@@ -1,0 +1,163 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Background texture ──────────────────────────────────────────────────── */
+/* CSS-only dot-grid, rendered once by the browser, zero JS, zero extra files */
+:root {
+  --texture-dot: rgba(0, 0, 0, 0.055);
+  --texture-size: 20px;
+}
+.dark {
+  --texture-dot: rgba(255, 255, 255, 0.04);
+}
+/* ─────────────────────────────────────────────────────────────────────────── */
+
+@layer utilities {
+  .texture-bg {
+    background-image: radial-gradient(
+      circle,
+      var(--texture-dot) 1px,
+      transparent 1px
+    );
+    background-size: var(--texture-size) var(--texture-size);
+  }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+  
+  .scroll-smooth {
+    scroll-behavior: smooth;
+  }
+
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(156, 163, 175, 0.5) transparent;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: rgba(156, 163, 175, 0.5);
+    border-radius: 3px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: rgba(107, 114, 128, 0.7);
+  }
+  
+  .animate-fade-in {
+    animation: fadeIn 0.4s ease-in-out;
+  }
+
+  .animate-slide-in-left {
+    animation: slideInLeft 0.5s ease-out;
+  }
+
+  .animate-slide-in-up {
+    animation: slideInUp 0.5s ease-out;
+  }
+
+  .animate-scale-in {
+    animation: scaleIn 0.4s ease-out;
+  }
+}
+
+@layer components {
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes slideInLeft {
+    from {
+      opacity: 0;
+      transform: translateX(-16px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes slideInUp {
+    from {
+      opacity: 0;
+      transform: translateY(16px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes scaleIn {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+}
+
+/* Smooth scrolling and transitions */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Subtle dot-grid texture on the root background — CSS-only, no extra assets.
+   Dots are rendered via radial-gradient; opacity and color switch via CSS vars
+   already toggled by the dark-mode class on <html>. Using background-repeat
+   + a fixed small size keeps GPU tile cost negligible. */
+body {
+  background-image: radial-gradient(
+    circle,
+    var(--texture-dot) 1px,
+    transparent 1px
+  );
+  background-size: var(--texture-size) var(--texture-size);
+}
+
+/* Optimize button interactions */
+button {
+  @apply transition-all duration-200;
+}
+
+/* Enhanced focus states */
+button:focus-visible,
+a:focus-visible {
+  @apply outline-offset-2;
+}
+
+/* Smooth color transitions */
+*,
+*::before,
+*::after {
+  @apply transition-colors duration-200;
+}
+
+/* Smooth transform transitions for interactive elements */
+.group {
+  @apply transition-all duration-300;
+}
