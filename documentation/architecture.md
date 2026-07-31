@@ -25,7 +25,7 @@ Nginx (port 80)
 logic-test-platform/
 ├── frontend/               # Next.js 16 application
 ├── backend/                # Python FastAPI application
-├── docs/
+├── documentation/
 │   ├── architecture.md     # This file
 │   ├── phases.md           # Step-by-step build phases
 │   └── README.md           # Docs index

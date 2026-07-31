@@ -31,7 +31,7 @@ A full-stack web application for conducting online logic and reasoning tests, wi
 logic-test-platform/
 ├── frontend/               # Next.js 14 application
 ├── backend/                # Python FastAPI application
-├── docs/
+├── documentation/
 │   ├── architecture.md     # System architecture, data flow, component diagram
 │   ├── phases.md           # Project phase breakdown with deliverables
 │   └── README.md           # Docs index and how to navigate
@@ -417,7 +417,7 @@ DescriptiveQuestion — Textarea with character/word count
 
 | Phase | Scope |
 |---|---|
-| **Phase 1** | Repo scaffold, `docs/` + `CLAUDE.md` setup, Docker config, DB schema + Alembic migrations, auth endpoints + frontend auth pages |
+| **Phase 1** | Repo scaffold, `documentation/` + `CLAUDE.md` setup, Docker config, DB schema + Alembic migrations, auth endpoints + frontend auth pages |
 | **Phase 2** | Dashboard, test listing, `RulesModal` with scroll-to-enable button, session creation, basic test flow (frontend + backend) |
 | **Phase 3** | Timer, auto-save, question navigator, all three question types |
 | **Phase 4** | Submission, server-side score calculation, result page |

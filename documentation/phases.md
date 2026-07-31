@@ -10,8 +10,8 @@ Order within each phase: **Frontend first → Backend second → Docker last.**
 ### Step 1.1 — Monorepo Setup
 - Create root folder `logic-test-platform/`
 - Initialize git repo
-- Create `README.md`, `CLAUDE.md`, and `docs/` folder
-- Copy `planning.md` and `instruction.md` into `docs/`
+- Create `README.md`, `CLAUDE.md`, and `documentation/` folder
+- Copy `planning.md` and `instruction.md` into `documentation/`
 
 ### Step 1.2 — Frontend Scaffold
 - Bootstrap Next.js 14 app in `frontend/` with TypeScript and App Router:
