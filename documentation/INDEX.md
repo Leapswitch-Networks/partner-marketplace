@@ -28,9 +28,9 @@ are **not** what this project is becoming. Never cite them as current state.
 | File | Purpose | Start Here? |
 |------|---------|:-----------:|
 | `core/ARCHITECTURE.md` | Application architecture, request lifecycle, folder structure, layer boundaries | Yes |
-| `core/AUTHENTICATION.md` | JWT cookie auth, dual user/admin identity, refresh flow, **known plaintext-password debt** | |
-| `core/AUTHORIZATION.md` | Roles, FastAPI dependency guards, route protection, frontend middleware | |
-| `core/USERS.md` | `users` + `admin_users` tables, profile management, admin CRUD | |
+| `core/AUTHENTICATION.md` | bcrypt hashing, JWT cookie auth, approval gate, lockout, Google SSO, signup policy | |
+| `core/AUTHORIZATION.md` | RBAC — roles, permissions, per-route guards, protection rules, data visibility | |
+| `core/USERS.md` | The unified `users` table, what the merge migration did, admin endpoints | |
 
 ## System Design & Standards
 
