@@ -22,7 +22,11 @@ const schema = z.object({
     .optional(),
 });
 
-type FormValues = z.infer<typeof schema>;
+// `marks` uses z.coerce.number(), so the schema's input and output types differ
+// (input accepts the string from the number field, output is a number). useForm
+// needs both, or the resolver generic won't match.
+type FormInput = z.input<typeof schema>;
+type FormValues = z.output<typeof schema>;
 
 interface AddQuestionFormProps {
   initialType?: QuestionType;
@@ -43,7 +47,7 @@ export default function AddQuestionForm({ initialType = "mcq" }: AddQuestionForm
     reset,
     control,
     formState: { errors, isSubmitting, isSubmitSuccessful },
-  } = useForm<FormValues>({
+  } = useForm<FormInput, unknown, FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
       type: initialType,
