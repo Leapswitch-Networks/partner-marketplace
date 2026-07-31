@@ -50,7 +50,7 @@ Planning docs are **reference only** — they describe intent, not current state
 
 | File | Purpose | Status |
 |------|---------|--------|
-| `planning/MARKETPLACE_DOMAIN_PLAN.md` | Marketplace domain model — partners, listings, orders | **Blocked** — awaiting product scope |
+| `planning/MARKETPLACE_DOMAIN_PLAN.md` | Marketplace domain model — partners, tiers, customers, catalog, quotes | **Design — awaiting review** |
 | `planning/SCAFFOLD_CLEANUP_PLAN.md` | Retiring the inherited test-platform domain when the marketplace domain lands | Planning |
 | `planning/TECH_DEBT.md` | Known defects and inconsistencies carried in from the scaffold, ranked | Active |
 
