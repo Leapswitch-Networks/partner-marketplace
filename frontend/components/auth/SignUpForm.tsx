@@ -49,8 +49,13 @@ export default function SignUpForm({ onRegistered, onSwitchToSignIn }: SignUpFor
   const onSubmit = async (data: FormValues) => {
     setServerError(null);
     try {
-      await authApi.adminRegister({
-        full_name: data.full_name,
+      // Partner self-registration. Staff cannot register here — they arrive via
+      // Google SSO or an invitation, and the API rejects a staff-domain address.
+      const trimmed = data.full_name.trim();
+      const spaceAt = trimmed.indexOf(" ");
+      await authApi.register({
+        first_name: spaceAt > 0 ? trimmed.slice(0, spaceAt) : trimmed,
+        last_name: spaceAt > 0 ? trimmed.slice(spaceAt + 1).trim() : "",
         email: data.email,
         password: data.password,
         confirm_password: data.confirmPassword,

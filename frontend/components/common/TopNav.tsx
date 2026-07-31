@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import useAppSelector from "@/lib/hooks/useAppSelector";
 import useAppDispatch from "@/lib/hooks/useAppDispatch";
 import { logoutUser } from "@/lib/store/authSlice";
-import { getUserDisplayName } from "@/lib/utils/user";
+import { getRoleLabel, getUserDisplayName } from "@/lib/utils/user";
 import { ThemeToggle } from "@/components/common/ThemeToggle";
 import type { AdminSection } from "@/components/dashboard/Sidebar";
 
@@ -31,9 +31,8 @@ export default function TopNav({ onNavigate, activeSection }: TopNavProps) {
     .join("")
     .toUpperCase() || "SA";
 
-  const roleLabel = user?.role
-    ? user.role.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
-    : null;
+  // Roles are a list now, not a single enum column.
+  const roleLabel = getRoleLabel(user) || null;
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {

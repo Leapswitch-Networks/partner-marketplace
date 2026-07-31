@@ -4,73 +4,58 @@ import { useEffect, useState, useCallback, useRef, memo } from "react";
 import { createPortal } from "react-dom";
 
 // ── Role Select ───────────────────────────────────────────────────────────────
-const ROLE_OPTIONS = [
-  {
-    value: "admin",
-    label: "Admin",
-    description: "Manage tests and candidates",
-    icon: (
-      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-      </svg>
-    ),
-    color: "text-[#F97316]",
-    bg: "bg-orange-100 dark:bg-orange-950/40",
-    selectedBg: "bg-orange-50 dark:bg-orange-950/30",
-    selectedBorder: "border-[#F97316]",
-    dot: "bg-[#F97316]",
-  },
-  {
-    value: "super_admin",
-    label: "Super Admin",
-    description: "Full platform access & user management",
-    icon: (
-      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-      </svg>
-    ),
-    color: "text-[#F97316]",
-    bg: "bg-orange-100 dark:bg-orange-950/40",
-    selectedBg: "bg-orange-50 dark:bg-orange-950/30",
-    selectedBorder: "border-[#F97316]",
-    dot: "bg-[#F97316]",
-  },
-] as const;
-
-function RoleSelect({ value, onChange, id }: { value: string; onChange: (v: string) => void; id?: string }) {
+/**
+ * Role picker driven by the real roles table.
+ *
+ * Was a hardcoded admin/super_admin pair; roles are data now, so the options
+ * come from GET /api/roles and the value is a role id.
+ */
+function RoleSelect({
+  value,
+  onChange,
+  roles,
+  id,
+}: {
+  value: number | null;
+  onChange: (v: number) => void;
+  roles: Role[];
+  id?: string;
+}) {
   return (
     <div id={id} className="grid grid-cols-2 gap-2" role="radiogroup">
-      {ROLE_OPTIONS.map((opt) => {
-        const selected = value === opt.value;
+      {roles.map((opt) => {
+        const selected = value === opt.id;
         return (
           <button
-            key={opt.value}
+            key={opt.id}
             type="button"
             role="radio"
             aria-checked={selected}
-            onClick={() => onChange(opt.value)}
+            onClick={() => onChange(opt.id)}
             className={`relative flex flex-col items-start gap-1.5 rounded-xl border-2 px-3 py-2.5 text-left transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]/40 ${
               selected
-                ? `${opt.selectedBorder} ${opt.selectedBg} shadow-sm`
+                ? "border-[#F97316] bg-orange-50 shadow-sm dark:bg-orange-950/30"
                 : "border-gray-200 bg-white hover:border-[#F97316] hover:bg-orange-50 dark:border-gray-700 dark:bg-gray-800 dark:hover:border-[#F97316] dark:hover:bg-orange-950/20"
             }`}
           >
             <div className="flex items-center gap-2 w-full">
-              <span className={`flex h-7 w-7 items-center justify-center rounded-lg ${opt.bg} ${opt.color} flex-shrink-0`}>
-                {opt.icon}
+              <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-lg bg-orange-100 text-[#F97316] dark:bg-orange-950/40">
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
               </span>
-              <span className={`text-sm font-semibold ${selected ? opt.color : "text-gray-700 dark:text-gray-300"}`}>
-                {opt.label}
+              <span className={`text-sm font-semibold ${selected ? "text-[#F97316]" : "text-gray-700 dark:text-gray-300"}`}>
+                {opt.display_name}
               </span>
               {selected && (
-                <span className={`ml-auto flex h-4 w-4 items-center justify-center rounded-full ${opt.dot}`}>
+                <span className={`ml-auto flex h-4 w-4 items-center justify-center rounded-full bg-[#F97316]`}>
                   <svg className="h-2.5 w-2.5 text-white" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
                   </svg>
                 </span>
               )}
             </div>
-            <p className="text-[11px] text-gray-400 leading-tight pl-9 dark:text-gray-500">{opt.description}</p>
+            <p className="text-[11px] text-gray-400 leading-tight pl-9 dark:text-gray-500">{opt.description ?? `${opt.user_count} user(s)`}</p>
           </button>
         );
       })}
@@ -78,9 +63,10 @@ function RoleSelect({ value, onChange, id }: { value: string; onChange: (v: stri
   );
 }
 
-import type { AdminRole, AdminUser } from "@/types";
+import type { ManagedUser, Role, RoleSummary, UserStatus } from "@/types";
 import { adminApi } from "@/lib/api/adminApi";
-import type { CreateAdminUserPayload, UpdateAdminUserPayload } from "@/lib/api/adminApi";
+import type { CreateUserPayload, UpdateUserPayload } from "@/lib/api/adminApi";
+import { roleApi } from "@/lib/api/rbacApi";
 
 type ModalMode = "add" | "edit" | "delete" | null;
 
@@ -131,21 +117,35 @@ function Spinner() {
   );
 }
 
-function AddUserModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (user: AdminUser) => void }) {
-  const [form, setForm] = useState({ full_name: "", email: "", password: "", confirm_password: "", role: "admin" as AdminRole });
+function AddUserModal({ onClose, onSuccess, roles }: { onClose: () => void; onSuccess: (user: ManagedUser) => void; roles: Role[] }) {
+  const [form, setForm] = useState({ full_name: "", email: "", password: "", confirm_password: "" });
+  const [roleId, setRoleId] = useState<number | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const set = (key: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [key]: v }));
 
   const handleSubmit = async (e: React.SyntheticEvent) => {
     e.preventDefault();
+    if (!roleId) { setError("Select a role."); return; }
     if (form.password !== form.confirm_password) { setError("Passwords do not match."); return; }
     if (form.password.length < 8) { setError("Password must be at least 8 characters."); return; }
     if (!/[A-Z]/.test(form.password)) { setError("Password must contain at least one uppercase letter."); return; }
     if (!/[0-9]/.test(form.password)) { setError("Password must contain at least one number."); return; }
     setSaving(true); setError(null);
     try {
-      const payload: CreateAdminUserPayload = { full_name: form.full_name.trim(), email: form.email.trim(), password: form.password, confirm_password: form.confirm_password, role: form.role };
+      // The API takes first/last name and a list of role ids.
+      const trimmed = form.full_name.trim();
+      const spaceAt = trimmed.indexOf(" ");
+      const payload: CreateUserPayload = {
+        first_name: spaceAt > 0 ? trimmed.slice(0, spaceAt) : trimmed,
+        last_name: spaceAt > 0 ? trimmed.slice(spaceAt + 1).trim() : "",
+        email: form.email.trim(),
+        password: form.password,
+        account_type: "staff",
+        // Admin-created accounts are vouched for, so skip the approval queue.
+        status: "ACTIVE",
+        role_ids: roleId ? [roleId] : [],
+      };
       const res = await adminApi.createUser(payload);
       onSuccess(res.data);
     } catch (err: unknown) {
@@ -179,7 +179,7 @@ function AddUserModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: 
         <Field label="Confirm password" id="add-confirm" type="password" value={form.confirm_password} onChange={set("confirm_password")} required placeholder="Repeat password" />
         <div>
           <label className="block text-xs font-semibold text-gray-700 mb-1.5 dark:text-gray-300">Role<span className="ml-0.5 text-red-400">*</span></label>
-          <RoleSelect id="add-role" value={form.role} onChange={set("role")} />
+          <RoleSelect id="add-role" value={roleId} onChange={setRoleId} roles={roles} />
         </div>
         {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-950/30 dark:text-red-400">{error}</p>}
         <div className="flex justify-end gap-2 pt-1 border-t border-gray-100 mt-2 dark:border-gray-800">
@@ -193,23 +193,38 @@ function AddUserModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: 
   );
 }
 
-function EditUserModal({ user, onClose, onSuccess }: { user: AdminUser; onClose: () => void; onSuccess: (updated: AdminUser) => void }) {
-  const [form, setForm] = useState({ full_name: user.full_name, email: user.email, is_active: user.is_active, role: user.role });
+function EditUserModal({ user, onClose, onSuccess, roles }: { user: ManagedUser; onClose: () => void; onSuccess: (updated: ManagedUser) => void; roles: Role[] }) {
+  const [form, setForm] = useState({
+    full_name: user.full_name,
+    email: user.email,
+    // Three states now, so a boolean toggle would lose SUSPENDED.
+    status: user.status as UserStatus,
+    role_id: user.roles[0]?.id ?? null,
+  });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const set = (key: keyof typeof form) => (v: string | boolean) => setForm((f) => ({ ...f, [key]: v }));
-  const isDirty = form.full_name !== user.full_name || form.email !== user.email || form.is_active !== user.is_active || form.role !== user.role;
+  const set = (key: keyof typeof form) => (v: string) => setForm((f) => ({ ...f, [key]: v }));
+  const isDirty =
+    form.full_name !== user.full_name ||
+    form.email !== user.email ||
+    form.status !== user.status ||
+    form.role_id !== (user.roles[0]?.id ?? null);
 
   const handleSubmit = async (e: React.SyntheticEvent) => {
     e.preventDefault();
     if (!isDirty) return;
     setSaving(true); setError(null);
     try {
-      const payload: UpdateAdminUserPayload = {};
-      if (form.full_name.trim() !== user.full_name) payload.full_name = form.full_name.trim();
+      const payload: UpdateUserPayload = {};
+      const trimmed = form.full_name.trim();
+      if (trimmed !== user.full_name) {
+        const spaceAt = trimmed.indexOf(" ");
+        payload.first_name = spaceAt > 0 ? trimmed.slice(0, spaceAt) : trimmed;
+        payload.last_name = spaceAt > 0 ? trimmed.slice(spaceAt + 1).trim() : "";
+      }
       if (form.email.trim() !== user.email) payload.email = form.email.trim();
-      if (form.is_active !== user.is_active) payload.is_active = form.is_active;
-      if (form.role !== user.role) payload.role = form.role as AdminRole;
+      if (form.status !== user.status) payload.status = form.status;
+      if (form.role_id !== (user.roles[0]?.id ?? null)) payload.role_ids = form.role_id ? [form.role_id] : [];
       const res = await adminApi.updateUser(user.id, payload);
       onSuccess(res.data);
     } catch (err: unknown) {
@@ -249,9 +264,21 @@ function EditUserModal({ user, onClose, onSuccess }: { user: AdminUser; onClose:
         <Field label="Email address" id="edit-email" type="email" value={form.email} onChange={set("email")} required />
         <div>
           <label className="block text-xs font-semibold text-gray-700 mb-1.5 dark:text-gray-300">Role<span className="ml-0.5 text-red-400">*</span></label>
-          <RoleSelect id="edit-role" value={form.role} onChange={set("role")} />
+          <RoleSelect id="edit-role" value={form.role_id} onChange={(v) => setForm((f) => ({ ...f, role_id: v }))} roles={roles} />
         </div>
-        <Toggle checked={form.is_active} onChange={(v) => set("is_active")(v)} label="Active account" />
+        <div>
+          <label htmlFor="edit-status" className="mb-1.5 block text-xs font-semibold text-gray-700 dark:text-gray-300">Status</label>
+          <select
+            id="edit-status"
+            value={form.status}
+            onChange={(e) => setForm((f) => ({ ...f, status: e.target.value as UserStatus }))}
+            className="block w-full rounded-xl border-2 border-gray-300 bg-white px-3.5 py-2.5 text-sm text-gray-900 outline-none transition focus:border-[#F97316] focus:ring-2 focus:ring-[#F97316]/20 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+          >
+            <option value="ACTIVE">Active — can sign in</option>
+            <option value="INACTIVE">Inactive — awaiting approval</option>
+            <option value="SUSPENDED">Suspended — blocked</option>
+          </select>
+        </div>
         {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-950/30 dark:text-red-400">{error}</p>}
         <div className="flex justify-end gap-2 pt-1 border-t border-gray-100 mt-2 dark:border-gray-800">
           <button type="button" onClick={onClose} className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800">Cancel</button>
@@ -264,7 +291,7 @@ function EditUserModal({ user, onClose, onSuccess }: { user: AdminUser; onClose:
   );
 }
 
-function DeleteUserModal({ user, onClose, onSuccess }: { user: AdminUser; onClose: () => void; onSuccess: (id: string) => void }) {
+function DeleteUserModal({ user, onClose, onSuccess }: { user: ManagedUser; onClose: () => void; onSuccess: (id: string) => void }) {
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -316,45 +343,59 @@ const UserTableRow = memo(function UserTableRow({
   onEdit,
   onDelete,
 }: {
-  u: AdminUser;
+  u: ManagedUser;
   idx: number;
-  onEdit: (u: AdminUser) => void;
-  onDelete: (u: AdminUser) => void;
+  onEdit: (u: ManagedUser) => void;
+  onDelete: (u: ManagedUser) => void;
 }) {
   return (
     <tr className={`border-b border-gray-50 transition-colors hover:bg-orange-50/40 dark:border-gray-800 dark:hover:bg-orange-950/10 ${idx % 2 === 0 ? "bg-white dark:bg-transparent" : "bg-gray-50/50 dark:bg-gray-800/20"}`}>
       <td className="w-12 px-4 py-3 text-gray-400 text-sm text-center tabular-nums 2xl:px-5 2xl:py-4 dark:text-gray-500">{idx + 1}</td>
       <td className="px-4 py-3 font-medium text-gray-900 2xl:px-5 2xl:py-4 dark:text-gray-100">{u.full_name}</td>
       <td className="px-4 py-3 text-gray-500 2xl:px-5 2xl:py-4 dark:text-gray-400">{u.email}</td>
-      <td className="px-4 py-3 2xl:px-5 2xl:py-4"><RoleBadge role={u.role} /></td>
-      <td className="px-4 py-3 2xl:px-5 2xl:py-4"><StatusBadge isActive={u.is_active} /></td>
+      <td className="px-4 py-3 2xl:px-5 2xl:py-4"><RoleBadge roles={u.roles} /></td>
+      <td className="px-4 py-3 2xl:px-5 2xl:py-4"><StatusBadge status={u.status} /></td>
       <td className="px-4 py-3 text-gray-400 2xl:px-5 2xl:py-4 dark:text-gray-500">{new Date(u.created_at).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" })}</td>
       <td className="w-24 px-4 py-3 2xl:px-5 2xl:py-4"><div className="flex items-center justify-center"><RowActions user={u} onEdit={onEdit} onDelete={onDelete} /></div></td>
     </tr>
   );
 });
 
-function RoleBadge({ role }: { role: AdminRole }) {
-  return role === "super_admin" ? (
-    <span className="inline-flex items-center rounded-md bg-orange-100 px-2 py-0.5 text-[11px] font-semibold text-[#F97316] dark:bg-orange-950/40 dark:text-orange-400">Super Admin</span>
-  ) : (
-    <span className="inline-flex items-center rounded-md bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-500 dark:bg-gray-700 dark:text-gray-400">Admin</span>
-  );
-}
-
-function StatusBadge({ isActive }: { isActive: boolean }) {
-  return isActive ? (
-    <span className="inline-flex items-center gap-1.5 text-emerald-600 text-sm dark:text-emerald-400">
-      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400" />Active
-    </span>
-  ) : (
-    <span className="inline-flex items-center gap-1.5 text-gray-400 text-sm dark:text-gray-500">
-      <span className="h-1.5 w-1.5 rounded-full bg-gray-300 dark:bg-gray-600" />Inactive
+function RoleBadge({ roles }: { roles: RoleSummary[] }) {
+  if (roles.length === 0) {
+    return <span className="text-[11px] text-gray-400 dark:text-gray-500">No role</span>;
+  }
+  return (
+    <span className="flex flex-wrap gap-1">
+      {roles.map((role) => (
+        <span
+          key={role.id}
+          className="inline-flex items-center rounded-md bg-orange-100 px-2 py-0.5 text-[11px] font-semibold text-[#F97316] dark:bg-orange-950/40 dark:text-orange-400"
+        >
+          {role.display_name}
+        </span>
+      ))}
     </span>
   );
 }
 
-function RowActions({ user, onEdit, onDelete }: { user: AdminUser; onEdit: (u: AdminUser) => void; onDelete: (u: AdminUser) => void }) {
+/** Three states, not a boolean — SUSPENDED is distinct from awaiting approval. */
+function StatusBadge({ status }: { status: UserStatus }) {
+  const styles: Record<UserStatus, { dot: string; text: string; label: string }> = {
+    ACTIVE: { dot: "bg-emerald-500 dark:bg-emerald-400", text: "text-emerald-600 dark:text-emerald-400", label: "Active" },
+    INACTIVE: { dot: "bg-amber-400 dark:bg-amber-500", text: "text-amber-600 dark:text-amber-400", label: "Pending approval" },
+    SUSPENDED: { dot: "bg-red-500 dark:bg-red-400", text: "text-red-600 dark:text-red-400", label: "Suspended" },
+  };
+  const s = styles[status];
+  return (
+    <span className={`inline-flex items-center gap-1.5 text-sm ${s.text}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${s.dot}`} />
+      {s.label}
+    </span>
+  );
+}
+
+function RowActions({ user, onEdit, onDelete }: { user: ManagedUser; onEdit: (u: ManagedUser) => void; onDelete: (u: ManagedUser) => void }) {
   const [open, setOpen] = useState(false);
   const [coords, setCoords] = useState({ top: 0, left: 0 });
   const [mounted, setMounted] = useState(false);
@@ -406,11 +447,12 @@ function RowActions({ user, onEdit, onDelete }: { user: AdminUser; onEdit: (u: A
 }
 
 export default function UserInfo({ initialModal }: { initialModal?: "add" }) {
-  const [users, setUsers] = useState<AdminUser[]>([]);
+  const [users, setUsers] = useState<ManagedUser[]>([]);
+  const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [modal, setModal] = useState<ModalMode>(initialModal ?? null);
-  const [selectedUser, setSelectedUser] = useState<AdminUser | null>(null);
+  const [selectedUser, setSelectedUser] = useState<ManagedUser | null>(null);
   const [toast, setToast] = useState<{ msg: string; type: "success" | "error" } | null>(null);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -422,22 +464,27 @@ export default function UserInfo({ initialModal }: { initialModal?: "add" }) {
 
   const fetchUsers = useCallback(async () => {
     setLoading(true); setFetchError(null);
-    try { const res = await adminApi.listUsers(); setUsers(res.data); }
+    try { const res = await adminApi.listUsers({ per_page: 100 }); setUsers(res.data.items); }
     catch { setFetchError("Failed to load users. Please try again."); }
     finally { setLoading(false); }
   }, []);
 
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
 
+  // Roles drive the pickers; fetched once.
+  useEffect(() => {
+    roleApi.list().then((res) => setRoles(res.data)).catch(() => setRoles([]));
+  }, []);
+
   const initialModalRef = useRef(initialModal);
   useEffect(() => { if (initialModalRef.current) setModal(initialModalRef.current); }, []);
 
   const closeModal = useCallback(() => { setModal(null); setSelectedUser(null); }, []);
-  const onUserAdded = useCallback((user: AdminUser) => { setUsers((prev) => [user, ...prev]); setModal(null); setSelectedUser(null); showToast(`${user.full_name} was added successfully.`); }, [showToast]);
-  const onUserUpdated = useCallback((updated: AdminUser) => { setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u))); setModal(null); setSelectedUser(null); showToast(`${updated.full_name} was updated successfully.`); }, [showToast]);
+  const onUserAdded = useCallback((user: ManagedUser) => { setUsers((prev) => [user, ...prev]); setModal(null); setSelectedUser(null); showToast(`${user.full_name} was added successfully.`); }, [showToast]);
+  const onUserUpdated = useCallback((updated: ManagedUser) => { setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u))); setModal(null); setSelectedUser(null); showToast(`${updated.full_name} was updated successfully.`); }, [showToast]);
   const onUserDeleted = useCallback((id: string) => { setUsers((prev) => prev.filter((u) => u.id !== id)); setModal(null); setSelectedUser(null); showToast("User deleted successfully."); }, [showToast]);
-  const openEdit = useCallback((user: AdminUser) => { setSelectedUser(user); setModal("edit"); }, []);
-  const openDelete = useCallback((user: AdminUser) => { setSelectedUser(user); setModal("delete"); }, []);
+  const openEdit = useCallback((user: ManagedUser) => { setSelectedUser(user); setModal("edit"); }, []);
+  const openDelete = useCallback((user: ManagedUser) => { setSelectedUser(user); setModal("delete"); }, []);
 
   return (
     <div className="relative">
@@ -502,7 +549,7 @@ export default function UserInfo({ initialModal }: { initialModal?: "add" }) {
                   <RowActions user={u} onEdit={openEdit} onDelete={openDelete} />
                 </div>
                 <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-gray-100 pt-2.5 dark:border-gray-700">
-                  <div className="flex items-center gap-2"><RoleBadge role={u.role} /><StatusBadge isActive={u.is_active} /></div>
+                  <div className="flex items-center gap-2"><RoleBadge roles={u.roles} /><StatusBadge status={u.status} /></div>
                   <span className="text-[11px] text-gray-400 dark:text-gray-500">{new Date(u.created_at).toLocaleDateString("en-US", { day: "numeric", month: "short", year: "numeric" })}</span>
                 </div>
               </div>
@@ -535,8 +582,8 @@ export default function UserInfo({ initialModal }: { initialModal?: "add" }) {
         </>
       )}
 
-      {modal === "add" && <AddUserModal onClose={closeModal} onSuccess={onUserAdded} />}
-      {modal === "edit" && selectedUser && <EditUserModal user={selectedUser} onClose={closeModal} onSuccess={onUserUpdated} />}
+      {modal === "add" && <AddUserModal onClose={closeModal} onSuccess={onUserAdded} roles={roles} />}
+      {modal === "edit" && selectedUser && <EditUserModal user={selectedUser} onClose={closeModal} onSuccess={onUserUpdated} roles={roles} />}
       {modal === "delete" && selectedUser && <DeleteUserModal user={selectedUser} onClose={closeModal} onSuccess={onUserDeleted} />}
     </div>
   );

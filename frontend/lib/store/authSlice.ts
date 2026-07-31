@@ -1,10 +1,12 @@
 import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
 import { authApi } from "@/lib/api/authApi";
-import type { AdminUser, User } from "@/types";
+import type { CurrentUser } from "@/types";
 
 interface AuthState {
-  user: User | AdminUser | null;
+  user: CurrentUser | null;
   isAuthenticated: boolean;
+  /** True until the first identity fetch settles — distinguishes "unknown" from "logged out". */
+  initialising: boolean;
   loading: boolean;
   error: string | null;
 }
@@ -12,34 +14,45 @@ interface AuthState {
 const initialState: AuthState = {
   user: null,
   isAuthenticated: false,
+  initialising: true,
   loading: false,
   error: null,
 };
 
 export const updateUserProfile = createAsyncThunk(
   "auth/updateUserProfile",
-  async (data: { name: string; email: string }, { getState, rejectWithValue }) => {
+  async (
+    data: {
+      first_name?: string;
+      last_name?: string;
+      designation?: string | null;
+      phone?: string | null;
+      company_name?: string | null;
+      timezone_preference?: string;
+    },
+    { rejectWithValue }
+  ) => {
     try {
-      const state = getState() as { auth: AuthState };
-      const isAdmin = state.auth.user && "full_name" in state.auth.user;
-      if (isAdmin) {
-        const res = await authApi.adminUpdateProfile({ full_name: data.name, email: data.email });
-        return res.data as AdminUser | User;
-      }
       const res = await authApi.updateProfile(data);
-      return res.data as AdminUser | User;
+      return res.data;
     } catch {
       return rejectWithValue("Failed to update profile");
     }
   }
 );
 
+/**
+ * Hydrate identity from the httpOnly cookie on mount.
+ *
+ * One endpoint now — there is a single account table, so there is nothing to
+ * disambiguate. The response already carries resolved roles and permissions.
+ */
 export const fetchCurrentUser = createAsyncThunk(
   "auth/fetchCurrentUser",
   async (_, { rejectWithValue }) => {
     try {
-      const res = await authApi.whoami();
-      return res.data.user as AdminUser | User;
+      const res = await authApi.me();
+      return res.data;
     } catch {
       return rejectWithValue("Unauthenticated");
     }
@@ -54,14 +67,16 @@ const authSlice = createSlice({
   name: "auth",
   initialState,
   reducers: {
-    setUser(state, action: PayloadAction<User | AdminUser>) {
+    setUser(state, action: PayloadAction<CurrentUser>) {
       state.user = action.payload;
       state.isAuthenticated = true;
+      state.initialising = false;
       state.error = null;
     },
     clearAuth(state) {
       state.user = null;
       state.isAuthenticated = false;
+      state.initialising = false;
     },
   },
   extraReducers: (builder) => {
@@ -72,11 +87,13 @@ const authSlice = createSlice({
       })
       .addCase(fetchCurrentUser.fulfilled, (state, action) => {
         state.loading = false;
+        state.initialising = false;
         state.user = action.payload;
         state.isAuthenticated = true;
       })
       .addCase(fetchCurrentUser.rejected, (state) => {
         state.loading = false;
+        state.initialising = false;
         state.isAuthenticated = false;
         state.user = null;
       })

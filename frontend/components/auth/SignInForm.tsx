@@ -42,7 +42,9 @@ export default function SignInForm({
   const onSubmit = async (data: FormValues) => {
     setServerError(null);
     try {
-      const res = await authApi.adminLogin({ email: data.email, password: data.password });
+      // One login endpoint for everyone — staff and partners share the `users`
+      // table, and roles decide what happens next.
+      const res = await authApi.login({ email: data.email, password: data.password });
       dispatch(setUser(res.data.user));
       router.push("/dashboard");
     } catch (err: unknown) {

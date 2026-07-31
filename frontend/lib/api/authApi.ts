@@ -1,40 +1,75 @@
 import axiosInstance from "./axiosInstance";
-import type { AdminUser, User } from "@/types";
+import type { CurrentUser } from "@/types";
 
+/**
+ * Auth endpoints.
+ *
+ * There is ONE login endpoint now — the backend unified `users` and
+ * `admin_users`, so `adminLogin` / `whoami` / `adminMe` no longer exist. Roles
+ * decide capability, not which table you authenticated against.
+ */
 export const authApi = {
+  /** Partner self-registration. Does NOT sign you in — the account starts INACTIVE. */
   register: (data: {
-    name: string;
+    first_name: string;
+    last_name: string;
     email: string;
     password: string;
     confirm_password: string;
+    company_name?: string;
+    phone?: string;
   }) => axiosInstance.post<{ message: string }>("/api/auth/register", data),
 
-  adminRegister: (data: {
-    full_name: string;
-    email: string;
+  login: (data: { email: string; password: string }) =>
+    axiosInstance.post<{ message: string; user: CurrentUser }>("/api/auth/login", data),
+
+  logout: () => axiosInstance.post<{ message: string }>("/api/auth/logout"),
+
+  /** Identity plus resolved roles and permissions. */
+  me: () => axiosInstance.get<CurrentUser>("/api/auth/me"),
+
+  updateProfile: (data: {
+    first_name?: string;
+    last_name?: string;
+    designation?: string | null;
+    phone?: string | null;
+    company_name?: string | null;
+    timezone_preference?: string;
+  }) => axiosInstance.patch<CurrentUser>("/api/auth/me", data),
+
+  changePassword: (data: {
+    current_password: string;
     password: string;
     confirm_password: string;
-  }) => axiosInstance.post<AdminUser>("/api/auth/admin/register", data),
+  }) => axiosInstance.post<{ message: string }>("/api/auth/me/change-password", data),
 
-  adminLogin: (data: { email: string; password: string }) =>
-    axiosInstance.post<{ message: string; user: AdminUser }>("/api/auth/admin/login", data),
+  forgotPassword: (data: { email: string }) =>
+    axiosInstance.post<{ message: string }>("/api/auth/forgot-password", data),
 
-  login: (data: { email: string; password: string }) =>
-    axiosInstance.post<{ message: string; user: User }>("/api/auth/login", data),
+  resetPassword: (data: { token: string; password: string; confirm_password: string }) =>
+    axiosInstance.post<{ message: string }>("/api/auth/reset-password", data),
 
-  logout: () =>
-    axiosInstance.post<{ message: string }>("/api/auth/logout"),
+  /** Complete a partner invitation. Signs you in immediately. */
+  acceptInvitation: (data: {
+    token: string;
+    first_name: string;
+    last_name: string;
+    password: string;
+    confirm_password: string;
+  }) =>
+    axiosInstance.post<{ message: string; user: CurrentUser }>(
+      "/api/auth/accept-invitation",
+      data
+    ),
 
-  whoami: () =>
-    axiosInstance.get<{ user_type: "admin" | "user"; user: AdminUser | User }>("/api/auth/whoami"),
-
-  me: () => axiosInstance.get<User>("/api/auth/me"),
-
-  adminMe: () => axiosInstance.get<AdminUser>("/api/auth/admin/me"),
-
-  updateProfile: (data: { name: string; email: string }) =>
-    axiosInstance.patch<User>("/api/auth/me", data),
-
-  adminUpdateProfile: (data: { full_name: string; email: string }) =>
-    axiosInstance.patch<AdminUser>("/api/auth/admin/me", data),
+  /**
+   * Where to send the browser to begin Google SSO.
+   *
+   * Must be a full-page navigation, not an XHR — Google blocks cross-origin
+   * AJAX on the consent screen. Use `window.location.href = url`.
+   */
+  googleAuthorizeUrl: (invitation?: string) =>
+    axiosInstance.get<{ authorization_url: string }>("/api/auth/google/authorize", {
+      params: invitation ? { invitation } : undefined,
+    }),
 };
