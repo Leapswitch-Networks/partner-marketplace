@@ -1,0 +1,15 @@
+# node_modules and .next are provided by named volumes at run time; shipping the
+# host copies into the build context would only slow the build down.
+node_modules/
+.next/
+out/
+build/
+
+# NEXT_PUBLIC_API_URL is supplied by docker-compose.yml at run time.
+.env
+.env.*
+
+npm-debug.log*
+yarn-error.log*
+*.tsbuildinfo
+.eslintcache

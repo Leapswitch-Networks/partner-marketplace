@@ -26,6 +26,93 @@ services:
     depends_on:
       - db
 
+  # ---------------------------------------------------------------------------
+  # FastAPI backend (development).
+  #
+  # Containerised because this host only has Python 3.14, and the pins in
+  # requirements.txt (psycopg2-binary 2.9.10, pydantic 2.10.3, sqlalchemy
+  # 2.0.36) publish no wheels for it. The image runs 3.12.
+  #
+  # Ports are mapped 1:1 rather than the usual fixed-internal-port style, so the
+  # port the browser talks to and the port uvicorn binds are the same number.
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: pmp-backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      # docker-entrypoint.dev.sh rewrites DATABASE_URL's host:port to these,
+      # keeping the percent-encoded credentials from backend/.env untouched.
+      # POSTGRES_PASSWORD contains '@' and '#', so the URL cannot be rebuilt
+      # from POSTGRES_USER/POSTGRES_PASSWORD here.
+      DB_HOST: db
+      DB_PORT: "5432"
+    ports:
+      - "${BACKEND_PORT:-8002}:${BACKEND_PORT:-8002}"
+    volumes:
+      # Bind mount so `--reload` sees host edits immediately.
+      - ./backend:/app
+    depends_on:
+      db:
+        condition: service_healthy
+    command:
+      - uvicorn
+      - app.main:app
+      - --host
+      - 0.0.0.0
+      - --port
+      - "${BACKEND_PORT:-8002}"
+      - --reload
+
+  # ---------------------------------------------------------------------------
+  # Next.js frontend (development).
+  #
+  # Port 3001 is not arbitrary: it is one of the two origins hardcoded in
+  # backend/app/main.py's CORS allowlist, and :3000 is taken by another
+  # project on this machine.
+  # ---------------------------------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: pmp-frontend
+    restart: unless-stopped
+    environment:
+      # Resolved by the browser, not by the container: every API call goes
+      # through lib/api/axiosInstance.ts on the client, and there is no
+      # server-side fetching. So this must be a host-visible URL.
+      NEXT_PUBLIC_API_URL: "http://localhost:${BACKEND_PORT:-8002}"
+      # inotify events don't always cross a bind mount; polling keeps Fast
+      # Refresh reliable. Remove it if watching works without it on your setup.
+      WATCHPACK_POLLING: "true"
+    ports:
+      - "${FRONTEND_PORT:-3001}:${FRONTEND_PORT:-3001}"
+    volumes:
+      - ./frontend:/app
+      # Mask the host's node_modules/.next so the container uses its own
+      # install — the host tree was built by a different Node/libc combination.
+      - frontend_node_modules:/app/node_modules
+      - frontend_next:/app/.next
+    depends_on:
+      - backend
+    command:
+      - npm
+      - run
+      - dev
+      - --
+      - --hostname
+      - 0.0.0.0
+      - --port
+      - "${FRONTEND_PORT:-3001}"
+
+volumes:
+  frontend_node_modules:
+  frontend_next:
+
 networks:
   default:
     name: test-platform

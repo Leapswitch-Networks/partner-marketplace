@@ -1,0 +1,30 @@
+# syntax=docker/dockerfile:1
+#
+# Development image for the Partner Marketplace Next.js frontend.
+#
+# bookworm-slim (glibc) rather than alpine (musl): Next.js ships
+# platform-specific SWC binaries and the host's frontend/node_modules holds the
+# linux-x64-gnu build. Matching libc means a stray host install can't break the
+# container. node_modules and .next are masked by named volumes anyway
+# (see docker-compose.yml), so the install below is what actually runs.
+FROM node:20-bookworm-slim
+
+ENV NEXT_TELEMETRY_DISABLED=1
+
+WORKDIR /app
+
+# npm ci installs exactly the lockfile's tree and needs both files present.
+#
+# --legacy-peer-deps is required, not cosmetic: package.json pins react 19.2.4
+# while next 14.2.35 declares peer react@^18.2.0 (React 19 support landed in
+# Next 15). package-lock.json already records the react-19 tree, so the flag
+# reproduces the exact dependency set the host runs instead of resolving a
+# different one. Remove it once the react/next mismatch is resolved upstream —
+# tracked in documentation/planning/TECH_DEBT.md.
+COPY package.json package-lock.json ./
+RUN npm ci --legacy-peer-deps
+
+# Source is bind-mounted at run time so Fast Refresh picks up host edits.
+EXPOSE 3001
+
+CMD ["npm", "run", "dev", "--", "--hostname", "0.0.0.0", "--port", "3001"]

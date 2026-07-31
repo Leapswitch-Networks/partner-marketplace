@@ -1,0 +1,37 @@
+# syntax=docker/dockerfile:1
+#
+# Development image for the Partner Marketplace FastAPI backend.
+#
+# Python is pinned to 3.12 deliberately. requirements.txt pins psycopg2-binary
+# 2.9.10, pydantic 2.10.3 and sqlalchemy 2.0.36 — none of which publish wheels
+# for 3.13/3.14. The host runs 3.14, which is the reason the backend is
+# containerised at all. See documentation/ONBOARDING.md § 4.
+#
+# This image is dev-only: application source is bind-mounted at run time so
+# `uvicorn --reload` picks up host edits. Nothing from app/ is copied in.
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /app
+
+# psycopg2-binary bundles its own libpq, but the entrypoint waits on the
+# database with pg_isready, which ships in postgresql-client.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends postgresql-client \
+ && rm -rf /var/lib/apt/lists/*
+
+# Dependencies are baked into the image so only a requirements.txt change
+# invalidates this layer.
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY docker-entrypoint.dev.sh /usr/local/bin/docker-entrypoint.dev.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.dev.sh
+
+EXPOSE 8002
+
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.dev.sh"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8002", "--reload"]
