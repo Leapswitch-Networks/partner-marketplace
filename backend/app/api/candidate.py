@@ -1,8 +1,14 @@
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import get_current_admin, get_db
-from app.models.admin_user import AdminUser
+from app.core.dependencies import get_db, require_permission
+from app.core.permissions import (
+    CANDIDATE_CREATE,
+    CANDIDATE_DELETE,
+    CANDIDATE_UPDATE,
+    CANDIDATE_VIEW,
+)
+from app.models.user import User
 from app.schemas.auth import MessageResponse
 from app.schemas.candidate import CandidateCreate, CandidateResponse, CandidateUpdate
 from app.services.candidate_service import (
@@ -19,7 +25,7 @@ router = APIRouter(prefix="/candidates", tags=["candidates"])
 @router.get("", response_model=list[CandidateResponse])
 def get_candidates(
     db: Session = Depends(get_db),
-    _: AdminUser = Depends(get_current_admin),
+    _: User = Depends(require_permission(CANDIDATE_VIEW)),
 ) -> list[CandidateResponse]:
     return list_candidates(db)
 
@@ -28,7 +34,7 @@ def get_candidates(
 def get_candidate_endpoint(
     candidate_id: str,
     db: Session = Depends(get_db),
-    _: AdminUser = Depends(get_current_admin),
+    _: User = Depends(require_permission(CANDIDATE_VIEW)),
 ) -> CandidateResponse:
     return get_candidate(db, candidate_id)
 
@@ -37,7 +43,7 @@ def get_candidate_endpoint(
 def create_candidate_endpoint(
     data: CandidateCreate,
     db: Session = Depends(get_db),
-    _: AdminUser = Depends(get_current_admin),
+    _: User = Depends(require_permission(CANDIDATE_CREATE)),
 ) -> CandidateResponse:
     return create_candidate(db, data)
 
@@ -47,7 +53,7 @@ def update_candidate_endpoint(
     candidate_id: str,
     data: CandidateUpdate,
     db: Session = Depends(get_db),
-    _: AdminUser = Depends(get_current_admin),
+    _: User = Depends(require_permission(CANDIDATE_UPDATE)),
 ) -> CandidateResponse:
     return update_candidate(db, candidate_id, data)
 
@@ -56,7 +62,7 @@ def update_candidate_endpoint(
 def delete_candidate_endpoint(
     candidate_id: str,
     db: Session = Depends(get_db),
-    _: AdminUser = Depends(get_current_admin),
+    _: User = Depends(require_permission(CANDIDATE_DELETE)),
 ) -> MessageResponse:
     delete_candidate(db, candidate_id)
     return MessageResponse(message="Candidate deleted successfully")

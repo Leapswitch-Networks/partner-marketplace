@@ -1,8 +1,14 @@
 from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
-from app.core.dependencies import get_current_admin, get_db
-from app.models.admin_user import AdminUser
+from app.core.dependencies import get_db, require_permission
+from app.core.permissions import (
+    CATEGORY_CREATE,
+    CATEGORY_DELETE,
+    CATEGORY_UPDATE,
+    CATEGORY_VIEW,
+)
+from app.models.user import User
 from app.schemas.auth import MessageResponse
 from app.schemas.category import CategoryCreate, CategoryResponse, CategoryUpdate
 from app.services.category_service import (
@@ -19,7 +25,7 @@ router = APIRouter(prefix="/categories", tags=["categories"])
 @router.get("", response_model=list[CategoryResponse])
 def get_categories(
     db: Session = Depends(get_db),
-    _: AdminUser = Depends(get_current_admin),
+    _: User = Depends(require_permission(CATEGORY_VIEW)),
 ) -> list[CategoryResponse]:
     return list_categories(db)
 
@@ -28,7 +34,7 @@ def get_categories(
 def get_category_endpoint(
     category_id: str,
     db: Session = Depends(get_db),
-    _: AdminUser = Depends(get_current_admin),
+    _: User = Depends(require_permission(CATEGORY_VIEW)),
 ) -> CategoryResponse:
     return get_category(db, category_id)
 
@@ -37,7 +43,7 @@ def get_category_endpoint(
 def create_category_endpoint(
     data: CategoryCreate,
     db: Session = Depends(get_db),
-    _: AdminUser = Depends(get_current_admin),
+    _: User = Depends(require_permission(CATEGORY_CREATE)),
 ) -> CategoryResponse:
     return create_category(db, data)
 
@@ -47,7 +53,7 @@ def update_category_endpoint(
     category_id: str,
     data: CategoryUpdate,
     db: Session = Depends(get_db),
-    _: AdminUser = Depends(get_current_admin),
+    _: User = Depends(require_permission(CATEGORY_UPDATE)),
 ) -> CategoryResponse:
     return update_category(db, category_id, data)
 
@@ -56,7 +62,7 @@ def update_category_endpoint(
 def delete_category_endpoint(
     category_id: str,
     db: Session = Depends(get_db),
-    _: AdminUser = Depends(get_current_admin),
+    _: User = Depends(require_permission(CATEGORY_DELETE)),
 ) -> MessageResponse:
     delete_category(db, category_id)
     return MessageResponse(message="Category deleted successfully")

@@ -6,6 +6,11 @@ psycopg2-binary==2.9.10
 pydantic[email]==2.10.3
 pydantic-settings==2.6.1
 python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
+# bcrypt is used directly, NOT through passlib. passlib 1.7.4 reads
+# bcrypt.__about__.__version__, which bcrypt removed in 4.1 — the pair emits a
+# spurious "error reading bcrypt version" trap on import. Using bcrypt's own
+# hashpw/checkpw avoids the incompatibility entirely.
 bcrypt==4.3.0
 python-multipart==0.0.17
+# Google OAuth token exchange + userinfo (server-to-server, no SDK needed).
+httpx==0.28.1

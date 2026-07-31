@@ -1,46 +1,51 @@
-from datetime import timedelta
+"""Authentication endpoints.
 
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
+Cookies are set ONLY here and in `google.py` — no service ever receives a
+Response object. `_set_auth_cookies` is the single place cookie flags are
+decided, so `COOKIE_SECURE` cannot be honoured in one place and forgotten in
+another.
+"""
+
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
 from jose import JWTError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.dependencies import get_current_admin, get_current_user, get_db
-from app.core.security import (
-    create_access_token,
-    create_refresh_token,
-    decode_token,
-)
-from app.models.admin_user import AdminUser
+from app.core.dependencies import get_client_ip, get_current_user, get_db
+from app.core.security import create_access_token, create_refresh_token, decode_token
 from app.models.user import User
 from app.schemas.auth import (
-    AdminRegisterRequest,
-    AdminTokenResponse,
-    AdminUserResponse,
+    AcceptInvitationRequest,
+    ChangePasswordRequest,
+    CurrentUserResponse,
+    ForgotPasswordRequest,
     LoginRequest,
+    LoginResponse,
     MessageResponse,
     RegisterRequest,
-    TokenResponse,
-    UpdateAdminProfileRequest,
+    ResetPasswordRequest,
     UpdateProfileRequest,
-    UserResponse,
-    WhoAmIResponse,
 )
-from app.services.auth_service import authenticate_admin, authenticate_user, register_admin, register_user, update_admin_profile, update_user_profile
+from app.services import auth_service, invitation_service, rbac_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 _ACCESS_MAX_AGE = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
 _REFRESH_MAX_AGE = settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
 
+#: The refresh cookie is scoped to this exact path, so it is never transmitted
+#: on ordinary requests. Anything that reads or clears it must use the same path
+#: or the browser will not match the cookie.
+_REFRESH_PATH = "/api/auth/refresh"
 
-def _set_auth_cookies(response: Response, user_id: str) -> None:
+
+def set_auth_cookies(response: Response, user_id: str) -> None:
     response.set_cookie(
         key="access_token",
         value=create_access_token(user_id),
         httponly=True,
-        samesite="lax",
-        secure=False,          # set True behind HTTPS in production
+        samesite=settings.COOKIE_SAMESITE,
+        secure=settings.COOKIE_SECURE,
         max_age=_ACCESS_MAX_AGE,
         path="/",
     )
@@ -48,58 +53,79 @@ def _set_auth_cookies(response: Response, user_id: str) -> None:
         key="refresh_token",
         value=create_refresh_token(user_id),
         httponly=True,
-        samesite="lax",
-        secure=False,
+        samesite=settings.COOKIE_SAMESITE,
+        secure=settings.COOKIE_SECURE,
         max_age=_REFRESH_MAX_AGE,
-        path="/api/auth/refresh",
+        path=_REFRESH_PATH,
     )
+
+
+def clear_auth_cookies(response: Response) -> None:
+    response.delete_cookie("access_token", path="/")
+    response.delete_cookie("refresh_token", path=_REFRESH_PATH)
+
+
+# --- Registration -----------------------------------------------------------
 
 
 @router.post("/register", response_model=MessageResponse, status_code=status.HTTP_201_CREATED)
 def register(data: RegisterRequest, db: Session = Depends(get_db)) -> MessageResponse:
-    register_user(db, data)
-    return MessageResponse(message="Account created. Please sign in.")
+    """Partner self-registration. Deliberately does NOT sign the user in —
+    the account starts INACTIVE and needs approval first."""
+    auth_service.register_partner(db, data)
+    return MessageResponse(
+        message=(
+            "Account created. An administrator will review and activate it, "
+            "and you'll be able to sign in once approved."
+        )
+    )
 
 
 @router.post(
-    "/admin/register",
-    response_model=AdminUserResponse,
+    "/accept-invitation",
+    response_model=LoginResponse,
     status_code=status.HTTP_201_CREATED,
 )
-def admin_register(
-    data: AdminRegisterRequest,
-    db: Session = Depends(get_db),
-    current_admin: AdminUser = Depends(get_current_admin),
-) -> AdminUserResponse:
-    return register_admin(db, data)
-
-
-@router.post("/admin/login", response_model=AdminTokenResponse)
-def admin_login(
-    data: LoginRequest,
+def accept_invitation(
+    data: AcceptInvitationRequest,
     response: Response,
     db: Session = Depends(get_db),
-) -> AdminTokenResponse:
-    admin = authenticate_admin(db, data.email, data.password)
-    _set_auth_cookies(response, admin.id)
-    return AdminTokenResponse(message="Login successful", user=admin)
+) -> LoginResponse:
+    """Complete a partner invitation and sign in immediately.
+
+    Signing in here is safe where `/register` is not: an administrator already
+    vouched for this address by inviting it.
+    """
+    user = invitation_service.accept_with_credentials(db, data)
+    set_auth_cookies(response, user.id)
+    return LoginResponse(
+        message="Welcome aboard",
+        user=CurrentUserResponse(**rbac_service.current_user_payload(db, user)),
+    )
 
 
-@router.post("/login", response_model=TokenResponse)
+# --- Login / logout ---------------------------------------------------------
+
+
+@router.post("/login", response_model=LoginResponse)
 def login(
     data: LoginRequest,
+    request: Request,
     response: Response,
     db: Session = Depends(get_db),
-) -> TokenResponse:
-    user = authenticate_user(db, data.email, data.password)
-    _set_auth_cookies(response, user.id)
-    return TokenResponse(message="Login successful", user=user)
+) -> LoginResponse:
+    user = auth_service.authenticate(db, data.email, data.password, get_client_ip(request))
+    set_auth_cookies(response, user.id)
+    return LoginResponse(
+        message="Login successful",
+        user=CurrentUserResponse(**rbac_service.current_user_payload(db, user)),
+    )
 
 
 @router.post("/logout", response_model=MessageResponse)
 def logout(response: Response) -> MessageResponse:
-    response.delete_cookie("access_token", path="/")
-    response.delete_cookie("refresh_token", path="/api/auth/refresh")
+    """Unauthenticated on purpose — logging out must work with an expired token."""
+    clear_auth_cookies(response)
     return MessageResponse(message="Logged out")
 
 
@@ -109,8 +135,13 @@ def refresh(
     refresh_token: str | None = Cookie(default=None),
     db: Session = Depends(get_db),
 ) -> MessageResponse:
+    """Rotate both cookies.
+
+    Status is re-checked here too, so a session cannot be extended after the
+    account was suspended.
+    """
     credentials_exc = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired refresh token"
+        status.HTTP_401_UNAUTHORIZED, "Invalid or expired refresh token"
     )
     if not refresh_token:
         raise credentials_exc
@@ -122,72 +153,74 @@ def refresh(
     except (JWTError, KeyError):
         raise credentials_exc
 
-    # Token may belong to either a regular user or an admin user
     user = db.get(User, user_id)
-    admin = db.get(AdminUser, user_id)
-    if user is None and admin is None:
-        raise credentials_exc
-    if admin is not None and not admin.is_active:
+    if user is None or user.status != "ACTIVE":
+        # Clear the cookies so the client stops retrying a dead session.
+        clear_auth_cookies(response)
         raise credentials_exc
 
-    _set_auth_cookies(response, user_id)
+    set_auth_cookies(response, user.id)
     return MessageResponse(message="Token refreshed")
 
 
-@router.get("/whoami", response_model=WhoAmIResponse)
-def whoami(
-    access_token: str | None = Cookie(default=None),
+# --- Current user -----------------------------------------------------------
+
+
+@router.get("/me", response_model=CurrentUserResponse)
+def me(
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> WhoAmIResponse:
-    """Single endpoint to identify the current user regardless of type."""
-    credentials_exc = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Not authenticated",
-    )
-    if not access_token:
-        raise credentials_exc
-    try:
-        payload = decode_token(access_token)
-        if payload.get("type") != "access":
-            raise credentials_exc
-        user_id: str = payload["sub"]
-    except Exception:
-        raise credentials_exc
+) -> CurrentUserResponse:
+    """Identity plus resolved roles and permissions.
 
-    admin = db.get(AdminUser, user_id)
-    if admin is not None and admin.is_active:
-        return WhoAmIResponse(user_type="admin", user=admin)
-
-    user = db.get(User, user_id)
-    if user is not None:
-        return WhoAmIResponse(user_type="user", user=user)
-
-    raise credentials_exc
+    Replaces the old `whoami`/`me`/`admin/me` trio — there is one account table
+    now, so there is one endpoint.
+    """
+    return CurrentUserResponse(**rbac_service.current_user_payload(db, current_user))
 
 
-@router.get("/me", response_model=UserResponse)
-def me(current_user: User = Depends(get_current_user)) -> UserResponse:
-    return current_user
-
-
-@router.get("/admin/me", response_model=AdminUserResponse)
-def admin_me(current_admin: AdminUser = Depends(get_current_admin)) -> AdminUserResponse:
-    return current_admin
-
-
-@router.patch("/me", response_model=UserResponse)
+@router.patch("/me", response_model=CurrentUserResponse)
 def update_me(
     data: UpdateProfileRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> UserResponse:
-    return update_user_profile(db, current_user, data)
+) -> CurrentUserResponse:
+    user = auth_service.update_own_profile(db, current_user, data)
+    return CurrentUserResponse(**rbac_service.current_user_payload(db, user))
 
 
-@router.patch("/admin/me", response_model=AdminUserResponse)
-def update_admin_me(
-    data: UpdateAdminProfileRequest,
-    current_admin: AdminUser = Depends(get_current_admin),
+@router.post("/me/change-password", response_model=MessageResponse)
+def change_password(
+    data: ChangePasswordRequest,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
-) -> AdminUserResponse:
-    return update_admin_profile(db, current_admin, data)
+) -> MessageResponse:
+    auth_service.change_own_password(db, current_user, data)
+    return MessageResponse(message="Password updated")
+
+
+# --- Password reset ---------------------------------------------------------
+
+
+@router.post("/forgot-password", response_model=MessageResponse)
+def forgot_password(
+    data: ForgotPasswordRequest, db: Session = Depends(get_db)
+) -> MessageResponse:
+    """Always answers identically, whether or not the address exists.
+
+    Anything else turns this endpoint into an account-enumeration oracle. With
+    no mail transport configured the token is currently only reachable by an
+    administrator reading the database — see TECH_DEBT.
+    """
+    auth_service.begin_password_reset(db, data.email)
+    return MessageResponse(
+        message="If an account exists for that address, a reset link has been sent."
+    )
+
+
+@router.post("/reset-password", response_model=MessageResponse)
+def reset_password(
+    data: ResetPasswordRequest, db: Session = Depends(get_db)
+) -> MessageResponse:
+    auth_service.complete_password_reset(db, data.token, data.password)
+    return MessageResponse(message="Password reset. You can now sign in.")

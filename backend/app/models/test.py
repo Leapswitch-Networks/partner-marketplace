@@ -17,8 +17,11 @@ class Test(Base):
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    created_by: Mapped[str] = mapped_column(
-        String(36), ForeignKey("admin_users.id", ondelete="SET NULL"), nullable=True
+    # Repointed from the dropped `admin_users` table when the two account tables
+    # were unified. Inherited domain — removed with the rest in
+    # SCAFFOLD_CLEANUP_PLAN § 2.
+    created_by: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

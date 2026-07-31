@@ -1,159 +1,272 @@
+"""Authentication: registration, login, profile, password management.
+
+Security decisions worth preserving:
+
+  * Passwords are hashed with bcrypt. `verify_password` is the only comparison.
+  * Login returns the SAME 401 for an unknown email and a wrong password, so the
+    endpoint never confirms which addresses exist.
+  * Credentials are checked BEFORE status, so a wrong password on a suspended
+    account still returns 401 rather than revealing that the account exists.
+  * Failed attempts are counted and the account locks — these columns are
+    actually written now (they were dead before: TECH_DEBT PM-6/PM-8).
+  * Emails are normalised to lower case on write AND on lookup (PM-17).
+"""
+
+from datetime import datetime, timedelta, timezone
+
 from fastapi import HTTPException, status
-from sqlalchemy import exists, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models.admin_user import AdminUser
+from app.core.config import settings
+from app.core.permissions import DEFAULT_PARTNER_ROLE
+from app.core.security import (
+    generate_token,
+    hash_password,
+    verify_password,
+)
 from app.models.user import User
-from app.schemas.auth import AdminRegisterRequest, RegisterRequest, UpdateAdminProfileRequest, UpdateAdminUserRequest, UpdateProfileRequest
+from app.schemas.auth import (
+    ChangePasswordRequest,
+    RegisterRequest,
+    UpdateProfileRequest,
+)
+from app.services.rbac_service import get_role_by_name
+
+#: Deliberately identical for "no such user" and "wrong password".
+_INVALID_CREDENTIALS = HTTPException(
+    status_code=status.HTTP_401_UNAUTHORIZED,
+    detail="Invalid email or password",
+)
 
 
-def _user_email_exists(db: Session, email: str) -> bool:
-    return db.scalar(select(exists().where(User.email == email))) or False
+def normalise_email(email: str) -> str:
+    return email.strip().lower()
 
 
-def _admin_email_exists(db: Session, email: str) -> bool:
-    return db.scalar(select(exists().where(AdminUser.email == email))) or False
+def get_user_by_email(db: Session, email: str) -> User | None:
+    return db.scalar(select(User).where(User.email == normalise_email(email)))
 
 
-def register_user(db: Session, data: RegisterRequest) -> User:
-    email = data.email.strip()
-    if _user_email_exists(db, email):
+def email_exists(db: Session, email: str, exclude_user_id: str | None = None) -> bool:
+    stmt = select(func.count()).select_from(User).where(User.email == normalise_email(email))
+    if exclude_user_id:
+        stmt = stmt.where(User.id != exclude_user_id)
+    return bool(db.scalar(stmt))
+
+
+# --- Registration -----------------------------------------------------------
+
+
+def register_partner(db: Session, data: RegisterRequest) -> User:
+    """Self-service partner registration.
+
+    Two refusals matter here:
+      * a staff-domain address cannot register this way, or someone could create
+        a staff account with a self-chosen password and bypass SSO entirely
+      * registration can be switched off wholesale via config
+    """
+    if not settings.ALLOW_PARTNER_SELF_REGISTRATION:
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="An account with this email already exists",
+            status.HTTP_403_FORBIDDEN,
+            "Self-registration is disabled. Please ask an administrator for an invitation.",
         )
+
+    email = normalise_email(data.email)
+
+    if settings.is_staff_email(email):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Staff accounts must sign in with Google. Use 'Continue with Google' instead.",
+        )
+
+    if email_exists(db, email):
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "An account with this email already exists"
+        )
+
     user = User(
-        name=data.name.strip(),
         email=email,
-        password=data.password,
+        password=hash_password(data.password),
+        first_name=data.first_name.strip(),
+        last_name=data.last_name.strip(),
+        company_name=(data.company_name or "").strip() or None,
+        phone=(data.phone or "").strip() or None,
+        account_type="partner",
+        auth_provider="credentials",
+        status=settings.NEW_USER_DEFAULT_STATUS,
     )
+
+    default_role = get_role_by_name(db, DEFAULT_PARTNER_ROLE)
+    if default_role:
+        user.roles.append(default_role)
+
     db.add(user)
     db.commit()
     db.refresh(user)
     return user
 
 
-def register_admin(db: Session, data: AdminRegisterRequest) -> AdminUser:
-    email = data.email.strip()
-    if _admin_email_exists(db, email):
+# --- Login ------------------------------------------------------------------
+
+
+def authenticate(db: Session, email: str, password: str, ip: str) -> User:
+    """Verify credentials and return the user, or raise.
+
+    Ordering is deliberate: lockout, then credentials, then status.
+    """
+    user = get_user_by_email(db, email)
+
+    if user is None:
+        # No user to throttle. Same error as a bad password.
+        raise _INVALID_CREDENTIALS
+
+    if user.is_locked:
+        remaining = int((user.locked_until - datetime.now(timezone.utc)).total_seconds() // 60) + 1
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="An admin account with this email already exists",
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            f"Too many failed attempts. Try again in {remaining} minute(s).",
         )
-    admin = AdminUser(
-        full_name=data.full_name.strip(),
-        email=email,
-        password=data.password,
-        role=data.role,
-    )
-    db.add(admin)
-    db.commit()
-    db.refresh(admin)
-    return admin
 
+    if not verify_password(password, user.password):
+        _record_failure(db, user)
+        raise _INVALID_CREDENTIALS
 
-def list_admin_users(db: Session) -> list[AdminUser]:
-    return db.query(AdminUser).order_by(AdminUser.created_at.desc()).all()
-
-
-def update_admin_user(db: Session, admin_id: str, data: UpdateAdminUserRequest, actor: AdminUser) -> AdminUser:
-    target = db.get(AdminUser, admin_id)
-    if target is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-
-    # Prevent a non-super-admin from editing anyone else
-    if not actor.is_super_admin and actor.id != target.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Super-admin privileges required")
-
-    # Only super-admins may change role or deactivate accounts
-    if data.role is not None and not actor.is_super_admin:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Super-admin privileges required")
-    if data.is_active is not None and not actor.is_super_admin:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Super-admin privileges required")
-
-    if data.email is not None:
-        email = data.email.strip()
-        if email != target.email:
-            if _admin_email_exists(db, email):
-                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already in use")
-            target.email = email
-
-    if data.full_name is not None:
-        target.full_name = data.full_name.strip()
-    if data.is_active is not None:
-        target.is_active = data.is_active
-    if data.role is not None:
-        target.role = data.role
-
-    db.commit()
-    db.refresh(target)
-    return target
-
-
-def delete_admin_user(db: Session, admin_id: str, actor: AdminUser) -> None:
-    if not actor.is_super_admin:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Super-admin privileges required")
-    target = db.get(AdminUser, admin_id)
-    if target is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    if target.id == actor.id:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="You cannot delete your own account")
-    db.delete(target)
-    db.commit()
-
-
-def authenticate_admin(db: Session, email: str, password: str) -> AdminUser:
-    admin = db.query(AdminUser).filter(AdminUser.email == email).first()
-    if not admin or admin.password != password:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password",
+    # Credentials are good. Only now does account state matter.
+    if user.status != "ACTIVE":
+        detail = (
+            "Your account is awaiting administrator approval."
+            if user.status == "INACTIVE"
+            else "Your account has been suspended. Contact an administrator."
         )
-    if not admin.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="This admin account has been deactivated",
+        raise HTTPException(status.HTTP_403_FORBIDDEN, detail)
+
+    _record_success(db, user, ip)
+    return user
+
+
+def _record_failure(db: Session, user: User) -> None:
+    """Count the failure and lock the account once the threshold is reached."""
+    user.failed_login_attempts += 1
+    if user.failed_login_attempts >= settings.MAX_FAILED_LOGIN_ATTEMPTS:
+        user.locked_until = datetime.now(timezone.utc) + timedelta(
+            minutes=settings.ACCOUNT_LOCKOUT_MINUTES
         )
-    return admin
-
-
-def update_admin_profile(db: Session, admin: AdminUser, data: UpdateAdminProfileRequest) -> AdminUser:
-    full_name = data.full_name.strip()
-    email = data.email.strip()
-    if email != admin.email:
-        if _admin_email_exists(db, email):
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="An account with this email already exists",
-            )
-    admin.full_name = full_name
-    admin.email = email
+        user.failed_login_attempts = 0
     db.commit()
-    db.refresh(admin)
-    return admin
 
 
-def update_user_profile(db: Session, user: User, data: UpdateProfileRequest) -> User:
-    name = data.name.strip()
-    email = data.email.strip()
-    if email != user.email:
-        if _user_email_exists(db, email):
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="An account with this email already exists",
-            )
-    user.name = name
-    user.email = email
+def _record_success(db: Session, user: User, ip: str) -> None:
+    user.failed_login_attempts = 0
+    user.locked_until = None
+    user.last_login_at = datetime.now(timezone.utc)
+    user.last_login_ip = ip
+    db.commit()
+    db.refresh(user)
+
+
+def record_login(db: Session, user: User, ip: str) -> None:
+    """Public wrapper used by the Google flow, which verifies no password."""
+    _record_success(db, user, ip)
+
+
+# --- Profile ----------------------------------------------------------------
+
+
+def update_own_profile(db: Session, user: User, data: UpdateProfileRequest) -> User:
+    """Apply only the fields that were actually sent.
+
+    Email is deliberately NOT updatable here — changing it would break the link
+    to a Google account and to any invitation, so it is an admin action.
+    """
+    updates = data.model_dump(exclude_unset=True)
+
+    for field in ("first_name", "last_name"):
+        if field in updates and updates[field] is not None:
+            setattr(user, field, updates[field].strip())
+
+    for field in ("designation", "phone", "company_name"):
+        if field in updates:
+            value = (updates[field] or "").strip()
+            setattr(user, field, value or None)
+
+    if updates.get("timezone_preference"):
+        user.timezone_preference = updates["timezone_preference"]
+
+    user.updated_by = user.id
     db.commit()
     db.refresh(user)
     return user
 
 
-def authenticate_user(db: Session, email: str, password: str) -> User:
-    user = db.query(User).filter(User.email == email).first()
-    if not user or user.password != password:
+def change_own_password(db: Session, user: User, data: ChangePasswordRequest) -> None:
+    """Change a password, requiring the current one.
+
+    A Google-only account has no password to verify, so it cannot use this — it
+    would be a way to add a credential path to an SSO account without proving
+    anything.
+    """
+    if user.password is None:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid email or password",
+            status.HTTP_400_BAD_REQUEST,
+            "This account signs in with Google and has no password to change.",
         )
+
+    if not verify_password(data.current_password, user.password):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Current password is incorrect")
+
+    if verify_password(data.password, user.password):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "New password must be different from the current one",
+        )
+
+    user.password = hash_password(data.password)
+    user.password_reset_token = None
+    user.password_reset_expires_at = None
+    user.updated_by = user.id
+    db.commit()
+
+
+# --- Password reset ---------------------------------------------------------
+
+
+def begin_password_reset(db: Session, email: str) -> tuple[User, str] | None:
+    """Issue a reset token, or return None when there is nothing to reset.
+
+    Returning None rather than raising is what lets the endpoint answer
+    identically whether or not the address exists — otherwise the endpoint
+    becomes an account-enumeration oracle.
+    """
+    user = get_user_by_email(db, email)
+    if user is None or user.password is None:
+        return None
+
+    token = generate_token(48)
+    user.password_reset_token = token
+    user.password_reset_expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+    db.commit()
+    return user, token
+
+
+def complete_password_reset(db: Session, token: str, new_password: str) -> User:
+    user = db.scalar(select(User).where(User.password_reset_token == token))
+
+    invalid = HTTPException(
+        status.HTTP_400_BAD_REQUEST, "This reset link is invalid or has expired"
+    )
+    if user is None or user.password_reset_expires_at is None:
+        raise invalid
+    if user.password_reset_expires_at <= datetime.now(timezone.utc):
+        raise invalid
+
+    user.password = hash_password(new_password)
+    user.password_reset_token = None
+    user.password_reset_expires_at = None
+    # A successful reset also clears a lockout — the legitimate owner has just
+    # proved control of the mailbox.
+    user.failed_login_attempts = 0
+    user.locked_until = None
+    db.commit()
+    db.refresh(user)
     return user

@@ -6,8 +6,19 @@ from alembic import context
 
 from app.core.config import settings
 from app.db.base import Base
+# EVERY model must be imported here or --autogenerate cannot see it, and may
+# emit a migration that drops its table. Add the import in the same commit as
+# the model.
+#
+# Core identity + RBAC
+import app.models.associations  # noqa: F401
 import app.models.user  # noqa: F401
-import app.models.admin_user  # noqa: F401
+import app.models.role  # noqa: F401
+import app.models.permission  # noqa: F401
+import app.models.permission_group  # noqa: F401
+import app.models.user_invitation  # noqa: F401
+
+# Inherited test-platform domain — see SCAFFOLD_CLEANUP_PLAN § 2
 import app.models.test  # noqa: F401
 import app.models.question  # noqa: F401
 import app.models.option  # noqa: F401
