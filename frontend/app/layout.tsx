@@ -6,8 +6,8 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
 export const metadata: Metadata = {
-  title: "Test Platform",
-  description: "Logic and reasoning test platform",
+  title: "Partner Marketplace",
+  description: "Partner marketplace platform",
 };
 
 // Injected before React hydration — eliminates dark-mode flash on page load.

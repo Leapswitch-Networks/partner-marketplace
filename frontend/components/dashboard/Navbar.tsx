@@ -36,10 +36,10 @@ export default function Navbar() {
         {/* Brand */}
         <Link href="/dashboard" className="flex items-center gap-2.5">
           <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#F97316] text-sm font-bold text-white">
-            T
+            P
           </span>
           <div className="hidden sm:block">
-            <p className="text-sm font-bold text-gray-900 leading-tight dark:text-gray-100">Test Platform</p>
+            <p className="text-sm font-bold text-gray-900 leading-tight dark:text-gray-100">Partner Marketplace</p>
             <p className="text-[10px] font-medium text-[#F97316] uppercase tracking-widest leading-tight">
               Super Admin
             </p>

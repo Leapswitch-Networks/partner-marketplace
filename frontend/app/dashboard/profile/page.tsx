@@ -2,8 +2,8 @@ import { Metadata } from "next";
 import DashboardClient from "../DashboardClient";
 
 export const metadata: Metadata = {
-  title: "Profile — Test Platform",
-  description: "Manage your profile on the Test Platform",
+  title: "Profile — Partner Marketplace",
+  description: "Manage your profile on Partner Marketplace",
 };
 
 export default function ProfilePage() {

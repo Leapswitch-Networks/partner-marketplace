@@ -504,10 +504,10 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
           onClick={() => onNavigate("dashboard")}
           className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#F97316] text-sm font-bold text-white"
         >
-          T
+          P
         </button>
         <div className="ml-2.5">
-          <p className="text-sm font-bold text-gray-900 leading-tight dark:text-white">Test Platform</p>
+          <p className="text-sm font-bold text-gray-900 leading-tight dark:text-white">Partner Marketplace</p>
           <p className="text-[10px] font-medium text-[#F97316] uppercase tracking-widest leading-tight">
             Admin Panel
           </p>
@@ -546,10 +546,10 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
                 onClick={() => onNavigate("dashboard")}
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#F97316] text-sm font-bold text-white"
               >
-                T
+                P
               </button>
               <div className="ml-2.5">
-                <p className="text-sm font-bold text-gray-900 leading-tight dark:text-white">Test Platform</p>
+                <p className="text-sm font-bold text-gray-900 leading-tight dark:text-white">Partner Marketplace</p>
                 <p className="text-[10px] font-medium text-[#F97316] uppercase tracking-widest leading-tight">
                   Admin Panel
                 </p>
@@ -593,7 +593,7 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#F97316] text-sm font-bold text-white transition-all duration-200 hover:bg-orange-600 hover:shadow-md 2xl:h-10 2xl:w-10 2xl:text-base"
             title="Dashboard"
           >
-            T
+            P
           </button>
 
           <div
@@ -601,7 +601,7 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
               collapsed ? "w-0 opacity-0" : "w-full opacity-100"
             }`}
           >
-            <p className="truncate text-sm font-bold text-gray-900 leading-tight 2xl:text-base dark:text-white">Test Platform</p>
+            <p className="truncate text-sm font-bold text-gray-900 leading-tight 2xl:text-base dark:text-white">Partner Marketplace</p>
             <p className="truncate text-[10px] font-medium text-[#F97316] uppercase tracking-widest leading-tight">
               Admin Panel
             </p>
