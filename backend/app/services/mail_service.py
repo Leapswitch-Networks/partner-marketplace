@@ -128,6 +128,17 @@ def send_invitation(to: str, accept_url: str, inviter_name: str | None, expires_
     return send(to, "You have been invited to Partner Marketplace", body)
 
 
+def send_email_verification(to: str, verify_url: str, expires_hours: int) -> bool:
+    body = (
+        "Please confirm this email address for your Partner Marketplace account.\n\n"
+        f"Confirm your address:\n{verify_url}\n\n"
+        f"The link expires in {expires_hours} hour{'s' if expires_hours != 1 else ''}.\n\n"
+        "If you did not create this account, you can ignore this message — nothing "
+        "will be activated without it.\n"
+    )
+    return send(to, "Confirm your email address", body)
+
+
 def send_password_reset(to: str, reset_url: str, expires_hours: int) -> bool:
     body = (
         "A password reset was requested for this address.\n\n"

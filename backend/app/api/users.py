@@ -117,11 +117,27 @@ def delete_user(
 @router.post("/{user_id}/approve", response_model=UserDetailResponse)
 def approve_user(
     user_id: str,
+    force_unverified: bool = Query(
+        default=False,
+        description=(
+            "Approve even though the email address has not been confirmed. Use only "
+            "when identity was verified another way — it is recorded as an override."
+        ),
+    ),
     db: Session = Depends(get_db),
     actor: User = Depends(require_permission(USER_APPROVE)),
 ) -> UserDetailResponse:
-    """Activate a pending account — the gate that Google SSO does not open."""
-    user = user_service.approve_user(db, user_id, actor)
+    """Activate a pending account — the gate that Google SSO does not open.
+
+    Answers `409` when the address is unconfirmed, rather than approving quietly:
+    activating an unverified account hands a live password-reset path to an address
+    its owner may not control. `force_unverified=true` overrides that for an
+    administrator who has confirmed identity out-of-band, and the override is
+    recorded distinctly in the audit trail.
+    """
+    user = user_service.approve_user(
+        db, user_id, actor, force_unverified=force_unverified
+    )
     return UserDetailResponse.model_validate(user_service.decorate(user, actor))
 
 

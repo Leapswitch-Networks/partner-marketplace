@@ -62,6 +62,12 @@ SENSITIVE_PATHS: frozenset[str] = frozenset(
         # Re-proving a password is a password check, and belongs under the same
         # limit as one.
         "/api/auth/me/confirm-password",
+        # Email verification (PM-35). `resend-verification` sends mail to an
+        # address the caller names, so without a tight limit it is a free relay for
+        # mailbombing someone else. `verify-email` is limited because the token,
+        # while signed, is worth guessing at scale.
+        "/api/auth/verify-email",
+        "/api/auth/resend-verification",
     }
 )
 

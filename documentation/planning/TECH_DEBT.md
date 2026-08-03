@@ -70,7 +70,7 @@ since 2026-07-31 — only the documentation was wrong, and wrong in a way that b
 | [PM-32](#pm-32--no-audit-log-leapdesk-has-one--recording-done-read-surface-pending) | 🟡 | ~~No audit log~~ recording done; **no read surface** | Quality |
 | [PM-33](#pm-33--no-security-response-headers--backend-done-frontend-pending) | ✅ | ~~No security response headers~~ | Infra |
 | [PM-34](#pm-34--no-two-factor-auth-fortify-parity--resolved) | ✅ | ~~No two-factor auth (Fortify parity)~~ | Auth |
-| [PM-35](#pm-35--email-verification-is-not-enforced-anywhere) | 🟠 | Email verification not enforced — nor is it in LeapDesk | Auth |
+| [PM-35](#pm-35--email-verification-is-not-enforced-anywhere--resolved) | ✅ | ~~Email verification not enforced~~ | Auth |
 
 ---
 
@@ -1071,7 +1071,55 @@ same state the RBAC API was in before 2026-07-31.
 
 ---
 
-### PM-35 — Email verification is not enforced anywhere
+### PM-35 — Email verification is not enforced anywhere ✅ RESOLVED
+
+**Resolved 2026-08-03.** Stateless signed tokens, two endpoints, and a gate at *approval* rather than at
+login. This closes the last Fortify feature LeapDesk has and we did not — and it is built **enforced**,
+which LeapDesk's is not.
+
+#### Where the gate goes, which was the real design question
+
+Registration already lands INACTIVE pending approval, so blocking the **user** on verification would add
+a second gate telling them nothing new. Blocking the **approver** is different and useful: activating an
+unverified account hands a live password-reset path to an address its owner may not control.
+
+So `POST /api/users/{id}/approve` answers **409** when the address is unconfirmed, with
+`?force_unverified=true` for an administrator who has confirmed identity out-of-band. The override is
+recorded distinctly — `unverified_override: true` in `properties` and "(email NOT confirmed —
+overridden)" in the description — so *who approved an unverified account* stays answerable.
+`REQUIRE_VERIFIED_EMAIL_FOR_APPROVAL` can switch the requirement off wholesale.
+
+#### Tokens are stateless and bound to the address
+
+No columns, no cleanup, nothing to leak — the same approach Laravel takes with signed URLs. The token
+carries `sub`, `email` and `type: "email_verification"`, and verification requires the claimed address to
+**still match the row**. That gives a property a stored token would not: changing the address invalidates
+every outstanding token for the old one, so a link mailed to a typo'd address cannot verify the corrected
+one. **Verified:** after an admin changed the address, the outstanding token returned `400`.
+
+Not single-use, deliberately — verifying twice is harmless, so a column and a write to prevent it would
+buy nothing. **Verified:** the second click returns `200`.
+
+24-hour TTL rather than the password reset's 1 hour. A reset link is a live credential and should be
+short-lived; a verification link proves an address and grants nothing on its own, so the balance tips
+towards the person who reads their email the next morning.
+
+#### `/resend-verification` says nothing
+
+Answers identically whether the address exists, is already verified, or the send failed — same reasoning
+as `/forgot-password`. Distinguishing those cases would be an enumeration oracle, and would additionally
+reveal which addresses are pending. Both endpoints are in the rate limiter's `sensitive` tier;
+`resend-verification` especially, since it mails an address the caller names and would otherwise be a
+free relay for mailbombing a third party.
+
+#### Verified 2026-08-03
+
+Register → link appeared in the log · approve before verifying → **409** with a message naming the
+override · verify → `200` · verify again → `200` (idempotent) · approve → `200` · override path → `409`
+then `200` with the audit row flagging it · address changed → outstanding token `400`. Both probe accounts
+deleted afterwards.
+
+Original entry follows.
 
 **Where:** `users.email_verified_at` is written but never checked
 

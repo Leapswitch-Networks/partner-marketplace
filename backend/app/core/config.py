@@ -75,6 +75,18 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_SECRET: str = ""
     GOOGLE_REDIRECT_URI: str = ""
 
+    # --- Email verification (PM-35) -----------------------------------------
+    # 24 hours rather than the 1 hour a password reset gets. A reset link is a
+    # live credential and should be short-lived; a verification link proves an
+    # address and grants nothing on its own, so the balance tips towards the user
+    # who opens their email the next morning.
+    EMAIL_VERIFICATION_TTL_HOURS: int = 24
+    # Whether approving an account requires its address to be verified first.
+    # On by default: approving an unverified account activates one whose owner may
+    # not control the address, and password reset then delivers to that address.
+    # An admin who has vouched out-of-band can still override per request.
+    REQUIRE_VERIFIED_EMAIL_FOR_APPROVAL: bool = True
+
     # --- Two-factor auth (PM-34) --------------------------------------------
     # Steps of ±30s accepted either side of now. LeapDesk leaves Fortify's
     # `window` commented out, which means its default of 0 — exact match only.

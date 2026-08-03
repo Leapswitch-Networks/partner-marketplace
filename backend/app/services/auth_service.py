@@ -15,12 +15,15 @@ Security decisions worth preserving:
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
+from jose import JWTError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.permissions import DEFAULT_PARTNER_ROLE
 from app.core.security import (
+    create_email_verification_token,
+    decode_token,
     generate_token,
     hash_password,
     verify_password,
@@ -262,6 +265,53 @@ def change_own_password(db: Session, user: User, data: ChangePasswordRequest) ->
     user.password_reset_expires_at = None
     user.updated_by = user.id
     db.commit()
+
+
+# --- Email verification (PM-35) ---------------------------------------------
+
+
+def complete_email_verification(db: Session, token: str) -> User:
+    """Mark an address verified from a signed token.
+
+    Four things are checked, and the email match is the one that is easy to omit:
+    the token must decode, be of the right `type`, name a real user, and **still
+    match that user's current address**. Without the last check a link mailed to a
+    typo'd address would verify whatever the address was later corrected to —
+    proving control of an inbox nobody read.
+    """
+    invalid = HTTPException(
+        status.HTTP_400_BAD_REQUEST, "This verification link is invalid or has expired."
+    )
+
+    try:
+        payload = decode_token(token)
+        if payload.get("type") != "email_verification":
+            raise invalid
+        user_id: str = payload["sub"]
+        claimed_email: str = payload["email"]
+    except (JWTError, KeyError):
+        raise invalid
+
+    user = db.get(User, user_id)
+    if user is None or user.email != normalise_email(claimed_email):
+        raise invalid
+
+    # Idempotent: a second click is a no-op rather than an error. The user cannot
+    # tell the difference and does not need to.
+    if user.email_verified_at is None:
+        user.email_verified_at = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(user)
+
+    return user
+
+
+def issue_email_verification(user: User) -> str | None:
+    """A fresh verification link for a user, or None if there is nothing to verify."""
+    if user.email_verified_at is not None:
+        return None
+    token = create_email_verification_token(user.id, user.email)
+    return f"{settings.FRONTEND_URL.rstrip('/')}/verify-email?token={token}"
 
 
 # --- Password reset ---------------------------------------------------------

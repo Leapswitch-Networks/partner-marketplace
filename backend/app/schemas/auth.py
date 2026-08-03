@@ -224,6 +224,10 @@ class TwoFactorStatusResponse(BaseModel):
     recovery_codes_remaining: int
 
 
+class VerifyEmailRequest(BaseModel):
+    token: str = Field(min_length=8)
+
+
 class ConfirmPasswordRequest(BaseModel):
     password: str = Field(min_length=1)
 

@@ -21,6 +21,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.config import settings
 from app.core.security import hash_password
 from app.models.activity_log import EVENT_STATUS_CHANGED
 from app.models.role import Role
@@ -367,8 +368,23 @@ def delete_user(db: Session, user_id: str, actor: User) -> str:
     return name
 
 
-def approve_user(db: Session, user_id: str, actor: User) -> User:
-    """Flip an INACTIVE account to ACTIVE. This is the gate SSO does not open."""
+def approve_user(
+    db: Session, user_id: str, actor: User, *, force_unverified: bool = False
+) -> User:
+    """Flip an INACTIVE account to ACTIVE. This is the gate SSO does not open.
+
+    **Approval is where email verification earns its place (PM-35).** Registration
+    already lands INACTIVE pending approval, so blocking the *user* on verification
+    would add a second gate that tells them nothing new. Blocking the *approver* is
+    different and useful: approving an unverified address activates an account whose
+    owner may not control that address, and password reset then delivers a live
+    credential to it.
+
+    `force_unverified` exists because an administrator who has confirmed identity
+    out-of-band — over a call, in person — should not be stuck behind an email the
+    user cannot receive. The override is recorded distinctly in the audit trail, so
+    "who approved an unverified account" stays answerable.
+    """
     target = get_user_or_404(db, user_id)
 
     if target.status == "ACTIVE":
@@ -380,6 +396,17 @@ def approve_user(db: Session, user_id: str, actor: User) -> User:
             status.HTTP_403_FORBIDDEN, "A super-admin account cannot be approved here."
         )
 
+    unverified = target.email_verified_at is None
+    if unverified and settings.REQUIRE_VERIFIED_EMAIL_FOR_APPROVAL and not force_unverified:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            (
+                "This address has not been confirmed yet. Ask the user to click the link "
+                "in their email, or approve anyway if you have verified their identity "
+                "another way."
+            ),
+        )
+
     was = target.status
     target.status = "ACTIVE"
     target.failed_login_attempts = 0
@@ -389,15 +416,24 @@ def approve_user(db: Session, user_id: str, actor: User) -> User:
     db.refresh(target)
 
     # Approval is the gate SSO does not open, so who opened it and when is one of
-    # the more important things this trail holds.
+    # the more important things this trail holds. An override of the verification
+    # requirement is flagged in the row rather than looking like a normal approval.
     activity_service.record(
         db,
-        description=f"{target.email} — approved",
+        description=(
+            f"{target.email} — approved"
+            + (" (email NOT confirmed — overridden)" if unverified else "")
+        ),
         event=EVENT_STATUS_CHANGED,
         subject_type="User",
         subject_id=target.id,
         actor=actor,
-        properties={"attributes": {"status": "ACTIVE"}, "old": {"status": was}},
+        properties={
+            "attributes": {"status": "ACTIVE"},
+            "old": {"status": was},
+            "email_verified": not unverified,
+            **({"unverified_override": True} if unverified else {}),
+        },
     )
     return target
 

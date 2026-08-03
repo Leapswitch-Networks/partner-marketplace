@@ -148,6 +148,34 @@ def create_two_factor_challenge_token(subject: Any) -> str:
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
+def create_email_verification_token(subject: Any, email: str) -> str:
+    """Token proving control of an email address (PM-35).
+
+    **Stateless, and bound to the address**, which is the interesting part. Laravel
+    uses signed URLs for this rather than a stored token, and the same reasoning
+    applies here: there is nothing to clean up, nothing to leak from a column, and
+    no migration.
+
+    Embedding `email` gives a property a stored token would not: if the address is
+    later changed, every outstanding token for the old one **stops working**,
+    because the claim no longer matches the row. Otherwise a link mailed to a
+    typo'd address could still verify the corrected one.
+
+    Not single-use, deliberately. Verifying twice is harmless — the second attempt
+    finds the address already verified — so paying for a database column and a write
+    to prevent it would buy nothing.
+    """
+    now = datetime.now(timezone.utc)
+    payload = {
+        "sub": str(subject),
+        "email": email,
+        "exp": now + timedelta(hours=settings.EMAIL_VERIFICATION_TTL_HOURS),
+        "iat": now,
+        "type": "email_verification",
+    }
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
 def decode_token(token: str) -> dict:
     """Raises JWTError if the token is invalid or expired."""
     return jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])

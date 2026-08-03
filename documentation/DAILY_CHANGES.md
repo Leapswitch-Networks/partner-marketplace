@@ -115,6 +115,42 @@
 
 ---
 
+## August 3, 2026 — Email verification, enforced (last Fortify gap)
+
+- **Email verification exists and is actually enforced, which is more than LeapDesk manages.** Its
+  `config/fortify.php` enables the feature, but `User.php` has `MustVerifyEmail` commented out and the
+  class does not implement it — so the routes exist and nothing checks them. Copying that would have been
+  copying a half-wired feature. This closes the last of the four Fortify features.
+- **The real design question was where the gate goes, and the answer is not where you would first put it.**
+  Registration already lands INACTIVE pending approval, so blocking the *user* on verification adds a
+  second gate that tells them nothing new. Blocking the *approver* is what matters: activating an
+  unverified account hands a live password-reset path to an address its owner may not control. So
+  approval answers **409** on an unconfirmed address, with an explicit `force_unverified=true` for an
+  administrator who has confirmed identity over a call — recorded as an override, both in the description
+  and as `unverified_override: true`, so "who approved an unverified account" stays answerable.
+- **Tokens are stateless and bound to the address.** No columns, no cleanup, nothing to leak — the same
+  approach Laravel takes with signed URLs. Binding the address into the claim buys a property a stored
+  token would not: **changing the address invalidates every outstanding token for the old one**, so a link
+  mailed to a typo cannot verify the corrected address. Verified — after an admin changed the email, the
+  outstanding token returned `400`.
+- **Not single-use, on purpose.** Verifying twice is harmless, so a column and a write to prevent it would
+  buy nothing. The second click returns `200`.
+- **24-hour expiry rather than the password reset's one hour.** A reset link is a live credential and
+  should be short-lived; a verification link proves an address and grants nothing on its own, so the
+  balance tips towards the person who opens their email the next morning.
+- **`/resend-verification` deliberately says nothing.** Identical answer whether the address exists, is
+  already verified, or the send failed — same reasoning as `/forgot-password`. Distinguishing those cases
+  would be an enumeration oracle *and* would reveal which addresses are pending. It is in the strict rate
+  limit tier especially, because it mails an address the caller names and would otherwise be a free relay
+  for mailbombing a third party.
+- **Eight checks against the running stack, all passing:** register produced a link in the log; approving
+  before verifying returned `409` with a message naming the override; verify `200`; verify again `200`;
+  approve then `200`; the override path `409` then `200` with the audit row flagging it; and an address
+  change invalidated the outstanding token. Both probe accounts were deleted afterwards, leaving the local
+  database as it was found.
+
+---
+
 ## August 3, 2026 — 2FA frontend, security headers finished, admin 2FA reset
 
 - **The 2FA endpoints now have a UI.** They worked and nothing reached them — the same state the RBAC API

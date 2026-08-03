@@ -44,6 +44,7 @@ from app.schemas.auth import (
     TwoFactorEnrolmentResponse,
     TwoFactorRequiredResponse,
     TwoFactorStatusResponse,
+    VerifyEmailRequest,
 )
 from app.services import (
     activity_service,
@@ -128,12 +129,84 @@ def clear_auth_cookies(response: Response) -> None:
 def register(data: RegisterRequest, db: Session = Depends(get_db)) -> MessageResponse:
     """Partner self-registration. Deliberately does NOT sign the user in —
     the account starts INACTIVE and needs approval first."""
-    auth_service.register_partner(db, data)
+    user = auth_service.register_partner(db, data)
+    _send_verification(db, user)
     return MessageResponse(
         message=(
-            "Account created. An administrator will review and activate it, "
-            "and you'll be able to sign in once approved."
+            "Account created. Check your email to confirm your address — "
+            "an administrator will then review and activate the account."
         )
+    )
+
+
+def _send_verification(db: Session, user: User) -> None:
+    """Email a verification link, if there is anything to verify.
+
+    Failures are swallowed by `mail_service` and logged, so a mail outage cannot
+    turn registration into a 500 for an account that was in fact created.
+    """
+    url = auth_service.issue_email_verification(user)
+    if url is None:
+        return
+    mail_service.send_email_verification(
+        to=user.email, verify_url=url, expires_hours=settings.EMAIL_VERIFICATION_TTL_HOURS
+    )
+    activity_service.record(
+        db,
+        log_name="auth",
+        description=f"Verification email sent to {user.email}",
+        event="email_verification_sent",
+        subject_type="User",
+        subject_id=user.id,
+    )
+
+
+# --- Email verification (PM-35) ---------------------------------------------
+
+
+@router.post("/verify-email", response_model=MessageResponse)
+def verify_email(data: VerifyEmailRequest, db: Session = Depends(get_db)) -> MessageResponse:
+    """Confirm an address from a signed link. Unauthenticated — the holder of the
+    link has no session yet, and requiring one would make the link useless to the
+    person it was sent to."""
+    user = auth_service.complete_email_verification(db, data.token)
+    activity_service.record(
+        db,
+        log_name="auth",
+        description=f"{user.email} confirmed their email address",
+        event="email_verified",
+        subject_type="User",
+        subject_id=user.id,
+        causer_id=user.id,
+    )
+    return MessageResponse(
+        message=(
+            "Email confirmed. An administrator will review your account."
+            if user.status != "ACTIVE"
+            else "Email confirmed. You can sign in."
+        )
+    )
+
+
+@router.post("/resend-verification", response_model=MessageResponse)
+def resend_verification(
+    data: ForgotPasswordRequest, db: Session = Depends(get_db)
+) -> MessageResponse:
+    """Send a fresh verification link.
+
+    Answers identically whether or not the address exists, whether or not it is
+    already verified, and whether or not the send succeeded — same reasoning as
+    `/forgot-password`. A response that distinguished those cases would be an
+    account-enumeration oracle, and it would also reveal which addresses are
+    pending, which is a hint worth withholding.
+
+    Reuses `ForgotPasswordRequest` because the shape is identical: one email field.
+    """
+    user = auth_service.get_user_by_email(db, data.email)
+    if user is not None:
+        _send_verification(db, user)
+    return MessageResponse(
+        message="If that address needs confirming, a new link has been sent."
     )
 
 
