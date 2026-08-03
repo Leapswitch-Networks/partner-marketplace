@@ -54,6 +54,14 @@ SENSITIVE_PATHS: frozenset[str] = frozenset(
         "/api/auth/accept-invitation",
         "/api/auth/me/change-password",
         "/api/invitations/preview",
+        # 2FA (PM-34). These MUST stay in this tier. A six-digit code is one in a
+        # million per guess, which is only strong while guesses are limited — and
+        # `/two-factor-challenge` is unauthenticated by necessity, so this limit
+        # plus the shared lockout counter is the entire brute-force defence.
+        "/api/auth/two-factor-challenge",
+        # Re-proving a password is a password check, and belongs under the same
+        # limit as one.
+        "/api/auth/me/confirm-password",
     }
 )
 

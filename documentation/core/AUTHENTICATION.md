@@ -169,6 +169,91 @@ sessions" screen would list. `session_service.list_active()` is already written 
 
 ---
 
+## Two-Factor Authentication and Password Confirmation
+
+**Added 2026-08-03 (PM-34).** Behavioural port of Laravel Fortify's
+`twoFactorAuthentication(['confirm' => true, 'confirmPassword' => true])`, which is what LeapDesk
+enables. **There is no Fortify for FastAPI** — `fastapi-users` is the nearest analogue, has no 2FA at
+all, and would mean replacing an already-audited auth layer. So it is built directly on `pyotp`.
+
+### Dependencies: one
+
+`pyotp` only. Secret encryption uses **Fernet from `cryptography`**, already present as a
+`python-jose` extra, so no separate crypto library. There is **no QR image library** — the API returns
+the `otpauth://` URI and the frontend renders it, rather than pulling in `qrcode` + Pillow to draw a
+picture the browser can draw itself.
+
+### The three states, and why the middle one exists
+
+```
+no secret                    →  2FA off
+secret, confirmed_at NULL    →  enrolled but UNPROVEN — 2FA is NOT enforced
+secret + confirmed_at        →  2FA on
+```
+
+The middle state is Fortify's `confirm => true`, and it prevents a self-inflicted lockout. If storing
+a secret were enough to enforce 2FA, anyone who mis-scanned the QR — or scanned it into an app on a
+phone they then wiped — would be required to produce codes nothing can generate, with no way back in.
+**Verified:** while enrolment is pending, login still succeeds without a code.
+
+### Endpoints
+
+| Method | Path | Notes |
+|---|---|---|
+| `POST` | `/api/auth/login` | Returns `{two_factor_required, challenge_token}` and **no cookies** when 2FA is on |
+| `POST` | `/api/auth/two-factor-challenge` | Exchange the token + a TOTP **or** a recovery code for a session |
+| `GET` | `/api/auth/me/two-factor` | Status, including `pending_confirmation` and codes remaining |
+| `POST` | `/api/auth/me/two-factor` | Begin enrolment — **password confirmation required** |
+| `POST` | `/api/auth/me/two-factor/confirm` | Prove a code; this is what enables it |
+| `DELETE` | `/api/auth/me/two-factor` | Disable — **password confirmation required** |
+| `POST` | `/api/auth/me/two-factor/recovery-codes` | Regenerate — **password confirmation required** |
+| `POST` | `/api/auth/me/confirm-password` | Re-prove the password |
+
+### Design decisions
+
+- **The challenge token carries `type: "two_factor"` and no `sid`.** `_decode_access_token` asserts
+  `type == "access"`, which is the only thing between "passed the password" and "authenticated" — so it
+  must never be relaxed to accept several types. Verified: the challenge token returns `401` at `/me`.
+- **The TOTP secret and recovery codes are encrypted at rest.** In the clear, anyone with a database
+  dump — a backup on a laptop, a restored snapshot, a reporting replica — can mint valid codes for every
+  account with 2FA, and the second factor silently becomes no factor. Laravel encrypts these columns for
+  the same reason.
+- **Recovery codes are single-use, by deletion.** Eight at enrolment, each removed the moment it is
+  used, so a code read over a shoulder is worth one login at most. Shown exactly once — the columns hold
+  ciphertext and nothing decrypts them for display.
+- **A wrong code counts against the same lockout the password uses.** A separate counter would hand an
+  attacker who already knows the password a fresh, independent budget of guesses at the second factor —
+  precisely the position 2FA exists to make hopeless.
+- **`/two-factor-challenge` and `/me/confirm-password` are in the rate limiter's `sensitive` tier.** A
+  six-digit code is one in a million per guess, which is only strong while guesses are limited.
+- **Password confirmation is stored per session**, on `user_sessions.password_confirmed_at`, not on the
+  user. It means "this browser proved it knows the password recently"; on the user, a confirmation from
+  a laptop would authorise a sensitive action from a phone. Default window 180 minutes, matching
+  Laravel.
+- **Disabling 2FA requires password confirmation, and that is the whole point of the gate.** Without it,
+  someone holding a stolen session could quietly remove the factor protecting the account.
+
+### ⚠️ Rotating `SECRET_KEY` breaks 2FA for everyone
+
+The encryption key is derived from `SECRET_KEY` via HKDF. Rotating that secret makes every stored TOTP
+secret and recovery code undecryptable, and **every enrolled user must re-enrol**. `decrypt` returns
+`None` rather than raising, which callers treat as "no secret" — so the failure is a refused code, not a
+500. Rotation already invalidates every token and signs everyone out, so it was never routine; this
+raises the stakes. The alternative — a separate `ENCRYPTION_KEY` — trades this for a second secret to
+manage and lose.
+
+### Verified 2026-08-03, full lifecycle against the running stack
+
+Enrol refused with `403` until the password was confirmed · wrong password `422` · enrolment returned a
+secret, an `otpauth://` URI and 8 codes · pending state reported `enabled=false` and **login still
+worked without a code** · wrong confirm code `422`, real code enabled it · login then returned
+`two_factor_required` with **zero `Set-Cookie` headers** · the challenge token was refused at `/me` ·
+wrong TOTP `401`, real TOTP produced a working session · a recovery code signed in and dropped the count
+8 → 7 · **reusing that code returned `401`** · disable `403` without confirmation and `200` with it,
+clearing the secrets · login returned to normal afterwards.
+
+---
+
 ## Login Throttling
 
 The lockout columns are written now — they were dead before (PM-6/PM-8).

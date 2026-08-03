@@ -11,9 +11,21 @@ from jose import JWTError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.dependencies import get_client_ip, get_current_user, get_db
-from app.core.security import create_access_token, create_refresh_token, decode_token
+from app.core.dependencies import (
+    get_client_ip,
+    get_current_session,
+    get_current_user,
+    get_db,
+    require_password_confirmation,
+)
+from app.core.security import (
+    create_access_token,
+    create_refresh_token,
+    create_two_factor_challenge_token,
+    decode_token,
+)
 from app.models.user import User
+from app.models.user_session import UserSession
 from app.schemas.auth import (
     AcceptInvitationRequest,
     ChangePasswordRequest,
@@ -25,6 +37,13 @@ from app.schemas.auth import (
     RegisterRequest,
     ResetPasswordRequest,
     UpdateProfileRequest,
+    ConfirmPasswordRequest,
+    RecoveryCodesResponse,
+    TwoFactorChallengeRequest,
+    TwoFactorConfirmRequest,
+    TwoFactorEnrolmentResponse,
+    TwoFactorRequiredResponse,
+    TwoFactorStatusResponse,
 )
 from app.services import (
     activity_service,
@@ -33,6 +52,7 @@ from app.services import (
     mail_service,
     rbac_service,
     session_service,
+    two_factor_service,
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -124,6 +144,7 @@ def register(data: RegisterRequest, db: Session = Depends(get_db)) -> MessageRes
 )
 def accept_invitation(
     data: AcceptInvitationRequest,
+    request: Request,
     response: Response,
     db: Session = Depends(get_db),
 ) -> LoginResponse:
@@ -133,7 +154,15 @@ def accept_invitation(
     vouched for this address by inviting it.
     """
     user = invitation_service.accept_with_credentials(db, data)
-    set_auth_cookies(response, user.id)
+    ip = get_client_ip(request)
+    user_agent = request.headers.get("User-Agent")
+    # A session, like any other sign-in — this path was missed when sessions were
+    # introduced and called `set_auth_cookies` with the old two-argument signature,
+    # which would have raised on the first invitation accepted. Caught while wiring
+    # 2FA, not by a test, which is PM-11 earning its severity.
+    session = session_service.create(db, user, ip=ip, user_agent=user_agent)
+    activity_service.record_login(db, user, ip, user_agent)
+    set_auth_cookies(response, user.id, session.id)
     return LoginResponse(
         message="Welcome aboard",
         user=CurrentUserResponse(**rbac_service.current_user_payload(db, user)),
@@ -143,17 +172,38 @@ def accept_invitation(
 # --- Login / logout ---------------------------------------------------------
 
 
-@router.post("/login", response_model=LoginResponse)
+@router.post("/login", response_model=LoginResponse | TwoFactorRequiredResponse)
 def login(
     data: LoginRequest,
     request: Request,
     response: Response,
     db: Session = Depends(get_db),
-) -> LoginResponse:
+) -> LoginResponse | TwoFactorRequiredResponse:
     ip = get_client_ip(request)
     user_agent = request.headers.get("User-Agent")
 
     user = auth_service.authenticate(db, data.email, data.password, ip)
+
+    # 2FA gate. The password was correct, but correct-password is not
+    # authenticated when a second factor is enabled — so no session is created and
+    # no cookie is set. The caller gets a short-lived challenge token that
+    # `get_current_user` will not accept, and must exchange it below.
+    if user.has_two_factor_enabled:
+        activity_service.record(
+            db,
+            log_name="auth",
+            description=f"{user.full_name} passed the password step; awaiting 2FA",
+            event="two_factor_challenged",
+            subject_type="User",
+            subject_id=user.id,
+            causer_id=user.id,
+            properties={"ip": ip},
+        )
+        return TwoFactorRequiredResponse(
+            challenge_token=create_two_factor_challenge_token(user.id),
+            recovery_codes_remaining=two_factor_service.remaining_recovery_codes(user),
+        )
+
     session = session_service.create(db, user, ip=ip, user_agent=user_agent)
     # Recorded here rather than in `authenticate`, because the audit entry should
     # mean "a session now exists", and only this point knows that it does.
@@ -343,6 +393,228 @@ def change_password(
             )
         )
     return MessageResponse(message="Password updated")
+
+
+# --- Two-factor authentication (PM-34) --------------------------------------
+#
+# Port of Fortify's `twoFactorAuthentication(['confirm' => true,
+# 'confirmPassword' => true])`, which is what LeapDesk enables.
+#
+# `/two-factor-challenge` is unauthenticated by necessity — the caller has passed
+# the password step and holds nothing a guard would accept. It IS covered by the
+# per-IP sensitive-tier rate limit, which is what bounds guessing a six-digit code;
+# see the assertion in core/rate_limit.py SENSITIVE_PATHS.
+
+
+@router.post("/two-factor-challenge", response_model=LoginResponse)
+def two_factor_challenge(
+    data: TwoFactorChallengeRequest,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> LoginResponse:
+    """Exchange a challenge token plus a code for a real session."""
+    invalid = HTTPException(
+        status.HTTP_401_UNAUTHORIZED, "That code is not valid. Please try again."
+    )
+
+    try:
+        payload = decode_token(data.challenge_token)
+        if payload.get("type") != "two_factor":
+            raise invalid
+        user_id: str = payload["sub"]
+    except (JWTError, KeyError):
+        raise invalid
+
+    user = db.get(User, user_id)
+    # Re-checked here, not trusted from the token: an account can be suspended in
+    # the minutes between the password step and the code being entered.
+    if user is None or user.status != "ACTIVE" or not user.has_two_factor_enabled:
+        raise invalid
+
+    ip = get_client_ip(request)
+    used_recovery_code = False
+
+    if data.code:
+        ok = two_factor_service.verify_totp(user, data.code)
+    elif data.recovery_code:
+        ok = two_factor_service.consume_recovery_code(db, user, data.recovery_code)
+        used_recovery_code = ok
+    else:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "Provide either an authenticator code or a recovery code.",
+        )
+
+    if not ok:
+        # Counted against the lockout, so a wrong second factor cannot be brute
+        # forced indefinitely even within the rate limit.
+        auth_service.record_second_factor_failure(db, user)
+        activity_service.record_failed_login(
+            db, user.email, ip, reason="bad_two_factor_code"
+        )
+        raise invalid
+
+    user_agent = request.headers.get("User-Agent")
+    session = session_service.create(db, user, ip=ip, user_agent=user_agent)
+    auth_service.record_login(db, user, ip)
+    activity_service.record_login(db, user, ip, user_agent)
+
+    if used_recovery_code:
+        remaining = two_factor_service.remaining_recovery_codes(user)
+        activity_service.record(
+            db,
+            log_name="auth",
+            description=f"{user.full_name} signed in with a recovery code",
+            event="recovery_code_used",
+            subject_type="User",
+            subject_id=user.id,
+            causer_id=user.id,
+            properties={"ip": ip, "remaining": remaining},
+        )
+
+    set_auth_cookies(response, user.id, session.id)
+    return LoginResponse(
+        message="Login successful",
+        user=CurrentUserResponse(**rbac_service.current_user_payload(db, user)),
+    )
+
+
+@router.post("/me/confirm-password", response_model=MessageResponse)
+def confirm_password(
+    data: ConfirmPasswordRequest,
+    session: UserSession = Depends(get_current_session),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> MessageResponse:
+    """Re-prove the password, marking this session confirmed for a while.
+
+    Fortify's `/user/confirm-password`. Stamped on the **session**, so confirming
+    on a laptop does not authorise a sensitive action from a phone.
+    """
+    if not auth_service.verify_own_password(current_user, data.password):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "That password is incorrect.")
+
+    session_service.mark_password_confirmed(db, session)
+    return MessageResponse(
+        message=f"Password confirmed for {settings.PASSWORD_CONFIRMATION_TIMEOUT_MINUTES} minutes."
+    )
+
+
+@router.get("/me/two-factor", response_model=TwoFactorStatusResponse)
+def two_factor_status(
+    current_user: User = Depends(get_current_user),
+) -> TwoFactorStatusResponse:
+    return TwoFactorStatusResponse(
+        enabled=current_user.has_two_factor_enabled,
+        pending_confirmation=(
+            current_user.two_factor_secret is not None
+            and current_user.two_factor_confirmed_at is None
+        ),
+        confirmed_at=current_user.two_factor_confirmed_at,
+        recovery_codes_remaining=two_factor_service.remaining_recovery_codes(current_user),
+    )
+
+
+@router.post("/me/two-factor", response_model=TwoFactorEnrolmentResponse)
+def enable_two_factor(
+    current_user: User = Depends(get_current_user),
+    _confirmed: UserSession = Depends(require_password_confirmation),
+    db: Session = Depends(get_db),
+) -> TwoFactorEnrolmentResponse:
+    """Start enrolment. Does NOT enable 2FA until `/confirm` succeeds."""
+    if current_user.password is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "This account signs in with Google. Two-factor authentication is managed there.",
+        )
+    try:
+        secret, uri, codes = two_factor_service.begin_enrolment(db, current_user)
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc))
+
+    activity_service.record(
+        db,
+        log_name="auth",
+        description=f"{current_user.full_name} started two-factor enrolment",
+        event="two_factor_enrolment_started",
+        subject_type="User",
+        subject_id=current_user.id,
+        actor=current_user,
+    )
+    return TwoFactorEnrolmentResponse(secret=secret, otpauth_uri=uri, recovery_codes=codes)
+
+
+@router.post("/me/two-factor/confirm", response_model=MessageResponse)
+def confirm_two_factor(
+    data: TwoFactorConfirmRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> MessageResponse:
+    """Prove a code works, which is what actually turns 2FA on."""
+    if not two_factor_service.confirm_enrolment(db, current_user, data.code):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "That code is not valid. Check your authenticator app and try again.",
+        )
+
+    activity_service.record(
+        db,
+        log_name="auth",
+        description=f"{current_user.full_name} enabled two-factor authentication",
+        event="two_factor_enabled",
+        subject_type="User",
+        subject_id=current_user.id,
+        actor=current_user,
+    )
+    return MessageResponse(message="Two-factor authentication is now enabled.")
+
+
+@router.delete("/me/two-factor", response_model=MessageResponse)
+def disable_two_factor(
+    current_user: User = Depends(get_current_user),
+    _confirmed: UserSession = Depends(require_password_confirmation),
+    db: Session = Depends(get_db),
+) -> MessageResponse:
+    """Turn 2FA off. **Password confirmation required** — this is the reason that
+    gate exists: without it, someone holding a stolen session could quietly remove
+    the factor protecting the account."""
+    two_factor_service.disable(db, current_user)
+    activity_service.record(
+        db,
+        log_name="auth",
+        description=f"{current_user.full_name} disabled two-factor authentication",
+        event="two_factor_disabled",
+        subject_type="User",
+        subject_id=current_user.id,
+        actor=current_user,
+    )
+    return MessageResponse(message="Two-factor authentication is now disabled.")
+
+
+@router.post("/me/two-factor/recovery-codes", response_model=RecoveryCodesResponse)
+def regenerate_recovery_codes(
+    current_user: User = Depends(get_current_user),
+    _confirmed: UserSession = Depends(require_password_confirmation),
+    db: Session = Depends(get_db),
+) -> RecoveryCodesResponse:
+    """Issue a fresh set. Gated too — regenerating invalidates the codes the real
+    owner may be relying on to get back in."""
+    if not current_user.has_two_factor_enabled:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST, "Two-factor authentication is not enabled."
+        )
+    codes = two_factor_service.regenerate_recovery_codes(db, current_user)
+    activity_service.record(
+        db,
+        log_name="auth",
+        description=f"{current_user.full_name} regenerated recovery codes",
+        event="recovery_codes_regenerated",
+        subject_type="User",
+        subject_id=current_user.id,
+        actor=current_user,
+    )
+    return RecoveryCodesResponse(recovery_codes=codes)
 
 
 # --- Password reset ---------------------------------------------------------

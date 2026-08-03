@@ -90,6 +90,12 @@ def touch(db: Session, session: UserSession) -> None:
     db.commit()
 
 
+def mark_password_confirmed(db: Session, session: UserSession) -> None:
+    """Stamp this session as having re-proved the account password just now."""
+    session.password_confirmed_at = datetime.now(timezone.utc)
+    db.commit()
+
+
 def revoke(db: Session, session: UserSession, reason: str) -> None:
     """End one session. Idempotent — re-revoking keeps the original reason."""
     if session.revoked_at is not None:

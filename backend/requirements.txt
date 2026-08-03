@@ -14,3 +14,10 @@ bcrypt==4.3.0
 python-multipart==0.0.17
 # Google OAuth token exchange + userinfo (server-to-server, no SDK needed).
 httpx==0.28.1
+# TOTP for two-factor auth (PM-34). The only new dependency 2FA needed:
+#   * secret encryption uses Fernet from `cryptography`, already present as a
+#     python-jose extra — no separate crypto library
+#   * no QR image library. The API returns the `otpauth://` URI and the frontend
+#     renders it, which avoids pulling in qrcode + Pillow to draw a picture the
+#     browser can draw itself
+pyotp==2.9.0

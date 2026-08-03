@@ -171,6 +171,68 @@ class LoginResponse(BaseModel):
     user: CurrentUserResponse
 
 
+class TwoFactorRequiredResponse(BaseModel):
+    """Returned by `/login` when the password was right but 2FA is enabled.
+
+    No cookies are set and no session exists yet — the caller must exchange
+    `challenge_token` at `/two-factor-challenge`. `two_factor_required` is an
+    explicit boolean rather than something the client infers from a missing
+    `user`, because a client guessing at the shape is a client that will
+    eventually guess wrong and treat a challenge as a successful login.
+    """
+
+    two_factor_required: bool = True
+    challenge_token: str
+    message: str = "Enter the code from your authenticator app."
+    recovery_codes_remaining: int
+
+
+class TwoFactorChallengeRequest(BaseModel):
+    challenge_token: str
+    #: Exactly one of these. A six-digit TOTP, or a recovery code if the
+    #: authenticator is gone.
+    code: str | None = Field(default=None, max_length=10)
+    recovery_code: str | None = Field(default=None, max_length=20)
+
+
+class TwoFactorEnrolmentResponse(BaseModel):
+    """The one and only time the secret and recovery codes are readable.
+
+    Both columns hold ciphertext and nothing decrypts them for display, so a user
+    who loses this response must re-enrol or regenerate.
+    """
+
+    secret: str
+    otpauth_uri: str
+    recovery_codes: list[str]
+    message: str = (
+        "Scan the QR code, then confirm with a code to finish enabling two-factor "
+        "authentication. Save the recovery codes now — they are not shown again."
+    )
+
+
+class TwoFactorConfirmRequest(BaseModel):
+    code: str = Field(min_length=6, max_length=10)
+
+
+class TwoFactorStatusResponse(BaseModel):
+    enabled: bool
+    #: True when a secret exists but has never been confirmed — enrolment started
+    #: and was abandoned. 2FA is NOT enforced in this state.
+    pending_confirmation: bool
+    confirmed_at: datetime | None
+    recovery_codes_remaining: int
+
+
+class ConfirmPasswordRequest(BaseModel):
+    password: str = Field(min_length=1)
+
+
+class RecoveryCodesResponse(BaseModel):
+    recovery_codes: list[str]
+    message: str = "Previous recovery codes no longer work."
+
+
 class MessageResponse(BaseModel):
     message: str
 

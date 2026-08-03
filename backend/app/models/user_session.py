@@ -80,6 +80,15 @@ class UserSession(Base):
     #: is otherwise unanswerable.
     revoked_reason: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
+    #: When this session last re-proved the account password. Fortify's
+    #: `confirmPassword` gate, stored per session rather than per user: it means
+    #: "this browser proved it knows the password recently", which is a property
+    #: of the session. On the user it would let a confirmation on one device
+    #: authorise a sensitive action on another.
+    password_confirmed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     user: Mapped["User"] = relationship(back_populates="sessions")  # noqa: F821
 
     # --- Derived ------------------------------------------------------------

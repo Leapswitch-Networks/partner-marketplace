@@ -115,6 +115,71 @@
 
 ---
 
+## August 3, 2026 — Two-factor auth and password confirmation (Fortify parity)
+
+- **The ecosystem question first, because it decided the approach: there is no Fortify for FastAPI.**
+  `fastapi-users` is the nearest analogue — registration, login, password reset, email verification,
+  OAuth — but it has **no 2FA at all**, and adopting it means it owns the user model and replaces an auth
+  layer that had just been audited and hardened. Rejected. Built directly instead, on **one** new
+  dependency: `pyotp`. Secret encryption reuses Fernet from `cryptography`, already installed as a
+  `python-jose` extra, and no QR library was needed — the API returns the `otpauth://` URI and the
+  frontend renders it, rather than pulling in `qrcode` plus Pillow to draw a picture the browser can draw.
+- **Fortify gives LeapDesk four features. Three were already covered and two were genuinely missing.**
+  Registration, password reset and login throttling we had — and on throttling we are *ahead*, because
+  LeapDesk has no lockout columns at all. Missing were two-factor auth and, less obviously, the
+  **password confirmation** that `confirmPassword => true` implies. That third one is easy to overlook and
+  is the reason 2FA is worth anything: without it, someone holding a stolen session could quietly turn the
+  second factor **off**.
+- **2FA has three states, and the middle one is the whole design.** A stored secret does not enable
+  anything until the user has proved once that they can read a code from it. If storing a secret were
+  enough, anyone who mis-scanned the QR — or scanned it into an app on a phone they then wiped — would be
+  required to produce codes nothing can generate, with no way back in. Verified: while enrolment is
+  pending, login still succeeds without a code.
+- **The secret and the recovery codes are encrypted at rest, and that is not paranoia.** In the clear,
+  anyone with a database dump — a backup on a laptop, a restored snapshot, a reporting replica — can mint
+  valid codes for every account with 2FA enabled, and the second factor silently becomes no factor.
+  Laravel encrypts these columns for exactly this reason. The key is derived from `SECRET_KEY` via HKDF
+  with its own info string, so the encryption key and the JWT signing key are different values.
+- **The cost of that choice is written down rather than discovered later: rotating `SECRET_KEY` makes
+  every enrolled user re-enrol.** `decrypt` returns `None` instead of raising, which callers read as "no
+  secret", so the failure is a refused code rather than a 500. Rotation already invalidates every token
+  and signs everyone out, so it was never routine — this raises the stakes.
+- **Recovery codes are single-use by deletion.** Eight at enrolment, each removed the moment it is used,
+  so a code read over someone's shoulder is worth one login at most. Shown exactly once; the column holds
+  ciphertext and nothing decrypts it for display.
+- **A wrong 2FA code counts against the same lockout the password uses.** A separate counter would hand an
+  attacker who already knows the password a fresh, independent budget of guesses at the second factor —
+  precisely the position 2FA exists to make hopeless. Both challenge endpoints are also in the rate
+  limiter's strict tier, since a six-digit code is one in a million per guess and only strong while
+  guesses are limited.
+- **Password confirmation is stored per session, not per user.** It means "this browser proved it knows
+  the password recently", which is a property of the session; on the user, confirming on a laptop would
+  authorise a sensitive action from a phone. 180-minute window, matching Laravel's default.
+- **Fifteen checks against the running stack, all passing.** Enrol refused `403` until the password was
+  confirmed; wrong password `422`; enrolment returned a secret, URI and 8 codes; pending state reported
+  `enabled=false` and login still worked without a code; wrong confirm code `422` and the real one enabled
+  it; login then returned `two_factor_required` with **zero `Set-Cookie` headers**; the challenge token was
+  **refused at `/me`**, confirming the `type` assertion holds; wrong TOTP `401`, real TOTP gave a working
+  session; a recovery code signed in and dropped the count 8 → 7; **reusing it returned `401`**; disable was
+  `403` without confirmation and `200` with it, clearing the secrets; and login returned to normal after.
+  The test account was left with 2FA off.
+- **A real bug found by reading, not by testing.** `POST /api/auth/accept-invitation` still called
+  `set_auth_cookies` with the pre-sessions two-argument signature and **would have raised on the first
+  invitation anyone accepted**. Nothing exercises that path, which is PM-11 earning its severity — the
+  session work landed with a latent crash in it and only a manual read caught it.
+- **A finding about LeapDesk worth recording, because it changed what "parity" means.** Its email
+  verification is **configured but never enforced**: `config/fortify.php` enables
+  `Features::emailVerification()`, but `app/Models/User.php` has
+  `// use Illuminate\Contracts\Auth\MustVerifyEmail;` commented out and the class does not implement it.
+  The routes exist; the gate does not. Copying LeapDesk here would mean copying a half-wired feature, so
+  it is recorded as **PM-35** to be built *enforced* — along with the honest question of whether
+  verification should gate approval rather than add a second gate that says nothing new.
+- **Still open on 2FA: there is no frontend.** The endpoints work and nothing in the UI reaches them —
+  the same state the RBAC API was in before July 31. There is also no admin "reset this user's 2FA"
+  action, which support will want the first time someone loses a phone with no recovery codes left.
+
+---
+
 ## August 3, 2026 — Audit trail and security headers
 
 - **There is an audit trail now, and it can answer questions the old columns could not (PM-32).**

@@ -75,6 +75,26 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_SECRET: str = ""
     GOOGLE_REDIRECT_URI: str = ""
 
+    # --- Two-factor auth (PM-34) --------------------------------------------
+    # Steps of ±30s accepted either side of now. LeapDesk leaves Fortify's
+    # `window` commented out, which means its default of 0 — exact match only.
+    # 1 is chosen here instead: a phone clock a few seconds out is common, and the
+    # cost is that a code stays valid for about 90 seconds rather than 30. Codes
+    # are single-use in practice because the challenge token is consumed.
+    TWO_FACTOR_WINDOW: int = 1
+    TWO_FACTOR_RECOVERY_CODE_COUNT: int = 8
+    # How long the intermediate token from a successful password check stays valid
+    # while the user fetches a code. Long enough to open an authenticator app,
+    # short enough that a leaked challenge token is nearly worthless.
+    TWO_FACTOR_CHALLENGE_TTL_MINUTES: int = 5
+    # Issuer shown in the authenticator app next to the account name.
+    TWO_FACTOR_ISSUER: str = "Partner Marketplace"
+
+    # --- Password confirmation ----------------------------------------------
+    # How long a re-entered password authorises sensitive actions for. Laravel's
+    # default is 3 hours; kept, so the two projects behave the same.
+    PASSWORD_CONFIRMATION_TIMEOUT_MINUTES: int = 180
+
     # --- Security headers (PM-33) -------------------------------------------
     # HSTS is off by default and deliberately NOT tied to COOKIE_SECURE. The two
     # answer different questions: whether cookies require TLS, versus whether

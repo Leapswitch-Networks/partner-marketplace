@@ -16,6 +16,7 @@ Every guard raises; none returns None. That means a router can treat the value
 as non-optional.
 """
 
+from datetime import datetime, timedelta, timezone
 from typing import Callable, Generator
 
 from fastapi import Cookie, Depends, HTTPException, Request, status
@@ -27,6 +28,7 @@ from app.core.permissions import SUPER_ADMIN_ROLES
 from app.core.security import decode_token
 from app.db.session import SessionLocal
 from app.models.user import User
+from app.models.user_session import UserSession
 from app.services import session_service
 
 
@@ -149,6 +151,58 @@ def get_current_user(
 # --- Authorization ----------------------------------------------------------
 
 
+def get_current_session(
+    access_token: str | None = Cookie(default=None),
+    db: Session = Depends(get_db),
+) -> UserSession:
+    """The live session behind the request.
+
+    Separate from `get_current_user` because a few things are properties of the
+    *session* rather than the account — password confirmation being the one that
+    forced it. Both guards resolve the same token, so a route needing both pays
+    for two lookups; that is cheaper than caching state across a request boundary
+    and getting the invalidation wrong.
+    """
+    user_id, session_id = _decode_access_token(access_token)
+    session = session_service.get_active(db, session_id, user_id)
+    if session is None:
+        raise _SESSION_EXC
+    return session
+
+
+def require_password_confirmation(
+    session: UserSession = Depends(get_current_session),
+) -> UserSession:
+    """Caller must have re-entered their password recently.
+
+    Fortify's `password.confirm` middleware, which LeapDesk turns on for 2FA via
+    `confirmPassword => true`. It guards the actions where holding a hijacked
+    session should not be enough — turning 2FA **off** above all, since without
+    this an attacker who stole a session could quietly remove the second factor
+    that was protecting the account.
+
+    Answers `403` with a distinguishable code rather than `401`: the caller *is*
+    authenticated, and a client that treated this as `401` would sign the user out
+    instead of prompting them for their password.
+    """
+    confirmed_at = session.password_confirmed_at
+    if confirmed_at is None:
+        raise _PASSWORD_CONFIRMATION_EXC
+
+    age = datetime.now(timezone.utc) - confirmed_at
+    if age > timedelta(minutes=settings.PASSWORD_CONFIRMATION_TIMEOUT_MINUTES):
+        raise _PASSWORD_CONFIRMATION_EXC
+
+    return session
+
+
+_PASSWORD_CONFIRMATION_EXC = HTTPException(
+    status_code=status.HTTP_403_FORBIDDEN,
+    detail="Please confirm your password to continue.",
+    headers={"X-Password-Confirmation-Required": "true"},
+)
+
+
 def require_permission(permission: str) -> Callable[..., User]:
     """Dependency factory: caller must hold `permission`.
 
@@ -228,6 +282,8 @@ __all__ = [
     "get_db",
     "get_client_ip",
     "get_current_user",
+    "get_current_session",
+    "require_password_confirmation",
     "require_permission",
     "require_any_permission",
     "require_roles",

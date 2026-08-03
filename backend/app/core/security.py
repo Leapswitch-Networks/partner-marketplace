@@ -124,6 +124,30 @@ def create_refresh_token(subject: Any, session_id: str) -> str:
     )
 
 
+def create_two_factor_challenge_token(subject: Any) -> str:
+    """Short-lived token proving the password step passed, 2FA step pending.
+
+    Issued when credentials are correct but the account has 2FA enabled, and
+    exchanged at `/two-factor-challenge` for a real session.
+
+    It carries `type: "two_factor"`, which is what stops it being used as an access
+    token: `_decode_access_token` asserts `type == "access"`. That assertion is the
+    only thing standing between "passed the password" and "authenticated", so it
+    must never be relaxed to accept several types.
+
+    No `sid`: there is no session yet, and that is the point — a caller stuck at the
+    challenge has nothing that `get_current_user` will accept.
+    """
+    now = datetime.now(timezone.utc)
+    payload = {
+        "sub": str(subject),
+        "exp": now + timedelta(minutes=settings.TWO_FACTOR_CHALLENGE_TTL_MINUTES),
+        "iat": now,
+        "type": "two_factor",
+    }
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
 def decode_token(token: str) -> dict:
     """Raises JWTError if the token is invalid or expired."""
     return jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])

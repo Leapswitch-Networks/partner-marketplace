@@ -180,6 +180,27 @@ def _record_success(db: Session, user: User, ip: str) -> None:
     db.refresh(user)
 
 
+def verify_own_password(user: User, password: str) -> bool:
+    """Check a password for a re-authentication prompt, not for a login.
+
+    Separate from `authenticate` on purpose: this must not touch the lockout
+    counters or the login timestamps. A password-confirmation prompt is not a
+    sign-in, and letting it write `last_login_at` would corrupt the audit answer
+    to "when did they last sign in?".
+    """
+    return verify_password(password, user.password)
+
+
+def record_second_factor_failure(db: Session, user: User) -> None:
+    """Count a wrong 2FA code against the same lockout the password uses.
+
+    Sharing the counter is deliberate. A separate one would mean an attacker who
+    knows the password gets a fresh, independent budget of guesses at the second
+    factor — which is exactly the position 2FA is supposed to make hopeless.
+    """
+    _record_failure(db, user)
+
+
 def record_login(db: Session, user: User, ip: str) -> None:
     """Public wrapper used by the Google flow, which verifies no password."""
     _record_success(db, user, ip)

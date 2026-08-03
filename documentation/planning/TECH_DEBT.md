@@ -69,6 +69,8 @@ since 2026-07-31 — only the documentation was wrong, and wrong in a way that b
 | [PM-31](#pm-31--refresh-reissues-rather-than-rotates-no-token-reuse-detection) | 🟡 | `/refresh` reissues rather than rotates — no reuse detection | Auth |
 | [PM-32](#pm-32--no-audit-log-leapdesk-has-one--recording-done-read-surface-pending) | 🟡 | ~~No audit log~~ recording done; **no read surface** | Quality |
 | [PM-33](#pm-33--no-security-response-headers--backend-done-frontend-pending) | 🟡 | ~~No security response headers~~ backend done; **frontend pending** | Infra |
+| [PM-34](#pm-34--no-two-factor-auth-fortify-parity--resolved) | ✅ | ~~No two-factor auth (Fortify parity)~~ | Auth |
+| [PM-35](#pm-35--email-verification-is-not-enforced-anywhere) | 🟠 | Email verification not enforced — nor is it in LeapDesk | Auth |
 
 ---
 
@@ -1012,6 +1014,57 @@ did not serve.
 
 **Fix:** a small middleware mirroring LeapDesk's, HSTS gated on an environment flag rather than on
 `COOKIE_SECURE`, plus the equivalent `headers()` block in `next.config.mjs`.
+
+---
+
+### PM-34 — No two-factor auth (Fortify parity) ✅ RESOLVED
+
+**Resolved 2026-08-03.** `app/services/two_factor_service.py`, `app/core/encryption.py`, five endpoints,
+migration `c8f42e7b91d5`. Full design and the verified lifecycle are in
+[`../core/AUTHENTICATION.md`](../core/AUTHENTICATION.md) § Two-Factor Authentication.
+
+**Ecosystem answer first, since it was the question:** there is **no Fortify for FastAPI**.
+`fastapi-users` is the nearest analogue — registration, login, password reset, email verification,
+OAuth — but it has **no 2FA at all**, and adopting it means it owns the user model and replaces an auth
+layer that was just audited. Rejected. One new dependency instead: `pyotp`. Encryption reuses Fernet
+from `cryptography`, already installed as a `python-jose` extra, and no QR library was needed because
+the API returns the `otpauth://` URI for the frontend to render.
+
+Columns use Fortify's exact names — `two_factor_secret`, `two_factor_recovery_codes`,
+`two_factor_confirmed_at` — plus `user_sessions.password_confirmed_at` for the `confirmPassword` gate.
+
+**Also closes the gap nobody lists:** password confirmation. `confirmPassword => true` implies Laravel's
+`password.confirm` middleware, which guards enabling and **disabling** 2FA. Without it, someone holding
+a stolen session could quietly remove the second factor protecting the account.
+
+**Found while wiring it:** `POST /api/auth/accept-invitation` still called `set_auth_cookies` with the
+pre-sessions two-argument signature and would have raised on the first invitation accepted. Caught by
+reading the file, not by a test — PM-11 earning its severity.
+
+**Still open for 2FA:** no frontend. The endpoints work and nothing in the UI reaches them, which is the
+same state the RBAC API was in before 2026-07-31. Also no admin-facing "reset this user's 2FA" action,
+which support will want the first time someone loses a phone with no recovery codes left.
+
+---
+
+### PM-35 — Email verification is not enforced anywhere
+
+**Where:** `users.email_verified_at` is written but never checked
+
+The column is set for Google sign-ups and by an admin creating an account, and **nothing reads it**. A
+partner who self-registers with a typo'd or someone else's address gets an account whose address was
+never proven; the approval gate catches it only if a human notices.
+
+**LeapDesk does not enforce it either, which is worth knowing before copying it.**
+`config/fortify.php` enables `Features::emailVerification()`, but `app/Models/User.php` has
+`// use Illuminate\Contracts\Auth\MustVerifyEmail;` **commented out** and the class does not implement
+it. So the routes exist and the gate does not. Matching LeapDesk here would mean matching a half-wired
+feature — build it enforced instead.
+
+**Fix:** a `verify-email` token on the same pattern as the password reset (which already works), a
+`mail_service` message, and a decision about *where* it gates. Registration already lands INACTIVE
+pending approval, so the honest question is whether verification should be a precondition of approval
+rather than a separate block — otherwise it adds a second gate that says nothing new.
 
 ---
 

@@ -116,6 +116,18 @@ class User(Base):
     )
     last_login_ip: Mapped[str | None] = mapped_column(String(45), nullable=True)
 
+    # --- Two-factor auth (Fortify's column names) ---------------------------
+    # Both secrets are Fernet-encrypted at rest; see core/encryption.py. Read them
+    # through two_factor_service, never directly — a caller that forgets to
+    # decrypt would compare a code against ciphertext and always fail closed,
+    # which looks like "the user's authenticator is wrong".
+    two_factor_secret: Mapped[str | None] = mapped_column(Text, nullable=True)
+    two_factor_recovery_codes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    two_factor_confirmed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+        comment="NULL means enrolled but unproven — 2FA is not enforced until set",
+    )
+
     # --- Password reset -----------------------------------------------------
     password_reset_token: Mapped[str | None] = mapped_column(Text, nullable=True)
     password_reset_expires_at: Mapped[datetime | None] = mapped_column(
@@ -176,6 +188,17 @@ class User(Base):
     @property
     def is_active(self) -> bool:
         return self.status == "ACTIVE"
+
+    @property
+    def has_two_factor_enabled(self) -> bool:
+        """True only when 2FA is enrolled **and confirmed**.
+
+        The confirmation half is load-bearing. Treating a stored secret as
+        "enabled" would lock out anyone who scanned the QR badly and never
+        produced a working code — they would be required to supply a code their
+        authenticator cannot generate, with no way back in.
+        """
+        return self.two_factor_secret is not None and self.two_factor_confirmed_at is not None
 
     @property
     def is_locked(self) -> bool:
