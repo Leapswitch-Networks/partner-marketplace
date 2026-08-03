@@ -56,7 +56,7 @@ since 2026-07-31 — only the documentation was wrong, and wrong in a way that b
 | [PM-24](#pm-24--production-build-failed-on-a-type-error--resolved) | ✅ | ~~Production build failed on a type error~~ | Build |
 | [PM-25](#pm-25--npm-ci-fails-react-19-against-next-14s-peer-range) | 🟠 | `npm ci` fails — React 19 against Next 14's peer range | Build |
 | [PM-26](#pm-26--no-http-rate-limiting-successor-to-pm-8--resolved) | ✅ | ~~No HTTP rate limiting~~ | Auth |
-| [PM-27](#pm-27--no-email-transport-so-invitations-and-resets-are-manual) | 🟠 | No email transport — invitations/resets are manual | Infra |
+| [PM-27](#pm-27--no-email-transport-so-invitations-and-resets-are-manual--resolved) | ✅ | ~~No email transport — invitations/resets are manual~~ | Infra |
 | [PM-28](#pm-28--google-sso-is-unverified-against-real-google) | 🟠 | Google SSO implemented but never run against Google | Auth |
 | [PM-29](#pm-29--eslint-cannot-run-v6-resolves-against-a-v9-flat-config--resolved) | ✅ | ~~ESLint cannot run — v6 binary vs v9 flat config~~ | Quality |
 | [PM-30](#pm-30--17-react-hooks-errors-from-rules-that-arrive-with-the-wrong-config-version) | 🟡 | 17 react-hooks errors, from `eslint-config-next` 16 on Next 14 | Quality |
@@ -707,18 +707,73 @@ the other.
 
 ---
 
-### PM-27 — No email transport, so invitations and resets are manual
+### PM-27 — No email transport, so invitations and resets are manual ✅ RESOLVED
 
-**Where:** `backend/app/services/invitation_service.py`, `auth_service.begin_password_reset`
+**Resolved 2026-08-03.** `backend/app/services/mail_service.py`, wired into invitation create, bulk
+create, resend, and `forgot-password`.
 
-There is no mail configuration. Consequences, both deliberate and visible rather than silent:
+Two backends, chosen by `MAIL_BACKEND`. `console` (the default) logs the message instead of sending it,
+so local development needs no SMTP server and the link is in `docker compose logs backend`. `smtp`
+sends for real via `smtplib`.
 
-- `POST /api/invitations` **returns** `accept_url` for the administrator to send by hand
-- `POST /api/auth/forgot-password` always answers "if an account exists…" but the token is only
-  reachable by reading `users.password_reset_token` in the database
+**`console` is the default rather than `smtp`, deliberately.** An unconfigured `smtp` backend fails
+every send; an unconfigured `console` backend works. The cost of guessing wrong should be "the link is
+in the log", not "nobody can ever be invited".
 
-**Fix:** add SMTP settings and a small mail service, then stop returning `accept_url` in the response.
-Until then the behaviour is honest but not self-service.
+#### Three decisions that shape the code
+
+**A send never breaks the operation that triggered it.** Creating an invitation writes a row; emailing
+is a side effect that can fail for unrelated reasons — wrong password, blocked port, greylisting relay.
+If that propagated, the caller would get a 500 for an invitation that *was* created, and retrying would
+then be refused with "a pending invitation already exists". So `send()` returns a boolean and the caller
+decides what to tell the user.
+
+**`accept_url` is now withheld only when a real email was delivered.** It used to be returned
+unconditionally. Returning it after successful delivery would leave a working credential in an API
+response, a devtools tab and a log for something already delivered privately. But withholding it after
+a *failed* send would leave the invitation created and uncompletable. So the rule is
+`sent and backend != "console"`, and a new `email_sent` boolean lets the UI say "we emailed them"
+versus "copy this link and send it yourself".
+
+**`forgot-password` does not reflect the send result, on purpose.** A caller able to tell "sent" from
+"not sent" could enumerate accounts exactly as easily as one able to read a 404 — which is the whole
+reason that endpoint answers identically either way. A failed send is logged, never surfaced.
+
+Also: the reset TTL is now the named `auth_service.PASSWORD_RESET_TTL_HOURS`, because the email quotes
+it. A literal in two places is how an email comes to promise an hour for a token that lasts two.
+
+#### Verified 2026-08-03
+
+The SMTP half looked unverifiable without credentials. It was verified against a **minimal fake SMTP
+relay** written for the test, which speaks enough of the protocol to accept a message:
+
+| Case | Result |
+|---|---|
+| `console` | Returns `True`, logs subject and body |
+| `smtp` with no `SMTP_HOST` | `False`, logs `MailError`, does **not** raise |
+| `smtp` with an unreachable host | `False`, logs `ConnectionRefusedError`, does **not** raise |
+| Unknown backend (`carrier-pigeon`) | `False`, logs `unknown MAIL_BACKEND` |
+| `smtp` against the fake relay | `True` — relay received a well-formed message with the right `To`, `Subject`, and the reset link intact |
+| **Token safety on failure** | A canary body was sent through both failing SMTP cases and appeared in **neither** log — the failure path logs recipient and subject only |
+| `forgot-password` live | Answered the neutral message; reset link logged under the request's correlation id |
+| Invitation create live | `email_sent: false` and `accept_url` present, correct for the `console` backend |
+
+The `accept_url`-withheld branch (`smtp` + successful send → `accept_url: null`) was not exercised
+through the live API, since the running server would have to be pointed at the fake relay; it is a
+two-term boolean and is stated here rather than claimed as tested.
+
+#### Still open
+
+- **Delivery against a real provider is untested** — authentication, the TLS handshake, and whether
+  anything actually lands in an inbox (SPF/DKIM/DMARC are unconfigured). The protocol is proven; the
+  deliverability is not.
+- **`MAIL_BACKEND=console` must never be used in a deployed environment.** It writes reset links to the
+  log, and a reset link is a working credential for anyone who can read logs. Listed in
+  `DEPLOYMENT.md` § 0 configuration.
+- **Sends are synchronous.** On a slow relay the request waits; `SMTP_TIMEOUT_SECONDS` bounds it at 10s
+  rather than removing it. A queue is the real answer if invitation volume ever grows.
+- **No HTML or branding.** Plain text, which every client renders and nothing can break. Branding is a
+  product decision, not a gap.
 
 ---
 
@@ -818,7 +873,7 @@ in order:
 5. **PM-10** — logging ✅ done 2026-08-03; **monitoring and alerting still open**
 6. **PM-5** (row-level scoping) — required before any partner-owned data exists; this is also
    Build Sequence step 2 in [`MARKETPLACE_DOMAIN_PLAN.md`](./MARKETPLACE_DOMAIN_PLAN.md)
-7. **PM-27** (email) — invitations and password reset are not self-service without it
+7. ~~**PM-27** (email)~~ — ✅ done 2026-08-03; deliverability against a real provider still untested
 8. **PM-28** (verify Google SSO end to end against a real OAuth client) — **needs credentials**
 9. ~~**PM-19** (error boundaries)~~ — ✅ done 2026-08-03; **PM-30** (react-hooks findings) remains
 10. **PM-25** (React/Next peer mismatch) — a framework-version decision; gates PM-30

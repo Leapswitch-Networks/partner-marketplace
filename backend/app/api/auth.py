@@ -26,7 +26,7 @@ from app.schemas.auth import (
     ResetPasswordRequest,
     UpdateProfileRequest,
 )
-from app.services import auth_service, invitation_service, rbac_service
+from app.services import auth_service, invitation_service, mail_service, rbac_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -231,11 +231,19 @@ def forgot_password(
 ) -> MessageResponse:
     """Always answers identically, whether or not the address exists.
 
-    Anything else turns this endpoint into an account-enumeration oracle. With
-    no mail transport configured the token is currently only reachable by an
-    administrator reading the database — see TECH_DEBT.
+    Anything else turns this endpoint into an account-enumeration oracle — which
+    is also why the send result is deliberately not reflected in the response. A
+    caller who could tell "sent" from "not sent" could enumerate accounts just as
+    easily as one who could read a 404. A failed send is logged, not surfaced.
     """
-    auth_service.begin_password_reset(db, data.email)
+    result = auth_service.begin_password_reset(db, data.email)
+    if result is not None:
+        user, token = result
+        mail_service.send_password_reset(
+            to=user.email,
+            reset_url=f"{settings.FRONTEND_URL.rstrip('/')}/reset-password?token={token}",
+            expires_hours=auth_service.PASSWORD_RESET_TTL_HOURS,
+        )
     return MessageResponse(
         message="If an account exists for that address, a reset link has been sent."
     )

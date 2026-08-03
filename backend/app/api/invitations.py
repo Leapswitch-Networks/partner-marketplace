@@ -8,6 +8,7 @@ page and nothing about the inviter or the wider system.
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.dependencies import get_db, require_permission
 from app.core.permissions import (
     INVITATION_CANCEL,
@@ -24,9 +25,29 @@ from app.schemas.rbac import (
     InvitationPreviewResponse,
     InvitationResponse,
 )
-from app.services import invitation_service
+from app.services import invitation_service, mail_service
 
 router = APIRouter(prefix="/invitations", tags=["invitations"])
+
+
+def _deliver(invitation: UserInvitation, accept_url: str) -> dict:
+    """Email the invitation, and decide what the response should expose.
+
+    The link is withheld from the response only when a real email was delivered.
+    Otherwise the administrator needs it — a failed send with no link in the
+    response would leave the invitation created and uncompletable, and resending
+    would then refuse with "a pending invitation already exists".
+    """
+    sent = mail_service.send_invitation(
+        to=invitation.email,
+        accept_url=accept_url,
+        inviter_name=invitation.inviter.full_name if invitation.inviter else None,
+        expires_days=invitation_service.INVITATION_TTL_DAYS,
+    )
+    delivered = sent and settings.MAIL_BACKEND.lower() != "console"
+    payload = _to_response(invitation, None if delivered else accept_url)
+    payload["email_sent"] = delivered
+    return payload
 
 
 def _to_response(invitation: UserInvitation, accept_url: str | None = None) -> dict:
@@ -51,14 +72,21 @@ def _to_response(invitation: UserInvitation, accept_url: str | None = None) -> d
 
 
 class InvitationCreatedResponse(InvitationResponse):
-    """Includes the accept URL.
+    """Includes the accept URL, and says whether an email actually went out.
 
-    Returned because no mail transport is configured yet — the administrator
-    copies the link and sends it. Better a visible manual step than an email
-    that silently never arrives.
+    `accept_url` used to be returned unconditionally because there was no mail
+    transport at all (PM-27). Now it is returned only when the invitee did **not**
+    receive an email — either because the backend is `console`, or because the
+    send failed. When a real email was delivered the field is `null`, so the link
+    is not sitting in an API response, a browser devtools tab and a log for a
+    credential that was already delivered privately.
+
+    `email_sent` exists so the UI can tell the two cases apart: "we emailed them"
+    versus "copy this link and send it yourself".
     """
 
-    accept_url: str
+    accept_url: str | None = None
+    email_sent: bool = False
 
 
 @router.get("", response_model=list[InvitationResponse])
@@ -95,7 +123,7 @@ def create_invitation(
     actor: User = Depends(require_permission(INVITATION_CREATE)),
 ) -> InvitationCreatedResponse:
     invitation, accept_url = invitation_service.create_invitation(db, data, actor)
-    return InvitationCreatedResponse(**_to_response(invitation, accept_url))
+    return InvitationCreatedResponse(**_deliver(invitation, accept_url))
 
 
 @router.post(
@@ -120,7 +148,7 @@ def create_invitations(
         except Exception:  # noqa: BLE001 - a rejected address must not abort the batch
             db.rollback()
             continue
-        created.append(InvitationCreatedResponse(**_to_response(invitation, accept_url)))
+        created.append(InvitationCreatedResponse(**_deliver(invitation, accept_url)))
     return created
 
 
@@ -132,7 +160,7 @@ def resend_invitation(
 ) -> InvitationCreatedResponse:
     """Rotates the token, so the previous link stops working."""
     invitation, accept_url = invitation_service.resend_invitation(db, invitation_id, actor)
-    return InvitationCreatedResponse(**_to_response(invitation, accept_url))
+    return InvitationCreatedResponse(**_deliver(invitation, accept_url))
 
 
 @router.delete("/{invitation_id}", response_model=MessageResponse)

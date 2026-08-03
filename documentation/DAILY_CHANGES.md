@@ -279,6 +279,43 @@
   the Chrome-DevTools-Protocol harness from July 31.
 - **Also fixed, and honestly a pre-existing gap these files exposed:** `Skeleton` had no dark variant.
   Fine as a small inline placeholder, glaring as a full-page one.
+- **Invitations and password resets can now actually email people (PM-27).** There was no mail
+  configuration at all: creating an invitation returned the accept link for an administrator to send by
+  hand, and a password reset token was only reachable by reading the database. There are two backends
+  now — `console`, which logs the message so local development needs no SMTP server, and `smtp`, which
+  sends for real. `console` is the default on purpose: an unconfigured `smtp` backend fails every send,
+  while an unconfigured `console` backend works, and the cost of guessing wrong should be "the link is
+  in the log" rather than "nobody can be invited".
+- **A send never breaks the thing that triggered it.** Creating an invitation writes a row; emailing is
+  a side effect that can fail for reasons of its own — wrong password, blocked port, greylisting relay.
+  Letting that propagate would return a 500 for an invitation that *was* created, and the retry would
+  then be refused with "a pending invitation already exists". So sending reports back a boolean and the
+  caller decides what to say.
+- **The accept link is now withheld only when a real email was delivered.** Returning it after
+  successful delivery would leave a working credential in an API response, a devtools tab and a log for
+  something already sent privately — but withholding it after a *failed* send would leave an invitation
+  that nobody can complete. A new `email_sent` flag lets the UI distinguish "we emailed them" from "copy
+  this link and send it yourself".
+- **`forgot-password` deliberately does not report whether the email went out.** A caller who could
+  tell "sent" from "not sent" could enumerate accounts just as easily as one who could read a 404 —
+  which is the entire reason that endpoint answers identically either way. Failures are logged, never
+  surfaced. The reset TTL also became a named constant, because the email quotes it and a literal in two
+  places is how an email ends up promising an hour for a token that lasts two.
+- **The SMTP half looked untestable without credentials, so a fake SMTP relay was written to test it.**
+  Eight checks passed: the console backend; `smtp` with no host and `smtp` with an unreachable host both
+  returning false and logging rather than raising; an unknown backend rejected; and a real SMTP
+  conversation against the fake relay that received a well-formed message with the correct recipient,
+  subject and an intact reset link. A canary body pushed through both failing paths appeared in
+  **neither** log, confirming that a failure logs only recipient and subject — the one moment someone
+  would be reading logs is exactly when a reset token must not be in them. Live checks too:
+  `forgot-password` returned the neutral message with the link logged under the request's correlation
+  id, and a real invitation came back with `email_sent: false` and the link present.
+- **What is still not proven:** delivery against a real provider. Authentication, the TLS handshake and
+  whether anything lands in an inbox are untested, and SPF/DKIM/DMARC are unconfigured. The protocol is
+  verified; deliverability is not. Sends are also synchronous, bounded by a 10-second timeout rather
+  than moved to a queue. And `MAIL_BACKEND=console` must never be used in a deployed environment,
+  which is now written into the deploy configuration table alongside `TRUST_PROXY_HEADERS` and
+  `LOG_FORMAT`.
 - **One thing left alone deliberately:** the four accounts in the local database still carry their
   pre-migration passwords, now bcrypt-hashed. `abc@gmail.com` therefore still signs in *on this
   machine*, which is why the onboarding checklist used to pass — but a fresh setup has only the root

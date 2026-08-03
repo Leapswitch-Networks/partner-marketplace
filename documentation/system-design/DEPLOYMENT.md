@@ -45,6 +45,9 @@ get lost among the six that aren't.
 | `CORS_ORIGINS` | Defaults to localhost. Set to the real frontend origin |
 | `SECRET_KEY` | Must be a fresh strong value per environment, never the development one |
 | `ROOT_PASSWORD` | Only read at seed time. Omit it and the seeder generates and prints one once |
+| `MAIL_BACKEND=smtp` | **Must not stay `console` in a deployed environment.** `console` writes password-reset links to the log, and a reset link is a working credential to anyone who can read logs. Set `SMTP_HOST`/`SMTP_USERNAME`/`SMTP_PASSWORD` with it |
+| `TRUST_PROXY_HEADERS=true` | Only in the same change that puts a reverse proxy in front. Enabling it without one lets any caller spoof `X-Forwarded-For` and bypass rate limiting entirely (PM-26) |
+| `LOG_FORMAT=json` | `console` is for humans; `json` is one object per line for an aggregator — grep does not survive multi-line tracebacks |
 
 ### Closed since this list was written
 

@@ -230,6 +230,10 @@ def change_own_password(db: Session, user: User, data: ChangePasswordRequest) ->
 
 # --- Password reset ---------------------------------------------------------
 
+#: Named rather than inlined because the reset email quotes it. A literal in two
+#: places is how an email ends up promising an hour for a token that lasts two.
+PASSWORD_RESET_TTL_HOURS = 1
+
 
 def begin_password_reset(db: Session, email: str) -> tuple[User, str] | None:
     """Issue a reset token, or return None when there is nothing to reset.
@@ -244,7 +248,9 @@ def begin_password_reset(db: Session, email: str) -> tuple[User, str] | None:
 
     token = generate_token(48)
     user.password_reset_token = token
-    user.password_reset_expires_at = datetime.now(timezone.utc) + timedelta(hours=1)
+    user.password_reset_expires_at = datetime.now(timezone.utc) + timedelta(
+        hours=PASSWORD_RESET_TTL_HOURS
+    )
     db.commit()
     return user, token
 

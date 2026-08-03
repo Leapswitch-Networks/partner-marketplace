@@ -75,6 +75,31 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_SECRET: str = ""
     GOOGLE_REDIRECT_URI: str = ""
 
+    # --- Email (PM-27) ------------------------------------------------------
+    # `console` logs the message instead of sending it, so local development needs
+    # no SMTP server and the accept/reset link is visible in the backend logs.
+    # `smtp` sends for real.
+    #
+    # `console` is the default rather than `smtp` deliberately: an unconfigured
+    # `smtp` backend fails every send, while an unconfigured `console` backend
+    # works. The cost of guessing wrong should be "the link is in the log", not
+    # "nobody can be invited". A deployed environment MUST set this to `smtp` —
+    # a reset link in a log file is a working credential for anyone who can read
+    # logs. Listed in DEPLOYMENT § 0.
+    MAIL_BACKEND: str = "console"
+    MAIL_FROM: str = "no-reply@leapswitch.com"
+    MAIL_FROM_NAME: str = "Partner Marketplace"
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USERNAME: str = ""
+    SMTP_PASSWORD: str = ""
+    # 587 with STARTTLS is the common case; 465 wants SSL from the first byte.
+    SMTP_USE_TLS: bool = True
+    SMTP_USE_SSL: bool = False
+    # Without a timeout, a silent relay blocks the worker until the client gives
+    # up, which on a synchronous stack means one fewer request served.
+    SMTP_TIMEOUT_SECONDS: int = 10
+
     # --- Logging (PM-10) ----------------------------------------------------
     # `console` is readable by a human; `json` is one object per line for an
     # aggregator. Deployed environments want json — grep does not survive
