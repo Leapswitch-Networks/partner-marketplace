@@ -22,6 +22,7 @@ from fastapi import Cookie, Depends, HTTPException, Request, status
 from jose import JWTError
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.permissions import SUPER_ADMIN_ROLES
 from app.core.security import decode_token
 from app.db.session import SessionLocal
@@ -37,14 +38,32 @@ def get_db() -> Generator[Session, None, None]:
 
 
 def get_client_ip(request: Request) -> str:
-    """Caller's IP, honouring X-Forwarded-For when behind a proxy.
+    """Caller's IP — from the socket by default, from `X-Forwarded-For` only when
+    a proxy is configured to be in front.
 
-    Only the first hop is trusted, which is correct when exactly one reverse
-    proxy sits in front. Revisit if a second proxy is ever added.
+    `X-Forwarded-For` is a request header, which means the *client* writes it.
+    Honouring it unconditionally, as this function used to, makes the value
+    attacker-chosen whenever no proxy is actually stripping and rewriting it —
+    and there is no reverse proxy in this deployment today.
+
+    That is not a theoretical problem. It defeated the PM-26 rate limiter
+    outright: rotating `X-Forwarded-For: 10.9.9.$i` produced a fresh bucket per
+    request, and 14 requests sailed through a limit of 10 (measured, 2026-08-03).
+    It would equally let an attacker write any address they liked into
+    `users.last_login_ip` and poison the audit trail.
+
+    So the header is trusted only when `TRUST_PROXY_HEADERS` says something
+    trustworthy is setting it. Turn it on **together with** deploying a proxy
+    that overwrites the header, never before: enabling it without one restores
+    exactly the bypass above.
+
+    Only the first hop is read, which is correct for exactly one proxy. Revisit
+    for a chain of two.
     """
-    forwarded_for = request.headers.get("X-Forwarded-For")
-    if forwarded_for:
-        return forwarded_for.split(",")[0].strip()
+    if settings.TRUST_PROXY_HEADERS:
+        forwarded_for = request.headers.get("X-Forwarded-For")
+        if forwarded_for:
+            return forwarded_for.split(",")[0].strip()
     return request.client.host if request.client else "unknown"
 
 

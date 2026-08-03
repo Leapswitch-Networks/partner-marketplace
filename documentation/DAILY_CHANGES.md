@@ -125,6 +125,37 @@
   `/api/auth/admin/login`, both **removed** when the account tables merged; and it listed an `admin`
   OpenAPI tag group that no longer exists. The corrected commands were each run against the running
   stack — `/api/auth/me` → 401, `/` → 307 to `/sign-in`, CORS preflight echoes the origin, health ok.
+- **Per-IP rate limiting exists now (PM-26), and account lockout is no longer the only throttle.**
+  Lockout protects one account against many guesses; it does nothing about one guess against many
+  accounts, which never trips it. The new limiter keys on the caller's IP with three tiers, because a
+  single number cannot serve both a login form and a dashboard: 10/min on credential and token
+  endpoints, 60/min on the rest of `/api/auth/*` (the frontend reads `/me` on navigation, so anything
+  tighter breaks ordinary browsing rather than an attack), 300/min elsewhere. Health probes are exempt
+  so an orchestrator cannot exhaust its own quota and get the service pulled from a load balancer, and
+  CORS preflights are exempt so one real request does not cost two. Hand-written rather than adding
+  `slowapi`, for the same reason `passlib` was dropped — and because `slowapi`'s default backend is
+  in-process memory too, so it would not have fixed the limitation below.
+- **Verifying it found that the first working version could be bypassed completely.** Sending 14
+  logins while rotating `X-Forwarded-For: 10.9.9.$i` produced **14 successes against a limit of 10** —
+  one fresh bucket per request. The fault was not in the limiter but in `get_client_ip`, which returned
+  that header whenever it was present. `X-Forwarded-For` is written by the *client*; it is only
+  trustworthy when a proxy overwrites it, and this deployment has no reverse proxy at all. So the
+  limiter was keyed on a string the attacker chose — and the same header could write any address into
+  `users.last_login_ip` and poison the audit trail. It is now gated on `TRUST_PROXY_HEADERS`, default
+  off, with the warning that it must be enabled in the same change that deploys the proxy and never
+  before. Re-measured after the fix: 10 through, then `429`, whatever the header says. **Had this not
+  been tested with a spoofed header, the register would now claim rate limiting that did nothing.**
+- **The subtle one: a `429` must carry CORS headers or the user sees nothing useful.** Starlette runs
+  the most recently added middleware outermost, so the limiter is registered *before* `CORSMiddleware`
+  to sit inside it. Backwards, and the rejection escapes without `Access-Control-Allow-Origin`, so the
+  browser reports an opaque network error instead of "too many attempts". Verified present on the 429.
+- **Eight checks run against the running stack, all passing:** 10 then `429`; `Retry-After` and
+  `X-RateLimit-*` headers correct; CORS header present on the 429; the window releases rather than
+  latching; `/health` × 30 all `200`; `/api/auth/me` still served on its own tier while the strict tier
+  was exhausted; the spoofing bypass closed; and `get_client_ip` correct in both trust modes, including
+  parsing a two-hop chain. **What is not fixed:** counters live in process memory, so N workers
+  multiply every limit by N and a restart clears them, and per-IP limiting does nothing against a
+  botnet. Both are recorded rather than glossed.
 - **One thing left alone deliberately:** the four accounts in the local database still carry their
   pre-migration passwords, now bcrypt-hashed. `abc@gmail.com` therefore still signs in *on this
   machine*, which is why the onboarding checklist used to pass — but a fresh setup has only the root

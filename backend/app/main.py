@@ -5,11 +5,20 @@ from sqlalchemy import text
 
 from app.api import auth, candidate, category, google, invitations, permissions, roles, users
 from app.core.config import settings
+from app.core.rate_limit import RateLimitMiddleware
 from app.db.session import engine
 
 app = FastAPI(title="Partner Marketplace API", version="1.0.0")
 
 app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+# Per-IP rate limiting (TECH_DEBT PM-26).
+#
+# ORDER MATTERS. Starlette runs the most recently added middleware outermost, so
+# this must be registered BEFORE CORSMiddleware to end up inside it. A 429 that
+# escapes without Access-Control-Allow-Origin is unreadable to the browser, and
+# the user sees an opaque network error rather than "too many attempts".
+app.add_middleware(RateLimitMiddleware)
 
 # Origins come from config so deploying never needs a code edit (TECH_DEBT PM-9).
 app.add_middleware(

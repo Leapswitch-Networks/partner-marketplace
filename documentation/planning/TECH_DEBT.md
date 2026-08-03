@@ -37,7 +37,7 @@ since 2026-07-31 — only the documentation was wrong, and wrong in a way that b
 | [PM-5](#pm-5--no-row-level-scoping-pattern-exists) | 🟠 | No row-level scoping pattern exists | Authz |
 | [PM-6](#pm-6--six-admin_users-columns-are-never-written--resolved) | ✅ | ~~Six `admin_users` columns are never written~~ | Data |
 | [PM-7](#pm-7--three-auth-guards-are-defined-but-unused--resolved) | ✅ | ~~Three auth guards are defined but unused~~ | Authz |
-| [PM-8](#pm-8--no-rate-limiting-and-no-lockout--partially-resolved) | 🟡 | ~~No lockout~~; still no HTTP rate limiting | Auth |
+| [PM-8](#pm-8--no-rate-limiting-and-no-lockout--partially-resolved) | ✅ | ~~No rate limiting and no lockout~~ — both now exist (PM-26) | Auth |
 | [PM-9](#pm-9--cors-origins-hardcoded-to-localhost--resolved) | ✅ | ~~CORS origins hardcoded to localhost~~ | Infra |
 | [PM-10](#pm-10--no-error-logging-or-monitoring) | 🟠 | No error logging or monitoring | Infra |
 | [PM-11](#pm-11--no-automated-tests) | 🟠 | No automated tests | Quality |
@@ -55,7 +55,7 @@ since 2026-07-31 — only the documentation was wrong, and wrong in a way that b
 | [PM-23](#pm-23--two-dead-virtualenvs-in-the-tree) | ⚪ | Two dead virtualenvs in the tree | Housekeeping |
 | [PM-24](#pm-24--production-build-failed-on-a-type-error--resolved) | ✅ | ~~Production build failed on a type error~~ | Build |
 | [PM-25](#pm-25--npm-ci-fails-react-19-against-next-14s-peer-range) | 🟠 | `npm ci` fails — React 19 against Next 14's peer range | Build |
-| [PM-26](#pm-26--no-http-rate-limiting-successor-to-pm-8) | 🟠 | No HTTP rate limiting | Auth |
+| [PM-26](#pm-26--no-http-rate-limiting-successor-to-pm-8--resolved) | ✅ | ~~No HTTP rate limiting~~ | Auth |
 | [PM-27](#pm-27--no-email-transport-so-invitations-and-resets-are-manual) | 🟠 | No email transport — invitations/resets are manual | Infra |
 | [PM-28](#pm-28--google-sso-is-unverified-against-real-google) | 🟠 | Google SSO implemented but never run against Google | Auth |
 | [PM-29](#pm-29--eslint-cannot-run-v6-resolves-against-a-v9-flat-config--resolved) | ✅ | ~~ESLint cannot run — v6 binary vs v9 flat config~~ | Quality |
@@ -512,16 +512,75 @@ Runtime behaviour is unchanged — the number field still yields a coerced `numb
 
 ---
 
-### PM-26 — No HTTP rate limiting (successor to PM-8)
+### PM-26 — No HTTP rate limiting (successor to PM-8) ✅ RESOLVED
 
-**Where:** `backend/app/main.py` — no limiting middleware
+**Resolved 2026-08-03.** `backend/app/core/rate_limit.py` — a per-IP sliding-window limiter,
+registered in `main.py`.
 
-Per-account lockout now exists (PM-8), but nothing limits requests per IP. An attacker can still
-spray one attempt each against thousands of accounts without ever tripping a lockout, and the
-`/api/auth/forgot-password` and `/api/invitations/preview` endpoints are unauthenticated.
+Hand-written rather than pulling in `slowapi`, matching the reasoning that removed `passlib`: one
+fewer dependency, and `slowapi`'s default backend is in-process memory anyway, so it would not have
+fixed the real limitation below.
 
-**Fix:** a reverse-proxy limit (nginx `limit_req`) or `slowapi` middleware, keyed on IP, tightest on
-`/api/auth/*`.
+**Three tiers**, because one number cannot serve both a login form and a dashboard:
+
+| Tier | Applies to | Default |
+|---|---|---|
+| `sensitive` | `login`, `register`, `forgot-password`, `reset-password`, `accept-invitation`, `me/change-password`, `invitations/preview` | **10 / 60s** |
+| `auth` | the rest of `/api/auth/*` — `me`, `refresh`, `logout`, Google | 60 / 60s |
+| `default` | everything else | 300 / 60s |
+
+`/health*` is exempt: an orchestrator polling liveness must not be able to exhaust its own quota and
+get the service pulled from a load balancer. `OPTIONS` is exempt so a CORS preflight does not make one
+real request cost two. All limits are `Settings` values, and `RATE_LIMIT_ENABLED` turns the whole thing
+off for a load test or once a proxy does the job.
+
+A sliding log, not a fixed window: a fixed window lets a caller send the full allowance at 0:59 and
+again at 1:01 — double the intended rate, at exactly the boundary an attacker would look for.
+
+#### The bug found while verifying it, which mattered more than the feature
+
+The first working version **could be bypassed completely**, and the measurement is worth keeping:
+sending 14 logins while rotating `X-Forwarded-For: 10.9.9.$i` produced **14 × HTTP 401 against a limit
+of 10** — a fresh bucket per request.
+
+The cause was in `get_client_ip`, not in the limiter. It returned the `X-Forwarded-For` value whenever
+the header was present. That header is written by the *client*; it is only trustworthy when a proxy
+overwrites it, and **this deployment has no reverse proxy**. So the limiter keyed on an
+attacker-controlled string, and the same header could write any address into `users.last_login_ip` and
+poison the audit trail.
+
+Now gated on `TRUST_PROXY_HEADERS` (default `False`): the socket address is used unless a proxy is
+declared to be in front. **Enable it only in the same change that deploys the proxy** — turning it on
+without one restores the bypass exactly.
+
+Re-measured after the fix: 10 through, then `429`, regardless of the rotating header.
+
+#### Verified 2026-08-03, against the running stack
+
+| Check | Result |
+|---|---|
+| 12 rapid logins, limit 10 | 10 × `401`, then `429` |
+| `429` body and headers | `Retry-After: 4`, `X-RateLimit-Limit: 10`, `X-RateLimit-Remaining: 0` |
+| **`429` carries `Access-Control-Allow-Origin`** | Present — the middleware order is right |
+| Window releases | recovers to `401` after expiry, does not latch |
+| `/health` × 30 | 30 × `200` — exempt |
+| Tier isolation | `/api/auth/me` still answered with `X-RateLimit-Limit: 60` while `sensitive` was exhausted |
+| `X-Forwarded-For` spoofing | 14 rotating values → `429` after 10 |
+| `get_client_ip`, both modes | `False`: socket wins, header ignored. `True`: first hop wins, chain parsed, falls back to socket |
+
+The CORS check is the one that would have been easy to miss: `RateLimitMiddleware` is registered
+**before** `CORSMiddleware` because Starlette runs the most recently added middleware outermost. Get
+that backwards and the `429` escapes without CORS headers, so the browser reports an opaque network
+error instead of "too many attempts".
+
+#### Still open
+
+**Counters are per process.** N workers multiply every limit by N, and a restart clears them. Honest
+for the current single-container deployment, wrong the moment the API scales horizontally — a shared
+store (Redis) is the fix. Until then this is a speed bump against spraying, not an authorisation
+control. It is also not a defence against a distributed attack: per-IP limiting does nothing against a
+botnet, which is what the per-account lockout is for. The two are complements, and neither replaces
+the other.
 
 ---
 
@@ -631,7 +690,8 @@ in order:
 1. ~~**PM-29** (ESLint)~~ — ✅ done 2026-08-03; linting runs now
 2. ~~**PM-2** (`secure` cookies)~~ — ✅ done 2026-08-03; the clearing half was still open
 3. ~~**PM-4** (seed credentials)~~ — ✅ was already fixed in code; the docs were the live problem
-4. **PM-26** (rate limiting) — the last item still required before public exposure
+4. ~~**PM-26** (rate limiting)~~ — ✅ done 2026-08-03; also closed PM-8 and fixed an
+   `X-Forwarded-For` bypass that made the limiter useless
 5. **PM-10** (logging) — a 500 in production is currently invisible
 6. **PM-5** (row-level scoping) — required before any partner-owned data exists; this is also
    Build Sequence step 2 in [`MARKETPLACE_DOMAIN_PLAN.md`](./MARKETPLACE_DOMAIN_PLAN.md)

@@ -29,6 +29,33 @@ class Settings(BaseSettings):
     MAX_FAILED_LOGIN_ATTEMPTS: int = 5
     ACCOUNT_LOCKOUT_MINUTES: int = 15
 
+    # --- HTTP rate limiting (PM-26) -----------------------------------------
+    # Per-IP, which is the axis account lockout cannot cover: one attempt each
+    # against a thousand accounts never trips a lockout. See core/rate_limit.py
+    # for the tiers and for why the counters being per-process matters.
+    #
+    # Switchable because a load test or a bulk import wants it off, and because
+    # once a reverse proxy does the limiting this becomes duplication.
+    RATE_LIMIT_ENABLED: bool = True
+    # Whether to believe `X-Forwarded-For`. Clients write that header, so trusting
+    # it without a proxy that overwrites it hands every caller a free bypass of
+    # the limits below — measured, not hypothetical: see get_client_ip. Enable
+    # this only in the same change that puts a reverse proxy in front.
+    TRUST_PROXY_HEADERS: bool = False
+    # Credential and token endpoints. 10/minute is unremarkable for a person
+    # typing a password and expensive for anyone spraying.
+    RATE_LIMIT_SENSITIVE_MAX_REQUESTS: int = 10
+    RATE_LIMIT_SENSITIVE_WINDOW_SECONDS: int = 60
+    # The rest of /api/auth/*. Cannot be as tight as the above: the frontend
+    # reads /api/auth/me on navigation, so a tight limit here breaks ordinary
+    # browsing rather than an attack.
+    RATE_LIMIT_AUTH_MAX_REQUESTS: int = 60
+    RATE_LIMIT_AUTH_WINDOW_SECONDS: int = 60
+    # Everything else. High enough that a dashboard loading several lists in
+    # parallel is nowhere near it.
+    RATE_LIMIT_DEFAULT_MAX_REQUESTS: int = 300
+    RATE_LIMIT_DEFAULT_WINDOW_SECONDS: int = 60
+
     # --- Signup policy ------------------------------------------------------
     # Staff are domain-gated and may use Google SSO. Anyone else may register
     # with credentials as a partner and lands INACTIVE pending approval.
