@@ -49,6 +49,11 @@ ROLE_VIEW = "role-view"
 ROLE_CREATE = "role-create"
 ROLE_UPDATE = "role-update"
 ROLE_DELETE = "role-delete"
+#: Changing WHAT a role can do, as distinct from its name and description.
+#: Split from ROLE_UPDATE deliberately (LeapDesk has the same separation): renaming
+#: a role and rewriting its grants are different risk levels, and conflating them
+#: means anyone who can tidy up a label can also hand out every permission.
+ROLE_PERMISSIONS = "role-permissions"
 
 # Permissions (read-only for everyone but super admins)
 PERMISSION_VIEW = "permission-view"
@@ -107,7 +112,8 @@ PERMISSION_CATALOG: dict[str, tuple[str, int, str, list[tuple[str, str]]]] = {
         [
             (ROLE_VIEW, "View roles"),
             (ROLE_CREATE, "Create roles"),
-            (ROLE_UPDATE, "Update roles and their permissions"),
+            (ROLE_UPDATE, "Update a role's name and description"),
+            (ROLE_PERMISSIONS, "Change which permissions a role grants"),
             (ROLE_DELETE, "Delete roles"),
         ],
     ),

@@ -104,13 +104,20 @@ export default function RolesModule() {
         header: "Actions",
         cell: (row) => {
           // A super-admin role's grants may only be edited by a super admin.
-          const editable = can("role-update") && (!row.is_protected || isSuperAdmin);
+          // Editing a role's GRANTS needs role-permissions, which is now separate
+          // from role-update (renaming). Gating on role-update alone would offer an
+          // editable matrix that the API refuses on save — worse than read-only.
+          const editable =
+            can("role-update") && can("role-permissions") && (!row.is_protected || isSuperAdmin);
           return (
             <div className="flex justify-center">
               <RowActions
                 actions={[
                   {
-                    label: can("role-update") ? "Edit permissions" : "View permissions",
+                    label:
+                      can("role-update") && can("role-permissions")
+                        ? "Edit permissions"
+                        : "View permissions",
                     onSelect: () => {
                       setTarget(row);
                       setModal("edit");
@@ -276,6 +283,7 @@ export default function RolesModule() {
           groups={groups}
           readOnly={
             !can(modal === "edit" ? "role-update" : "role-create") ||
+            !can("role-permissions") ||
             (modal === "edit" && Boolean(target?.is_protected) && !isSuperAdmin)
           }
           onClose={() => {

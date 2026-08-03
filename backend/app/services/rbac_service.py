@@ -10,7 +10,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.permissions import PROTECTED_ROLES, SUPER_ADMIN_ROLES
+from app.core.permissions import PROTECTED_ROLES, SUPER_ADMIN_ROLES, ROLE_PERMISSIONS
 from app.models.associations import user_roles
 from app.models.permission import Permission
 from app.models.permission_group import PermissionGroup
@@ -53,6 +53,44 @@ def get_role_or_404(db: Session, role_id: int) -> Role:
     if role is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Role not found")
     return role
+
+
+def _resolve_grantable_permissions(
+    db: Session, permission_ids: list[int], actor: User
+) -> list[Permission]:
+    """Load permissions, refusing any the actor does not themselves hold.
+
+    **The privilege ceiling.** Without it, editing a role is an escalation path
+    rather than an administrative task: someone holding a custom role that grants
+    `role-update` could add `user-delete` to that same role and immediately have it.
+    The route guard cannot catch this — they legitimately hold the permission the
+    route requires. The escalation is in the *payload*.
+
+    An earlier comment here argued no ceiling was needed "because the catalog holds
+    nothing more dangerous than the role-management permissions themselves". That
+    stopped being true once `user-delete` and `activity-view` existed, which is the
+    trouble with reasoning from the current contents of a list that grows.
+
+    Super admins bypass, because they already hold everything by definition — a
+    ceiling below your own level is not a ceiling.
+    """
+    permissions = resolve_permissions(db, permission_ids)
+
+    if actor.is_super_admin:
+        return permissions
+
+    over_ceiling = sorted(
+        p.name for p in permissions if not actor.has_permission(p.name)
+    )
+    if over_ceiling:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            (
+                "You cannot grant a permission you do not hold yourself: "
+                f"{', '.join(over_ceiling)}."
+            ),
+        )
+    return permissions
 
 
 def resolve_permissions(db: Session, permission_ids: list[int]) -> list[Permission]:
@@ -153,12 +191,7 @@ def create_role(db: Session, data: CreateRoleRequest, actor: User) -> Role:
             "That name is reserved for a system role",
         )
 
-    # NOTE: there is no privilege ceiling on which permissions may be granted,
-    # because the catalog currently holds nothing more dangerous than the
-    # role-management permissions themselves. If a genuinely destructive
-    # permission is added, gate it here — editing a role is the back door into
-    # escalation, not the route that uses the permission.
-    permissions = resolve_permissions(db, data.permission_ids)
+    permissions = _resolve_grantable_permissions(db, data.permission_ids, actor)
 
     role = Role(
         name=name,
@@ -192,7 +225,17 @@ def update_role(db: Session, role_id: int, data: UpdateRoleRequest, actor: User)
         role.description = data.description.strip() or None
 
     if data.permission_ids is not None:
-        role.permissions = resolve_permissions(db, data.permission_ids)
+        # Changing grants needs its own permission, beyond the ROLE_UPDATE the route
+        # declares. Same pattern as `update_user`, where the route requires
+        # USER_UPDATE and the service additionally requires admin access to touch
+        # `status` or `role_ids` — the route states the minimum, the service enforces
+        # the rest.
+        if not actor.has_permission(ROLE_PERMISSIONS):
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "Changing what a role grants requires the 'role-permissions' permission.",
+            )
+        role.permissions = _resolve_grantable_permissions(db, data.permission_ids, actor)
 
     role.updated_by = actor.id
     db.commit()

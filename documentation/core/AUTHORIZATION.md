@@ -210,6 +210,42 @@ is not a security control.
 
 ---
 
+## Two Rules That Are Not Route Guards
+
+**Added 2026-08-03**, both from comparing against LeapDesk's `PermissionSeeder` and `RolePolicy`.
+
+### `role-permissions` is separate from `role-update`
+
+LeapDesk splits these — `role-update` for edit/update, `role-permissions` for `updatePermissions` — and
+it is right to. **Renaming a role and rewriting what it grants are different risk levels.** Conflated,
+anyone who can tidy up a label can also hand out every permission in the catalog.
+
+`PATCH /api/roles/{id}` still declares `role-update`; the service additionally requires
+`role-permissions` when the payload carries `permission_ids`. That is the same shape as `update_user`,
+where the route requires `user-update` and the service additionally requires admin access to touch
+`status` or `role_ids` — **the route states the minimum, the service enforces the rest.**
+
+### The privilege ceiling: you cannot grant what you do not hold
+
+A non-super-admin may only grant a role permissions **they themselves hold**. Super admins bypass,
+because a ceiling below your own level is not a ceiling.
+
+This closes a real escalation path. Someone holding a custom role that grants `role-update` could add
+`user-delete` to that same role and immediately have it — and **no route guard can catch it**, because
+they legitimately hold the permission the route requires. The escalation is in the payload, not the
+route.
+
+This code previously carried a comment arguing no ceiling was needed *"because the catalog currently
+holds nothing more dangerous than the role-management permissions themselves"*. That stopped being true
+the moment `user-delete` and `activity-view` existed. **Reasoning from the current contents of a list
+that grows is how a safe assumption expires without anyone noticing** — worth remembering next time an
+argument depends on what is in a catalog today.
+
+Verified: an actor holding only `Staff` was refused `user-delete` with a 403 naming it, allowed
+`dashboard-view` which they do hold, and a super admin was allowed `user-delete`.
+
+---
+
 ## Seeding
 
 Two seeders, deliberately separate — the vocabulary and the people change on different schedules.
