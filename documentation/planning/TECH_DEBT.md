@@ -68,7 +68,7 @@ since 2026-07-31 — only the documentation was wrong, and wrong in a way that b
 | [PM-30](#pm-30--17-react-hooks-errors-from-rules-that-arrive-with-the-wrong-config-version) | 🟡 | 17 react-hooks errors, from `eslint-config-next` 16 on Next 14 | Quality |
 | [PM-31](#pm-31--refresh-reissues-rather-than-rotates-no-token-reuse-detection) | 🟡 | `/refresh` reissues rather than rotates — no reuse detection | Auth |
 | [PM-32](#pm-32--no-audit-log-leapdesk-has-one) | 🟠 | No audit log — LeapDesk has `activity_log` | Quality |
-| [PM-33](#pm-33--no-security-response-headers) | 🟠 | No security response headers | Infra |
+| [PM-33](#pm-33--no-security-response-headers--backend-done-frontend-pending) | 🟡 | ~~No security response headers~~ backend done; **frontend pending** | Infra |
 
 ---
 
@@ -920,7 +920,34 @@ lost on `docker compose down`.
 
 ---
 
-### PM-33 — No security response headers
+### PM-33 — No security response headers ⚠️ BACKEND DONE, FRONTEND PENDING
+
+**Backend resolved 2026-08-03** in `backend/app/core/headers.py`, registered in `main.py`. **The
+frontend half is not done** — `frontend/next.config.mjs` is a protected file and needs the owner's
+confirmation before editing.
+
+Sent on every response, verified including on a `429`:
+`X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`,
+`X-Frame-Options: SAMEORIGIN`, `Content-Security-Policy: frame-ancestors 'self'`, and a
+`Permissions-Policy`. HSTS is gated on `HSTS_ENABLED` (default off) and verified to appear as
+`max-age=31536000; includeSubDomains` when switched on and to be absent otherwise.
+
+**Two deliberate divergences from LeapDesk's middleware:**
+
+1. **`X-XSS-Protection` is not set.** It controlled an auditor every current browser has removed —
+   Chrome dropped it in 2019 — and it could itself be abused to selectively block scripts. LeapDesk
+   sets it; copying a dead header for symmetry would be cargo-culting.
+2. **HSTS is not tied to `COOKIE_SECURE`.** They answer different questions: whether cookies require
+   TLS, versus whether every browser that has seen this host should refuse plain HTTP to it for a year.
+   Enabling HSTS against a host without a valid certificate is not a warning, it is an outage no
+   server-side change can clear. `HSTS_PRELOAD` is separate again, because preloading is effectively
+   irreversible.
+
+**Still open:** the Next.js app is a separate origin serving the actual HTML, so a header on the API
+does nothing for a page the API did not serve. `next.config.mjs` already has a `headers()` block and
+needs the same set added there — that is where framing and sniffing protections actually matter.
+
+Original entry follows.
 
 **Where:** `backend/app/main.py` — no header middleware
 

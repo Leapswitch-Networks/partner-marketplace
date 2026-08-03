@@ -10,6 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from app.api import auth, candidate, category, google, invitations, permissions, roles, users
 from app.core.config import settings
+from app.core.headers import SecurityHeadersMiddleware
 from app.core.logging import RequestContextMiddleware, configure_logging, request_id_ctx
 from app.core.rate_limit import RateLimitMiddleware
 from app.db.session import engine
@@ -39,6 +40,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Security response headers (TECH_DEBT PM-33). Added after CORS so it sits
+# outside it, which means the headers land on CORS's own preflight replies as well
+# as on ordinary responses.
+app.add_middleware(SecurityHeadersMiddleware)
 
 # Outermost, so its timing covers gzip and rate limiting too and every log line
 # from any handler carries a request id (TECH_DEBT PM-10).

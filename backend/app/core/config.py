@@ -75,6 +75,19 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_SECRET: str = ""
     GOOGLE_REDIRECT_URI: str = ""
 
+    # --- Security headers (PM-33) -------------------------------------------
+    # HSTS is off by default and deliberately NOT tied to COOKIE_SECURE. The two
+    # answer different questions: whether cookies require TLS, versus whether
+    # every browser that has seen this host should refuse plain HTTP to it for a
+    # year. Enabling it against a host without a valid certificate is not a
+    # warning, it is an outage no server-side change can clear.
+    HSTS_ENABLED: bool = False
+    HSTS_MAX_AGE_SECONDS: int = 31536000  # one year, matching LeapDesk
+    HSTS_INCLUDE_SUBDOMAINS: bool = True
+    # Preload submits the domain to a browser-shipped list, which is effectively
+    # irreversible. Opt in only once the domain is settled.
+    HSTS_PRELOAD: bool = False
+
     # --- Email (PM-27) ------------------------------------------------------
     # `console` logs the message instead of sending it, so local development needs
     # no SMTP server and the accept/reset link is visible in the backend logs.
