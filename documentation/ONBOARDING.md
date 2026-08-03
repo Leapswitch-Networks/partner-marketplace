@@ -188,12 +188,20 @@ That brings up four containers. `backend` waits for the database's healthcheck b
 App ports are mapped **1:1** on purpose — the port the browser talks to is the same number the dev
 server binds, which keeps Next.js's Fast Refresh websocket working without extra configuration.
 
-Then run the migrations and seed the admin (**neither is automatic**, see § 4.3):
+Then run the migrations and seed RBAC plus the root account (**neither is automatic**, see § 4.3):
 
 ```bash
 docker compose run --rm backend alembic upgrade head
-docker compose run --rm backend python -m app.db.seed_admin
+
+# ROOT_PASSWORD is optional. Set it to choose the root password, or omit it and
+# the seeder generates one and prints it once — there is no default credential.
+docker compose run --rm -e ROOT_PASSWORD='choose-a-strong-one' backend python -m app.db.seed_rbac
 ```
+
+The seeder is idempotent: it reconciles permissions, permission groups and system roles against
+`app/core/permissions.py` on every run, leaves administrator-created roles alone, and creates the root
+account **only when no user exists at all**. Root's address defaults to `root@leapswitch.com` and can
+be overridden with `ROOT_EMAIL`.
 
 Check it came up:
 
@@ -284,23 +292,37 @@ alembic upgrade head
 Alembic ignores the placeholder `sqlalchemy.url` in `alembic.ini`; `app/db/migrations/env.py`
 overrides it from `settings.DATABASE_URL`, so `.env` is the single source of truth.
 
-Current head is **`3ab496a7c5b7`** (`create_categories_table`). Full chain and conventions:
+Current head is **`e7b41c9a2d10`** (`unify_accounts_and_add_rbac`). Full chain and conventions:
 `system-design/DATABASE_MIGRATIONS.md`.
 
-### 5.2 Seed the default admin
+### 5.2 Seed RBAC and the root account
 
 ```bash
-python -m app.db.seed_admin
+# Choose the password:
+ROOT_PASSWORD='choose-a-strong-one' python -m app.db.seed_rbac
+
+# Or omit it and let the seeder generate one — it prints the password once and
+# never again, so capture it from the output.
+python -m app.db.seed_rbac
 ```
 
-Creates one `super_admin` if none exists:
+What it does, idempotently, on every run:
 
-| Email | Password | Role |
-|-------|----------|------|
-| `abc@gmail.com` | `Abc@1234` | `super_admin` |
+| Step | Behaviour |
+|------|-----------|
+| Permissions & groups | Created or updated to match `app/core/permissions.py`, the source of truth |
+| System roles | Created if missing, permissions re-synced |
+| Administrator-created roles | **Never touched** |
+| Root account | Created **only if no user exists at all** — it will not silently mint a second one |
 
-> These are **local dev placeholders in a public repo**. Never use them anywhere reachable from the
-> internet, and never add real credentials to `seed_admin.py`.
+| Setting | Env var | Default |
+|---------|---------|---------|
+| Root email | `ROOT_EMAIL` | `root@leapswitch.com` |
+| Root password | `ROOT_PASSWORD` | **none** — a random one is generated and printed once |
+
+> **There is no default credential**, deliberately: this is a public repo and a committed working
+> password is a working password for everyone. If the seeder generated yours, it appears in the output
+> exactly once — rotate it before the environment is reachable from anywhere.
 
 ### 5.3 Run the API
 
@@ -352,27 +374,30 @@ add the origin there.
 
 - [ ] `docker compose ps` shows `db` healthy (Path A: and `backend`/`frontend` `Up`)
 - [ ] `curl -s localhost:8002/health` → `{"status":"ok"}`
-- [ ] http://localhost:8002/docs lists the `auth`, `admin`, `candidates`, `categories` tag groups
+- [ ] http://localhost:8002/docs lists the `auth`, `users`, `roles`, `permissions`, `invitations`,
+      `candidates`, `categories` and `health` tag groups
 - [ ] http://localhost:3001 redirects to `/sign-in` (root always redirects — see `frontend/middleware.ts`)
-- [ ] Signing in as `abc@gmail.com` / `Abc@1234` reaches `/dashboard`
-- [ ] `curl -s localhost:8002/api/auth/whoami` without a cookie → `401`
+- [ ] Signing in as the root account from § 5.2 reaches `/dashboard`
+- [ ] `curl -s localhost:8002/api/auth/me` without a cookie → `401`
 - [ ] http://localhost:8083 (Adminer) connects to the `db` server
 
 The whole set as one paste-able block:
 
 ```bash
 curl -s localhost:8002/health                                   # {"status":"ok"}
-curl -s -o /dev/null -w '%{http_code}\n' localhost:8002/api/auth/whoami   # 401
+curl -s -o /dev/null -w '%{http_code}\n' localhost:8002/api/auth/me       # 401
 curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' localhost:3001/  # 307 …/sign-in
 
-# admin login — note the /admin/ segment; plain /api/auth/login checks the
-# separate `users` table and will 401 for a seeded admin account
-curl -s -X POST localhost:8002/api/auth/admin/login \
+# One login endpoint for everyone. There is no /api/auth/admin/login and no
+# /api/auth/whoami — both were removed when the two account tables were merged
+# (migration e7b41c9a2d10). Capability comes from roles, not from the endpoint.
+# Use the root credentials from § 5.2; there is no committed default.
+curl -s -X POST localhost:8002/api/auth/login \
   -H 'Content-Type: application/json' \
-  -d '{"email":"abc@gmail.com","password":"Abc@1234"}'           # 200 + Set-Cookie
+  -d "{\"email\":\"root@leapswitch.com\",\"password\":\"$ROOT_PASSWORD\"}"  # 200 + Set-Cookie
 
 # CORS preflight must echo the frontend origin back
-curl -s -i -X OPTIONS localhost:8002/api/auth/admin/login \
+curl -s -i -X OPTIONS localhost:8002/api/auth/login \
   -H 'Origin: http://localhost:3001' \
   -H 'Access-Control-Request-Method: POST' | grep -i access-control-allow-origin
 ```
@@ -402,13 +427,13 @@ docker compose logs backend --since 15s | grep Reloading   # WatchFiles detected
 | Apply migrations | `docker compose run --rm backend alembic upgrade head` |
 | Roll back one | `docker compose run --rm backend alembic downgrade -1` |
 | Current revision | `docker compose run --rm backend alembic current` |
-| Seed the admin | `docker compose run --rm backend python -m app.db.seed_admin` |
+| Seed RBAC + root account | `docker compose run --rm -e ROOT_PASSWORD backend python -m app.db.seed_rbac` |
 | Lint frontend | `docker compose exec frontend npm run lint` |
 | Production build | `docker compose exec frontend npm run build` |
 | Rebuild after a dependency change | `docker compose up -d --build backend` (or `frontend`) |
 | Reinstall node modules | `docker compose down && docker volume rm partnermarketplace_frontend_node_modules && docker compose up -d --build frontend` |
 
-`alembic` and `seed_admin` use `run --rm` rather than `exec` for the reason in § 4.3. Everything else
+`alembic` and `seed_rbac` use `run --rm` rather than `exec` for the reason in § 4.3. Everything else
 uses `exec` because it doesn't touch the database.
 
 ### Path B
@@ -516,8 +541,8 @@ contains them:
 | `docker-compose up --build` starts all four services | Compose has only `db` + `adminer` |
 | Backend auto-runs `alembic upgrade head` on startup | It does not — run it yourself (§ 5.1) |
 | `cp backend/.env.example backend/.env` | No `.env.example` exists |
-| `docker-compose exec backend python seed.py` | No backend container, no `seed.py`; use `python -m app.db.seed_admin` |
-| Admin login `admin@example.com` / `admin123` | `abc@gmail.com` / `Abc@1234` |
+| `docker-compose exec backend python seed.py` | No `seed.py`; use `python -m app.db.seed_rbac` |
+| Admin login `admin@example.com` / `admin123`, or `abc@gmail.com` / `Abc@1234` | **Neither exists.** There is no committed credential at all — the seeder takes `ROOT_PASSWORD` from the environment or generates one and prints it once (§ 5.2) |
 | `postgresql+asyncpg://` | `postgresql://` (sync psycopg2) |
 | `docker-compose.yaml`, `docker/` folder, `docs/` folder | `docker-compose.yml`; no `docker/`; folder is `documentation/` |
 

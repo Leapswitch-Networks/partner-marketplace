@@ -73,7 +73,7 @@ as the model, and always read the generated file.**
 
 ## 2. Current Revision Chain
 
-Linear, seven revisions. **Head is `3ab496a7c5b7`.**
+Linear, eight revisions. **Head is `e7b41c9a2d10`.**
 
 | # | Revision | Down revision | What it did |
 |---|----------|---------------|-------------|
@@ -83,7 +83,8 @@ Linear, seven revisions. **Head is `3ab496a7c5b7`.**
 | 4 | `c4a2f81d9e10` | `b818194d8e23` | Add `role` to `admin_users` |
 | 5 | `d9e3f1a2b4c5` | `c4a2f81d9e10` | Create `candidates` |
 | 6 | `cc12bb0fb8fb` | `d9e3f1a2b4c5` | Rename `password_hash` → `password` ⚠️ |
-| 7 | `3ab496a7c5b7` | `cc12bb0fb8fb` | Create `categories` ← **head** |
+| 7 | `3ab496a7c5b7` | `cc12bb0fb8fb` | Create `categories` |
+| 8 | `e7b41c9a2d10` | `3ab496a7c5b7` | Unify `users`/`admin_users` into one table, add RBAC, bcrypt every existing password in place ← **head** |
 
 Verify at any time:
 
@@ -184,7 +185,7 @@ Every revision needs a working `downgrade()`. Template:
 """create listings table
 
 Revision ID: abc123def456
-Revises: 3ab496a7c5b7
+Revises: e7b41c9a2d10
 Create Date: 2026-07-30 …
 """
 from typing import Sequence, Union
@@ -193,7 +194,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "abc123def456"
-down_revision: Union[str, None] = "3ab496a7c5b7"
+down_revision: Union[str, None] = "e7b41c9a2d10"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -256,7 +257,7 @@ startup." **It does not.** `main.py` has no startup hook.
 | Multiple heads | Two revisions share a `down_revision`. `alembic heads` to see them, then `alembic merge -m "merge heads" <rev1> <rev2>`. Better: keep the chain linear. |
 | Migration failed halfway | Postgres DDL is transactional, so a failed migration rolls back — but `alembic_version` may not have advanced. Check `alembic current`, fix the migration, re-run. |
 | Model and DB have drifted | `alembic revision --autogenerate -m "sync"` and **read** it. It shows the delta. Discard it if it's not what you want. |
-| Need a clean slate (local only) | `docker compose down -v` then `docker compose up -d`, `alembic upgrade head`, `python -m app.db.seed_admin`. **Destroys all local data.** |
+| Need a clean slate (local only) | `docker compose down -v` then `docker compose up -d`, `alembic upgrade head`, `python -m app.db.seed_rbac`. **Destroys all local data.** |
 | `alembic: command not found` | Venv not active, or you're using the broken inherited venv — see `../ONBOARDING.md` § 2. |
 | `FAILED: No config file 'alembic.ini' found` | You're not in `backend/`. |
 

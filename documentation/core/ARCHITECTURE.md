@@ -148,7 +148,7 @@ Partner Market Place/
 │       ├── db/
 │       │   ├── base.py             # DeclarativeBase
 │       │   ├── session.py          # engine + SessionLocal (pooled)
-│       │   ├── seed_admin.py       # default super-admin seeder
+│       │   ├── seed_rbac.py        # RBAC catalog + bootstrap root account
 │       │   └── migrations/         # Alembic env.py + versions/
 │       ├── models/                 # SQLAlchemy models
 │       ├── schemas/                # Pydantic v2 request/response models
@@ -324,7 +324,7 @@ Still open:
 
 | Gap | Detail |
 |-----|--------|
-| `COOKIE_SECURE` defaults to `False` | Configurable now, but must be `True` behind HTTPS (PM-2) |
+| `COOKIE_SECURE` defaults to `False` | A **deployment requirement, not a code defect** — PM-2 is closed. The flag is honoured on both set and clear; it must be set `True` in any HTTPS environment |
 | No CSRF token | `samesite=lax` alone; no double-submit or synchroniser token |
 | **No HTTP rate limiting** | Lockout is per-account, so an attacker can still spray many accounts (PM-26) |
 | No email transport | Invitations return the accept URL; reset tokens are only readable in the DB (PM-27) |

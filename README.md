@@ -96,8 +96,10 @@ docker compose up -d --build
 
 # 3. Migrate and seed — neither is automatic.
 #    Use `run`, not `exec`: see ONBOARDING § 4.3 for why.
+#    ROOT_PASSWORD is optional: without it the seeder generates one and prints
+#    it once. There is no default credential.
 docker compose run --rm backend alembic upgrade head
-docker compose run --rm backend python -m app.db.seed_admin
+docker compose run --rm -e ROOT_PASSWORD backend python -m app.db.seed_rbac
 
 # 4. Follow the dev servers
 docker compose logs -f backend frontend

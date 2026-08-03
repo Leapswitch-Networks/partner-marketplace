@@ -61,8 +61,31 @@ def set_auth_cookies(response: Response, user_id: str) -> None:
 
 
 def clear_auth_cookies(response: Response) -> None:
-    response.delete_cookie("access_token", path="/")
-    response.delete_cookie("refresh_token", path=_REFRESH_PATH)
+    """Expire both auth cookies.
+
+    The `secure`/`samesite`/`httponly` flags are repeated here deliberately.
+    Starlette's `delete_cookie` does not inherit them — it defaults to
+    `samesite="lax"`, `secure=False` — so without this the expiring
+    `Set-Cookie` would carry different attributes from the one that created it.
+    Browsers match on name/domain/path, so deletion works either way today, but
+    it breaks the moment `COOKIE_SAMESITE` is `none`: a `SameSite=None` cookie
+    without `Secure` is rejected outright, and logout would silently leave the
+    session cookie in place.
+    """
+    response.delete_cookie(
+        "access_token",
+        path="/",
+        httponly=True,
+        samesite=settings.COOKIE_SAMESITE,
+        secure=settings.COOKIE_SECURE,
+    )
+    response.delete_cookie(
+        "refresh_token",
+        path=_REFRESH_PATH,
+        httponly=True,
+        samesite=settings.COOKIE_SAMESITE,
+        secure=settings.COOKIE_SECURE,
+    )
 
 
 # --- Registration -----------------------------------------------------------

@@ -9,6 +9,9 @@
 **Since then:** PM-25 added 2026-07-31 (containerisation); PM-26/27/28 added 2026-07-31
 during the auth/RBAC rebuild, which also closed PM-1, 3, 6, 7, 9, 14, 15, 16, 17 and 18.
 **2026-08-03:** PM-29 closed; PM-30 added — the 17 react-hooks errors that closing PM-29 revealed.
+PM-2 closed (its clearing half was genuinely still open). PM-4 confirmed **already** closed in code
+since 2026-07-31 — only the documentation was wrong, and wrong in a way that broke the setup command.
+**Both had been sitting in this register as 🔴 blockers while the code was fine.**
 
 ---
 
@@ -28,9 +31,9 @@ during the auth/RBAC rebuild, which also closed PM-1, 3, 6, 7, 9, 14, 15, 16, 17
 | ID | Sev | Title | Area |
 |----|:---:|-------|------|
 | [PM-1](#pm-1--passwords-stored-and-compared-in-plaintext--resolved) | ✅ | ~~Passwords stored and compared in plaintext~~ | Auth |
-| [PM-2](#pm-2--auth-cookies-set-with-securefalse) | 🔴 | Auth cookies set with `secure=False` | Auth |
+| [PM-2](#pm-2--auth-cookies-set-with-securefalse--resolved) | ✅ | ~~Auth cookies set with `secure=False`~~ | Auth |
 | [PM-3](#pm-3--any-admin-can-create-a-super-admin--resolved) | ✅ | ~~Any admin can create a super-admin~~ | Authz |
-| [PM-4](#pm-4--seed-credentials-in-a-public-repo) | 🔴 | Seed credentials in a public repo | Auth |
+| [PM-4](#pm-4--seed-credentials-in-a-public-repo--resolved) | ✅ | ~~Seed credentials in a public repo~~ | Auth |
 | [PM-5](#pm-5--no-row-level-scoping-pattern-exists) | 🟠 | No row-level scoping pattern exists | Authz |
 | [PM-6](#pm-6--six-admin_users-columns-are-never-written--resolved) | ✅ | ~~Six `admin_users` columns are never written~~ | Data |
 | [PM-7](#pm-7--three-auth-guards-are-defined-but-unused--resolved) | ✅ | ~~Three auth guards are defined but unused~~ | Authz |
@@ -89,16 +92,31 @@ existing credentials must be rotated, since they were stored readable.
 
 ---
 
-### PM-2 — Auth cookies set with `secure=False`
+### PM-2 — Auth cookies set with `secure=False` ✅ RESOLVED
 
-**Where:** `backend/app/api/auth.py` `_set_auth_cookies()`
+**Setting side resolved by the 2026-07-31 auth/RBAC rebuild. Clearing side resolved 2026-08-03.**
 
-Both cookies are issued with `secure=False`, so they will be transmitted over plain HTTP. The source
-already carries the reminder: `# set True behind HTTPS in production`.
+`set_auth_cookies` has driven both cookies from `settings.COOKIE_SECURE` and `settings.COOKIE_SAMESITE`
+since the rebuild. What the rebuild missed was the other half: `clear_auth_cookies` called Starlette's
+`delete_cookie` with only a path. `delete_cookie` does **not** inherit the flags — it defaults to
+`samesite="lax"`, `secure=False`, `httponly=False` — so the expiring `Set-Cookie` carried different
+attributes from the one that created it.
 
-**Fix:** drive it from `Settings` (e.g. `COOKIE_SECURE: bool = False`) so local stays HTTP and
-deployed environments get `True`. Verify with
-`curl -si … | grep -i set-cookie` — `Secure` must be present.
+Deletion still worked, because browsers match on name/domain/path. But it would have broken silently
+the moment `COOKIE_SAMESITE` was set to `none` for a cross-site deployment: a `SameSite=None` cookie
+without `Secure` is rejected outright, so the expiry header would be dropped and **logout would leave
+the session cookie in place**. Both calls now mirror the full flag set.
+
+**Verified 2026-08-03** by constructing both responses inside the running backend container:
+
+| `COOKIE_SECURE` / `COOKIE_SAMESITE` | Set | Clear |
+|---|---|---|
+| `False` / `lax` (local default) | `HttpOnly; Path=/; SameSite=lax` — no `Secure`, correct for HTTP | same attributes, `Max-Age=0` |
+| `True` / `none` (deployment shape) | `HttpOnly; SameSite=none; Secure` | `HttpOnly; SameSite=none; Secure; Max-Age=0` |
+
+**Remaining, and it is configuration rather than a defect:** `COOKIE_SECURE` defaults to `False` so
+local HTTP works, so every HTTPS environment must set it to `True`. Tracked in `DEPLOYMENT.md` § 0
+under configuration, not blockers.
 
 ---
 
@@ -122,16 +140,25 @@ it shows up in OpenAPI.
 
 ---
 
-### PM-4 — Seed credentials in a public repo
+### PM-4 — Seed credentials in a public repo ✅ RESOLVED
 
-**Where:** `backend/app/db/seed_admin.py:13-15`, and the inherited `README.md:114-118`
+**Resolved by the 2026-07-31 auth/RBAC rebuild; confirmed and documented 2026-08-03.**
 
-`abc@gmail.com` / `Abc@1234` as a `super_admin`. The README additionally publishes a different
-(non-existent) pair, `admin@example.com` / `admin123`.
+`seed_admin.py`, which hardcoded `abc@gmail.com` / `Abc@1234`, **no longer exists**. It was replaced by
+`backend/app/db/seed_rbac.py`, which takes the root address from `ROOT_EMAIL` (defaulting to
+`root@leapswitch.com`) and the password from `ROOT_PASSWORD`. There is no hardcoded default: if
+`ROOT_PASSWORD` is unset the seeder generates `secrets.token_urlsafe(16)` and prints it once. The
+source comment states the reasoning — *"Better a random password printed once than a known default
+committed."*
 
-**Fix:** acceptable as an obviously-fake local placeholder, but the seeder must never run in a reachable
-environment. The README's credentials block was removed when it was rewritten (PM-12), so the seeder
-is now the only place these appear.
+**There is now no working credential anywhere in this repository.**
+
+The rebuild did not update the docs, though, and that was the more dangerous half of this item: nine
+places across `README.md`, `ONBOARDING.md`, `ARCHITECTURE.md`, `DATABASE_MIGRATIONS.md` and
+`DEPLOYMENT.md` still referenced `app.db.seed_admin`. Because the module is gone, the **documented
+setup command failed outright** — a new developer following the README got `ModuleNotFoundError`, and
+ONBOARDING § 5.2 still published `Abc@1234` as the password the seeder creates. All corrected
+2026-08-03.
 
 ---
 
@@ -602,15 +629,24 @@ The 2026-07-31 auth/RBAC rebuild closed the four original blockers except PM-2 a
 in order:
 
 1. ~~**PM-29** (ESLint)~~ — ✅ done 2026-08-03; linting runs now
-2. **PM-26** (rate limiting) + **PM-2** (`secure` cookies) — both required before public exposure
-3. **PM-5** (row-level scoping) — required before any partner-owned data exists; this is also
+2. ~~**PM-2** (`secure` cookies)~~ — ✅ done 2026-08-03; the clearing half was still open
+3. ~~**PM-4** (seed credentials)~~ — ✅ was already fixed in code; the docs were the live problem
+4. **PM-26** (rate limiting) — the last item still required before public exposure
+5. **PM-10** (logging) — a 500 in production is currently invisible
+6. **PM-5** (row-level scoping) — required before any partner-owned data exists; this is also
    Build Sequence step 2 in [`MARKETPLACE_DOMAIN_PLAN.md`](./MARKETPLACE_DOMAIN_PLAN.md)
-4. **PM-27** (email) — invitations and password reset are not self-service without it
-5. **PM-28** (verify Google SSO end to end against a real OAuth client)
-6. **PM-4** (seed credentials), **PM-10** (logging), **PM-19** (error boundaries)
-7. **PM-25** (React/Next peer mismatch) — a framework-version decision
-8. **PM-11** (tests) — **deliberately last**, see below
-9. Everything else as the surrounding code is worked on
+7. **PM-27** (email) — invitations and password reset are not self-service without it
+8. **PM-28** (verify Google SSO end to end against a real OAuth client) — **needs credentials**
+9. **PM-19** (error boundaries), **PM-30** (react-hooks findings)
+10. **PM-25** (React/Next peer mismatch) — a framework-version decision; gates PM-30
+11. **PM-11** (tests) — **deliberately last**, see below
+12. Everything else as the surrounding code is worked on
+
+> **Audit note, 2026-08-03.** Working this queue found that **PM-2 and PM-4 were already fixed in
+> code** and only the register said otherwise, and that `DEPLOYMENT.md` § 0 still listed five resolved
+> items as hard blockers. Closing an item and updating this file were separate acts, and the second
+> kept not happening. Before starting any item here, verify it against the code first — the register
+> is a map, not the territory.
 
 ### Why PM-11 is last, and what that costs
 

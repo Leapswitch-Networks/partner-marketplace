@@ -8,6 +8,45 @@
 
 ---
 
+## August 3, 2026 — Viho theme captured as a design reference
+
+- **The visual direction now has a written spec instead of living in a browser tab.** The owner
+  selected the Viho admin theme (Pixelstrap) and shared its login screen. Because the theme is
+  **paid**, its source cannot enter this repo — so the design *decisions* were extracted into
+  `documentation/design/VIHO_THEME_REFERENCE.md` and the source stays out. New folder
+  `documentation/design/` with `assets/inspiration/` for the owner's screenshots, plus a row in
+  `INDEX.md`.
+- **The values are parsed from the theme's stylesheets, not eyedropped from screenshots.** The demo
+  serves two CSS bundles totalling 2.6 MB; `app.css` alone carries 3,878 hex literals across 258
+  distinct colours. Every value in the doc names the selector it came from, so it can be re-checked.
+  The filenames are content-hashed, so the doc records the hashes and says to re-verify when they
+  change. The theme's brand variable is genuinely misspelled `--theme-deafult` — quoted verbatim so
+  nobody "corrects" it while diffing against the demo, but our own token is spelled properly.
+- **Viho is teal-and-tan, and our app is orange.** Primary `#24695c`, secondary `#ba895d`. That makes
+  the theme's personality a genuine product decision rather than a styling tweak, so the doc ends with
+  an explicit Adoption Decision section listing three conflicts against `UI_PATTERNS.md` — brand hue,
+  `border-radius: 0` versus our mandatory `rounded-lg`, and Montserrat 14px versus Inter — with the
+  cost of each. None were applied; no component or config was touched.
+- **A contrast audit was run rather than assumed, and it found four failures worth not copying.** The
+  worst is real and shipped in the theme: `.btn-warning` sets white text on mustard `#e2c636`, which
+  is **1.70:1** — dark text on the same fill is 8.58. Also failing: muted `#999999` on white (2.85),
+  white on secondary `#ba895d` (3.08), and placeholder `#898989` (3.50). The doc's proposed token set
+  substitutes our own passing values for these instead of inheriting them.
+- **One trap found that a purely visual review would have missed.** Viho's cards use 30px padding and
+  30px bottom margin — airier than ours. Our mandatory full-height index layout sizes itself with
+  `useAutoPerPage()`'s `floor((h − 433) / 38)`, so adopting that spacing changes how many table rows
+  fit and the 433 constant must be re-measured. Recorded in the doc so it is not discovered later as a
+  layout bug.
+- **Also noted:** the theme's `success` is a shade of its own primary and its `info` is grey, so both
+  read wrong semantically; and its login input sets `:focus { box-shadow: none }`, which our standards
+  forbid. All three are called out as "do not copy".
+- **Verified:** values quoted from real selectors in the downloaded CSS; contrast ratios computed from
+  sRGB relative luminance, not estimated. **Documentation only — no application code changed**, so
+  there is nothing to build or test. The screenshots table is intentionally empty pending the owner's
+  images.
+
+---
+
 ## August 3, 2026 — Users & Roles committed; tests moved to the back of the queue
 
 - **The Users and Roles work is in version control, as two commits rather than one.** It had been
@@ -57,6 +96,40 @@
 - **Verified:** `npm run typecheck` clean, `npm run build` green across all 10 routes, `npm run lint`
   down from 24 errors to 17. The Sidebar refactor was **not** exercised in a browser — the build
   compiles it, which is not the same as watching the sign-out button work.
+- **Working the queue found that two of its items were already fixed, and the register was the only
+  thing that still said otherwise.** PM-2 and PM-4 were both sitting there as 🔴 blockers. PM-4 was
+  fully closed in code on July 31; PM-2 was half closed. This is worth stating plainly because the
+  register is what the next person plans from: **verify an item against the code before starting it.**
+- **PM-2's remaining half was real, and it was the logout path.** `set_auth_cookies` has honoured
+  `COOKIE_SECURE` since the rebuild, but `clear_auth_cookies` passed only a path to Starlette's
+  `delete_cookie`, which does not inherit the flags — it defaults to `samesite="lax"`, `secure=False`.
+  Deletion still worked, because browsers match on name/domain/path, so nothing looked wrong. It would
+  have broken the first time anyone set `COOKIE_SAMESITE=none` for a cross-site deployment: a
+  `SameSite=None` cookie without `Secure` is rejected outright, the expiry header would be dropped, and
+  **logout would silently leave the session cookie in place**. Both calls now mirror the full flag set,
+  verified by building both responses inside the running container under `False/lax` and `True/none`.
+- **PM-4 was closed in code but broken in the docs, which was the more dangerous half.** The seeder
+  that hardcoded `abc@gmail.com` / `Abc@1234` doesn't exist any more — it's `seed_rbac.py`, taking
+  `ROOT_EMAIL`/`ROOT_PASSWORD` from the environment and generating a random password if none is given.
+  There is no working credential in the repository. But **nine places still told people to run
+  `python -m app.db.seed_admin`**, so the documented setup command failed with `ModuleNotFoundError`,
+  and ONBOARDING § 5.2 still published `Abc@1234` as the password it creates.
+- **The deploy blocker list was the worst of it: five of its eight entries were already fixed.** It
+  still led with plaintext passwords. A blocker list nobody trusts is worse than none, because the
+  entries that *are* real get lost among the ones that aren't. § 0 is now split into what still blocks
+  (logging, tests, no production topology), per-environment configuration that is not a defect, and a
+  closed-items table, with a note that closing a blocker and moving its row are one change, not two.
+- **Four more stale claims found while verifying, all corrected against the live API and files:** the
+  migration head was documented as `3ab496a7c5b7` when it is `e7b41c9a2d10` (eight revisions, not
+  seven, in two files); the onboarding checklist tested `/api/auth/whoami` and
+  `/api/auth/admin/login`, both **removed** when the account tables merged; and it listed an `admin`
+  OpenAPI tag group that no longer exists. The corrected commands were each run against the running
+  stack — `/api/auth/me` → 401, `/` → 307 to `/sign-in`, CORS preflight echoes the origin, health ok.
+- **One thing left alone deliberately:** the four accounts in the local database still carry their
+  pre-migration passwords, now bcrypt-hashed. `abc@gmail.com` therefore still signs in *on this
+  machine*, which is why the onboarding checklist used to pass — but a fresh setup has only the root
+  account, so the checklist was misleading for exactly the reader it exists for. Those four passwords
+  were readable while they were plaintext and should still be rotated.
 
 ---
 

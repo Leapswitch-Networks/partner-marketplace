@@ -24,22 +24,45 @@
 
 ## 0. Blockers — Fix Before Any Deploy
 
-These are **hard blockers**, not nice-to-haves. Each one is a live security or correctness problem
-the moment the app is reachable from outside `localhost`.
+**Corrected 2026-08-03.** This list had gone badly stale: five of its eight entries were fixed by the
+2026-07-31 auth/RBAC rebuild and one more was never true after it, yet all eight still read as live
+blockers. A blocker list nobody trusts is worse than no list, because the two entries that *are* real
+get lost among the six that aren't.
+
+### Still blocking
 
 | # | Blocker | Where | Required change |
 |---|---------|-------|-----------------|
-| 1 | **Passwords stored in plaintext** | `backend/app/core/security.py:9-16`, `services/auth_service.py` | Implement bcrypt hashing, migrate, rotate every credential. See `../core/AUTHENTICATION.md` § Known Debt. **Accepted debt for local dev; not deployable.** |
-| 2 | **`secure=False` on both auth cookies** | `backend/app/api/auth.py` `_set_auth_cookies()` | Set `secure=True` behind HTTPS. The source already carries the reminder. Without this, session cookies travel in cleartext. |
-| 3 | **CORS origins hardcoded to localhost** | `backend/app/main.py` | Move `allow_origins` into `Settings` so each environment configures its own. Today, deploying requires a code edit. |
-| 4 | **No login rate limiting and no account lockout** | — | The lockout columns exist but are never written (`../core/USERS.md`). Credential stuffing is unthrottled. |
-| 5 | **Any admin can create a `super_admin`** | `services/auth_service.register_admin` | Gate on `require_super_admin`, or reject elevated roles unless the actor is one. See `../core/AUTHORIZATION.md`. |
-| 6 | **Seed credentials are in a public repo** | `backend/app/db/seed_admin.py` | `abc@gmail.com` / `Abc@1234` must never exist in a reachable environment. |
-| 7 | **No error logging or monitoring** | — | No exception handler, no structured logging, no alerting. A 500 in production would be invisible. |
-| 8 | **No automated tests, and nothing runs the build** | — | Nothing verifies a deploy didn't break auth. The production build was **silently broken** by a type error until 2026-07-30 (`../planning/TECH_DEBT.md` PM-24) precisely because no workflow ran `npm run build`. At minimum, run it before every deploy. |
+| 1 | **No error logging or monitoring** | — | No exception handler, no structured logging, no alerting. A 500 in production would be invisible. PM-10 |
+| 2 | **No automated tests** | — | Nothing verifies a deploy didn't break auth. The production build was **silently broken** by a type error until 2026-07-30 (PM-24) precisely because no workflow ran `npm run build`. PM-11, and by the owner's 2026-08-03 decision it is deliberately last in the queue — so **run `npm run typecheck`, `npm run lint` and `npm run build` by hand before every deploy** until it lands |
+| 3 | **No production topology** | — | The Compose services are development-only: bind-mounted source, reload servers, no Nginx, no TLS terminator. See § 1 |
 
-**Recommendation:** blockers 1–3 and 6 are non-negotiable for any internet-reachable environment.
-4, 5, 7, 8 are non-negotiable before real partners use it.
+### Configuration that must change per environment — not defects
+
+| Setting | Why it matters |
+|---|---|
+| `COOKIE_SECURE=true` | Honoured on both set and clear, but defaults to `false` so local HTTP works. Without it, session cookies travel in cleartext. Verify with `curl -si … \| grep -i set-cookie` — `Secure` must be present |
+| `CORS_ORIGINS` | Defaults to localhost. Set to the real frontend origin |
+| `SECRET_KEY` | Must be a fresh strong value per environment, never the development one |
+| `ROOT_PASSWORD` | Only read at seed time. Omit it and the seeder generates and prints one once |
+
+### Closed since this list was written
+
+| Was | Now |
+|---|---|
+| ~~Passwords stored in plaintext~~ | bcrypt at 12 rounds; migration `e7b41c9a2d10` hashed every existing row in place. PM-1 |
+| ~~`secure=False` on both auth cookies~~ | Driven by `COOKIE_SECURE`, on set **and** clear. PM-2 |
+| ~~CORS origins hardcoded to localhost~~ | `settings.allowed_origins`. PM-9 |
+| ~~No login rate limiting and no account lockout~~ | **Half closed.** Per-account lockout works — five failures, fifteen minutes, `429`. Per-IP HTTP rate limiting still does not exist: PM-26, and it remains required before public exposure |
+| ~~Any admin can create a `super_admin`~~ | Elevated roles refused unless the actor holds one, on both the user and invitation paths. PM-3 |
+| ~~Seed credentials in a public repo~~ | `seed_admin.py` no longer exists. `seed_rbac.py` takes `ROOT_PASSWORD` from the environment and generates a random one if unset — **there is no committed credential**. PM-4 |
+
+**Recommendation:** the three still-blocking items plus **PM-26** are non-negotiable before real
+partners use it. The configuration table is non-negotiable for any internet-reachable environment.
+
+> **Maintaining this section:** when a blocker closes, move it into *Closed since this list was
+> written* in the same change. Do not delete the row — the drift above happened because closing a
+> blocker and updating this list were separate acts, and the second one never happened.
 
 ---
 
@@ -157,7 +180,10 @@ curl -sf https://<host>/health
 4. **Review migration SQL before applying** — `alembic upgrade head --sql`.
 5. **Have a rollback path** for both code and schema before you deploy. A migration without a working
    `downgrade()` is not deployable.
-6. **Never seed `seed_admin.py` in a deployed environment.**
+6. **`seed_rbac.py` is safe to re-run on every deploy** — it is idempotent and reconciles the
+   permission catalog. It creates the root account only when no user exists at all. Supply
+   `ROOT_PASSWORD` explicitly on a first deploy rather than letting it generate one, so the value
+   never appears in deploy logs.
 
 ---
 
