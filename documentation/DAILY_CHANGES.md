@@ -65,11 +65,41 @@
 - **A ranked list of the screenshots still worth capturing is in the doc** rather than left to memory —
   index/table page first, then the form wizard, then user edit/profile, then a modal and input error
   states. The reasoning is recorded per item so the next person can re-prioritise instead of guessing.
-- **Verified:** values quoted from real selectors in the downloaded CSS, then cross-checked against the
-  four renders by pixel sampling and corner scans; contrast ratios computed from sRGB relative
-  luminance, not estimated. The login page's alpha washes composite to exactly the measured
-  `#eaf0ef` / `#eff3f2`, so extraction and render agree. **Documentation only — no application code
-  changed**, so there is nothing to build or test.
+- **The owner then added 30 more screenshots covering the widget and chart pages plus 15 other screens,
+  and the doc became a build-time lookup rather than a colour reference.** All 30 arrived as
+  `Screenshot From <timestamp>.png`; each was opened and identified, then renamed to describe its screen
+  (`tables-datatable-light-pagination.png`, `widgets-chart-dark-2-radar-bubble.png`, and so on), and the
+  earlier misspelled `dashbaord1_darkmode.png` was regularised to `dashboard-default-dark.png`. 34
+  screenshots total, no duplicates by hash, every one referenced from the doc and every link verified to
+  resolve.
+- **The doc now leads with a "when you're building X → open this screenshot" table.** That was the
+  owner's stated goal: not a palette, but something a future session can consult before writing a
+  component. Nineteen build tasks map to specific files, followed by a per-file index of what to notice
+  in each, grouped by area.
+- **Two more of the doc's own claims were wrong and are corrected.** The dashboard widget's borderless,
+  plain-text-status table had led to "status is plain text, not a badge" — but the real index pages
+  (`tables-basic-light`, `tables-datatable-light-pagination`) use badges, `#` first columns, `⋮` action
+  menus and 1px `#e6edef` row dividers. Viho's tables are **closer to our mandatory index spec than the
+  widget suggested**, and the only genuine conflict is page size: Viho asks the user via
+  `Show [10] entries` where `useAutoPerPage()` derives it from viewport height. Separately, "charts use
+  exactly two categorical colours" was wrong — the Support Ticket page's six progress bars sample to
+  exactly the six semantic tones, and the radar and bubble charts add gold as a third series.
+- **The most reusable find is a derivable soft-badge rule.** The Todo page's `In progress` / `Pending` /
+  `Done` pills all composite to within 1–3 values of `tone at 20% over white` with the solid tone as
+  text, so the whole variant is `bg-{tone}/20 text-{tone}` against the solid `bg-{tone} text-white`.
+  No new tokens, and our `Badge` only has the solid style today.
+- **Also newly documented:** the full form vocabulary (labels always above, 20px field gaps, 2-up/3-up
+  grids for short fields, a dashed brand-bordered tinted upload zone), pagination styling (active page a
+  solid squared `#24695c` tile), the six-group ~40-item sidebar structure, and calendar/kanban tone
+  usage. Three things are explicitly marked do-not-copy: `Add`-in-tan beside `Cancel`-in-red, the
+  required-asterisk hidden in a placeholder, and treating `success`/`info` as teal/grey.
+- **Verified:** values quoted from real selectors in the downloaded CSS, then cross-checked against all
+  34 renders by pixel sampling, 1px border scans and corner-radius ramps; contrast ratios computed from
+  sRGB relative luminance, not estimated. The login page's alpha washes composite to exactly the
+  measured `#eaf0ef` / `#eff3f2` and the six progress fills to the exact `.btn-*` hexes, so extraction
+  and render agree. Link integrity checked programmatically: 34 files on disk, 34 referenced, 0 broken.
+  **Documentation only — no application code changed**, so there is nothing to build or test. Four gaps
+  remain and are listed: input error states, form wizard, an open modal, an open dropdown.
 
 ---
 
@@ -220,6 +250,35 @@
   there is no error-tracking service, and container stdout is lost on `docker compose down`. Ticking off
   the whole item because logs exist is how a register stops being trustworthy, which is the same failure
   this day already found twice.
+- **A render error no longer produces a blank screen (PM-19).** There were no `error.tsx`,
+  `loading.tsx` or `not-found.tsx` files anywhere, so any component that threw took the page with it.
+  Eight files now: a global boundary for a failure in the root layout itself, a root boundary, one
+  scoped to the dashboard so a broken module leaves the sidebar and top nav usable, one for sign-in, a
+  404, two skeleton loading states, and a shared `ErrorState` so four boundaries are not four
+  near-copies.
+- **The contract was read from the installed package, because the required docs do not exist.**
+  `AGENTS.md` says to read `node_modules/next/dist/docs/` before writing Next code — that directory is
+  **not present in `next@14.2.35`**. So the shipped types were read instead: `error-boundary.d.ts` for
+  the `{ error, reset }` signature and `next-app-loader.js` for which convention filenames this version
+  actually recognises. Recorded in PM-19, since the instruction cannot be followed literally.
+- **Three details that would each have been a silent bug.** The global boundary renders its own
+  `<html>` and `<body>` with inline styles, because it *replaces* the root layout — it cannot assume the
+  providers, the store, the theme class or even that the stylesheet loaded, and importing something that
+  reached for the store would fail inside the error handler and cause the very blank screen it exists to
+  prevent. Users are shown `error.digest`, not `error.message`, because Next deliberately replaces the
+  message with an opaque digest for server errors; the message appears only in development. And the
+  first verification attempt used a folder named `__boom`, which 404'd — **a folder starting with `_` is
+  private and not routable**, so the route never existed and the boundary was never involved.
+- **What was verified, and one thing that was not.** All eight files are registered as real route-tree
+  entries in the build manifest, which is what catches the actual silent failure — a boundary in the
+  wrong place or with the wrong filename is ignored without complaint. The 404 was confirmed end to end:
+  a bad URL returns **HTTP 404** with the new copy, and middleware does not intercept it. `tsc` clean,
+  build green. **The boundaries themselves were never rendered in a browser** — that cannot be done with
+  `curl`, because dev mode's error overlay intercepts and a route that throws during prerender *fails
+  the build* (confirmed, which is why the test route was removed). Proving the fallback looks right needs
+  the Chrome-DevTools-Protocol harness from July 31.
+- **Also fixed, and honestly a pre-existing gap these files exposed:** `Skeleton` had no dark variant.
+  Fine as a small inline placeholder, glaring as a full-page one.
 - **One thing left alone deliberately:** the four accounts in the local database still carry their
   pre-migration passwords, now bcrypt-hashed. `abc@gmail.com` therefore still signs in *on this
   machine*, which is why the onboarding checklist used to pass — but a fresh setup has only the root

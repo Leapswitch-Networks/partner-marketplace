@@ -48,7 +48,7 @@ since 2026-07-31 — only the documentation was wrong, and wrong in a way that b
 | [PM-16](#pm-16--no-change-password-endpoint--resolved) | ✅ | ~~No change-password endpoint~~ | Auth |
 | [PM-17](#pm-17--emails-are-not-normalised--resolved) | ✅ | ~~Emails are not normalised~~ | Data |
 | [PM-18](#pm-18--health-check-doesnt-check-the-database--resolved) | ✅ | ~~Health check doesn't check the database~~ | Infra |
-| [PM-19](#pm-19--no-error-boundaries-or-route-suspense) | 🟡 | No error boundaries or route suspense | Frontend |
+| [PM-19](#pm-19--no-error-boundaries-or-route-suspense--resolved) | ✅ | ~~No error boundaries or route suspense~~ | Frontend |
 | [PM-20](#pm-20--brand-colour-hardcoded-in-components) | ⚪ | Brand colour hardcoded in components | UI |
 | [PM-21](#pm-21--stale-product-naming-throughout--mostly-resolved) | ✅ | ~~Stale product naming throughout~~ (2 items deferred) | Housekeeping |
 | [PM-22](#pm-22--unused-tailwind-v4-dependency) | ⚪ | Unused Tailwind v4 dependency | Frontend |
@@ -483,10 +483,66 @@ useless as a load-balancer probe.
 
 ---
 
-### PM-19 — No error boundaries or route suspense
+### PM-19 — No error boundaries or route suspense ✅ RESOLVED
 
-No `error.tsx`, `loading.tsx`, or `not-found.tsx` anywhere in `app/`. A render error in a client
-component produces a blank screen; loading is handled ad hoc per component.
+**Resolved 2026-08-03.** Eight files, all confirmed registered in the route tree.
+
+| File | Catches |
+|---|---|
+| `app/global-error.tsx` | A failure in the **root layout itself** |
+| `app/error.tsx` | Anything below the root layout without a nearer boundary |
+| `app/dashboard/error.tsx` | A module failure, **keeping the sidebar and top nav alive** |
+| `app/(auth)/error.tsx` | Sign-in / sign-up |
+| `app/not-found.tsx` | 404 |
+| `app/loading.tsx`, `app/dashboard/loading.tsx` | Suspense fallbacks, skeleton-shaped |
+| `components/common/ErrorState.tsx` | The shared body, so four boundaries are not four near-copies |
+
+**Verified against the installed version, not from memory.** `next/dist/docs/` — which `AGENTS.md`
+requires reading — **does not exist in `next@14.2.35`**, so the contract was read from the shipped
+types instead: `error-boundary.d.ts` gives `{ error: Error; reset: () => void }`, and
+`next-app-loader.js` lists the recognised conventions as `layout`, `template`, `error`, `loading`,
+`not-found`, plus `global-error`. Worth noting for the next person, because the instruction cannot be
+followed literally.
+
+#### Three things that are easy to get wrong, and why the code looks like it does
+
+1. **`global-error.tsx` renders its own `<html>` and `<body>`, and uses inline styles.** It *replaces*
+   the root layout rather than nesting inside it, so it cannot assume `Providers`, the Redux store, the
+   theme class, the `next/font` variable, or even that `globals.css` loaded. Importing a component that
+   reached for the store would fail inside the error handler and produce exactly the blank screen the
+   file exists to prevent.
+2. **`error.digest`, not `error.message`, is what users see.** For a server-thrown error Next replaces
+   the message with an opaque digest before it reaches the browser, deliberately. `ErrorState` shows
+   the digest always (support asks for it, and it correlates with the backend's `X-Request-ID`) and the
+   message only when `NODE_ENV === "development"`.
+3. **A folder starting with `_` is a private folder and is not routable.** A first verification attempt
+   used `app/(auth)/__boom/` and returned 404 — not because the boundary failed, but because the route
+   never existed.
+
+#### What was verified, and what was not
+
+| Check | Result |
+|---|---|
+| All 8 files registered in the route tree | Present in `.next/app-build-manifest.json` — `/error`, `/global-error`, `/loading`, `/not-found`, `/dashboard/error`, `/dashboard/loading`, `/(auth)/error`, `/_not-found/page` |
+| 404 end to end | `GET /this-route-does-not-exist` → **HTTP 404** with the custom copy; `middleware.ts` does not intercept it |
+| `tsc --noEmit` | Clean |
+| `next build` | Green, 10 routes |
+| **Error boundaries rendered in a browser** | ❌ **Not done** |
+
+The last row is the honest gap. A boundary's output cannot be checked with `curl`: in dev, Next's error
+overlay intercepts and the raw message is served instead; in production, a route that throws during
+prerender **fails the build** (confirmed — `Export encountered errors on /boom-check`), so the throwing
+route had to be removed. Proving the rendered output needs the Chrome-DevTools-Protocol harness used on
+2026-07-31. The manifest evidence covers the real silent-failure risk — a boundary in the wrong place
+or with the wrong filename is ignored without complaint — but it does **not** prove the fallback looks
+right.
+
+Also fixed alongside: `Skeleton` had no dark variant. Tolerable on a small inline placeholder, glaring
+as a full-page one, which these loading files made it.
+
+**One caveat on `loading.tsx`:** every dashboard page renders the same client component, so its segments
+resolve instantly and the fallback will rarely be seen in practice. It is correct to have, and it is
+not doing much work today.
 
 ---
 
@@ -764,7 +820,7 @@ in order:
    Build Sequence step 2 in [`MARKETPLACE_DOMAIN_PLAN.md`](./MARKETPLACE_DOMAIN_PLAN.md)
 7. **PM-27** (email) — invitations and password reset are not self-service without it
 8. **PM-28** (verify Google SSO end to end against a real OAuth client) — **needs credentials**
-9. **PM-19** (error boundaries), **PM-30** (react-hooks findings)
+9. ~~**PM-19** (error boundaries)~~ — ✅ done 2026-08-03; **PM-30** (react-hooks findings) remains
 10. **PM-25** (React/Next peer mismatch) — a framework-version decision; gates PM-30
 11. **PM-11** (tests) — **deliberately last**, see below
 12. Everything else as the surrounding code is worked on
