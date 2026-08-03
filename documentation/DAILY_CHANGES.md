@@ -115,6 +115,55 @@
 
 ---
 
+## August 3, 2026 — Activity Log index: the audit trail is readable
+
+- **The audit trail has a read surface, so PM-32 is finally a whole feature.** It has been recording since
+  earlier today and nothing could read it — history nobody can see is not much better than no history. There
+  is now `GET /api/activity` behind a new **`activity-view`** permission, plus an Activity Log index at
+  `/dashboard/activity`, which is the equivalent of LeapDesk's.
+- **Read-only structurally rather than by policy.** No create, update or delete route exists and no service
+  function sits behind one — `POST`, `PUT`, `PATCH` and `DELETE` all return **405**, verified. An audit trail
+  a privileged user can edit is not evidence of anything, so tampering is prevented by the absence of a code
+  path rather than by a permission that someone could later widen without knowing why it was narrow. The UI
+  follows the same rule: no row actions, no bulk actions. A delete button on an audit trail would be the
+  single most damaging control in the product.
+- **The filter dropdown is built from the data, not a hardcoded list.** `GET /api/activity/events` returns
+  the event names actually present, so an event added by a future call site appears without anyone
+  remembering to register it, and one that has never occurred does not clutter the filter. It found 15.
+- **Sorted by `id`, not `created_at`.** Rows written inside one transaction share a timestamp, and an
+  unstable sort lets a row appear on two consecutive pages or on neither.
+- **Actor names are resolved once per page, not once per row.** `causer_id` is a bare UUID that means nothing
+  on screen; resolving it per row would issue 25 lookups to render one page.
+- **`activity-view` went to Admin and above, deliberately not to Staff.** Staff is a read-across-modules
+  role, and the trail carries failed-login attempts with email addresses and IP addresses for every account.
+  Worth noting what happened when the permission was added: **every Admin received it automatically**,
+  because the role matrix gives Admin `"*"`. That is exactly the documented consequence of the wildcard
+  choice made earlier today — a new sensitive permission has to be reviewed against it on purpose.
+- **Not scoped by actor, and that is a decision rather than an omission.** `activity-view` is the whole
+  authorisation: a partial view of an audit trail is worse than none when someone is reviewing an incident
+  and needs to know they are seeing everything. It is now flagged as **the first query to revisit when
+  partner scoping lands (PM-5)**, because a partner must never read another partner's history.
+- **The wired coverage is written into `AUTHORIZATION.md` rather than left implicit.** Recording is explicit
+  at each call site instead of a global ORM hook — a hook cannot be forgotten, but it would log the inherited
+  test-platform domain and every session `last_seen_at` touch and bury the role grants. The cost of choosing
+  explicit is that calls *can* be forgotten, so all sixteen wired events and where they fire are listed for a
+  reviewer to check against the routes.
+- **Lint 18 → 19, and one of the two new errors was fixed properly rather than absorbed.** `ActivityModule`
+  originally reset the page number from an effect reacting to a filter change — a genuine synchronous
+  setState-in-effect, and backwards as an expression of intent. Resetting the page inside the filter setters
+  is both what the rule wants and the clearer statement that "changing a filter means starting at page 1".
+  The remaining one is the same fetch-on-mount false positive as the other 17, all still waiting on the
+  PM-25 config decision.
+- **Verified against the running stack:** 42 entries across 11 pages with names resolved; filters correct
+  (`log_name=auth` → 34, `failed_login` → 5, `search=granted` → 2); every write verb `405`; `activity-view`
+  absent from the Partner role and present for Admin; `tsc` clean; build green with the new route. The test
+  account moved to Partner for the permission check was restored to Admin.
+- **Still open on the audit log:** no retention policy — the table grows forever and, unlike sessions, must
+  not simply be purged, so how long who-did-what is kept is a real decision. And no export, which is the
+  first thing anyone asks for during an actual incident review.
+
+---
+
 ## August 3, 2026 — Email verification, enforced (last Fortify gap)
 
 - **Email verification exists and is actually enforced, which is more than LeapDesk manages.** Its

@@ -65,9 +65,9 @@ since 2026-07-31 — only the documentation was wrong, and wrong in a way that b
 | [PM-27](#pm-27--no-email-transport-so-invitations-and-resets-are-manual--resolved) | ✅ | ~~No email transport — invitations/resets are manual~~ | Infra |
 | [PM-28](#pm-28--google-sso-is-unverified-against-real-google) | 🟠 | Google SSO implemented but never run against Google | Auth |
 | [PM-29](#pm-29--eslint-cannot-run-v6-resolves-against-a-v9-flat-config--resolved) | ✅ | ~~ESLint cannot run — v6 binary vs v9 flat config~~ | Quality |
-| [PM-30](#pm-30--17-react-hooks-errors-from-rules-that-arrive-with-the-wrong-config-version) | 🟡 | **18** react-hooks errors, from `eslint-config-next` 16 on Next 14 | Quality |
+| [PM-30](#pm-30--17-react-hooks-errors-from-rules-that-arrive-with-the-wrong-config-version) | 🟡 | **19** react-hooks errors, from `eslint-config-next` 16 on Next 14 | Quality |
 | [PM-31](#pm-31--refresh-reissues-rather-than-rotates-no-token-reuse-detection) | 🟡 | `/refresh` reissues rather than rotates — no reuse detection | Auth |
-| [PM-32](#pm-32--no-audit-log-leapdesk-has-one--recording-done-read-surface-pending) | 🟡 | ~~No audit log~~ recording done; **no read surface** | Quality |
+| [PM-32](#pm-32--no-audit-log-leapdesk-has-one--recording-done-read-surface-pending) | ✅ | ~~No audit log~~ | Quality |
 | [PM-33](#pm-33--no-security-response-headers--backend-done-frontend-pending) | ✅ | ~~No security response headers~~ | Infra |
 | [PM-34](#pm-34--no-two-factor-auth-fortify-parity--resolved) | ✅ | ~~No two-factor auth (Fortify parity)~~ | Auth |
 | [PM-35](#pm-35--email-verification-is-not-enforced-anywhere--resolved) | ✅ | ~~Email verification not enforced~~ | Auth |
@@ -852,7 +852,7 @@ genuine defects rather than style opinions:
 
 | Count | Rule |
 |---|---|
-| **16** | `react-hooks/set-state-in-effect` |
+| **17** | `react-hooks/set-state-in-effect` |
 | 1 | `react-hooks/immutability` (`Sidebar.tsx`) |
 | 1 | `react-hooks/preserve-manual-memoization` (`Sidebar.tsx`) |
 
@@ -871,6 +871,12 @@ blanket-disable the rules — the `static-components` findings above prove this 
 defects in this codebase.
 
 #### The count grows with every new client component, and that is the argument for settling PM-25
+
+**2026-08-03, later:** 18 → **19**. `ActivityModule.tsx` adds one, again a fetch-on-mount. A second new
+error in that file **was** removed rather than absorbed: it reset the page number from an effect reacting to
+a filter change, which is a genuine synchronous setState-in-effect and reads backwards. Resetting the page
+inside the filter setters is both what the rule wants and the clearer expression of "changing a filter
+means starting at page 1". The remaining one is the same false positive as below.
 
 **2026-08-03:** 17 → **18**. `components/auth/TwoFactorSettings.tsx` fetches its status on mount, which
 is the ordinary shape of a client component that reads an API, and the rule flags it. An attempt to
@@ -910,11 +916,38 @@ replayed it or an attacker has it, and neither should continue.
 
 ---
 
-### PM-32 — No audit log; LeapDesk has one ⚠️ RECORDING DONE, READ SURFACE PENDING
+### PM-32 — No audit log; LeapDesk has one ✅ RESOLVED
 
-**Recording resolved 2026-08-03.** `activity_log` table, `app/models/activity_log.py`,
-`app/services/activity_service.py`. **There is no way to read it yet** — no endpoint, no permission, no
-screen. LeapDesk has an Activity Log Index; ours is write-only until that is built.
+**Fully resolved 2026-08-03.** Recording in `app/services/activity_service.py`; reading via
+`GET /api/activity` gated on a new **`activity-view`** permission, with an Activity Log index at
+`/dashboard/activity` matching LeapDesk's.
+
+The full coverage list — every wired event and where it fires — lives in
+[`../core/AUTHORIZATION.md`](../core/AUTHORIZATION.md) § Audit Trail Coverage, so a reviewer can check it
+against the routes. That matters because recording is explicit rather than a global hook, and explicit
+calls can be forgotten.
+
+**Read-only structurally, not by policy.** No create, update or delete route exists and no service
+function sits behind one; every write verb returns `405` (verified). An audit trail a privileged user can
+edit is not evidence of anything, so tampering is prevented by the absence of a code path rather than by a
+permission someone could later widen without knowing why it was narrow.
+
+**Not scoped by actor** — `activity-view` is the whole authorisation, because a partial view of an audit
+trail is worse than none when someone is reviewing an incident. **This is the first query to revisit when
+partner scoping lands (PM-5)**: a partner must never read another partner's history.
+
+`activity-view` went to Admin and above, **not** to Staff, which is a read-across-modules role — the trail
+carries failed-login attempts with addresses and IPs for every account. Note that adding it to the catalog
+granted it to every Admin automatically via the `"*"` wildcard, which is the documented consequence of the
+choice made earlier that day.
+
+Sorted by `id` rather than `created_at`: rows written in one transaction share a timestamp, and an unstable
+sort lets a row appear on two consecutive pages or on neither.
+
+**Verified 2026-08-03:** 42 entries paginated across 11 pages with actor names resolved in one query per
+page; 15 event names discovered from the data for the filter; filters correct (`log_name=auth` → 34,
+`event=failed_login` → 5, `search=granted` → 2); `POST`/`PUT`/`PATCH`/`DELETE` all `405`; `activity-view`
+absent from the Partner role and present for Admin.
 
 Column names are LeapDesk's verbatim: `log_name`, `description`, `subject_type`, `subject_id`, `event`,
 `causer_type`, `causer_id`, `properties`, `batch_uuid`, `created_at`, `updated_at`. Its index names
@@ -952,9 +985,9 @@ Column names are LeapDesk's verbatim: `log_name`, `description`, `subject_type`,
 - **A failed login has no causer and no subject.** Nobody authenticated, and the submitted address may
   match no account — inventing a subject for it would be fiction. The address goes in `properties`.
 
-**Still open:** a read endpoint gated on a new `activity-view` permission, and a UI. Also no retention
-policy — this table grows forever, and unlike `user_sessions` it must not simply be purged, so the
-policy is a real decision rather than a cron job.
+**Still open:** no retention policy. The table grows forever, and unlike `user_sessions` it must not
+simply be purged — how long who-did-what is kept is a real decision, not a cron job. Also no export, which
+is the first thing anyone asks for during an actual incident review.
 
 Original entry follows.
 

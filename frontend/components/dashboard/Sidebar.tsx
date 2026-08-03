@@ -14,6 +14,7 @@ export type AdminSection =
   | "user-info"
   | "user-add"
   | "roles"
+  | "activity"
   | "profile"
   | "add-category"
   | "add-job-role"
@@ -28,6 +29,7 @@ export const SECTION_URLS = {
   "/dashboard/all-users": "user-info",
   "/dashboard/add-user": "user-add",
   "/dashboard/roles": "roles",
+  "/dashboard/activity": "activity",
   "/dashboard/profile": "profile",
 } as const satisfies Partial<Record<string, AdminSection>>;
 
@@ -310,6 +312,25 @@ function NavItems({
           />
         ))}
 
+      {/* Activity Log — requires activity-view */}
+      {can("activity-view") &&
+        (collapsed ? (
+          <IconButton
+            active={activeSection === "activity"}
+            onClick={() => onNavigate("activity")}
+            icon={navIcons.activity}
+            label="Activity Log"
+          />
+        ) : (
+          <NavButton
+            active={activeSection === "activity"}
+            onClick={() => onNavigate("activity")}
+            icon={navIcons.activity}
+            label="Activity Log"
+            large={large}
+          />
+        ))}
+
       {/* Create (inherited test-platform authoring) — requires category-create */}
       {can("category-create") &&
         (collapsed ? (
@@ -518,6 +539,11 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
     createTest: (
       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+      </svg>
+    ),
+    activity: (
+      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 12h6m-6 4h4" />
       </svg>
     ),
     roles: (

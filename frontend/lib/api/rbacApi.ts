@@ -39,6 +39,50 @@ export interface CreateInvitationPayload {
   note?: string | null;
 }
 
+export interface ActivityEntry {
+  id: number;
+  log_name: string | null;
+  description: string;
+  event: string | null;
+  subject_type: string | null;
+  subject_id: string | null;
+  causer_id: string | null;
+  /** Resolved name for `causer_id`. Null means an unauthenticated actor. */
+  causer_name: string | null;
+  properties: Record<string, unknown> | null;
+  batch_uuid: string | null;
+  created_at: string;
+}
+
+export interface ActivityFilters {
+  log_name?: string;
+  event?: string;
+  subject_type?: string;
+  causer_id?: string;
+  search?: string;
+  page?: number;
+  per_page?: number;
+}
+
+/**
+ * The audit trail (PM-32). **Read-only — there is no write method here, and none
+ * on the server either.** An audit trail a privileged user can edit is not
+ * evidence of anything.
+ */
+export const activityApi = {
+  list: (params: ActivityFilters = {}) =>
+    axiosInstance.get<{
+      items: ActivityEntry[];
+      total: number;
+      page: number;
+      per_page: number;
+      pages: number;
+    }>("/api/activity", { params }),
+
+  /** Event names present in the data, for the filter dropdown. */
+  events: () => axiosInstance.get<string[]>("/api/activity/events"),
+};
+
 export const invitationApi = {
   list: (status?: Invitation["status"]) =>
     axiosInstance.get<Invitation[]>("/api/invitations", {

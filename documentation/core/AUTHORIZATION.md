@@ -210,6 +210,60 @@ is not a security control.
 
 ---
 
+## Audit Trail Coverage
+
+**Added 2026-08-03 (PM-32).** Recording is **explicit at the call site**, not a global ORM hook. A hook
+cannot be forgotten, which is its advantage — and it would log the inherited test-platform domain and
+every session `last_seen_at` touch, burying the role grants in noise. The trade-off for choosing explicit
+calls is that they *can* be forgotten, so the wired paths are listed here and a reviewer can check this
+list against the routes.
+
+| Action | Event | Where |
+|---|---|---|
+| Sign-in succeeded | `login` | `api/auth.login`, after the session exists |
+| Sign-in failed | `failed_login` | `auth_service.authenticate` — 4 reasons: unknown email, bad password, locked, status-blocked |
+| Wrong 2FA code | `failed_login` | `api/auth.two_factor_challenge` |
+| Sign-out | `logout` | `api/auth.logout`, only when a session was actually revoked |
+| Account created | `created` | `user_service.create_user` |
+| Account edited | `updated` | `user_service.update_user`, with a before/after diff |
+| Account deleted | `deleted` | `delete_user` and `bulk_delete`, **with a snapshot** — after a hard delete there is nothing left to describe |
+| Status changed | `status_changed` | `toggle_status`, `approve_user`, `bulk_set_status` |
+| **Roles granted or revoked** | `roles_changed` | `update_user`, with explicit `granted`/`revoked` lists |
+| Lockout cleared | `lockout_cleared` | `unlock_user` |
+| Password set by an admin | `password_changed` | `update_user` |
+| 2FA enrolled / enabled / disabled | `two_factor_*` | `api/auth` 2FA routes |
+| 2FA reset by an admin | `two_factor_reset_by_admin` | `user_service.reset_two_factor` |
+| Recovery code used | `recovery_code_used` | `api/auth.two_factor_challenge` |
+| Email verified / link sent | `email_verified`, `email_verification_sent` | `api/auth` |
+
+`roles_changed` gets its own event rather than hiding inside an `updated` diff, because in an RBAC system
+a role grant is the change most likely to be the subject of *"who did that, and when?"*.
+
+### Reading it
+
+`GET /api/activity` requires the **`activity-view`** permission and filters on log name, event, subject,
+actor, description substring and date range. `GET /api/activity/events` lists the event names actually
+present, so the filter dropdown is built from the data rather than a hardcoded list that goes stale.
+
+**The read surface is read-only structurally, not by policy.** There is no create, update or delete route
+and no service function behind one — every write verb returns `405`. An audit trail a privileged user can
+edit is not evidence of anything, so tampering is prevented by the absence of a code path rather than by a
+permission that someone could later widen without knowing why it was narrow.
+
+**Not scoped by actor**, deliberately: `activity-view` is the whole authorisation. A partial view of an
+audit trail is worse than none — someone reviewing an incident needs to know they are seeing everything.
+**This is the first query to revisit when partner scoping lands (PM-5)**, because a partner must never
+read another partner's history.
+
+`activity-view` went to Admin and above and **not** to Staff. Staff is a read-across-modules role, and the
+trail contains failed-login attempts with addresses and IP addresses for every account.
+
+> Note: adding `activity-view` to the catalog granted it to every **Admin** automatically, because
+> `ROLE_PERMISSION_MATRIX` gives Admin `"*"`. That is the documented consequence of the wildcard the owner
+> chose to keep on 2026-08-03 — a new sensitive permission must be reviewed against it deliberately.
+
+---
+
 ## Adding a Permission
 
 1. Add the constant and a catalog entry in `core/permissions.py`

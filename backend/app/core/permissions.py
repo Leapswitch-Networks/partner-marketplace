@@ -59,6 +59,9 @@ INVITATION_CREATE = "invitation-create"
 INVITATION_RESEND = "invitation-resend"
 INVITATION_CANCEL = "invitation-cancel"
 
+# Activity log (PM-32)
+ACTIVITY_VIEW = "activity-view"
+
 # Dashboard
 DASHBOARD_VIEW = "dashboard-view"
 
@@ -125,6 +128,14 @@ PERMISSION_CATALOG: dict[str, tuple[str, int, str, list[tuple[str, str]]]] = {
             (INVITATION_CREATE, "Send invitations"),
             (INVITATION_RESEND, "Resend invitations"),
             (INVITATION_CANCEL, "Cancel invitations"),
+        ],
+    ),
+    "activity": (
+        "Activity Log",
+        60,
+        "core",
+        [
+            (ACTIVITY_VIEW, "View the activity log"),
         ],
     ),
     "categories": (

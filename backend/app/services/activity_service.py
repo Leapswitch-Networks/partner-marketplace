@@ -28,8 +28,10 @@ from __future__ import annotations
 
 import logging
 import uuid
+from datetime import datetime
 from typing import Any
 
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.activity_log import (
@@ -281,6 +283,96 @@ def record_logout(db: Session, user_id: str, ip: str | None) -> None:
         causer_id=user_id,
         properties={"ip": ip},
     )
+
+
+def list_entries(
+    db: Session,
+    *,
+    log_name: str | None = None,
+    event: str | None = None,
+    subject_type: str | None = None,
+    subject_id: str | None = None,
+    causer_id: str | None = None,
+    search: str | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    page: int = 1,
+    per_page: int = 25,
+) -> tuple[list[ActivityLog], int, dict[str, str]]:
+    """Read the trail, newest first. Returns `(rows, total, causer_names)`.
+
+    **Read-only by design — there is no update or delete anywhere in this module.**
+    An audit trail a privileged user can edit is not evidence of anything, so
+    tampering is prevented by there being no code path to it rather than by a
+    permission check that could later be widened.
+
+    `causer_names` maps causer id to a display name, resolved in **one** query for
+    the whole page rather than per row. Without it, rendering a 25-row page would
+    issue 25 lookups, and `causer_id` is a bare UUID that means nothing on screen.
+
+    Deliberately **not** scoped by actor: `activity-view` is the whole
+    authorisation. This is a global audit trail, and a partial view of one is worse
+    than none — someone reviewing an incident needs to know they are seeing
+    everything. When partner scoping lands (PM-5) this is the query to revisit
+    first, because a partner must never read another partner's history.
+    """
+    stmt = select(ActivityLog)
+
+    if log_name:
+        stmt = stmt.where(ActivityLog.log_name == log_name)
+    if event:
+        stmt = stmt.where(ActivityLog.event == event)
+    if subject_type:
+        stmt = stmt.where(ActivityLog.subject_type == subject_type)
+    if subject_id:
+        stmt = stmt.where(ActivityLog.subject_id == str(subject_id))
+    if causer_id:
+        stmt = stmt.where(ActivityLog.causer_id == str(causer_id))
+    if search:
+        stmt = stmt.where(func.lower(ActivityLog.description).like(f"%{search.strip().lower()}%"))
+    if date_from:
+        stmt = stmt.where(ActivityLog.created_at >= date_from)
+    if date_to:
+        stmt = stmt.where(ActivityLog.created_at <= date_to)
+
+    total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
+
+    per_page = max(1, min(per_page, 100))
+    page = max(1, page)
+    rows = list(
+        db.scalars(
+            stmt.order_by(ActivityLog.id.desc())
+            .offset((page - 1) * per_page)
+            .limit(per_page)
+        )
+    )
+
+    # Ordered by `id` rather than `created_at`: two rows written in the same
+    # transaction can share a timestamp, and an unstable sort would let a row
+    # appear on two consecutive pages or on neither.
+    causer_ids = {row.causer_id for row in rows if row.causer_id}
+    names: dict[str, str] = {}
+    if causer_ids:
+        for user in db.scalars(select(User).where(User.id.in_(causer_ids))):
+            names[user.id] = user.full_name
+
+    return rows, total, names
+
+
+def distinct_events(db: Session) -> list[str]:
+    """Every event name present in the trail, for a filter dropdown.
+
+    Read from the data rather than from a hardcoded list, so an event added by a
+    future call site appears in the filter without anyone remembering to register
+    it — and one that has never actually occurred does not clutter the list.
+    """
+    return [
+        value
+        for value in db.scalars(
+            select(ActivityLog.event).distinct().where(ActivityLog.event.is_not(None))
+        )
+        if value
+    ]
 
 
 def record_failed_login(db: Session, email: str, ip: str | None, reason: str) -> None:

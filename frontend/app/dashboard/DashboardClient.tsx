@@ -16,6 +16,7 @@ import ProfileForm from "@/components/admin/ProfileForm";
 import TwoFactorSettings from "@/components/auth/TwoFactorSettings";
 import UsersModule from "@/components/admin/UsersModule";
 import RolesModule from "@/components/admin/RolesModule";
+import ActivityModule from "@/components/admin/ActivityModule";
 import Candidate from "@/components/admin/Candidate";
 
 type QuestionType = "mcq" | "true_false" | "descriptive";
@@ -107,7 +108,7 @@ export default function DashboardClient() {
    * must NOT sit inside the padded, scrolling panel the other sections use —
    * two nested scroll containers means neither behaves.
    */
-  const FULL_HEIGHT_SECTIONS: AdminSection[] = ["user-info", "user-add", "roles"];
+  const FULL_HEIGHT_SECTIONS: AdminSection[] = ["user-info", "user-add", "roles", "activity"];
   const isFullHeight = FULL_HEIGHT_SECTIONS.includes(activeSection);
   const hideWelcomeBanner = isFullHeight;
 
@@ -125,6 +126,7 @@ export default function DashboardClient() {
               <UsersModule initialModal={activeSection === "user-add" ? "create" : undefined} />
             )}
             {activeSection === "roles" && <RolesModule />}
+            {activeSection === "activity" && <ActivityModule />}
           </main>
         ) : (
         <main className="flex-1 overflow-y-auto scrollbar-hide scroll-smooth h-screen bg-gray-100 px-4 py-6 pt-20 md:pt-4 sm:px-6 sm:py-6 lg:px-6 2xl:px-8 2xl:py-8 dark:bg-gray-950">

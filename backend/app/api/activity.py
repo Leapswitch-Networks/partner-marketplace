@@ -1,0 +1,125 @@
+"""Activity-log endpoints (TECH_DEBT PM-32).
+
+The read surface for the audit trail. LeapDesk has an Activity Log Index; this is
+the API half of the same thing.
+
+**Read-only, and that is structural rather than a policy.** There is no create,
+update or delete route here and no service function behind one. An audit trail a
+privileged user can edit is not evidence of anything, so tampering is prevented by
+there being no code path — not by a permission that could later be widened by
+someone who did not know why it was narrow.
+
+Recording happens at the call sites that matter (login, role change, status
+change, deletion). Nothing writes through this router.
+"""
+
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from app.core.dependencies import get_db, require_permission
+from app.core.permissions import ACTIVITY_VIEW
+from app.models.user import User
+from app.services import activity_service
+
+router = APIRouter(prefix="/activity", tags=["activity"])
+
+
+class ActivityEntry(BaseModel):
+    id: int
+    log_name: str | None
+    description: str
+    event: str | None
+    subject_type: str | None
+    subject_id: str | None
+    causer_id: str | None
+    #: Resolved display name for `causer_id`, or None for an unauthenticated
+    #: actor. Sent alongside the id because the id alone means nothing on screen,
+    #: and resolving it per row in the client would be N requests per page.
+    causer_name: str | None
+    properties: dict | None
+    batch_uuid: str | None
+    created_at: datetime
+
+
+class PaginatedActivity(BaseModel):
+    items: list[ActivityEntry]
+    total: int
+    page: int
+    per_page: int
+    pages: int
+
+
+@router.get("", response_model=PaginatedActivity)
+def list_activity(
+    log_name: str | None = Query(default=None, description="'auth' | 'default'"),
+    event: str | None = Query(default=None),
+    subject_type: str | None = Query(default=None, description="'User' | 'Role'"),
+    subject_id: str | None = Query(default=None),
+    causer_id: str | None = Query(default=None, description="Filter to one actor"),
+    search: str | None = Query(default=None, description="Substring of the description"),
+    date_from: datetime | None = Query(default=None),
+    date_to: datetime | None = Query(default=None),
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=25, ge=1, le=100),
+    db: Session = Depends(get_db),
+    _actor: User = Depends(require_permission(ACTIVITY_VIEW)),
+) -> PaginatedActivity:
+    """The audit trail, newest first.
+
+    Sorted by `id`, not `created_at`: rows written inside one transaction can share
+    a timestamp, and an unstable sort would let a row appear on two consecutive
+    pages or on neither.
+    """
+    rows, total, causer_names = activity_service.list_entries(
+        db,
+        log_name=log_name,
+        event=event,
+        subject_type=subject_type,
+        subject_id=subject_id,
+        causer_id=causer_id,
+        search=search,
+        date_from=date_from,
+        date_to=date_to,
+        page=page,
+        per_page=per_page,
+    )
+
+    return PaginatedActivity(
+        items=[
+            ActivityEntry(
+                id=row.id,
+                log_name=row.log_name,
+                description=row.description,
+                event=row.event,
+                subject_type=row.subject_type,
+                subject_id=row.subject_id,
+                causer_id=row.causer_id,
+                causer_name=causer_names.get(row.causer_id) if row.causer_id else None,
+                properties=row.properties,
+                batch_uuid=row.batch_uuid,
+                created_at=row.created_at,
+            )
+            for row in rows
+        ],
+        total=total,
+        page=page,
+        per_page=per_page,
+        pages=max(1, -(-total // per_page)),
+    )
+
+
+@router.get("/events", response_model=list[str])
+def list_events(
+    db: Session = Depends(get_db),
+    _actor: User = Depends(require_permission(ACTIVITY_VIEW)),
+) -> list[str]:
+    """Event names actually present in the trail, for the filter dropdown.
+
+    Read from the data rather than a hardcoded list, so an event added by a future
+    call site appears without anyone remembering to register it — and one that has
+    never occurred does not clutter the filter.
+    """
+    return activity_service.distinct_events(db)

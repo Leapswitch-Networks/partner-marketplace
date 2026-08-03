@@ -8,7 +8,17 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.api import auth, candidate, category, google, invitations, permissions, roles, users
+from app.api import (
+    activity,
+    auth,
+    candidate,
+    category,
+    google,
+    invitations,
+    permissions,
+    roles,
+    users,
+)
 from app.core.config import settings
 from app.core.headers import SecurityHeadersMiddleware
 from app.core.logging import RequestContextMiddleware, configure_logging, request_id_ctx
@@ -126,6 +136,7 @@ app.include_router(users.router, prefix="/api")
 app.include_router(roles.router, prefix="/api")
 app.include_router(permissions.router, prefix="/api")
 app.include_router(invitations.router, prefix="/api")
+app.include_router(activity.router, prefix="/api")
 # Inherited test-platform domain — gated but scheduled for removal.
 app.include_router(candidate.router, prefix="/api")
 app.include_router(category.router, prefix="/api")
