@@ -3,20 +3,27 @@ import { InputHTMLAttributes, forwardRef } from "react";
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label: string;
   error?: string;
+  /** Helper text under the field. Hidden while an `error` is showing, so the
+   *  two never stack and compete for the same spot. */
+  hint?: string;
 }
 
 const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ label, error, id, className = "", ...props }, ref) => {
+  ({ label, error, hint, id, className = "", ...props }, ref) => {
     const inputId = id ?? label.toLowerCase().replace(/\s+/g, "-");
 
     return (
       <div className="flex flex-col gap-1">
-        <label
-          htmlFor={inputId}
-          className="text-sm font-medium text-gray-700 dark:text-gray-300"
-        >
-          {label}
-        </label>
+        {/* An empty label is a deliberate opt-out for filter bars, where the
+            placeholder carries the meaning and a visible label wastes a row. */}
+        {label && (
+          <label
+            htmlFor={inputId}
+            className="text-sm font-medium text-gray-700 dark:text-gray-300"
+          >
+            {label}
+          </label>
+        )}
         <input
           ref={ref}
           id={inputId}
@@ -27,7 +34,11 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
             ${className}`}
           {...props}
         />
-        {error && <p className="text-xs text-red-500">{error}</p>}
+        {error ? (
+          <p className="text-xs text-red-500">{error}</p>
+        ) : (
+          hint && <p className="text-xs text-gray-400 dark:text-gray-500">{hint}</p>
+        )}
       </div>
     );
   }

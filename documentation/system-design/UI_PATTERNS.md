@@ -113,9 +113,68 @@ Never add a `<link>` to Google Fonts — `next/font` self-hosts and eliminates l
 
 ---
 
+## Full-Page Index Layout (MANDATORY for every list page)
+
+Ported from LeapDesk. The class combinations are load-bearing, not cosmetic — get one wrong and the
+whole page scrolls instead of the table.
+
+```
+Outer      flex h-full min-h-0 flex-col
+  Card         flex min-h-0 flex-1 flex-col overflow-hidden
+    CardHeader   shrink-0                 (title + create button — never scrolls)
+    CardContent  flex min-h-0 flex-1 flex-col
+      FilterRow    shrink-0               (filters — never scrolls)
+      DataTable    min-h-0 flex-1
+        Cols menu    shrink-0
+        top pager    shrink-0
+        scroll box   flex-1 overflow-auto  ← ONLY this scrolls, maxHeight measured
+          sticky thead (top-0 z-10, opaque bg)
+        bottom pager shrink-0
+```
+
+`min-h-0` is what allows a flex child to shrink below its content height. Without it the table cannot
+scroll internally and the page scrolls instead — the exact failure this layout prevents.
+
+**A section using this must be listed in `FULL_HEIGHT_SECTIONS` in `DashboardClient.tsx`**, which
+renders it outside the padded scrolling panel the other sections use. Two nested scroll containers
+means neither behaves.
+
+### Fixed column order
+
+`#` → `Actions` → `Status` → data columns. `#` and `Actions` are as narrow as possible
+(`w-10 text-center px-0.5` and `!px-0 w-0`) so data columns get the room.
+
+### Other mandatory index behaviours
+
+| Behaviour | Where |
+|---|---|
+| Rows-per-page adapts to viewport height | `useAutoPerPage()` — `floor((h − 433) / 38)`, clamped 5–50 |
+| Search debounced 500ms | `useDebouncedValue()` |
+| Reset button always visible, disabled when no filter is active | caller |
+| Empty state distinguishes "no data" from "filters hid everything" | `DataTable` `filtersActive` |
+| Status badge toggles on click when permitted | `Badge` with `onClick` |
+| Bulk actions report what they skipped | `Toast` with `details` — never auto-dismisses |
+| Table font `text-xs` / `2xl:text-sm`, cells must not override | `DataTable` |
+
+---
+
 ## Component Primitives
 
 All in `components/common/`. Hand-written, no library. Keep them dumb — no data fetching, no Redux.
+
+| Component | Purpose |
+|---|---|
+| `Button` | `primary` / `outline`, `loading`, `fullWidth` |
+| `Input` | Required `label` (pass `""` to opt out in filter bars), `error`, `hint` |
+| `Select` | Native `<select>` — keyboard and mobile support for free |
+| `Badge` | 6 tones, all with dark variants. `onClick` makes it a real `<button>`, so it stays keyboard reachable |
+| `Card` / `CardHeader` / `CardContent` / `FilterRow` | The viewport-locked frame above |
+| `DataTable` | Sticky head, measured scroll box, dual pagination, sorting, selection, column visibility |
+| `Modal` | Portalled to `body` so the dashboard's `overflow-hidden` panel can't clip it; Escape + backdrop close, scroll lock |
+| `RowActions` | Three-dot menu, portalled and positioned from the trigger rect because the table clips. Actions with `visible: false` are dropped |
+| `Toast` + `useToast` | Auto-dismisses in 3.5s **unless** it carries `details` |
+| `Skeleton` | Loading placeholder |
+| `ThemeToggle` | Light/dark switch |
 
 ### Button — `components/common/Button.tsx`
 
