@@ -57,3 +57,8 @@ next-env.d.ts
 .vscode/
 .idea/
 .claude/settings.local.json
+
+# Team roster for `python -m app.db.seed_users`. Contains real email addresses and
+# possibly passwords, and THIS REPOSITORY IS PUBLIC. The committed
+# `seed_users.example.json` shows the shape with obviously-fake values.
+backend/seed_users.json

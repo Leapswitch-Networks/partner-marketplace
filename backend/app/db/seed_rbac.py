@@ -91,12 +91,24 @@ def seed_roles(db: Session, permissions: dict[str, Permission]) -> dict[str, Rol
         if grants == "*":
             role.permissions = list(permissions.values())
         else:
-            resolved = [permissions[name] for name in grants if name in permissions]
             missing = [name for name in grants if name not in permissions]
             if missing:
-                # Loud, because a typo here silently under-grants a role.
-                print(f"[seed] WARNING role '{role_name}' references unknown: {missing}")
-            role.permissions = resolved
+                # Raise, don't warn. This was previously a printed WARNING, which
+                # scrolls past six role lines and gets missed — and the consequence
+                # surfaces weeks later as an unexplained 403 that nobody connects
+                # back to a typo in a constant.
+                #
+                # Both sides of this comparison live in `core/permissions.py`, so a
+                # mismatch is an inconsistency between two literals in one file. That
+                # should never survive to a deploy, and failing the seed is how it
+                # doesn't. Ported from LeapDesk's `createRoles()`, which throws for
+                # the same reason.
+                raise RuntimeError(
+                    f"Role {role_name!r} grants permission(s) that are not in "
+                    f"PERMISSION_CATALOG: {', '.join(missing)}. "
+                    "Fix ROLE_PERMISSION_MATRIX or add them to the catalog."
+                )
+            role.permissions = [permissions[name] for name in grants]
 
         db.flush()
         roles[role_name] = role

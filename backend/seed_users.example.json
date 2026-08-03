@@ -1,0 +1,37 @@
+[
+  {
+    "first_name": "Root",
+    "last_name": "User",
+    "email": "root@example.com",
+    "roles": ["RootUser"],
+    "status": "ACTIVE"
+  },
+  {
+    "first_name": "Ada",
+    "last_name": "Lovelace",
+    "email": "ada@example.com",
+    "roles": ["SuperAdmin"],
+    "status": "ACTIVE"
+  },
+  {
+    "first_name": "Grace",
+    "last_name": "Hopper",
+    "email": "grace@example.com",
+    "roles": ["Admin"],
+    "status": "ACTIVE"
+  },
+  {
+    "first_name": "Alan",
+    "last_name": "Turing",
+    "email": "alan@example.com",
+    "roles": ["Staff"],
+    "status": "ACTIVE"
+  },
+  {
+    "first_name": "Partner",
+    "last_name": "Example",
+    "email": "partner@example.com",
+    "roles": ["Partner"],
+    "status": "INACTIVE"
+  }
+]

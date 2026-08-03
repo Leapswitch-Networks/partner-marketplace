@@ -210,6 +210,28 @@ is not a security control.
 
 ---
 
+## Seeding
+
+Two seeders, deliberately separate — the vocabulary and the people change on different schedules.
+
+| Command | Seeds |
+|---|---|
+| `python -m app.db.seed_rbac` | Permissions, groups, system roles, and one bootstrap root account. Reconciles against `core/permissions.py` on every run |
+| `python -m app.db.seed_users` | A team roster from a gitignored JSON file — the equivalent of LeapDesk's `PermissionSeeder::createUsers()` |
+
+**`seed_rbac` now fails rather than warns when `ROLE_PERMISSION_MATRIX` names a permission absent from
+`PERMISSION_CATALOG`.** It previously printed a warning, which scrolls past six role lines and gets
+missed — and the consequence surfaces weeks later as an unexplained 403 that nobody connects back to a
+typo. Both sides of that comparison live in the same file, so a mismatch is an inconsistency between two
+literals and should never reach a deploy. Ported from LeapDesk's `createRoles()`, which throws for the
+same reason.
+
+**Neither seeder ever assigns a permission directly to a user.** This schema has no user-permission
+table, so the bypass LeapDesk's own seeder warns about — direct grants defeating role-based access —
+is structurally impossible here rather than merely avoided by convention.
+
+---
+
 ## Audit Trail Coverage
 
 **Added 2026-08-03 (PM-32).** Recording is **explicit at the call site**, not a global ORM hook. A hook

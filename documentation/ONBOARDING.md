@@ -324,6 +324,30 @@ What it does, idempotently, on every run:
 > password is a working password for everyone. If the seeder generated yours, it appears in the output
 > exactly once — rotate it before the environment is reachable from anywhere.
 
+### 5.2b Seed the team roster (optional)
+
+`seed_rbac` creates one bootstrap root account. To get a whole team able to sign in — the FastAPI
+equivalent of LeapDesk's `PermissionSeeder::createUsers()` — use the roster seeder:
+
+```bash
+cp seed_users.example.json seed_users.json    # then edit it
+python -m app.db.seed_users
+```
+
+| Behaviour | Detail |
+|---|---|
+| Roster location | `backend/seed_users.json`, or `SEED_USERS_FILE=/path/to.json` |
+| Passwords | Omit `password` and one is generated and **printed once** |
+| Re-running | Idempotent. Roles and profile are synced; **an existing password is never reset** |
+| Roles | **Set**, not appended — removing a role from the roster removes it from the user |
+| Unknown role | **Fails the run.** Half-seeding an account that looks fine and cannot work is worse |
+| Malformed entry | Fails the run, naming the entry number and field |
+
+**`seed_users.json` is gitignored, and that is the point.** It holds real addresses and possibly
+passwords, and **this repository is public**. LeapDesk keeps its equivalent roster in the source file
+including plaintext passwords — defensible in a private repo, not here. The committed
+`seed_users.example.json` shows the shape with obviously-fake values.
+
 ### 5.3 Run the API
 
 ```bash
