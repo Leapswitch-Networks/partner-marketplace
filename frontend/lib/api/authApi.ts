@@ -130,6 +130,19 @@ export const authApi = {
   forgotPassword: (data: { email: string }) =>
     axiosInstance.post<{ message: string }>("/api/auth/forgot-password", data),
 
+  /** Confirm an address from an emailed link. Idempotent — a second click is fine. */
+  verifyEmail: (data: { token: string }) =>
+    axiosInstance.post<{ message: string }>("/api/auth/verify-email", data),
+
+  /**
+   * Request a fresh verification link.
+   *
+   * Answers identically whether the address exists, is already verified, or the
+   * send failed — so the UI must not try to report which happened.
+   */
+  resendVerification: (data: { email: string }) =>
+    axiosInstance.post<{ message: string }>("/api/auth/resend-verification", data),
+
   resetPassword: (data: { token: string; password: string; confirm_password: string }) =>
     axiosInstance.post<{ message: string }>("/api/auth/reset-password", data),
 

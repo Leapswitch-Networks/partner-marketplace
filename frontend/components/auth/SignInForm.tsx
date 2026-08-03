@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Input from "@/components/common/Input";
 import Button from "@/components/common/Button";
@@ -107,9 +108,9 @@ export default function SignInForm({
             Password
           </label>
           {!hideForgotPassword && (
-            <a href="#" className="text-xs text-[#F97316] hover:underline">
+            <Link href="/forgot-password" className="text-xs text-[#F97316] hover:underline">
               Forgot password?
-            </a>
+            </Link>
           )}
         </div>
         <input

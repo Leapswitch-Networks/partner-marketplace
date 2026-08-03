@@ -128,10 +128,11 @@ function AuthHubInner({ initialTab = "signin" }: AuthHubProps) {
             )}
 
             {displayTab === "signin" ? (
-              <SignInForm
-                hideForgotPassword
-                onSwitchToSignUp={() => switchTab("signup")}
-              />
+              // `hideForgotPassword` is no longer passed: the link was suppressed
+              // because /forgot-password did not exist and pointed at `href="#"`.
+              // The page exists now, so hiding the only route to a password reset
+              // would leave locked-out users with nowhere to go.
+              <SignInForm onSwitchToSignUp={() => switchTab("signup")} />
             ) : (
               <SignUpForm
                 onRegistered={handleRegistered}

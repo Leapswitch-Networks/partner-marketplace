@@ -71,6 +71,7 @@ since 2026-07-31 — only the documentation was wrong, and wrong in a way that b
 | [PM-33](#pm-33--no-security-response-headers--backend-done-frontend-pending) | ✅ | ~~No security response headers~~ | Infra |
 | [PM-34](#pm-34--no-two-factor-auth-fortify-parity--resolved) | ✅ | ~~No two-factor auth (Fortify parity)~~ | Auth |
 | [PM-35](#pm-35--email-verification-is-not-enforced-anywhere--resolved) | ✅ | ~~Email verification not enforced~~ | Auth |
+| [PM-36](#pm-36--every-emailed-link-landed-on-a-404--resolved) | ✅ | ~~Every emailed link landed on a 404~~ | Frontend |
 
 ---
 
@@ -1137,6 +1138,49 @@ feature — build it enforced instead.
 `mail_service` message, and a decision about *where* it gates. Registration already lands INACTIVE
 pending approval, so the honest question is whether verification should be a precondition of approval
 rather than a separate block — otherwise it adds a second gate that says nothing new.
+
+---
+
+### PM-36 — Every emailed link landed on a 404 ✅ RESOLVED
+
+**Found and resolved 2026-08-03**, while adding the verification page. The backend's email-driven flows
+all worked; **not one of them could be completed by a user**, because none of the landing pages existed.
+
+| Link we mailed | Landed on |
+|---|---|
+| Password reset (`/reset-password?token=…`) | **404** |
+| Invitation (`/accept-invitation?token=…`) | **404** |
+| Email verification (`/verify-email?token=…`) | **404** — created by PM-35 an hour earlier |
+| "Forgot password?" on the sign-in form | `href="#"`, and **suppressed** by `hideForgotPassword` |
+
+The last row is the one worth dwelling on: the link was hidden *because* the page did not exist, so
+nothing looked broken. A user locked out of their account had no route to a reset at all, and no error to
+report. That is the failure mode where the UI's tidiness hides the gap.
+
+Four pages now exist, on a shared `AuthCard` frame so they cannot drift apart in width, padding or dark
+mode — they are the first thing a new user sees, often before they have an account.
+
+Notable behaviour:
+
+- **Verification verifies on mount**, not behind a button. The user expressed intent by clicking the link
+  in their inbox; a second click confirming they meant it is friction for nothing. A `useRef` guard stops
+  React strict mode's double-invoke from spending two of the endpoint's rate-limit allowance per load.
+- **On a failed verification the page offers to resend**, because the common cause is an expired 24-hour
+  link and a dead end there means the account can never be approved.
+- **`/forgot-password` makes no claim about whether the address exists**, matching the endpoint. A
+  distinguishable success screen would reinstate the enumeration oracle the API carefully avoids.
+- **The invitation page previews before asking for anything** — the address, and the role. That is the
+  invitee's only signal the link is genuine, and lets them catch a forwarded or wrong link before typing a
+  password.
+- **Reset tells the user every device has been signed out**, which is what the backend actually does, and
+  sends them to sign in rather than pretending to log them in — there is deliberately no session to inherit.
+- All three token pages set `robots: { index: false }`. The URLs contain live credentials.
+- A `422` from Pydantic is a list of field errors, not a string. Both password forms unwrap it, because
+  rendering the object prints `[object Object]` at the user.
+
+**Verified 2026-08-03** by a full round trip: `forgot-password` → link captured from the log → the page
+served `200` → reset succeeded → **the old password returned `401`** → the new one worked → original
+restored. All four routes return `200` and render their own copy rather than a 404 page.
 
 ---
 
