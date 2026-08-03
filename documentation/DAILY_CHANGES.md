@@ -100,6 +100,18 @@
   and render agree. Link integrity checked programmatically: 34 files on disk, 34 referenced, 0 broken.
   **Documentation only — no application code changed**, so there is nothing to build or test. Four gaps
   remain and are listed: input error states, form wizard, an open modal, an open dropdown.
+- **The screenshots are temporary, by the owner's decision, and that is now written down.** They exist to
+  get the UI/UX components built; once the component set is complete and the patterns live in
+  `UI_PATTERNS.md`, the folder gets deleted. That also settles the licensing tension the folder's own
+  README raises — 34 shots of a paid theme is acceptable as working reference during a build, and is not
+  meant to remain in a public repo afterwards. The extracted **values** are the lasting output; the
+  images are scaffolding.
+- **One catch recorded with it, because the plan does not work the way it sounds.** `git rm` removes the
+  files from the working tree but **not from history**: after deletion the ~14 MB still ships with every
+  clone, and the images stay reachable at their old commits on a public remote. Deleting them does not
+  un-publish them. Reclaiming the space needs a history rewrite plus a force-push, which changes every
+  commit hash — **cheap on an unmerged feature branch, expensive on `main`**, so it is worth deciding
+  before this branch merges rather than after.
 
 ---
 

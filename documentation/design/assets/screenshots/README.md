@@ -82,7 +82,26 @@ Add `-mobile` or `-tablet` for a narrower viewport: `auth-login-light-mobile.png
 - Keep files reasonable (**under ~500 KB**). These go in git history permanently and cannot be pruned
   without a rewrite.
 
-## After adding a screenshot
+## Retirement — these are temporary by decision
+
+**Owner's decision, 2026-08-03:** this folder exists to get the UI/UX components built. Once the
+component set is complete and the patterns live in `system-design/UI_PATTERNS.md`, the screenshots are
+to be **deleted** — they are scaffolding for a build, not a permanent project asset. That also settles
+the licensing question the § above raises: 34 shots of a paid theme is acceptable as working reference
+during the build, and is not meant to stay in a public repo afterwards.
+
+**Trigger:** the UI/UX component build-out is finished and `UI_PATTERNS.md` documents the patterns
+these images were used to derive. At that point delete `assets/screenshots/`, strip the § Screenshot
+Catalogue table from `VIHO_THEME_REFERENCE.md`, and keep the doc — the extracted **values** are the
+lasting output, the images are not.
+
+**Know this before relying on that plan:** `git rm` removes the files from the working tree, **not from
+history**. After deletion the ~14 MB still ships with every clone, and the images stay reachable at
+their old commits on a public remote — so deleting them does not un-publish them. Actually reclaiming
+the space and removing them from the public record needs a history rewrite (`git filter-repo` or BFG)
+plus a force-push, which rewrites every commit hash and must be coordinated with anyone who has cloned.
+Worth deciding **before** this branch merges, because rewriting one unmerged feature branch is cheap and
+rewriting `main` later is not.
 
 1. Add a row to the **§ Screenshots** table in
    [`../../VIHO_THEME_REFERENCE.md`](../../VIHO_THEME_REFERENCE.md) — filename, which screen, and

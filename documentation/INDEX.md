@@ -49,7 +49,7 @@ Each file has ONE clear purpose. Load only what the task needs.
 | File | Purpose | Status |
 |------|---------|--------|
 | `design/VIHO_THEME_REFERENCE.md` | Design tokens extracted from the **Viho** theme (the chosen visual direction) — colour hex values, contrast audit, type scale, spacing, login-screen anatomy, and how it maps to our Tailwind stack | **Inspiration — adoption not yet decided** |
-| `design/assets/screenshots/` | Reference screenshots + the rules for adding them to a public repo | Active |
+| `design/assets/screenshots/` | Reference screenshots + the rules for adding them to a public repo | **Temporary — delete after the UI/UX component build-out** ([why, and the catch](design/assets/screenshots/README.md#retirement--these-are-temporary-by-decision)) |
 
 > ⚠️ `system-design/UI_PATTERNS.md` remains **authoritative** for how our UI is actually built. The
 > design folder records an external theme we are borrowing from; where the two disagree, the theme has
