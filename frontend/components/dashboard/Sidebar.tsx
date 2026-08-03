@@ -6,12 +6,14 @@ import { useRouter } from "next/navigation";
 import useAppDispatch from "@/lib/hooks/useAppDispatch";
 import { logoutUser } from "@/lib/store/authSlice";
 import { ThemeToggle } from "@/components/common/ThemeToggle";
+import usePermissions from "@/lib/hooks/usePermissions";
 
 export type AdminSection =
   | "dashboard"
   | "candidate"
   | "user-info"
   | "user-add"
+  | "roles"
   | "profile"
   | "add-category"
   | "add-job-role"
@@ -25,6 +27,7 @@ export const SECTION_URLS = {
   "/dashboard/candidates": "candidate",
   "/dashboard/all-users": "user-info",
   "/dashboard/add-user": "user-add",
+  "/dashboard/roles": "roles",
   "/dashboard/profile": "profile",
 } as const satisfies Partial<Record<string, AdminSection>>;
 
@@ -226,6 +229,9 @@ function NavItems({
   large?: boolean;
 }) {
   const isUserSubActive = userInfoSections.includes(activeSection);
+  // Nav mirrors the API's gating: an item the user cannot use is not shown.
+  // The API re-checks regardless — hiding a link is not the control.
+  const { can } = usePermissions();
 
   return (
     <>
@@ -247,44 +253,66 @@ function NavItems({
         />
       )}
 
-      {/* Candidate */}
-      {collapsed ? (
-        <IconButton
-          active={activeSection === "candidate"}
-          onClick={() => onNavigate("candidate")}
-          icon={navIcons.candidate}
-          label="Candidate"
-        />
-      ) : (
-        <NavButton
-          active={activeSection === "candidate"}
-          onClick={() => onNavigate("candidate")}
-          icon={navIcons.candidate}
-          label="Candidate"
-          large={large}
-        />
-      )}
+      {/* Candidate — requires candidate-view */}
+      {can("candidate-view") &&
+        (collapsed ? (
+          <IconButton
+            active={activeSection === "candidate"}
+            onClick={() => onNavigate("candidate")}
+            icon={navIcons.candidate}
+            label="Candidate"
+          />
+        ) : (
+          <NavButton
+            active={activeSection === "candidate"}
+            onClick={() => onNavigate("candidate")}
+            icon={navIcons.candidate}
+            label="Candidate"
+            large={large}
+          />
+        ))}
 
-      {/* User Management */}
-      {collapsed ? (
-        <IconButton
-          active={isUserSubActive}
-          onClick={() => onNavigate("user-info")}
-          icon={navIcons.userInfo}
-          label="User Management"
-        />
-      ) : (
-        <NavButton
-          active={isUserSubActive}
-          onClick={() => onNavigate("user-info")}
-          icon={navIcons.userInfo}
-          label="User Management"
-          large={large}
-        />
-      )}
+      {/* Users — requires user-view */}
+      {can("user-view") &&
+        (collapsed ? (
+          <IconButton
+            active={isUserSubActive}
+            onClick={() => onNavigate("user-info")}
+            icon={navIcons.userInfo}
+            label="Users"
+          />
+        ) : (
+          <NavButton
+            active={isUserSubActive}
+            onClick={() => onNavigate("user-info")}
+            icon={navIcons.userInfo}
+            label="Users"
+            large={large}
+          />
+        ))}
 
-      {/* Create */}
-      {collapsed ? (
+      {/* Roles & Permissions — requires role-view */}
+      {can("role-view") &&
+        (collapsed ? (
+          <IconButton
+            active={activeSection === "roles"}
+            onClick={() => onNavigate("roles")}
+            icon={navIcons.roles}
+            label="Roles & Permissions"
+          />
+        ) : (
+          <NavButton
+            active={activeSection === "roles"}
+            onClick={() => onNavigate("roles")}
+            icon={navIcons.roles}
+            label="Roles & Permissions"
+            large={large}
+          />
+        ))}
+
+      {/* Create (inherited test-platform authoring) — requires category-create */}
+      {can("category-create") &&
+        (collapsed ? (
         <IconButton
           active={isSubItemActive}
           onClick={() => { setCollapsed(false); setCreateTestOpen(true); }}
@@ -362,7 +390,7 @@ function NavItems({
             </div>
           </div>
         </div>
-      )}
+        ))}
     </>
   );
 }
@@ -431,6 +459,11 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
     logout: (
       <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h6a2 2 0 012 2v1" />
+      </svg>
+    ),
+    roles: (
+      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
       </svg>
     ),
     candidate: (

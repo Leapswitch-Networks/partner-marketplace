@@ -13,7 +13,8 @@ import AddTestSectionForm from "@/components/admin/AddTestSectionForm";
 import SelectQuestionType from "@/components/admin/SelectQuestionType";
 import AddQuestionForm from "@/components/admin/AddQuestionForm";
 import ProfileForm from "@/components/admin/ProfileForm";
-import UserInfo from "@/components/admin/UserInfo";
+import UsersModule from "@/components/admin/UsersModule";
+import RolesModule from "@/components/admin/RolesModule";
 import Candidate from "@/components/admin/Candidate";
 
 type QuestionType = "mcq" | "true_false" | "descriptive";
@@ -97,7 +98,17 @@ export default function DashboardClient() {
   };
 
   const userInfoSections: AdminSection[] = ["user-info", "user-add"];
-  const hideWelcomeBanner = userInfoSections.includes(activeSection);
+
+  /**
+   * Sections that own the full viewport height.
+   *
+   * These render a viewport-locked Card whose table scrolls internally, so they
+   * must NOT sit inside the padded, scrolling panel the other sections use —
+   * two nested scroll containers means neither behaves.
+   */
+  const FULL_HEIGHT_SECTIONS: AdminSection[] = ["user-info", "user-add", "roles"];
+  const isFullHeight = FULL_HEIGHT_SECTIONS.includes(activeSection);
+  const hideWelcomeBanner = isFullHeight;
 
   return (
     <>
@@ -107,6 +118,14 @@ export default function DashboardClient() {
       <div className="flex flex-1 flex-col min-w-0 bg-gray-100 dark:bg-gray-950">
         <TopNav onNavigate={handleNavigate} activeSection={activeSection} />
 
+        {isFullHeight ? (
+          <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-gray-100 px-3 pb-3 pt-20 md:pt-3 sm:px-4 dark:bg-gray-950">
+            {userInfoSections.includes(activeSection) && (
+              <UsersModule initialModal={activeSection === "user-add" ? "create" : undefined} />
+            )}
+            {activeSection === "roles" && <RolesModule />}
+          </main>
+        ) : (
         <main className="flex-1 overflow-y-auto scrollbar-hide scroll-smooth h-screen bg-gray-100 px-4 py-6 pt-20 md:pt-4 sm:px-6 sm:py-6 lg:px-6 2xl:px-8 2xl:py-8 dark:bg-gray-950">
           {!hideWelcomeBanner && (
             <div className="mb-8 animate-fade-in">
@@ -117,11 +136,6 @@ export default function DashboardClient() {
           <div className="mx-auto w-full">
             <div className="rounded-2xl bg-white p-4 sm:p-6 lg:p-8 shadow-sm ring-1 ring-gray-100 animate-fade-in dark:bg-gray-900 dark:ring-gray-800">
               {activeSection === "dashboard" && <DashboardOverview onNavigate={handleNavigate} />}
-              {userInfoSections.includes(activeSection) && (
-                <UserInfo
-                  initialModal={activeSection === "user-add" ? "add" : undefined}
-                />
-              )}
               {activeSection === "candidate" && <Candidate />}
               {activeSection === "add-category" && (
                 <AddCategoryForm
@@ -142,6 +156,7 @@ export default function DashboardClient() {
             </div>
           </div>
         </main>
+        )}
       </div>
 
       {/* Profile modal — rendered via portal so it overlays the entire viewport */}

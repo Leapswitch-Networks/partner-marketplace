@@ -86,7 +86,8 @@ frontend/
 ├── lib/
 │   ├── api/                   # axiosInstance + one module per resource
 │   ├── store/                 # store + slices
-│   ├── hooks/                 # typed dispatch/selector, useTheme
+│   ├── hooks/                 # typed dispatch/selector, useTheme, usePermissions,
+│   │                          #   useAutoPerPage, useDebouncedValue
 │   └── utils/                 # constants, user helpers
 └── types/index.ts             # shared types
 ```
@@ -429,6 +430,38 @@ layout shift.
 | `any` | Don't. Use `unknown` and narrow. |
 | Form types | Always `z.infer<typeof schema>` |
 | Defaults | Destructure with defaults: `{ variant = "primary" }` |
+
+---
+
+## 10b. Hooks
+
+| Hook | Purpose |
+|------|---------|
+| `useAppDispatch` / `useAppSelector` | Typed Redux accessors — **never** import the untyped ones |
+| `usePermissions` | `can` / `canAny` / `canAll` / `hasRole` / `hasAdminAccess` / `isSuperAdmin` |
+| `useAutoPerPage` | Viewport-sized rows per page for index tables |
+| `useDebouncedValue` | 500ms debounce, for search inputs |
+| `useTheme` | Light/dark toggle backed by `localStorage` |
+
+### Gating UI on permissions
+
+```tsx
+const { can } = usePermissions();
+{can("user-create") && <Button onClick={openCreate}>Add user</Button>}
+```
+
+The permission list arrives already resolved from `GET /api/auth/me`, with the super-admin bypass
+expanded server-side — so there is no client-side special case for super admins.
+
+**Three rules:**
+
+1. **Gate the nav item, not just the page.** Offering a link that 403s on click is worse than not
+   offering it. `Sidebar` and `DashboardOverview` both filter on permissions.
+2. **Use the row's `can_*` flags for row actions.** The API computes them against the requesting
+   actor, so the UI and API cannot disagree about what is allowed.
+3. **This is rendering only.** The API re-checks every request and is the authority. A hidden button
+   is not a security control — verified by driving a partner session at a protected URL directly and
+   confirming it shows the API's 403 rather than data.
 
 ---
 

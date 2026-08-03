@@ -8,7 +8,62 @@
 
 ---
 
-## July 31, 2026
+## July 31, 2026 — Users & Roles modules
+
+- **The Users and Roles modules are now usable after login, instead of only by `curl`.** The RBAC
+  backend has been in place since earlier today, but nothing in the UI reached it — there were no
+  roles, permissions or invitations pages at all, so granting someone a role needed a developer with
+  an HTTP client. Both modules now exist as real screens, built on LeapDesk's mandatory index-page
+  patterns rather than an approximation of them: a viewport-locked card where **only the table rows
+  scroll**, a sticky table header, pagination at top and bottom that never scrolls out of reach, the
+  fixed `#` → `Actions` → `Status` → data column order with `#` and `Actions` squeezed to minimum
+  width, a 500ms search debounce, a Reset button that is always visible but disabled until a filter is
+  active, and rows-per-page that sizes itself to the viewport so a 32" monitor is not two-thirds white
+  space and a 14" laptop is not endless scrolling.
+- **Users: everything the API already supported, now reachable.** Search across name, email and
+  company; filter by status, account type and role; sort on seven columns; select rows for bulk
+  activate, deactivate or delete; and per-row edit, approve, activate/deactivate, clear-lockout and
+  delete. Two details carried over deliberately from the API's design: the status badge is itself the
+  toggle (click Active to deactivate) and **bulk results report what they skipped and why** — a
+  toast carrying skipped reasons does not auto-dismiss, because hiding it after three seconds turns a
+  partial success into an apparent total one.
+- **Roles: a permission matrix, not a text field.** Each role opens into its permission groups exactly
+  as the API returns them, with a select-all per group, a live selected-count, and `partial` / `all`
+  markers per group. Protected roles are flagged and open read-only for anyone who is not a super
+  admin, matching the API's refusal rather than letting the user discover it on save. A role that
+  still has users assigned shows why it cannot be deleted before the button is pressed.
+- **Every nav item and dashboard card is now gated on a permission, which surfaced two that never
+  were.** The new Users and Roles entries were gated from the start, but the inherited `Candidate` item
+  and the whole `Create` group were not — a Partner saw both, and clicking either produced a 403. The
+  dashboard's Quick Actions had the same problem, offering "Manage Users" and "View Candidates" to
+  accounts that cannot use them. All are filtered on permission now. A Partner's sidebar correctly
+  shows Dashboard alone, and their Quick Actions show only "My Profile".
+- **Verified by driving real Chrome over the DevTools Protocol, not by reading the code.** 26 checks
+  against an Admin session (both modules render and populate from the live API, sticky header, measured
+  scroll container, column order, permission matrix opens with all 23 checkboxes) and 9 against a
+  freshly created Partner session (each nav item and card correctly absent, and a direct visit to
+  `/dashboard/all-users` shows the API's *"This action requires the 'user-view' permission"* rather
+  than any data). 35 checks, all passing.
+- **Two of those checks failed first for reasons worth writing down.** One was a wrong assertion: the
+  test matched the string "Users" anywhere on the page and caught an `<h4>Manage Users</h4>` in a
+  dashboard card, not the nav item — the gating was already correct, the test was not. The other was
+  browser disk cache: Next.js dev serves chunks under **stable** names, so a headless Chrome reusing
+  its profile happily replayed a pre-edit bundle and the fix appeared not to work through a container
+  restart and a recompile. `Network.setCacheDisabled` fixed it. Both are now noted in the harness,
+  because either would waste an afternoon a second time.
+- **The old `UserInfo` component was deleted rather than left beside its replacement.** It was still
+  wired to the pre-RBAC shape, and nothing imported it once `UsersModule` landed. Two
+  user-management components in one tree is how the wrong one gets edited.
+- **Found while trying to lint: ESLint cannot run on this project at all.** `package.json` declares
+  ESLint 9 and the config is flat-format, but the binary that resolves is **6.4.0**, which looks for
+  `.eslintrc` and errors out. `npm run lint` is also just `eslint` with no target, so it prints help.
+  So the only checks that actually run are `tsc --noEmit` and `next build`. Recorded as PM-29.
+
+---
+
+---
+
+## July 31, 2026 — auth & RBAC rebuild
 
 - **Passwords are hashed now, and the four existing accounts kept working.** The scaffold stored and
   compared passwords in plaintext at every layer — `hash_password()` returned its input, login was a

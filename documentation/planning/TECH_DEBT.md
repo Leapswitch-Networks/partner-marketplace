@@ -54,6 +54,7 @@ during the auth/RBAC rebuild, which also closed PM-1, 3, 6, 7, 9, 14, 15, 16, 17
 | [PM-26](#pm-26--no-http-rate-limiting-successor-to-pm-8) | 🟠 | No HTTP rate limiting | Auth |
 | [PM-27](#pm-27--no-email-transport-so-invitations-and-resets-are-manual) | 🟠 | No email transport — invitations/resets are manual | Infra |
 | [PM-28](#pm-28--google-sso-is-unverified-against-real-google) | 🟠 | Google SSO implemented but never run against Google | Auth |
+| [PM-29](#pm-29--eslint-cannot-run-v6-resolves-against-a-v9-flat-config) | 🟠 | ESLint cannot run — v6 binary vs v9 flat config | Quality |
 
 ---
 
@@ -521,6 +522,23 @@ configured, so `settings.google_oauth_configured` is false and the endpoints ret
 **Fix:** create an OAuth client, set `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` /
 `GOOGLE_REDIRECT_URI=http://localhost:8002/api/auth/google/callback`, then walk the flow. Until that
 happens, treat this code as untested.
+
+---
+
+### PM-29 — ESLint cannot run: v6 resolves against a v9 flat config
+
+**Where:** `frontend/package.json` declares `eslint: ^9`, but `npx eslint --version` reports **6.4.0**
+
+`eslint.config.mjs` is a flat config, which needs ESLint 9. The binary that actually resolves is 6.4.0,
+which looks for `.eslintrc` and fails with "couldn't find a configuration file". `npm run lint` is
+also just `eslint` with no path, so it prints help rather than linting anything.
+
+Consequence: **no linting runs at all today**, on any workflow. `tsc --noEmit` and `next build` are the
+only checks. Pre-existing and unrelated to the peer-dependency issue in PM-25, though both stem from
+the same `--legacy-peer-deps` install.
+
+**Fix:** work out why 6.4.0 wins (likely a hoisted transitive copy), pin the binary, and give the
+`lint` script a target: `"lint": "eslint app components lib types"`.
 
 ---
 

@@ -3,9 +3,11 @@
 import React, { useState, useEffect } from "react";
 import StatCard from "./StatCard";
 import QuickActionsCard from "./QuickActionsCard";
+import usePermissions from "@/lib/hooks/usePermissions";
 import type { AdminSection } from "@/components/dashboard/Sidebar";
 
 export default function DashboardOverview({ onNavigate }: { onNavigate: (section: AdminSection) => void }) {
+  const { can } = usePermissions();
   const [isLoaded, setIsLoaded] = useState(false);
 
   useEffect(() => {
@@ -93,9 +95,13 @@ export default function DashboardOverview({ onNavigate }: { onNavigate: (section
       >
         <h3 className="mb-4 text-lg font-bold text-gray-900 dark:text-gray-100">Quick Actions</h3>
         <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 auto-rows-max">
+          {/* Each action declares the permission its target needs, and is dropped
+              when the user lacks it — offering a card that 403s on click is worse
+              than not offering it. `null` means everyone (own profile). */}
           {[
             {
               title: "Add Job Role",
+              permission: "category-create",
               description: "Create a new job role for your test platform",
               icon: "briefcase" as const,
               color: "blue" as const,
@@ -103,6 +109,7 @@ export default function DashboardOverview({ onNavigate }: { onNavigate: (section
             },
             {
               title: "Add Test Section",
+              permission: "category-create",
               description: "Organize tests into different sections",
               icon: "layers" as const,
               color: "purple" as const,
@@ -110,6 +117,7 @@ export default function DashboardOverview({ onNavigate }: { onNavigate: (section
             },
             {
               title: "Add Question",
+              permission: "category-create",
               description: "Create MCQ, True/False, or descriptive questions",
               icon: "help-circle" as const,
               color: "amber" as const,
@@ -117,6 +125,7 @@ export default function DashboardOverview({ onNavigate }: { onNavigate: (section
             },
             {
               title: "Manage Users",
+              permission: "user-view",
               description: "Add, edit, or view all system users",
               icon: "users" as const,
               color: "emerald" as const,
@@ -124,6 +133,7 @@ export default function DashboardOverview({ onNavigate }: { onNavigate: (section
             },
             {
               title: "View Candidates",
+              permission: "candidate-view",
               description: "Track candidate test submissions and scores",
               icon: "trending-up" as const,
               color: "rose" as const,
@@ -135,8 +145,11 @@ export default function DashboardOverview({ onNavigate }: { onNavigate: (section
               icon: "user" as const,
               color: "slate" as const,
               section: "profile",
+              permission: null,
             },
-          ].map((action, index) => (
+          ]
+            .filter((action) => action.permission === null || can(action.permission))
+            .map((action, index) => (
             <div
               key={index}
               className={`h-full transition-all duration-500 ${
