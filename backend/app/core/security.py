@@ -115,13 +115,25 @@ def create_access_token(subject: Any, session_id: str) -> str:
     )
 
 
-def create_refresh_token(subject: Any, session_id: str) -> str:
-    return _create_token(
+def create_refresh_token(subject: Any, session_id: str, jti: str) -> str:
+    """A refresh token, identified by `jti` (PM-31).
+
+    The `jti` is what makes rotation real: the session stores the one currently
+    valid value, so a superseded token is recognisable as superseded rather than
+    merely old. Without it, "rotation" only means issuing a new token while the
+    previous one keeps working.
+    """
+    token = _create_token(
         subject,
         timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
         "refresh",
         session_id,
     )
+    # Re-encode with the jti rather than widening `_create_token`, which is shared
+    # with access tokens — an access token has no rotation and no need of one.
+    payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+    payload["jti"] = jti
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
 def create_two_factor_challenge_token(subject: Any) -> str:

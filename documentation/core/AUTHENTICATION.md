@@ -154,11 +154,12 @@ locked out or recovering from a compromise and may be on a borrowed device, so n
   that can revoke keeps server state somewhere, and the only real choice is where.
 - `last_seen_at` is written at most once every 5 minutes, or every authenticated read would become a
   write and a polled endpoint like `/me` would churn the row constantly.
-- **`/refresh` reissues rather than rotates.** The session id is carried over, so the previous refresh
-  token remains decodable and usable until its own expiry while the session lives. Making a superseded
-  token individually dead needs per-token state and reuse detection — recorded as **PM-31**, not
-  pretended away. The session check bounds the damage: revoke the session and every token naming it
-  dies at once.
+- **`/refresh` rotates, with reuse detection** (PM-31, added 2026-08-03). Each session records the one
+  `jti` currently valid. Presenting a superseded token outside a 30-second grace window **revokes the
+  whole session** — if a superseded token is in play, either the client replayed it or somebody else has
+  it, and neither should continue. The grace window exists because strict rotation would otherwise sign
+  out anyone with two tabs open: the second concurrent refresh presents a token valid microseconds
+  earlier and would be judged a replay.
 - **Tokens minted before this change fail closed** — no `sid`, no entry. Accepting a token without one
   "for compatibility" would have left a permanent bypass of the whole mechanism.
 - Session rows are never purged automatically. `session_service.purge_expired()` exists and nothing

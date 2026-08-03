@@ -68,12 +68,19 @@ _REFRESH_MAX_AGE = settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
 _REFRESH_PATH = "/api/auth/refresh"
 
 
-def set_auth_cookies(response: Response, user_id: str, session_id: str) -> None:
+def set_auth_cookies(
+    response: Response, user_id: str, session_id: str, refresh_jti: str
+) -> None:
     """Issue both cookies for a session.
 
     `session_id` is not optional. Both tokens carry it as `sid`, and the guard
     refuses a token whose session is revoked or expired — that is the whole
     mechanism by which logout means anything.
+
+    `refresh_jti` is not optional either. It identifies the one refresh token
+    currently valid for this session (PM-31), so a superseded one is recognisable
+    as superseded rather than merely old. Passing a stale value here would issue a
+    token that the very next refresh rejects as a replay.
     """
     response.set_cookie(
         key="access_token",
@@ -86,7 +93,7 @@ def set_auth_cookies(response: Response, user_id: str, session_id: str) -> None:
     )
     response.set_cookie(
         key="refresh_token",
-        value=create_refresh_token(user_id, session_id),
+        value=create_refresh_token(user_id, session_id, refresh_jti),
         httponly=True,
         samesite=settings.COOKIE_SAMESITE,
         secure=settings.COOKIE_SECURE,
@@ -236,7 +243,7 @@ def accept_invitation(
     # 2FA, not by a test, which is PM-11 earning its severity.
     session = session_service.create(db, user, ip=ip, user_agent=user_agent)
     activity_service.record_login(db, user, ip, user_agent)
-    set_auth_cookies(response, user.id, session.id)
+    set_auth_cookies(response, user.id, session.id, session.refresh_token_jti)
     return LoginResponse(
         message="Welcome aboard",
         user=CurrentUserResponse(**rbac_service.current_user_payload(db, user)),
@@ -282,7 +289,7 @@ def login(
     # Recorded here rather than in `authenticate`, because the audit entry should
     # mean "a session now exists", and only this point knows that it does.
     activity_service.record_login(db, user, ip, user_agent)
-    set_auth_cookies(response, user.id, session.id)
+    set_auth_cookies(response, user.id, session.id, session.refresh_token_jti)
     return LoginResponse(
         message="Login successful",
         user=CurrentUserResponse(**rbac_service.current_user_payload(db, user)),
@@ -366,12 +373,14 @@ def refresh(
     * **The token is a refresh token**, not an access token replayed here.
 
     The session id is carried over rather than replaced: this is the same sign-in
-    continuing, and issuing a new `sid` would orphan the row holding its
-    provenance. Note this therefore reissues rather than *rotates* — the previous
-    refresh token stays decodable until its own expiry, and remains usable while
-    the session lives. Making a superseded token individually dead needs per-token
-    state and reuse detection; the session check already bounds the damage, and
-    the gap is recorded in AUTHENTICATION.md rather than papered over.
+    continuing, and issuing a new `sid` would orphan the row holding its provenance.
+
+    **The refresh token itself now rotates (PM-31).** Each session records the one
+    `jti` currently valid, so presenting a superseded token is detectable — and
+    outside a short grace window it is treated as evidence of theft and the whole
+    session is revoked. That is the point of reuse detection: if a superseded token
+    is being presented, either the client replayed it or somebody else has it, and
+    neither should continue.
     """
     credentials_exc = HTTPException(
         status.HTTP_401_UNAUTHORIZED, "Invalid or expired refresh token"
@@ -384,6 +393,7 @@ def refresh(
             raise credentials_exc
         user_id: str = payload["sub"]
         session_id: str = payload["sid"]
+        presented_jti: str | None = payload.get("jti")
     except (JWTError, KeyError):
         raise credentials_exc
 
@@ -394,8 +404,47 @@ def refresh(
         clear_auth_cookies(response)
         raise credentials_exc
 
+    outcome = session_service.classify_refresh_jti(session, presented_jti)
+
+    if outcome is session_service.RefreshOutcome.REUSED:
+        # A token that was valid once, is not current, and is past the grace
+        # window. Kill the session rather than merely refusing this request: the
+        # legitimate holder's token has almost certainly been copied, and letting
+        # the *current* token carry on would leave the attacker's next attempt one
+        # rotation behind rather than locked out.
+        session_service.revoke(db, session, reason="reuse_detected")
+        clear_auth_cookies(response)
+        activity_service.record(
+            db,
+            log_name="auth",
+            description=(
+                f"Refresh token reuse detected for {user.email} — session revoked"
+            ),
+            event="refresh_token_reuse_detected",
+            subject_type="User",
+            subject_id=user.id,
+            causer_id=user.id,
+            properties={"session_id": session.id, "presented_jti": presented_jti},
+        )
+        raise credentials_exc
+
+    if outcome is session_service.RefreshOutcome.UNKNOWN:
+        # A token minted before rotation existed. Refused, not grandfathered —
+        # see classify_refresh_jti for why.
+        clear_auth_cookies(response)
+        raise credentials_exc
+
     session_service.touch(db, session)
-    set_auth_cookies(response, user.id, session.id)
+
+    if outcome is session_service.RefreshOutcome.GRACE:
+        # Two tabs refreshed at once. Hand back the *current* token rather than
+        # rotating again — rotating per concurrent request would make each one
+        # invalidate the others and turn a race into a logout.
+        new_jti = session.refresh_token_jti
+    else:
+        new_jti = session_service.rotate_refresh_jti(db, session)
+
+    set_auth_cookies(response, user.id, session.id, new_jti)
     return MessageResponse(message="Token refreshed")
 
 
@@ -651,7 +700,7 @@ def two_factor_challenge(
             properties={"ip": ip, "remaining": remaining},
         )
 
-    set_auth_cookies(response, user.id, session.id)
+    set_auth_cookies(response, user.id, session.id, session.refresh_token_jti)
     return LoginResponse(
         message="Login successful",
         user=CurrentUserResponse(**rbac_service.current_user_payload(db, user)),

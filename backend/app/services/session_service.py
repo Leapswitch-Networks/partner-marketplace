@@ -25,7 +25,9 @@ holds, and they sign in fresh.
 from __future__ import annotations
 
 import logging
+import uuid
 from datetime import datetime, timedelta, timezone
+from enum import Enum
 
 from sqlalchemy import select, update
 from sqlalchemy.orm import Session
@@ -46,9 +48,16 @@ _MAX_USER_AGENT = 512
 
 
 def create(db: Session, user: User, ip: str | None, user_agent: str | None) -> UserSession:
-    """Open a session. Its id becomes the `sid` claim in both tokens."""
+    """Open a session. Its id becomes the `sid` claim in both tokens.
+
+    The first `refresh_token_jti` is seeded here so a brand-new session already has
+    one — the caller reads it to mint the initial refresh token, and a session that
+    started life without one would be refused at its first refresh.
+    """
     now = datetime.now(timezone.utc)
     session = UserSession(
+        refresh_token_jti=str(uuid.uuid4()),
+        refresh_rotated_at=now,
         user_id=user.id,
         ip_address=ip,
         user_agent=(user_agent or "")[:_MAX_USER_AGENT] or None,
@@ -88,6 +97,60 @@ def touch(db: Session, session: UserSession) -> None:
         return
     session.last_seen_at = now
     db.commit()
+
+
+def rotate_refresh_jti(db: Session, session: UserSession) -> str:
+    """Issue a new refresh-token id, keeping the old one for the grace window.
+
+    Returns the new `jti` for the caller to embed in the token it is about to mint.
+    """
+    new_jti = str(uuid.uuid4())
+    session.previous_refresh_jti = session.refresh_token_jti
+    session.refresh_token_jti = new_jti
+    session.refresh_rotated_at = datetime.now(timezone.utc)
+    db.commit()
+    return new_jti
+
+
+class RefreshOutcome(str, Enum):
+    """What a presented refresh-token `jti` turned out to be."""
+
+    CURRENT = "current"
+    #: The immediately-previous token, inside the grace window. Honoured without
+    #: rotating again, so concurrent tabs converge on one token.
+    GRACE = "grace"
+    #: Not current and not within grace — a replay or a theft. Kill the session.
+    REUSED = "reused"
+    #: No jti at all, or the session has none. Pre-rotation token; refuse.
+    UNKNOWN = "unknown"
+
+
+def classify_refresh_jti(session: UserSession, jti: str | None) -> RefreshOutcome:
+    """Decide what a presented refresh-token id means, without mutating anything.
+
+    Separated from the endpoint so the decision is testable and readable on its
+    own — this is the security-critical branch of the whole rotation scheme.
+    """
+    if not jti or session.refresh_token_jti is None:
+        # A session created before rotation existed, or a token minted without a
+        # jti. Refused rather than grandfathered: accepting one "until the first
+        # rotation" would leave a window in which a pre-rotation stolen token
+        # still works, which is exactly what this closes.
+        return RefreshOutcome.UNKNOWN
+
+    if jti == session.refresh_token_jti:
+        return RefreshOutcome.CURRENT
+
+    if (
+        session.previous_refresh_jti is not None
+        and jti == session.previous_refresh_jti
+        and session.refresh_rotated_at is not None
+        and datetime.now(timezone.utc) - session.refresh_rotated_at
+        <= timedelta(seconds=settings.REFRESH_ROTATION_GRACE_SECONDS)
+    ):
+        return RefreshOutcome.GRACE
+
+    return RefreshOutcome.REUSED
 
 
 def mark_password_confirmed(db: Session, session: UserSession) -> None:

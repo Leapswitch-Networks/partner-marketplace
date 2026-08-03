@@ -87,6 +87,14 @@ class Settings(BaseSettings):
     # An admin who has vouched out-of-band can still override per request.
     REQUIRE_VERIFIED_EMAIL_FOR_APPROVAL: bool = True
 
+    # --- Refresh-token rotation (PM-31) --------------------------------------
+    # How long the immediately-superseded refresh token is still honoured. Without
+    # a window, two browser tabs refreshing at the same instant would look like a
+    # replay and kill the session — signing out a legitimate user for having two
+    # tabs open. Short enough that an attacker gains only these seconds on a token
+    # they would already have to hold.
+    REFRESH_ROTATION_GRACE_SECONDS: int = 30
+
     # --- Two-factor auth (PM-34) --------------------------------------------
     # Steps of ±30s accepted either side of now. LeapDesk leaves Fortify's
     # `window` commented out, which means its default of 0 — exact match only.

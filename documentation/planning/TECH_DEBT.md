@@ -66,7 +66,7 @@ since 2026-07-31 — only the documentation was wrong, and wrong in a way that b
 | [PM-28](#pm-28--google-sso-is-unverified-against-real-google) | 🟠 | Google SSO implemented but never run against Google | Auth |
 | [PM-29](#pm-29--eslint-cannot-run-v6-resolves-against-a-v9-flat-config--resolved) | ✅ | ~~ESLint cannot run — v6 binary vs v9 flat config~~ | Quality |
 | [PM-30](#pm-30--17-react-hooks-errors-from-rules-that-arrive-with-the-wrong-config-version) | 🟡 | **20** react-hooks errors, from `eslint-config-next` 16 on Next 14 | Quality |
-| [PM-31](#pm-31--refresh-reissues-rather-than-rotates-no-token-reuse-detection) | 🟡 | `/refresh` reissues rather than rotates — no reuse detection | Auth |
+| [PM-31](#pm-31--refresh-reissues-rather-than-rotates-no-token-reuse-detection--resolved) | ✅ | ~~`/refresh` reissues rather than rotates~~ | Auth |
 | [PM-32](#pm-32--no-audit-log-leapdesk-has-one--recording-done-read-surface-pending) | ✅ | ~~No audit log~~ | Quality |
 | [PM-33](#pm-33--no-security-response-headers--backend-done-frontend-pending) | ✅ | ~~No security response headers~~ | Infra |
 | [PM-34](#pm-34--no-two-factor-auth-fortify-parity--resolved) | ✅ | ~~No two-factor auth (Fortify parity)~~ | Auth |
@@ -895,7 +895,47 @@ that makes them unnecessary.
 
 ---
 
-### PM-31 — `/refresh` reissues rather than rotates: no token reuse detection
+### PM-31 — `/refresh` reissues rather than rotates: no token reuse detection ✅ RESOLVED
+
+**Resolved 2026-08-03.** Migration `d4a71f6c8e93` adds three columns to `user_sessions`
+(`refresh_token_jti`, `previous_refresh_jti`, `refresh_rotated_at`); refresh tokens now carry a `jti`, and
+`session_service.classify_refresh_jti` decides what a presented one means.
+
+| Presented `jti` | Outcome |
+|---|---|
+| Matches `refresh_token_jti` | **Current** — rotate and issue a new pair |
+| Matches `previous_refresh_jti` within the grace window | **Grace** — hand back the current token, do **not** rotate again |
+| Anything else | **Reuse** — revoke the whole session (`reuse_detected`) |
+| No `jti`, or the session has none | **Unknown** — refuse |
+
+**Reuse revokes the session rather than merely refusing the request**, and that is the point. If a
+superseded token is being presented, either the client replayed it or somebody else holds it. Letting the
+*current* token carry on would leave the attacker one rotation behind rather than locked out.
+
+#### The grace window, and why strict rotation alone is a trap
+
+Strict rotation plus reuse detection has a well-known failure mode: two browser tabs refreshing at the
+same instant. The second presents a token that was valid microseconds earlier, is judged a replay, and the
+session dies — **signing out a legitimate user for having two tabs open**. A 30-second window
+(`REFRESH_ROTATION_GRACE_SECONDS`) honours the immediately-previous token *without rotating again*, so
+concurrent requests converge on one token instead of each invalidating the others. An attacker gains only
+those seconds, on a token they would already have to hold.
+
+#### No backfill, deliberately
+
+Pre-rotation sessions have a NULL `jti` and are refused. Accepting one "until the first rotation" would
+leave a window in which a pre-rotation stolen token still works, which is exactly the hole being closed.
+Those users sign in again — the same fail-closed choice made for `sid`, for the same reason.
+
+#### Verified 2026-08-03
+
+Refresh with the current token returned `200` and **the token changed**; the new one worked; replaying the
+original after the grace window returned `401`; **and then the good token also returned `401` and `/me`
+returned `401`** — the session really was revoked, with `revoked_reason = reuse_detected` and an
+`refresh_token_reuse_detected` audit row naming the account. Separately, two back-to-back refreshes with
+the same token both returned `200` and the session stayed alive, with no second rotation.
+
+Original entry follows.
 
 **Where:** `backend/app/api/auth.py` `refresh()`
 

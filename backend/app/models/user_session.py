@@ -80,6 +80,18 @@ class UserSession(Base):
     #: is otherwise unanswerable.
     revoked_reason: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
+    # --- Refresh-token rotation (PM-31) -------------------------------------
+    #: The id of the ONE refresh token currently valid for this session. Anything
+    #: else presented at /refresh is not current, and outside the grace window
+    #: below that means a replay or a theft.
+    refresh_token_jti: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    #: The just-superseded token, honoured only inside the grace window so two
+    #: tabs refreshing at the same instant do not kill the session.
+    previous_refresh_jti: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    refresh_rotated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     #: When this session last re-proved the account password. Fortify's
     #: `confirmPassword` gate, stored per session rather than per user: it means
     #: "this browser proved it knows the password recently", which is a property
