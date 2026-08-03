@@ -103,14 +103,36 @@
 
 ---
 
-## August 3, 2026 — Users & Roles committed; tests moved to the back of the queue
+## August 3, 2026 — Tech-debt sweep: seven items closed, and a register that had drifted
+
+**The day in one line:** the ranked tech-debt queue was worked top to bottom. Seven items closed, two of
+them turning out to have been **fixed in code for days with only the register still calling them
+blockers**, and one security control I wrote was found to be completely bypassable before it shipped.
+
+| Item | Outcome |
+|------|---------|
+| PM-29 | ESLint runs for the first time. Recorded cause was wrong; 7 real defects fixed |
+| PM-2 | Cookie flags — the **logout** half was genuinely still open |
+| PM-4 | Already fixed in code. The **documentation** was the live defect |
+| PM-26 | Per-IP rate limiting. Also closed PM-8, and closed a bypass in my own first version |
+| PM-10 | Structured logging with request correlation. **Monitoring half left open** |
+| PM-19 | Error boundaries, loading states, 404 |
+| PM-27 | Invitation and password-reset email |
+| PM-30 | **New** — the 17 react-hooks errors that closing PM-29 revealed |
+
+Still needing the owner: **PM-5** (blocked on domain-plan approval), **PM-28** (needs OAuth
+credentials), **PM-25** (a framework-version decision), **PM-11** (last, by the owner's decision).
+
+All of it went onto `feature/platform-hardening` rather than straight to `main`, and was pushed.
+
+---
 
 - **The Users and Roles work is in version control, as two commits rather than one.** It had been
   finished and documented since July 31 but never committed, which meant three days of the project's
   largest frontend change existing only in one working tree. Split so each half is reviewable on its
   own: `feat(ui)` for the reusable index-page component set (9 new files plus the `Input` changes the
   filter bars needed), and `feat(admin)` for the two modules, the permission gating and the `UserInfo`
-  deletion. `tsc --noEmit` exits 0 on the committed tree. Not pushed — `origin/main` is still behind.
+  deletion. `tsc --noEmit` exits 0 on the committed tree.
 - **Automated tests (PM-11) are now deliberately the *last* item in the queue, not the first.** The
   owner's reasoning: tests are slow to write and slow to run, and that cost would be paid on every
   task ahead of them. This reverses what both `TECH_DEBT.md` and `MARKETPLACE_DOMAIN_PLAN.md`
@@ -321,6 +343,21 @@
   machine*, which is why the onboarding checklist used to pass — but a fresh setup has only the root
   account, so the checklist was misleading for exactly the reader it exists for. Those four passwords
   were readable while they were plaintext and should still be rotated.
+- **The day's work went to `feature/platform-hardening`, not straight to `main`.** Nine commits: the two
+  Users & Roles commits that had been sitting uncommitted since July 31, plus seven from this sweep.
+  Branched rather than pushed to `main` at the owner's request, so the security-relevant changes — rate
+  limiting, the `X-Forwarded-For` fix, cookie flags on logout — can be reviewed as a set before they
+  land.
+- **The one lesson worth carrying forward: the register is a map, not the territory.** Two items were
+  worked on that needed no code, the deploy blocker list had five resolved entries still marked as hard
+  blockers, the documented setup command referenced a deleted module, and the documented migration head
+  was two revisions stale. A note now sits at the top of `TECH_DEBT.md` § Suggested Order telling the
+  next person to verify an item against the code before starting it. Closing an item and updating the
+  register kept being treated as two acts, and the second one kept not happening.
+- **Also worth stating: three of the four things left are waiting on the owner, not on effort.** PM-5 is
+  Build Sequence step 2 and building it before the domain plan is approved risks the one mistake that
+  plan calls expensive to undo. PM-28 needs OAuth credentials. PM-25 is a framework-version decision
+  that also gates PM-30. Only PM-11 is deferred by choice.
 
 ---
 
