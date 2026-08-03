@@ -44,6 +44,17 @@ Each file has ONE clear purpose. Load only what the task needs.
 | `system-design/DATABASE_MIGRATIONS.md` | **Alembic runbook** — revision chain, writing migrations, current head, recovery | Any schema change |
 | `system-design/DEPLOYMENT.md` | **Deploy runbook** — environments, build, migrate, health checks | Deploying or debugging prod |
 
+## Design
+
+| File | Purpose | Status |
+|------|---------|--------|
+| `design/VIHO_THEME_REFERENCE.md` | Design tokens extracted from the **Viho** theme (the chosen visual direction) — colour hex values, contrast audit, type scale, spacing, login-screen anatomy, and how it maps to our Tailwind stack | **Inspiration — adoption not yet decided** |
+| `design/assets/screenshots/` | Reference screenshots + the rules for adding them to a public repo | Active |
+
+> ⚠️ `system-design/UI_PATTERNS.md` remains **authoritative** for how our UI is actually built. The
+> design folder records an external theme we are borrowing from; where the two disagree, the theme has
+> not won until the owner says so. Viho is a **paid** template — its source is not in this repo.
+
 ## Planning
 
 Planning docs are **reference only** — they describe intent, not current state. Check the code.
@@ -86,6 +97,9 @@ documentation/
 ├── DAILY_CHANGES.md         ← Per-task log
 ├── core/                    ← Architecture, auth, authorization, users
 ├── system-design/           ← Standards, patterns, migrations, deployment
+├── design/                  ← Theme inspiration + reference screenshots
+│   ├── VIHO_THEME_REFERENCE.md
+│   └── assets/screenshots/  ← owner-supplied screenshots
 ├── planning/                ← Domain plan, cleanup plan, tech debt
 ├── architecture.md          ← inherited (stale)
 ├── instruction.md           ← inherited (stale)
