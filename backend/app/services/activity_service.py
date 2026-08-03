@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from sqlalchemy import func, select
@@ -357,6 +357,80 @@ def list_entries(
             names[user.id] = user.full_name
 
     return rows, total, names
+
+
+def iter_for_export(
+    db: Session,
+    *,
+    log_name: str | None = None,
+    event: str | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    batch_size: int = 500,
+):
+    """Yield matching rows for a CSV export, in batches.
+
+    A generator rather than a list because an export is the one read with no upper
+    bound — "give me everything for the audit" is the whole point of it, and
+    materialising a year of rows to build a response would be the request that
+    exhausts memory. `yield_per` streams from the driver rather than buffering the
+    full result.
+
+    Oldest first here, unlike the paginated view: an exported file is read top to
+    bottom as a chronology, where a screen is read newest-first.
+    """
+    stmt = select(ActivityLog).order_by(ActivityLog.id.asc())
+
+    if log_name:
+        stmt = stmt.where(ActivityLog.log_name == log_name)
+    if event:
+        stmt = stmt.where(ActivityLog.event == event)
+    if date_from:
+        stmt = stmt.where(ActivityLog.created_at >= date_from)
+    if date_to:
+        stmt = stmt.where(ActivityLog.created_at <= date_to)
+
+    yield from db.scalars(stmt.execution_options(yield_per=batch_size))
+
+
+def purge_older_than(db: Session, days: int) -> int:
+    """Delete audit rows older than `days`. Returns how many were removed.
+
+    **Not wired to anything, and that is deliberate.** How long who-did-what is kept
+    is a policy decision — legal, contractual, or simply "how far back do we want to
+    be able to answer questions?" — and it is not this function's place to pick a
+    number. `ACTIVITY_LOG_RETENTION_DAYS` exists as a default for whoever runs this,
+    and nothing calls it on a schedule because there is no scheduler.
+
+    Refuses a non-positive value rather than treating it as "everything": a stray
+    `0` from a config file should not silently destroy the entire trail.
+    """
+    if days <= 0:
+        raise ValueError("Retention must be a positive number of days.")
+
+    try:
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    except (OverflowError, OSError):
+        # A retention longer than `datetime` can express. The semantically correct
+        # answer is "nothing is that old", not a crash — found by passing 999999
+        # while testing the guard above, which raised OverflowError from timedelta.
+        return 0
+    result = db.execute(
+        ActivityLog.__table__.delete().where(ActivityLog.created_at < cutoff)
+    )
+    db.commit()
+    removed = result.rowcount or 0
+
+    # Recorded in the trail it just truncated, so the gap is explained rather than
+    # looking like data loss to whoever reads it next.
+    if removed:
+        record(
+            db,
+            description=f"Purged {removed} activity log row(s) older than {days} days",
+            event="activity_log_purged",
+            properties={"removed": removed, "retention_days": days},
+        )
+    return removed
 
 
 def distinct_events(db: Session) -> list[str]:

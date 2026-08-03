@@ -87,6 +87,13 @@ class Settings(BaseSettings):
     # An admin who has vouched out-of-band can still override per request.
     REQUIRE_VERIFIED_EMAIL_FOR_APPROVAL: bool = True
 
+    # --- Audit log retention (PM-32) ------------------------------------------
+    # A DEFAULT for whoever runs the purge, not an active policy — nothing calls it
+    # on a schedule, because there is no scheduler and because how long
+    # who-did-what is kept is a decision rather than a constant. Two years is a
+    # common floor for access records; change it deliberately.
+    ACTIVITY_LOG_RETENTION_DAYS: int = 730
+
     # --- Refresh-token rotation (PM-31) --------------------------------------
     # How long the immediately-superseded refresh token is still honoured. Without
     # a window, two browser tabs refreshing at the same instant would look like a

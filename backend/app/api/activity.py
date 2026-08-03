@@ -13,9 +13,13 @@ Recording happens at the call sites that matter (login, role change, status
 change, deletion). Nothing writes through this router.
 """
 
-from datetime import datetime
+import csv
+import io
+import json
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -108,6 +112,75 @@ def list_activity(
         page=page,
         per_page=per_page,
         pages=max(1, -(-total // per_page)),
+    )
+
+
+@router.get("/export")
+def export_activity(
+    log_name: str | None = Query(default=None),
+    event: str | None = Query(default=None),
+    date_from: datetime | None = Query(default=None),
+    date_to: datetime | None = Query(default=None),
+    db: Session = Depends(get_db),
+    _actor: User = Depends(require_permission(ACTIVITY_VIEW)),
+) -> StreamingResponse:
+    """Stream the trail as CSV — the first thing anyone asks for in a real review.
+
+    **Streamed, not built in memory.** This is the one read with no upper bound:
+    "everything for the audit" is the whole point, and materialising a year of rows
+    to assemble a response is the request that runs the process out of memory.
+
+    Oldest first, unlike the paginated view: a file is read top to bottom as a
+    chronology, where a screen is read newest-first.
+
+    `properties` is emitted as compact JSON in one column. Flattening it into
+    columns is impossible — the shape differs per event — and truncating it would
+    silently drop the before/after diff that makes an export worth having.
+    """
+
+    def rows():
+        buffer = io.StringIO()
+        writer = csv.writer(buffer)
+
+        def flush() -> str:
+            value = buffer.getvalue()
+            buffer.seek(0)
+            buffer.truncate(0)
+            return value
+
+        writer.writerow(
+            ["id", "created_at", "log_name", "event", "description",
+             "subject_type", "subject_id", "causer_id", "batch_uuid", "properties"]
+        )
+        yield flush()
+
+        for row in activity_service.iter_for_export(
+            db, log_name=log_name, event=event, date_from=date_from, date_to=date_to
+        ):
+            writer.writerow([
+                row.id,
+                row.created_at.isoformat(),
+                row.log_name or "",
+                row.event or "",
+                row.description,
+                row.subject_type or "",
+                row.subject_id or "",
+                row.causer_id or "",
+                row.batch_uuid or "",
+                json.dumps(row.properties, separators=(",", ":")) if row.properties else "",
+            ])
+            yield flush()
+
+    return StreamingResponse(
+        rows(),
+        media_type="text/csv",
+        headers={
+            # A filename without a timestamp means the second export overwrites the
+            # first in the downloads folder, which is how two audits get confused.
+            "Content-Disposition": (
+                f'attachment; filename="activity-log-{datetime.now(timezone.utc):%Y%m%d-%H%M%S}.csv"'
+            )
+        },
     )
 
 

@@ -1063,9 +1063,29 @@ Column names are LeapDesk's verbatim: `log_name`, `description`, `subject_type`,
 - **A failed login has no causer and no subject.** Nobody authenticated, and the submitted address may
   match no account — inventing a subject for it would be fiction. The address goes in `properties`.
 
-**Still open:** no retention policy. The table grows forever, and unlike `user_sessions` it must not
-simply be purged — how long who-did-what is kept is a real decision, not a cron job. Also no export, which
-is the first thing anyone asks for during an actual incident review.
+#### Export and retention (added 2026-08-03)
+
+`GET /api/activity/export` streams the trail as CSV, gated on the same `activity-view` permission.
+**Streamed, not assembled in memory:** this is the one read with no upper bound — "everything, for the
+audit" is the point of it — so materialising a year of rows would be the request that exhausts the
+process. Oldest-first, unlike the paginated view, because a file is read top to bottom as a chronology
+where a screen is read newest-first. `properties` goes into one column as compact JSON: the shape differs
+per event so it cannot be flattened, and truncating it would silently drop the before/after diff that
+makes an export worth having. The filename carries a UTC timestamp, or the second export overwrites the
+first in a downloads folder and two audits get confused.
+
+`activity_service.purge_older_than(days)` exists and **nothing calls it on a schedule**, deliberately.
+There is no scheduler, and more importantly *how long who-did-what is kept* is a policy decision — legal,
+contractual, or simply how far back you want to be able to answer questions.
+`ACTIVITY_LOG_RETENTION_DAYS` (default 730) is a default for whoever runs it, not an active policy.
+
+Two guards, because this function deletes evidence: a non-positive `days` raises rather than being read as
+"everything", so a stray `0` in a config file cannot destroy the trail; and a value too large for
+`datetime` returns 0 instead of crashing — found by passing `999999` while testing the first guard, which
+raised `OverflowError` from `timedelta`. The purge records itself in the trail it truncated, so the gap is
+explained rather than looking like data loss.
+
+**Still open:** the export has no UI button — it is an API call today.
 
 Original entry follows.
 
