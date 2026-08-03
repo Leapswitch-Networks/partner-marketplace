@@ -26,7 +26,7 @@ from app.models.activity_log import EVENT_STATUS_CHANGED
 from app.models.role import Role
 from app.models.user import User
 from app.schemas.rbac import CreateUserRequest, UpdateUserRequest
-from app.services import activity_service, session_service
+from app.services import activity_service, session_service, two_factor_service
 from app.services.auth_service import email_exists, normalise_email
 from app.services.rbac_service import resolve_roles
 
@@ -472,6 +472,48 @@ def unlock_user(db: Session, user_id: str, actor: User) -> User:
         subject_id=target.id,
         actor=actor,
         properties={"old": {"locked_until": was_locked.isoformat() if was_locked else None}},
+    )
+    return target
+
+
+def reset_two_factor(db: Session, user_id: str, actor: User) -> User:
+    """Clear another user's 2FA enrolment, and end their sessions.
+
+    Sessions are revoked as well as the secret cleared, and that pairing is the
+    point. If a phone was stolen rather than lost, whoever has it may still hold a
+    live session on that device — clearing only the secret would remove the second
+    factor and leave the attacker signed in, which is worse than doing nothing.
+    """
+    target = get_user_or_404(db, user_id)
+
+    # Same rule as an edit, so a non-super-admin cannot strip a super-admin's 2FA.
+    if not can_edit(actor, target):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN, "You cannot modify this account."
+        )
+    if target.two_factor_secret is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "This account does not have two-factor authentication set up.",
+        )
+
+    had_confirmed = target.two_factor_confirmed_at is not None
+    two_factor_service.disable(db, target)
+    target.updated_by = actor.id
+    db.commit()
+    db.refresh(target)
+
+    session_service.revoke_all(db, target.id, reason="revoked_by_admin")
+
+    activity_service.record(
+        db,
+        log_name="auth",
+        description=f"{target.email} — two-factor authentication reset by an administrator",
+        event="two_factor_reset_by_admin",
+        subject_type="User",
+        subject_id=target.id,
+        actor=actor,
+        properties={"was_confirmed": had_confirmed},
     )
     return target
 

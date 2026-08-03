@@ -146,6 +146,32 @@ def unlock_user(
     return UserDetailResponse.model_validate(user_service.decorate(user, actor))
 
 
+@router.post("/{user_id}/reset-two-factor", response_model=UserDetailResponse)
+def reset_two_factor(
+    user_id: str,
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_permission(USER_UPDATE)),
+) -> UserDetailResponse:
+    """Clear a user's 2FA so they can sign in and re-enrol.
+
+    The support path for the case recovery codes exist to cover and sometimes do
+    not: a lost phone with every code already spent. Without this the only route
+    back into an account would be someone editing the database by hand.
+
+    **This removes a security control from another person's account**, so it is
+    gated on `user-update` *and* on the same protection rules as an edit — which
+    means a non-super-admin cannot strip 2FA from a super-admin. It is recorded in
+    the audit trail with the actor, because "who turned off my second factor" must
+    be answerable.
+
+    Deliberately not self-service: a user who still holds a session can disable
+    their own 2FA at `/api/auth/me/two-factor`, which requires their password. This
+    route exists for the case where they cannot get in at all.
+    """
+    user = user_service.reset_two_factor(db, user_id, actor)
+    return UserDetailResponse.model_validate(user_service.decorate(user, actor))
+
+
 @router.post("/bulk-delete", response_model=BulkActionResult)
 def bulk_delete(
     data: BulkUserIdsRequest,

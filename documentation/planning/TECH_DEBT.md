@@ -68,7 +68,7 @@ since 2026-07-31 — only the documentation was wrong, and wrong in a way that b
 | [PM-30](#pm-30--17-react-hooks-errors-from-rules-that-arrive-with-the-wrong-config-version) | 🟡 | 17 react-hooks errors, from `eslint-config-next` 16 on Next 14 | Quality |
 | [PM-31](#pm-31--refresh-reissues-rather-than-rotates-no-token-reuse-detection) | 🟡 | `/refresh` reissues rather than rotates — no reuse detection | Auth |
 | [PM-32](#pm-32--no-audit-log-leapdesk-has-one--recording-done-read-surface-pending) | 🟡 | ~~No audit log~~ recording done; **no read surface** | Quality |
-| [PM-33](#pm-33--no-security-response-headers--backend-done-frontend-pending) | 🟡 | ~~No security response headers~~ backend done; **frontend pending** | Infra |
+| [PM-33](#pm-33--no-security-response-headers--backend-done-frontend-pending) | ✅ | ~~No security response headers~~ | Infra |
 | [PM-34](#pm-34--no-two-factor-auth-fortify-parity--resolved) | ✅ | ~~No two-factor auth (Fortify parity)~~ | Auth |
 | [PM-35](#pm-35--email-verification-is-not-enforced-anywhere) | 🟠 | Email verification not enforced — nor is it in LeapDesk | Auth |
 
@@ -968,11 +968,14 @@ lost on `docker compose down`.
 
 ---
 
-### PM-33 — No security response headers ⚠️ BACKEND DONE, FRONTEND PENDING
+### PM-33 — No security response headers ✅ RESOLVED
 
-**Backend resolved 2026-08-03** in `backend/app/core/headers.py`, registered in `main.py`. **The
-frontend half is not done** — `frontend/next.config.mjs` is a protected file and needs the owner's
-confirmation before editing.
+**Fully resolved 2026-08-03.** Backend in `backend/app/core/headers.py`, registered in `main.py`;
+frontend in `next.config.mjs`'s `headers()` block, verified present on `/sign-in`.
+
+The frontend set omits HSTS deliberately: it belongs on the TLS terminator, which does not exist yet,
+and emitting it from a dev server reachable over plain HTTP would pin `localhost` to HTTPS in every
+developer's browser for a year with no server-side way to undo it.
 
 Sent on every response, verified including on a `429`:
 `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`,
@@ -991,9 +994,9 @@ Sent on every response, verified including on a `429`:
    server-side change can clear. `HSTS_PRELOAD` is separate again, because preloading is effectively
    irreversible.
 
-**Still open:** the Next.js app is a separate origin serving the actual HTML, so a header on the API
-does nothing for a page the API did not serve. `next.config.mjs` already has a `headers()` block and
-needs the same set added there — that is where framing and sniffing protections actually matter.
+Both halves were needed because the Next.js app is a separate origin serving the actual HTML: a header
+on the API does nothing for a page the API did not serve, and framing and sniffing protections matter
+far more on the HTML than on a JSON response.
 
 Original entry follows.
 
@@ -1041,9 +1044,16 @@ a stolen session could quietly remove the second factor protecting the account.
 pre-sessions two-argument signature and would have raised on the first invitation accepted. Caught by
 reading the file, not by a test — PM-11 earning its severity.
 
+**Admin reset added 2026-08-03:** `POST /api/users/{id}/reset-two-factor`. The support path for the case
+recovery codes exist to cover and sometimes do not — a lost phone with every code spent. It clears the
+enrolment **and revokes every session**, and that pairing is the point: if the phone was stolen rather
+than lost, clearing only the secret would remove the second factor and leave the attacker signed in.
+Gated on `user-update` plus the same protection rule as an edit, so a non-super-admin cannot strip a
+super-admin's 2FA (verified `403`), refuses with `400` when there is nothing to reset rather than
+no-oping, and is recorded with the actor.
+
 **Still open for 2FA:** no frontend. The endpoints work and nothing in the UI reaches them, which is the
-same state the RBAC API was in before 2026-07-31. Also no admin-facing "reset this user's 2FA" action,
-which support will want the first time someone loses a phone with no recovery codes left.
+same state the RBAC API was in before 2026-07-31.
 
 ---
 
