@@ -547,14 +547,36 @@ the same `--legacy-peer-deps` install.
 The 2026-07-31 auth/RBAC rebuild closed the four original blockers except PM-2 and PM-4. What is left,
 in order:
 
-1. **PM-11** (tests) — the auth surface is now large and verified only by a shell script
+1. **PM-29** (ESLint) — small, and it is why no linting protects anything below it
 2. **PM-26** (rate limiting) + **PM-2** (`secure` cookies) — both required before public exposure
-3. **PM-27** (email) — invitations and password reset are not self-service without it
-4. **PM-28** (verify Google SSO end to end against a real OAuth client)
-5. **PM-5** (row-level scoping) — still required before any partner-owned data exists
+3. **PM-5** (row-level scoping) — required before any partner-owned data exists; this is also
+   Build Sequence step 2 in [`MARKETPLACE_DOMAIN_PLAN.md`](./MARKETPLACE_DOMAIN_PLAN.md)
+4. **PM-27** (email) — invitations and password reset are not self-service without it
+5. **PM-28** (verify Google SSO end to end against a real OAuth client)
 6. **PM-4** (seed credentials), **PM-10** (logging), **PM-19** (error boundaries)
 7. **PM-25** (React/Next peer mismatch) — a framework-version decision
-8. Everything else as the surrounding code is worked on
+8. **PM-11** (tests) — **deliberately last**, see below
+9. Everything else as the surrounding code is worked on
+
+### Why PM-11 is last, and what that costs
+
+**Owner's decision, 2026-08-03:** tests are deferred to the end of the queue, because writing them is
+slow and running them is slow, and that cost lands on every task in between.
+
+This reverses the earlier recommendation, and the risk it was protecting against is real, so it is
+recorded rather than quietly dropped:
+
+- **Row-level scoping (PM-5) will ship without a regression net.** A scoping bug does not raise an
+  error — it returns another partner's rows. Nothing in the current toolchain would notice.
+- **`tsc --noEmit` and `next build` are the only automatic checks**, and until PM-29 is fixed there is
+  no linting at all. Neither checks behaviour.
+- **The verification that does exist is manual** — a shell script over the auth surface and a
+  Chrome-DevTools-Protocol harness over the UI. Both must be re-run by hand and neither runs in CI.
+
+**Mitigation while PM-11 waits:** every change to a scoping or permission path gets its verification
+recorded in [`../DAILY_CHANGES.md`](../DAILY_CHANGES.md) — what was run, against which role, and what
+it returned. That is not a substitute for a test suite; it is a paper trail so the eventual suite
+knows what it must reproduce.
 
 ## Related Documentation
 

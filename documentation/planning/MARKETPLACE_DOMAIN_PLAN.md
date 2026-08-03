@@ -270,11 +270,21 @@ Each step ends with something demonstrable. **Step 2 before any partner-owned ta
 | 3 | `customers` — the first partner-owned table, and the proof that scoping works | Smallest possible thing to validate step 2 against |
 | 4 | Catalog: `catalog_categories`, `products`, tier-priced read endpoints | Partners need something to quote |
 | 5 | `quotes` + `quote_items` + the full state machine | The core object |
-| 6 | Partner-facing UI, plus the RBAC admin UI still outstanding | Currently everything is curl-only |
+| 6 | Partner-facing UI — the RBAC admin half is **done** (2026-08-03) | Partner side is still unbuilt |
 | 7 | `orders`, then QMAS-backed catalog via `source`/`external_ref` | Deferrable without reshaping anything |
 
-**Automated tests (PM-11) should land alongside step 1**, not after step 7. Scoping is exactly the
-kind of rule that a shell script will not protect and a silent regression will leak data.
+### Automated tests come after step 7, not alongside step 1
+
+**Owner's decision, 2026-08-03**, overriding this document's earlier recommendation. Tests are slow to
+write and slow to run, and that cost would be paid on every step above.
+
+The reason the original recommendation existed still holds, so build steps 2 and 3 with it in mind:
+scoping is exactly the kind of rule a shell script will not protect, and a silent regression leaks one
+partner's rows to another rather than raising an error. Until PM-11 lands, step 3 (`customers`) is the
+**only** proof that step 2 works — so verify it by hand against at least two partner organisations and
+one staff account, and record what was run in [`../DAILY_CHANGES.md`](../DAILY_CHANGES.md).
+
+See [`TECH_DEBT.md`](./TECH_DEBT.md) § Suggested Order of Work for the full cost and the mitigation.
 
 ---
 

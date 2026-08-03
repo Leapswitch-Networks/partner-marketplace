@@ -8,6 +8,33 @@
 
 ---
 
+## August 3, 2026 — Users & Roles committed; tests moved to the back of the queue
+
+- **The Users and Roles work is in version control, as two commits rather than one.** It had been
+  finished and documented since July 31 but never committed, which meant three days of the project's
+  largest frontend change existing only in one working tree. Split so each half is reviewable on its
+  own: `feat(ui)` for the reusable index-page component set (9 new files plus the `Input` changes the
+  filter bars needed), and `feat(admin)` for the two modules, the permission gating and the `UserInfo`
+  deletion. `tsc --noEmit` exits 0 on the committed tree. Not pushed — `origin/main` is still behind.
+- **Automated tests (PM-11) are now deliberately the *last* item in the queue, not the first.** The
+  owner's reasoning: tests are slow to write and slow to run, and that cost would be paid on every
+  task ahead of them. This reverses what both `TECH_DEBT.md` and `MARKETPLACE_DOMAIN_PLAN.md`
+  recommended, so both were updated in the same change — leaving them saying "tests first" would have
+  had the next session arguing with the decision instead of acting on it.
+- **What that costs is written down rather than left implicit.** Row-level scoping (PM-5) will ship
+  with no regression net, and a scoping bug does not raise an error — it quietly returns another
+  partner's rows. `tsc` and `next build` are the only automatic checks, and until PM-29 is fixed there
+  is no linting at all; none of the three check behaviour. The agreed mitigation is that every change
+  to a scoping or permission path records its manual verification here — what was run, against which
+  role, and what came back — so the eventual suite knows what it has to reproduce.
+- **The revised order:** PM-29 (ESLint) → PM-26 + PM-2 → PM-5 → PM-27 → PM-28 → PM-4/10/19 → PM-25 →
+  PM-11. PM-5 moved up because it is the same work as Build Sequence step 2 and blocks the first
+  partner-owned table.
+- **One correction to the domain plan while it was open:** step 6 claimed the RBAC admin UI was still
+  outstanding. Its admin half shipped on July 31; only the partner-facing side remains.
+
+---
+
 ## July 31, 2026 — Users & Roles modules
 
 - **The Users and Roles modules are now usable after login, instead of only by `curl`.** The RBAC
