@@ -39,6 +39,7 @@ from app.schemas.auth import (
     UpdateProfileRequest,
     ConfirmPasswordRequest,
     RecoveryCodesResponse,
+    SessionResponse,
     TwoFactorChallengeRequest,
     TwoFactorConfirmRequest,
     TwoFactorEnrolmentResponse,
@@ -261,7 +262,7 @@ def login(
     # authenticated when a second factor is enabled — so no session is created and
     # no cookie is set. The caller gets a short-lived challenge token that
     # `get_current_user` will not accept, and must exchange it below.
-    if user.has_two_factor_enabled:
+    if user.two_factor_enabled:
         activity_service.record(
             db,
             log_name="auth",
@@ -468,6 +469,110 @@ def change_password(
     return MessageResponse(message="Password updated")
 
 
+# --- Active sessions ---------------------------------------------------------
+#
+# Lets a user see where they are signed in and end a session they do not
+# recognise. LeapDesk has no equivalent — Laravel's session table makes it
+# possible but Fortify does not expose it — so this is parity-plus rather than a
+# port.
+#
+# **No password confirmation on any of these, deliberately.** Signing a device out
+# is a defensive act; putting friction in front of "I don't recognise this login"
+# makes people give up on it. The gate exists for *weakening* security (disabling
+# 2FA), not for strengthening it.
+
+
+@router.get("/me/sessions", response_model=list[SessionResponse])
+def list_sessions(
+    current_user: User = Depends(get_current_user),
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+) -> list[SessionResponse]:
+    """Every live session for the caller, newest activity first.
+
+    `is_current` marks the one making this request, so the UI can label it and
+    avoid offering a "sign out" that would log the user out of the page they are
+    looking at without explaining why.
+    """
+    return [
+        SessionResponse(
+            id=s.id,
+            ip_address=s.ip_address,
+            user_agent=s.user_agent,
+            created_at=s.created_at,
+            last_seen_at=s.last_seen_at,
+            is_current=(s.id == session.id),
+        )
+        for s in session_service.list_active(db, current_user.id)
+    ]
+
+
+@router.delete("/me/sessions/{session_id}", response_model=MessageResponse)
+def revoke_session(
+    session_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> MessageResponse:
+    """End one of the caller's own sessions.
+
+    `get_active` matches on both session id and user id, so a caller cannot revoke
+    somebody else's session by guessing an id — it returns `None` and this answers
+    `404`, which is also the right answer for an id that never existed. Saying
+    "that session belongs to another user" would confirm the id is real.
+    """
+    target = session_service.get_active(db, session_id, current_user.id)
+    if target is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "That session was not found.")
+
+    session_service.revoke(db, target, reason="logout")
+    activity_service.record(
+        db,
+        log_name="auth",
+        description=f"{current_user.full_name} signed out a session from {target.ip_address or 'an unknown address'}",
+        event="session_revoked",
+        subject_type="User",
+        subject_id=current_user.id,
+        actor=current_user,
+        properties={"session_id": target.id, "ip": target.ip_address},
+    )
+    return MessageResponse(message="That device has been signed out.")
+
+
+@router.post("/me/sessions/revoke-others", response_model=MessageResponse)
+def revoke_other_sessions(
+    current_user: User = Depends(get_current_user),
+    session: UserSession = Depends(get_current_session),
+    db: Session = Depends(get_db),
+) -> MessageResponse:
+    """End every session except this one — the "sign out everywhere else" button.
+
+    Spares the current session for the same reason a password change does: the
+    person doing this is here, and logging them out of the action they just took
+    would punish the wrong party.
+    """
+    count = session_service.revoke_all_except(
+        db, current_user.id, keep_session_id=session.id, reason="logout"
+    )
+    if count:
+        activity_service.record(
+            db,
+            log_name="auth",
+            description=f"{current_user.full_name} signed out {count} other session(s)",
+            event="sessions_revoked",
+            subject_type="User",
+            subject_id=current_user.id,
+            actor=current_user,
+            properties={"count": count},
+        )
+    return MessageResponse(
+        message=(
+            f"{count} other session{'s' if count != 1 else ''} signed out."
+            if count
+            else "There were no other sessions."
+        )
+    )
+
+
 # --- Two-factor authentication (PM-34) --------------------------------------
 #
 # Port of Fortify's `twoFactorAuthentication(['confirm' => true,
@@ -502,7 +607,7 @@ def two_factor_challenge(
     user = db.get(User, user_id)
     # Re-checked here, not trusted from the token: an account can be suspended in
     # the minutes between the password step and the code being entered.
-    if user is None or user.status != "ACTIVE" or not user.has_two_factor_enabled:
+    if user is None or user.status != "ACTIVE" or not user.two_factor_enabled:
         raise invalid
 
     ip = get_client_ip(request)
@@ -579,7 +684,7 @@ def two_factor_status(
     current_user: User = Depends(get_current_user),
 ) -> TwoFactorStatusResponse:
     return TwoFactorStatusResponse(
-        enabled=current_user.has_two_factor_enabled,
+        enabled=current_user.two_factor_enabled,
         pending_confirmation=(
             current_user.two_factor_secret is not None
             and current_user.two_factor_confirmed_at is None
@@ -673,7 +778,7 @@ def regenerate_recovery_codes(
 ) -> RecoveryCodesResponse:
     """Issue a fresh set. Gated too — regenerating invalidates the codes the real
     owner may be relying on to get back in."""
-    if not current_user.has_two_factor_enabled:
+    if not current_user.two_factor_enabled:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST, "Two-factor authentication is not enabled."
         )

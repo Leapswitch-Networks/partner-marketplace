@@ -99,7 +99,7 @@ def begin_enrolment(db: Session, user: User) -> tuple[str, str, list[str]]:
     Refuses when 2FA is already confirmed: silently replacing a working secret
     would be a way to knock out someone's second factor with one request.
     """
-    if user.has_two_factor_enabled:
+    if user.two_factor_enabled:
         raise ValueError("Two-factor authentication is already enabled.")
 
     secret = pyotp.random_base32()

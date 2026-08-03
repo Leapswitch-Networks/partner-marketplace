@@ -190,8 +190,12 @@ class User(Base):
         return self.status == "ACTIVE"
 
     @property
-    def has_two_factor_enabled(self) -> bool:
+    def two_factor_enabled(self) -> bool:
         """True only when 2FA is enrolled **and confirmed**.
+
+        Named without a `has_` prefix, unlike its neighbours, so the API schemas
+        can serialise it directly by field name. One name for one concept beats a
+        second alias property that drifts.
 
         The confirmation half is load-bearing. Treating a stored secret as
         "enabled" would lock out anyone who scanned the QR badly and never

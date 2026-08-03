@@ -100,6 +100,11 @@ class UserListItem(BaseModel):
     last_login_at: datetime | None
     created_at: datetime
     roles: list[RoleSummary]
+    #: 2FA enrolled AND confirmed. On the LIST item, not just the detail response:
+    #: the Users table offers "Reset 2FA" per row, and an action whose visibility
+    #: depends on a field the row does not carry would either never appear or
+    #: appear everywhere. A boolean only — never the secret.
+    two_factor_enabled: bool = False
 
     can_edit: bool = False
     can_delete: bool = False

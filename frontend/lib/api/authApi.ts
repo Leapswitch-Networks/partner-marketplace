@@ -25,6 +25,17 @@ export function isTwoFactorRequired(result: LoginResult): result is TwoFactorReq
   return result.two_factor_required === true;
 }
 
+export interface SessionInfo {
+  id: string;
+  ip_address: string | null;
+  /** Untrusted self-reported text. Display only — never drive a decision on it. */
+  user_agent: string | null;
+  created_at: string;
+  last_seen_at: string;
+  /** The session making the request. The UI labels it instead of offering sign-out. */
+  is_current: boolean;
+}
+
 export interface TwoFactorStatus {
   enabled: boolean;
   /** A secret exists but was never confirmed. 2FA is NOT enforced in this state. */
@@ -86,6 +97,17 @@ export const authApi = {
   /** Re-prove the password. Required before enabling or disabling 2FA. */
   confirmPassword: (data: { password: string }) =>
     axiosInstance.post<{ message: string }>("/api/auth/me/confirm-password", data),
+
+  /** The caller's own live sessions, newest activity first. */
+  listSessions: () => axiosInstance.get<SessionInfo[]>("/api/auth/me/sessions"),
+
+  /** End one of your own sessions. 404 if the id is not yours. */
+  revokeSession: (id: string) =>
+    axiosInstance.delete<{ message: string }>(`/api/auth/me/sessions/${id}`),
+
+  /** End every session except the current one. */
+  revokeOtherSessions: () =>
+    axiosInstance.post<{ message: string }>("/api/auth/me/sessions/revoke-others"),
 
   twoFactorStatus: () =>
     axiosInstance.get<TwoFactorStatus>("/api/auth/me/two-factor"),

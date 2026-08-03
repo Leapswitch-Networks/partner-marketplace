@@ -224,6 +224,24 @@ class TwoFactorStatusResponse(BaseModel):
     recovery_codes_remaining: int
 
 
+class SessionResponse(BaseModel):
+    """One live sign-in, for the caller's own "where am I signed in" list.
+
+    `user_agent` is untrusted, self-reported text of unbounded length — truncated
+    on write and rendered as text, never interpreted. It is shown so a person can
+    recognise their own devices, and must never drive a decision.
+    """
+
+    id: str
+    ip_address: str | None
+    user_agent: str | None
+    created_at: datetime
+    last_seen_at: datetime
+    #: True for the session making this request, so the UI can label it rather
+    #: than offering a sign-out that logs the user out of the page they are on.
+    is_current: bool
+
+
 class VerifyEmailRequest(BaseModel):
     token: str = Field(min_length=8)
 

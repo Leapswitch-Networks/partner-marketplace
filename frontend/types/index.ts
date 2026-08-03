@@ -33,6 +33,8 @@ export interface CurrentUser {
   auth_provider: AuthProvider;
   timezone_preference: string;
   email_verified_at: string | null;
+  /** 2FA enrolled AND confirmed. A boolean only — never the secret. */
+  two_factor_enabled: boolean;
   last_login_at: string | null;
   created_at: string;
   roles: RoleSummary[];
@@ -53,6 +55,8 @@ export interface ManagedUser {
   account_type: AccountType;
   status: UserStatus;
   auth_provider: AuthProvider;
+  /** 2FA enrolled AND confirmed. Drives the per-row "Reset 2FA" action. */
+  two_factor_enabled: boolean;
   last_login_at: string | null;
   created_at: string;
   roles: RoleSummary[];

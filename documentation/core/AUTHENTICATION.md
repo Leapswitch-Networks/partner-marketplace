@@ -164,8 +164,33 @@ locked out or recovering from a compromise and may be on a borrowed device, so n
 - Session rows are never purged automatically. `session_service.purge_expired()` exists and nothing
   calls it, because there is no scheduler.
 
-`user_sessions` also records `ip_address` and `user_agent` per sign-in, which is what a future "active
-sessions" screen would list. `session_service.list_active()` is already written for it.
+### Active sessions (added 2026-08-03)
+
+`user_sessions` records `ip_address` and `user_agent` per sign-in, and the user can now see and end them:
+
+| Method | Path | Effect |
+|---|---|---|
+| `GET` | `/api/auth/me/sessions` | The caller's live sessions, newest activity first, with `is_current` |
+| `DELETE` | `/api/auth/me/sessions/{id}` | End one. **`404`, not `403`,** for an id that is not yours — `403` would confirm the id exists |
+| `POST` | `/api/auth/me/sessions/revoke-others` | "Sign out everywhere else", sparing the current session |
+
+**LeapDesk has no equivalent** — Laravel's session table makes it possible but Fortify does not expose it —
+so this is parity-plus rather than a port.
+
+**No password confirmation on any of these, deliberately.** Signing a device out is a defensive act, and
+friction in front of "I don't recognise this login" is how people give up on acting on it. The
+confirmation gate exists for *weakening* security (disabling 2FA), not for strengthening it.
+
+The UI shows a friendly device name derived from the user-agent — which is **untrusted self-reported text**,
+rendered as text and never used for a decision — and offers no sign-out on the current session, since that
+would log the user out of the page they are reading with no explanation.
+
+### Admin 2FA reset
+
+`POST /api/users/{id}/reset-two-factor`, surfaced as a per-row action in the Users table and offered only
+where `two_factor_enabled` is true. Clears the enrolment **and revokes every session** — if the phone was
+stolen rather than lost, clearing only the secret would strip the second factor and leave the attacker
+signed in.
 
 ---
 

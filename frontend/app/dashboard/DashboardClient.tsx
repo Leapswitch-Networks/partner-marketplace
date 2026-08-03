@@ -14,6 +14,7 @@ import SelectQuestionType from "@/components/admin/SelectQuestionType";
 import AddQuestionForm from "@/components/admin/AddQuestionForm";
 import ProfileForm from "@/components/admin/ProfileForm";
 import TwoFactorSettings from "@/components/auth/TwoFactorSettings";
+import ActiveSessions from "@/components/auth/ActiveSessions";
 import UsersModule from "@/components/admin/UsersModule";
 import RolesModule from "@/components/admin/RolesModule";
 import ActivityModule from "@/components/admin/ActivityModule";
@@ -203,6 +204,10 @@ export default function DashboardClient() {
                   bother. */}
               <div className="mt-8 border-t border-gray-100 pt-6 dark:border-gray-800">
                 <TwoFactorSettings />
+              </div>
+
+              <div className="mt-8 border-t border-gray-100 pt-6 dark:border-gray-800">
+                <ActiveSessions />
               </div>
             </div>
           </div>

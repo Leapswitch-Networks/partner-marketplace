@@ -75,6 +75,17 @@ export const adminApi = {
   unlockUser: (id: string) =>
     axiosInstance.post<ManagedUser>(`/api/users/${id}/unlock`),
 
+  /**
+   * Clear a user's 2FA enrolment so they can sign in and set it up again.
+   *
+   * The support path for a lost phone with no recovery codes left. Also revokes
+   * every session the account has, server-side — if the phone was stolen rather
+   * than lost, clearing only the secret would strip the second factor and leave
+   * the attacker signed in.
+   */
+  resetTwoFactor: (id: string) =>
+    axiosInstance.post<ManagedUser>(`/api/users/${id}/reset-two-factor`),
+
   bulkDelete: (user_ids: string[]) =>
     axiosInstance.post<BulkActionResult>("/api/users/bulk-delete", { user_ids }),
 

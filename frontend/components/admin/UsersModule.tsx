@@ -170,6 +170,19 @@ export default function UsersModule({ initialModal }: { initialModal?: ModalMode
   const handleUnlock = (user: ManagedUser) =>
     runAction(user.id, () => adminApi.unlockUser(user.id), `${user.full_name} unlocked.`);
 
+  /**
+   * Clear a user's 2FA — the support path for a lost phone with no recovery codes
+   * left. The message says both consequences out loud, because this removes a
+   * control the account holder chose *and* signs out every device they have; a
+   * bare "done" would understate it.
+   */
+  const handleResetTwoFactor = (user: ManagedUser) =>
+    runAction(
+      user.id,
+      () => adminApi.resetTwoFactor(user.id),
+      `Two-factor cleared for ${user.full_name}. They have been signed out everywhere and can set it up again.`
+    );
+
   const handleBulk = async (kind: "delete" | UserStatus) => {
     const ids = Array.from(selected);
     if (ids.length === 0) return;
@@ -238,6 +251,16 @@ export default function UsersModule({ initialModal }: { initialModal?: ModalMode
                   disabled: busy === row.id,
                   hint: "Clears failed sign-in attempts",
                   onSelect: () => handleUnlock(row),
+                },
+                {
+                  label: "Reset 2FA",
+                  // Only offered when the account actually has it — otherwise
+                  // every row grows an action that can only ever return an error.
+                  visible: row.can_edit && Boolean(row.two_factor_enabled),
+                  disabled: busy === row.id,
+                  destructive: true,
+                  hint: "Clears their authenticator and signs out every device",
+                  onSelect: () => handleResetTwoFactor(row),
                 },
                 {
                   label: "Delete",

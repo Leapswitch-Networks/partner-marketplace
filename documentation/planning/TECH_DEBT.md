@@ -65,7 +65,7 @@ since 2026-07-31 — only the documentation was wrong, and wrong in a way that b
 | [PM-27](#pm-27--no-email-transport-so-invitations-and-resets-are-manual--resolved) | ✅ | ~~No email transport — invitations/resets are manual~~ | Infra |
 | [PM-28](#pm-28--google-sso-is-unverified-against-real-google) | 🟠 | Google SSO implemented but never run against Google | Auth |
 | [PM-29](#pm-29--eslint-cannot-run-v6-resolves-against-a-v9-flat-config--resolved) | ✅ | ~~ESLint cannot run — v6 binary vs v9 flat config~~ | Quality |
-| [PM-30](#pm-30--17-react-hooks-errors-from-rules-that-arrive-with-the-wrong-config-version) | 🟡 | **19** react-hooks errors, from `eslint-config-next` 16 on Next 14 | Quality |
+| [PM-30](#pm-30--17-react-hooks-errors-from-rules-that-arrive-with-the-wrong-config-version) | 🟡 | **20** react-hooks errors, from `eslint-config-next` 16 on Next 14 | Quality |
 | [PM-31](#pm-31--refresh-reissues-rather-than-rotates-no-token-reuse-detection) | 🟡 | `/refresh` reissues rather than rotates — no reuse detection | Auth |
 | [PM-32](#pm-32--no-audit-log-leapdesk-has-one--recording-done-read-surface-pending) | ✅ | ~~No audit log~~ | Quality |
 | [PM-33](#pm-33--no-security-response-headers--backend-done-frontend-pending) | ✅ | ~~No security response headers~~ | Infra |
@@ -852,7 +852,7 @@ genuine defects rather than style opinions:
 
 | Count | Rule |
 |---|---|
-| **17** | `react-hooks/set-state-in-effect` |
+| **18** | `react-hooks/set-state-in-effect` |
 | 1 | `react-hooks/immutability` (`Sidebar.tsx`) |
 | 1 | `react-hooks/preserve-manual-memoization` (`Sidebar.tsx`) |
 
@@ -871,6 +871,9 @@ blanket-disable the rules — the `static-components` findings above prove this 
 defects in this codebase.
 
 #### The count grows with every new client component, and that is the argument for settling PM-25
+
+**2026-08-03, later still:** 19 → **20**. `ActiveSessions.tsx`, again fetch-on-mount. Four of the last
+five components added today have contributed one each, which is the pattern rather than a coincidence.
 
 **2026-08-03, later:** 18 → **19**. `ActivityModule.tsx` adds one, again a fetch-on-mount. A second new
 error in that file **was** removed rather than absorbed: it reset the page number from an effect reacting to
