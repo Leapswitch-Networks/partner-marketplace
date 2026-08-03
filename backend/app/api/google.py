@@ -20,7 +20,7 @@ from app.api.auth import set_auth_cookies
 from app.core.config import settings
 from app.core.dependencies import get_client_ip, get_db
 from app.schemas.auth import GoogleAuthUrlResponse
-from app.services import auth_service, google_service, invitation_service
+from app.services import auth_service, google_service, invitation_service, session_service
 
 router = APIRouter(prefix="/auth/google", tags=["auth"])
 
@@ -85,8 +85,18 @@ def callback(
 
         auth_service.record_login(db, user, get_client_ip(request))
 
+        # An SSO sign-in is a sign-in: it gets a session row like any other, so
+        # logout and password-change eviction apply to it identically. Omitting
+        # this would leave Google users with unrevocable tokens.
+        session = session_service.create(
+            db,
+            user,
+            ip=get_client_ip(request),
+            user_agent=request.headers.get("User-Agent"),
+        )
+
         response = _frontend_redirect("/dashboard")
-        set_auth_cookies(response, user.id)
+        set_auth_cookies(response, user.id, session.id)
         return response
 
     except HTTPException as exc:

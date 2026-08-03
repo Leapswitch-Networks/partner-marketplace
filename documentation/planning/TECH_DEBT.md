@@ -8,6 +8,12 @@
 **Last audited:** 2026-07-31, after the auth/RBAC rebuild.
 **Since then:** PM-25 added 2026-07-31 (containerisation); PM-26/27/28 added 2026-07-31
 during the auth/RBAC rebuild, which also closed PM-1, 3, 6, 7, 9, 14, 15, 16, 17 and 18.
+**2026-08-03 (auth/RBAC audit against LeapDesk):** the auth foundation was audited line by line against
+LeapDesk (Laravel 12 + Spatie permission + Fortify). **Enforcement coverage is complete** — every route
+is permission-gated and every ungated one is intentionally public — and every UserPolicy/RolePolicy
+protection rule is already ported. The gap was **revocation**: closed by adding `user_sessions`.
+PM-31/32/33 added from that audit.
+
 **2026-08-03:** PM-29 closed; PM-30 added — the 17 react-hooks errors that closing PM-29 revealed.
 PM-2 closed (its clearing half was genuinely still open). PM-4 confirmed **already** closed in code
 since 2026-07-31 — only the documentation was wrong, and wrong in a way that broke the setup command.
@@ -60,6 +66,9 @@ since 2026-07-31 — only the documentation was wrong, and wrong in a way that b
 | [PM-28](#pm-28--google-sso-is-unverified-against-real-google) | 🟠 | Google SSO implemented but never run against Google | Auth |
 | [PM-29](#pm-29--eslint-cannot-run-v6-resolves-against-a-v9-flat-config--resolved) | ✅ | ~~ESLint cannot run — v6 binary vs v9 flat config~~ | Quality |
 | [PM-30](#pm-30--17-react-hooks-errors-from-rules-that-arrive-with-the-wrong-config-version) | 🟡 | 17 react-hooks errors, from `eslint-config-next` 16 on Next 14 | Quality |
+| [PM-31](#pm-31--refresh-reissues-rather-than-rotates-no-token-reuse-detection) | 🟡 | `/refresh` reissues rather than rotates — no reuse detection | Auth |
+| [PM-32](#pm-32--no-audit-log-leapdesk-has-one) | 🟠 | No audit log — LeapDesk has `activity_log` | Quality |
+| [PM-33](#pm-33--no-security-response-headers) | 🟠 | No security response headers | Infra |
 
 ---
 
@@ -857,6 +866,79 @@ because both defeat the React Compiler's assumptions.
 **Fix:** settle PM-25 first, then re-run and fix whatever the chosen config still reports. Do **not**
 blanket-disable the rules — the `static-components` findings above prove this rule set catches real
 defects in this codebase.
+
+---
+
+### PM-31 — `/refresh` reissues rather than rotates: no token reuse detection
+
+**Where:** `backend/app/api/auth.py` `refresh()`
+
+Sessions (2026-08-03) made revocation possible, and `/refresh` now refuses a revoked session. What it
+does **not** do is invalidate the specific refresh token it just superseded: the session id is carried
+over, so the previous token stays decodable and keeps working until its own 7-day expiry while the
+session lives.
+
+Consequence: a refresh token captured at any point remains usable for as long as that session is alive,
+even after the legitimate client has refreshed several times. The blast radius is bounded — revoking the
+session kills every token naming it at once, and logout/password-change/admin-suspend all do that — but
+a stolen token is not individually killable.
+
+**Fix:** give each refresh token a `jti`, store the current one on the session row, and on refresh (a)
+reject a `jti` that is not the current one and (b) treat that rejection as evidence of theft by revoking
+the whole session. That last part is the point: presenting a superseded token means either the client
+replayed it or an attacker has it, and neither should continue.
+
+**Not urgent** because the session check bounds it, but it is the difference between "revocable" and
+"rotating", and the standard expectation for refresh tokens is rotation with reuse detection.
+
+---
+
+### PM-32 — No audit log; LeapDesk has one
+
+**Where:** whole backend
+
+`users.created_by` / `updated_by` record *who last touched a row* and nothing else. There is no history,
+so none of these can be answered: who granted this user the Admin role, and when? Who deactivated this
+account? How many failed logins preceded that lockout? Who deleted the role that used to exist?
+
+LeapDesk has `spatie/laravel-activitylog` with two layers worth porting:
+
+- **`LogsAllActivity`** — a trait wrapping Spatie's, logging dirty fields only, rewriting an
+  `updated` event to `status_changed` when the only change is a status flip, and stamping a `source`
+  discriminator (`web` / `seeder` / `tinker` / `command` / `job`) plus the OS user and host so a change
+  made from the CLI is attributable instead of showing a blank actor.
+- **`LogAuthEvents`** — a listener recording `login`, `logout` and **`failed_login`** with IP and
+  user-agent.
+
+Its table is `activity_log`: `log_name`, `description`, `subject_type`/`subject_id`,
+`causer_type`/`causer_id`, `properties` (json), `event`, `batch_uuid`, timestamps.
+
+**Fix:** an `activity_log` table using those exact column names (the 2026-08-03 alignment decision), a
+service that records a diff, and calls on the role-grant, status-change, delete and auth paths.
+Structured logging (PM-10) is *not* a substitute: those lines go to stdout, are not queryable, and are
+lost on `docker compose down`.
+
+---
+
+### PM-33 — No security response headers
+
+**Where:** `backend/app/main.py` — no header middleware
+
+The API sends none of the standard hardening headers. LeapDesk registers a `SecurityHeaders` middleware
+globally that sets `X-Frame-Options: SAMEORIGIN`, `X-Content-Type-Options: nosniff`,
+`X-XSS-Protection: 1; mode=block`, `Referrer-Policy: strict-origin-when-cross-origin`,
+`Permissions-Policy` disabling camera/microphone/geolocation/payment, and HSTS in production only.
+
+Worth being precise about what this does and does not buy, because these headers are often
+cargo-culted: the API returns JSON, so `X-Frame-Options` and `X-XSS-Protection` matter far less here
+than on LeapDesk's HTML responses — the ones that genuinely count for this service are `nosniff`,
+`Referrer-Policy` (so a URL with a token in it is not leaked in a `Referer`), and **HSTS**, which is
+what stops a downgrade attack from ever seeing the auth cookie. The frontend is a separate Next.js app
+and needs its own headers via `next.config.mjs`; a header on the API does not protect a page the API
+did not serve.
+
+**Fix:** a small middleware mirroring LeapDesk's, HSTS gated on an environment flag rather than on
+`COOKIE_SECURE`, plus the equivalent `headers()` block in `next.config.mjs`.
 
 ---
 

@@ -77,29 +77,50 @@ def generate_token(length: int = 64) -> str:
 # --- JWT --------------------------------------------------------------------
 
 
-def _create_token(subject: Any, expire_delta: timedelta, token_type: str) -> str:
-    expire = datetime.now(timezone.utc) + expire_delta
+def _create_token(
+    subject: Any, expire_delta: timedelta, token_type: str, session_id: str
+) -> str:
+    """Build a signed token.
+
+    Claims, and why each is here:
+
+      ``sub``   the user id.
+      ``type``  ``access`` or ``refresh``. Asserted on decode, which is what stops
+                a seven-day refresh token being replayed as an hour-long access
+                token.
+      ``sid``   the `user_sessions` row backing this token. **This is what makes
+                revocation possible at all** — a JWT cannot be un-issued, so the
+                guard checks the named session is still live. Without it, logout
+                could do nothing but clear a cookie.
+      ``iat``   issued-at. Not used for a decision today; present because
+                debugging "which token is this?" without it means guessing.
+    """
+    now = datetime.now(timezone.utc)
     payload = {
         "sub": str(subject),
-        "exp": expire,
+        "exp": now + expire_delta,
+        "iat": now,
         "type": token_type,
+        "sid": session_id,
     }
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
-def create_access_token(subject: Any) -> str:
+def create_access_token(subject: Any, session_id: str) -> str:
     return _create_token(
         subject,
         timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
         "access",
+        session_id,
     )
 
 
-def create_refresh_token(subject: Any) -> str:
+def create_refresh_token(subject: Any, session_id: str) -> str:
     return _create_token(
         subject,
         timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
         "refresh",
+        session_id,
     )
 
 

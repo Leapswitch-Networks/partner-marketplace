@@ -1,6 +1,6 @@
 export type UserStatus = "INACTIVE" | "ACTIVE" | "SUSPENDED";
 export type AccountType = "staff" | "partner";
-export type AuthProvider = "credentials" | "google";
+export type AuthProvider = "password" | "google";
 
 export interface RoleSummary {
   id: number;
@@ -25,7 +25,8 @@ export interface CurrentUser {
   avatar_url: string | null;
   designation: string | null;
   employee_id: string | null;
-  phone: string | null;
+  personal_mobile_number: string | null;
+  personal_email: string | null;
   company_name: string | null;
   account_type: AccountType;
   status: UserStatus;

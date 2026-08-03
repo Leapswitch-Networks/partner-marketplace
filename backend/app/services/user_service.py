@@ -25,6 +25,7 @@ from app.core.security import hash_password
 from app.models.role import Role
 from app.models.user import User
 from app.schemas.rbac import CreateUserRequest, UpdateUserRequest
+from app.services import session_service
 from app.services.auth_service import email_exists, normalise_email
 from app.services.rbac_service import resolve_roles
 
@@ -162,14 +163,14 @@ def create_user(db: Session, data: CreateUserRequest, actor: User) -> User:
     user = User(
         email=email,
         password=hash_password(data.password) if data.password else None,
-        auth_provider="credentials" if data.password else "google",
+        auth_provider="password" if data.password else "google",
         first_name=data.first_name.strip(),
         last_name=data.last_name.strip(),
         account_type=data.account_type,
         status=data.status,
         designation=(data.designation or "").strip() or None,
         employee_id=(data.employee_id or "").strip() or None,
-        phone=(data.phone or "").strip() or None,
+        personal_mobile_number=(data.personal_mobile_number or "").strip() or None,
         company_name=(data.company_name or "").strip() or None,
         timezone_preference=data.timezone_preference,
         # An admin creating an account vouches for the address.
@@ -243,14 +244,14 @@ def update_user(db: Session, user_id: str, data: UpdateUserRequest, actor: User)
     if updates.get("password"):
         target.password = hash_password(updates["password"])
         if target.auth_provider == "google" and target.google_id is None:
-            target.auth_provider = "credentials"
+            target.auth_provider = "password"
 
     # --- plain fields ---
     for field in ("first_name", "last_name"):
         if updates.get(field):
             setattr(target, field, updates[field].strip())
 
-    for field in ("designation", "employee_id", "phone", "company_name"):
+    for field in ("designation", "employee_id", "personal_mobile_number", "personal_email", "company_name"):
         if field in updates:
             setattr(target, field, (updates[field] or "").strip() or None)
 
@@ -326,6 +327,16 @@ def toggle_status(db: Session, user_id: str, actor: User) -> User:
     target.updated_by = actor.id
     db.commit()
     db.refresh(target)
+
+    # Deactivating must end their live sessions, not merely stop new sign-ins.
+    # `get_current_user` already re-reads status on every request, so access is
+    # refused immediately either way — but leaving the session rows live would
+    # mean that re-activating the account silently restores whatever tokens were
+    # outstanding, including any an attacker holds. Revoking makes deactivation
+    # a real eviction.
+    if target.status != "ACTIVE":
+        session_service.revoke_all(db, target.id, reason="revoked_by_admin")
+
     return target
 
 
@@ -371,6 +382,7 @@ def bulk_set_status(
 ) -> tuple[int, int, list[str]]:
     targets = _load_bulk_targets(db, user_ids)
     skipped: list[str] = []
+    deactivated: list[str] = []
     updated = 0
 
     for target in targets:
@@ -388,9 +400,18 @@ def bulk_set_status(
             target.failed_login_attempts = 0
             target.locked_until = None
         target.updated_by = actor.id
+        deactivated.append(target.id)
         updated += 1
 
     db.commit()
+
+    # Same reasoning as `toggle_status`: a bulk deactivation has to evict, or
+    # re-activating later would silently restore every outstanding token. Done
+    # after the commit so a revocation failure cannot roll back the status change.
+    if new_status != "ACTIVE":
+        for user_id in deactivated:
+            session_service.revoke_all(db, user_id, reason="revoked_by_admin")
+
     skipped.extend(_missing_ids(user_ids, targets))
     return updated, len(skipped), skipped
 

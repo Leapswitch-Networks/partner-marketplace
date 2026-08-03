@@ -114,6 +114,61 @@ Unchanged in shape from before, and still sound:
 
 ---
 
+## Sessions and Revocation
+
+**Added 2026-08-03.** Every token carries a `sid` claim naming a row in `user_sessions`, and the guard
+refuses a token whose session is revoked or expired.
+
+### Why this exists
+
+A JWT cannot be un-issued. Until this table existed, `logout` cleared the browser's cookie and did
+nothing else — a token captured beforehand stayed valid for the rest of its life, **up to an hour for
+access and seven days for refresh**. Three consequences, all real:
+
+- Logging out did not end the session, it just forgot about it.
+- `/refresh` minted a new pair while the old refresh token stayed valid, so a stolen one was a
+  renewable seven-day credential.
+- **Changing your password evicted nobody** — the single action a user takes after a suspected
+  compromise did not remove the attacker.
+
+LeapDesk does not have this problem because Laravel sessions are database rows and deleting the row
+ends the session. This is the same idea adapted to JWT.
+
+### The rules
+
+| Trigger | Scope | `revoked_reason` |
+|---|---|---|
+| Logout | that session only | `logout` |
+| Password change | every **other** session | `password_change` |
+| Password reset completed | **every** session | `password_reset` |
+| Admin deactivates / suspends (single or bulk) | every session | `revoked_by_admin` |
+
+**Change spares the current session, reset does not**, deliberately. Someone changing their password
+in their own settings is demonstrably holding a live session and should not be thrown out of the tab
+they are working in; the point is to evict everyone else. Someone completing a reset link is usually
+locked out or recovering from a compromise and may be on a borrowed device, so nothing is spared.
+
+### What it costs, and what it still does not do
+
+- **One extra indexed lookup per authenticated request.** That is the price of revocation: any design
+  that can revoke keeps server state somewhere, and the only real choice is where.
+- `last_seen_at` is written at most once every 5 minutes, or every authenticated read would become a
+  write and a polled endpoint like `/me` would churn the row constantly.
+- **`/refresh` reissues rather than rotates.** The session id is carried over, so the previous refresh
+  token remains decodable and usable until its own expiry while the session lives. Making a superseded
+  token individually dead needs per-token state and reuse detection — recorded as **PM-31**, not
+  pretended away. The session check bounds the damage: revoke the session and every token naming it
+  dies at once.
+- **Tokens minted before this change fail closed** — no `sid`, no entry. Accepting a token without one
+  "for compatibility" would have left a permanent bypass of the whole mechanism.
+- Session rows are never purged automatically. `session_service.purge_expired()` exists and nothing
+  calls it, because there is no scheduler.
+
+`user_sessions` also records `ip_address` and `user_agent` per sign-in, which is what a future "active
+sessions" screen would list. `session_service.list_active()` is already written for it.
+
+---
+
 ## Login Throttling
 
 The lockout columns are written now — they were dead before (PM-6/PM-8).

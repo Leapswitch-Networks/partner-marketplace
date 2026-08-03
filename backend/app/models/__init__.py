@@ -27,6 +27,7 @@ from app.models.test import Test
 from app.models.test_session import TestSession
 from app.models.user import User
 from app.models.user_invitation import UserInvitation
+from app.models.user_session import UserSession
 
 __all__ = [
     # Core identity + RBAC
@@ -35,6 +36,7 @@ __all__ = [
     "Permission",
     "PermissionGroup",
     "UserInvitation",
+    "UserSession",
     "user_roles",
     "role_permissions",
     # Inherited test-platform domain (SCAFFOLD_CLEANUP_PLAN § 2)

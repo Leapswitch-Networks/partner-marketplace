@@ -27,6 +27,7 @@ from app.core.permissions import SUPER_ADMIN_ROLES
 from app.core.security import decode_token
 from app.db.session import SessionLocal
 from app.models.user import User
+from app.services import session_service
 
 
 def get_db() -> Generator[Session, None, None]:
@@ -75,11 +76,17 @@ _CREDENTIALS_EXC = HTTPException(
 )
 
 
-def _decode_access_token(token: str | None) -> str:
-    """Return the subject of a valid ACCESS token, or raise 401.
+def _decode_access_token(token: str | None) -> tuple[str, str]:
+    """Return `(user_id, session_id)` from a valid ACCESS token, or raise 401.
 
     The `type` assertion is what stops a refresh token being replayed as an
     access token — refresh tokens live for days, access tokens for an hour.
+
+    `sid` is required, not optional. Treating a missing `sid` as "fine" would let
+    any token minted before sessions existed bypass revocation entirely, which is
+    exactly the hole this was added to close. Tokens issued before the change
+    therefore fail closed and the user signs in again — a one-off inconvenience
+    in exchange for the guarantee being real.
     """
     if not token:
         raise _CREDENTIALS_EXC
@@ -87,9 +94,17 @@ def _decode_access_token(token: str | None) -> str:
         payload = decode_token(token)
         if payload.get("type") != "access":
             raise _CREDENTIALS_EXC
-        return payload["sub"]
+        return payload["sub"], payload["sid"]
     except (JWTError, KeyError):
         raise _CREDENTIALS_EXC
+
+
+#: Distinct from the generic 401 so the client can tell "your session ended" from
+#: "your token is malformed" and show something honest.
+_SESSION_EXC = HTTPException(
+    status_code=status.HTTP_401_UNAUTHORIZED,
+    detail="Your session has ended. Please sign in again.",
+)
 
 
 def get_current_user(
@@ -98,15 +113,24 @@ def get_current_user(
 ) -> User:
     """The authenticated, ACTIVE user behind the access-token cookie.
 
-    Status is re-read from the database on **every request**, not trusted from
-    the token. Suspending or deactivating an account therefore takes effect
-    immediately, without waiting for the access token to expire.
+    Three checks, none of which trusts the token's own claims about them:
+
+    1. **The user exists.**
+    2. **The session is still live** — not revoked, not expired. This is what
+       makes logout, and eviction on password change, take effect immediately
+       instead of whenever the token happens to expire.
+    3. **The account is ACTIVE**, re-read from the database on every request.
+       Suspending an account therefore kills its live sessions at once.
     """
-    user_id = _decode_access_token(access_token)
+    user_id, session_id = _decode_access_token(access_token)
 
     user = db.get(User, user_id)
     if user is None:
         raise _CREDENTIALS_EXC
+
+    session = session_service.get_active(db, session_id, user_id)
+    if session is None:
+        raise _SESSION_EXC
 
     if user.status != "ACTIVE":
         raise HTTPException(
@@ -118,6 +142,7 @@ def get_current_user(
             ),
         )
 
+    session_service.touch(db, session)
     return user
 
 

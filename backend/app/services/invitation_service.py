@@ -236,7 +236,7 @@ def accept_with_credentials(
         first_name=data.first_name.strip(),
         last_name=data.last_name.strip(),
         account_type="partner",
-        auth_provider="credentials",
+        auth_provider="password",
         status="ACTIVE",
         email_verified_at=datetime.now(timezone.utc),
         created_by=invitation.invited_by,

@@ -26,7 +26,8 @@ export const updateUserProfile = createAsyncThunk(
       first_name?: string;
       last_name?: string;
       designation?: string | null;
-      phone?: string | null;
+      personal_mobile_number?: string | null;
+      personal_email?: string | null;
       company_name?: string | null;
       timezone_preference?: string;
     },

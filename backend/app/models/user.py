@@ -18,7 +18,13 @@ UserStatusEnum = Enum("INACTIVE", "ACTIVE", "SUSPENDED", name="user_status")
 AccountTypeEnum = Enum("staff", "partner", name="account_type")
 
 #: How the account authenticates. A 'google' account has password = NULL.
-AuthProviderEnum = Enum("credentials", "google", name="auth_provider")
+#: Values match LeapDesk's enum exactly — 'password', not 'credentials'.
+AuthProviderEnum = Enum("password", "google", name="auth_provider")
+
+#: Sidebar collapsed state. The naming is LeapDesk's and reads backwards:
+#: ACTIVE means collapsed, INACTIVE means expanded. Kept verbatim so the two
+#: schemas agree; see the comment on the column.
+SidebarPreferenceEnum = Enum("ACTIVE", "INACTIVE", name="sidebar_preference")
 
 
 class User(Base):
@@ -49,19 +55,30 @@ class User(Base):
         comment="Set automatically for Google sign-ups",
     )
     auth_provider: Mapped[str] = mapped_column(
-        AuthProviderEnum, nullable=False, default="credentials"
+        AuthProviderEnum, nullable=False, default="password"
     )
     google_id: Mapped[str | None] = mapped_column(
         String(255), unique=True, nullable=True, index=True
     )
-    google_avatar: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    google_avatar: Mapped[str | None] = mapped_column(
+        String(500), nullable=True,
+        comment="Remote URL from Google. See profile_photo_path for an upload",
+    )
 
     # --- Profile ------------------------------------------------------------
     first_name: Mapped[str] = mapped_column(String(100), nullable=False, default="")
     last_name: Mapped[str] = mapped_column(String(100), nullable=False, default="")
     designation: Mapped[str | None] = mapped_column(String(150), nullable=True)
     employee_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    personal_mobile_number: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    personal_email: Mapped[str | None] = mapped_column(
+        String(255), nullable=True,
+        comment="Personal address. NOT an identity — `email` is what signs in",
+    )
+    profile_photo_path: Mapped[str | None] = mapped_column(
+        String(2048), nullable=True,
+        comment="Uploaded avatar path, as opposed to google_avatar's remote URL",
+    )
     company_name: Mapped[str | None] = mapped_column(
         String(255), nullable=True,
         comment="Partner's organisation; NULL for staff",
@@ -79,6 +96,10 @@ class User(Base):
     # --- Preferences --------------------------------------------------------
     timezone_preference: Mapped[str] = mapped_column(
         String(50), nullable=False, default="Asia/Kolkata"
+    )
+    sidebar_preference: Mapped[str] = mapped_column(
+        SidebarPreferenceEnum, nullable=False, default="INACTIVE",
+        comment="LeapDesk semantics: ACTIVE = collapsed, INACTIVE = expanded",
     )
 
     # --- Login throttling (these columns ARE written — see auth_service) -----
@@ -123,6 +144,13 @@ class User(Base):
         secondary=user_roles,
         back_populates="users",
         lazy="selectin",
+    )
+    # Deliberately lazy: the guard loads one session by primary key, so pulling
+    # every session on every authenticated request would be pure waste.
+    sessions: Mapped[list["UserSession"]] = relationship(  # noqa: F821
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
     )
 
     # --- Derived values -----------------------------------------------------

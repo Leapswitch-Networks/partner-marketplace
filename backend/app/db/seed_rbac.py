@@ -137,7 +137,7 @@ def seed_root_user(db: Session, roles: dict[str, Role]) -> None:
         first_name="Root",
         last_name="User",
         account_type="staff",
-        auth_provider="credentials",
+        auth_provider="password",
         status="ACTIVE",
         email_verified_at=datetime.now(timezone.utc),
     )

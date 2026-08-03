@@ -66,7 +66,8 @@ class RegisterRequest(_PasswordPair):
     last_name: str = Field(min_length=1, max_length=100)
     email: EmailStr
     company_name: str | None = Field(default=None, max_length=255)
-    phone: str | None = Field(default=None, max_length=30)
+    personal_mobile_number: str | None = Field(default=None, max_length=30)
+    personal_email: EmailStr | None = None
 
 
 class LoginRequest(BaseModel):
@@ -95,7 +96,8 @@ class UpdateProfileRequest(BaseModel):
     first_name: str | None = Field(default=None, min_length=1, max_length=100)
     last_name: str | None = Field(default=None, min_length=1, max_length=100)
     designation: str | None = Field(default=None, max_length=150)
-    phone: str | None = Field(default=None, max_length=30)
+    personal_mobile_number: str | None = Field(default=None, max_length=30)
+    personal_email: EmailStr | None = None
     company_name: str | None = Field(default=None, max_length=255)
     timezone_preference: str | None = Field(default=None, max_length=50)
 
@@ -147,7 +149,8 @@ class CurrentUserResponse(BaseModel):
     avatar_url: str | None
     designation: str | None
     employee_id: str | None
-    phone: str | None
+    personal_mobile_number: str | None
+    personal_email: str | None
     company_name: str | None
     account_type: str
     status: str

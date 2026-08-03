@@ -26,7 +26,13 @@ from app.schemas.auth import (
     ResetPasswordRequest,
     UpdateProfileRequest,
 )
-from app.services import auth_service, invitation_service, mail_service, rbac_service
+from app.services import (
+    auth_service,
+    invitation_service,
+    mail_service,
+    rbac_service,
+    session_service,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -39,10 +45,16 @@ _REFRESH_MAX_AGE = settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
 _REFRESH_PATH = "/api/auth/refresh"
 
 
-def set_auth_cookies(response: Response, user_id: str) -> None:
+def set_auth_cookies(response: Response, user_id: str, session_id: str) -> None:
+    """Issue both cookies for a session.
+
+    `session_id` is not optional. Both tokens carry it as `sid`, and the guard
+    refuses a token whose session is revoked or expired — that is the whole
+    mechanism by which logout means anything.
+    """
     response.set_cookie(
         key="access_token",
-        value=create_access_token(user_id),
+        value=create_access_token(user_id, session_id),
         httponly=True,
         samesite=settings.COOKIE_SAMESITE,
         secure=settings.COOKIE_SECURE,
@@ -51,7 +63,7 @@ def set_auth_cookies(response: Response, user_id: str) -> None:
     )
     response.set_cookie(
         key="refresh_token",
-        value=create_refresh_token(user_id),
+        value=create_refresh_token(user_id, session_id),
         httponly=True,
         samesite=settings.COOKIE_SAMESITE,
         secure=settings.COOKIE_SECURE,
@@ -138,7 +150,13 @@ def login(
     db: Session = Depends(get_db),
 ) -> LoginResponse:
     user = auth_service.authenticate(db, data.email, data.password, get_client_ip(request))
-    set_auth_cookies(response, user.id)
+    session = session_service.create(
+        db,
+        user,
+        ip=get_client_ip(request),
+        user_agent=request.headers.get("User-Agent"),
+    )
+    set_auth_cookies(response, user.id, session.id)
     return LoginResponse(
         message="Login successful",
         user=CurrentUserResponse(**rbac_service.current_user_payload(db, user)),
@@ -146,10 +164,56 @@ def login(
 
 
 @router.post("/logout", response_model=MessageResponse)
-def logout(response: Response) -> MessageResponse:
-    """Unauthenticated on purpose — logging out must work with an expired token."""
+def logout(
+    response: Response,
+    access_token: str | None = Cookie(default=None),
+    refresh_token: str | None = Cookie(default=None),
+    db: Session = Depends(get_db),
+) -> MessageResponse:
+    """End the session server-side, then clear the cookies.
+
+    **Unauthenticated on purpose**, and it does not use `get_current_user`.
+    Logging out has to work when the access token has already expired, when the
+    account has since been suspended, and when the session is already gone —
+    a logout that can fail is a logout that leaves credentials alive.
+
+    So it identifies the session on a best-effort basis: the access cookie first,
+    the refresh cookie as a fallback, since the access token expires an hour in
+    and the refresh one lasts days. Either way the cookies are cleared and the
+    caller is told it worked. Nothing here reports whether a session was found —
+    that would turn logout into an oracle for whether a captured token is still
+    live.
+    """
+    session_id, user_id = _identify_session(access_token, refresh_token)
+
+    if session_id and user_id:
+        session = session_service.get_active(db, session_id, user_id)
+        if session is not None:
+            session_service.revoke(db, session, reason="logout")
+
     clear_auth_cookies(response)
     return MessageResponse(message="Logged out")
+
+
+def _identify_session(
+    access_token: str | None, refresh_token: str | None
+) -> tuple[str | None, str | None]:
+    """Best-effort `(session_id, user_id)` from either cookie, or `(None, None)`.
+
+    Never raises. Used only by logout, where failing to identify the session must
+    not prevent the cookies being cleared.
+    """
+    for token in (access_token, refresh_token):
+        if not token:
+            continue
+        try:
+            payload = decode_token(token)
+        except JWTError:
+            continue
+        session_id, user_id = payload.get("sid"), payload.get("sub")
+        if session_id and user_id:
+            return session_id, user_id
+    return None, None
 
 
 @router.post("/refresh", response_model=MessageResponse)
@@ -158,10 +222,25 @@ def refresh(
     refresh_token: str | None = Cookie(default=None),
     db: Session = Depends(get_db),
 ) -> MessageResponse:
-    """Rotate both cookies.
+    """Reissue both cookies against a still-live session.
 
-    Status is re-checked here too, so a session cannot be extended after the
-    account was suspended.
+    Three things are re-checked, and none of them is taken from the token:
+
+    * **The session is live.** Previously a refresh token that merely *decoded*
+      bought a new hour of access, so a stolen one was a renewable seven-day
+      credential and logout could not stop it. Now a revoked session refuses to
+      refresh, which is what makes logging out on one device final.
+    * **The account is still ACTIVE**, so a suspension cannot be outrun by
+      refreshing.
+    * **The token is a refresh token**, not an access token replayed here.
+
+    The session id is carried over rather than replaced: this is the same sign-in
+    continuing, and issuing a new `sid` would orphan the row holding its
+    provenance. Note this therefore reissues rather than *rotates* — the previous
+    refresh token stays decodable until its own expiry, and remains usable while
+    the session lives. Making a superseded token individually dead needs per-token
+    state and reuse detection; the session check already bounds the damage, and
+    the gap is recorded in AUTHENTICATION.md rather than papered over.
     """
     credentials_exc = HTTPException(
         status.HTTP_401_UNAUTHORIZED, "Invalid or expired refresh token"
@@ -173,16 +252,19 @@ def refresh(
         if payload.get("type") != "refresh":
             raise credentials_exc
         user_id: str = payload["sub"]
+        session_id: str = payload["sid"]
     except (JWTError, KeyError):
         raise credentials_exc
 
     user = db.get(User, user_id)
-    if user is None or user.status != "ACTIVE":
+    session = session_service.get_active(db, session_id, user_id)
+    if user is None or session is None or user.status != "ACTIVE":
         # Clear the cookies so the client stops retrying a dead session.
         clear_auth_cookies(response)
         raise credentials_exc
 
-    set_auth_cookies(response, user.id)
+    session_service.touch(db, session)
+    set_auth_cookies(response, user.id, session.id)
     return MessageResponse(message="Token refreshed")
 
 
@@ -216,9 +298,43 @@ def update_me(
 def change_password(
     data: ChangePasswordRequest,
     current_user: User = Depends(get_current_user),
+    access_token: str | None = Cookie(default=None),
     db: Session = Depends(get_db),
 ) -> MessageResponse:
+    """Change the password, then sign out every **other** session.
+
+    This is the point of changing a password after a suspected compromise, and
+    until sessions existed it did not happen: the password changed and whoever
+    held a stolen token carried on for up to seven days. Now they are evicted the
+    moment the new password is saved.
+
+    The current session survives deliberately — the person doing this is already
+    authenticated in this tab, and logging them out of the action they just took
+    would be punishing the wrong party. `password_reset` below is the opposite,
+    for reasons given there.
+    """
     auth_service.change_own_password(db, current_user, data)
+
+    session_id, _ = _identify_session(access_token, None)
+    if session_id:
+        evicted = session_service.revoke_all_except(
+            db, current_user.id, keep_session_id=session_id, reason="password_change"
+        )
+    else:
+        # No identifiable current session should be impossible here — the guard
+        # above just validated one. Fail safe rather than silently skipping:
+        # ending everything is the secure outcome, at the cost of one re-login.
+        evicted = session_service.revoke_all(
+            db, current_user.id, reason="password_change"
+        )
+
+    if evicted:
+        return MessageResponse(
+            message=(
+                f"Password updated. {evicted} other "
+                f"session{'s' if evicted != 1 else ''} signed out."
+            )
+        )
     return MessageResponse(message="Password updated")
 
 
@@ -253,5 +369,16 @@ def forgot_password(
 def reset_password(
     data: ResetPasswordRequest, db: Session = Depends(get_db)
 ) -> MessageResponse:
-    auth_service.complete_password_reset(db, data.token, data.password)
+    """Complete a reset, then sign out **every** session including any current one.
+
+    Stricter than change-password, on purpose. Someone changing their password in
+    their own settings is demonstrably in control of a live session; someone
+    completing a reset link usually is not — they are locked out, or recovering
+    from a compromise, and may be on a borrowed device. So nothing is spared: any
+    session an attacker holds dies here, and the user signs in fresh with the new
+    password. There is no session to preserve anyway, since this endpoint is
+    unauthenticated.
+    """
+    user = auth_service.complete_password_reset(db, data.token, data.password)
+    session_service.revoke_all(db, user.id, reason="password_reset")
     return MessageResponse(message="Password reset. You can now sign in.")

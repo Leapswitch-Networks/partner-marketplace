@@ -17,7 +17,8 @@ export const authApi = {
     password: string;
     confirm_password: string;
     company_name?: string;
-    phone?: string;
+    personal_mobile_number?: string;
+    personal_email?: string;
   }) => axiosInstance.post<{ message: string }>("/api/auth/register", data),
 
   login: (data: { email: string; password: string }) =>
@@ -32,7 +33,8 @@ export const authApi = {
     first_name?: string;
     last_name?: string;
     designation?: string | null;
-    phone?: string | null;
+    personal_mobile_number?: string | null;
+    personal_email?: string | null;
     company_name?: string | null;
     timezone_preference?: string;
   }) => axiosInstance.patch<CurrentUser>("/api/auth/me", data),

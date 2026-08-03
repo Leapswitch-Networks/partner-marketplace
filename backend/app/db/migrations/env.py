@@ -17,6 +17,7 @@ import app.models.role  # noqa: F401
 import app.models.permission  # noqa: F401
 import app.models.permission_group  # noqa: F401
 import app.models.user_invitation  # noqa: F401
+import app.models.user_session  # noqa: F401
 
 # Inherited test-platform domain — see SCAFFOLD_CLEANUP_PLAN § 2
 import app.models.test  # noqa: F401

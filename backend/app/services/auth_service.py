@@ -91,9 +91,9 @@ def register_partner(db: Session, data: RegisterRequest) -> User:
         first_name=data.first_name.strip(),
         last_name=data.last_name.strip(),
         company_name=(data.company_name or "").strip() or None,
-        phone=(data.phone or "").strip() or None,
+        personal_mobile_number=(data.personal_mobile_number or "").strip() or None,
         account_type="partner",
-        auth_provider="credentials",
+        auth_provider="password",
         status=settings.NEW_USER_DEFAULT_STATUS,
     )
 
@@ -185,7 +185,7 @@ def update_own_profile(db: Session, user: User, data: UpdateProfileRequest) -> U
         if field in updates and updates[field] is not None:
             setattr(user, field, updates[field].strip())
 
-    for field in ("designation", "phone", "company_name"):
+    for field in ("designation", "personal_mobile_number", "personal_email", "company_name"):
         if field in updates:
             value = (updates[field] or "").strip()
             setattr(user, field, value or None)

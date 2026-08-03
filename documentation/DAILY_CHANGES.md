@@ -115,6 +115,71 @@
 
 ---
 
+## August 3, 2026 — Auth foundation: sessions, revocation, and LeapDesk column parity
+
+- **Logging out now actually ends the session, which it did not before.** Authentication is stateless
+  JWT, and a JWT cannot be un-issued — so `logout` cleared the browser's cookie and nothing else. A
+  token captured beforehand stayed valid for the rest of its life: up to an hour for access, **seven days
+  for refresh**. Three things followed from that, all real. Logging out forgot the session rather than
+  ending it. `/refresh` minted a new pair while the old refresh token stayed good, making a stolen one a
+  renewable seven-day credential. And **changing your password evicted nobody** — the one action a person
+  takes after a suspected compromise left the attacker exactly where they were.
+- **The fix is a `user_sessions` table, which is what LeapDesk gets from Laravel for free.** Laravel
+  sessions are database rows, so deleting the row ends the session; there is nothing to port because the
+  framework does it. Adapted to JWT: every token now carries a `sid` claim naming a session row, and the
+  guard refuses a token whose row is revoked or expired. Logout revokes that one session; a password
+  change revokes every **other** one; completing a password reset revokes **all** of them; an admin
+  deactivation, single or bulk, revokes all of them too.
+- **Change spares the current session and reset does not, deliberately.** Someone changing their password
+  in their own settings is demonstrably holding a live session and should not be logged out of the tab
+  they are working in — the point is to evict everyone *else*. Someone completing a reset link is usually
+  locked out or recovering from a compromise and may be on a borrowed device, so nothing is spared.
+- **Measured, not assumed.** A token that returned `200` from `/me` was captured, logout was called, and
+  the same token then returned `401 "Your session has ended"`. A refresh token refreshed fine while live
+  and returned `401` after logout. Two devices were signed in, the first changed its password, and the
+  response said *"Password updated. 7 other sessions signed out"* — device one still `200`, device two
+  `401`. A hand-minted token with no `sid` was refused. The session table's `revoked_reason` column shows
+  the trail: 2 live, 2 `logout`, 7 `password_change`.
+- **Pre-existing tokens fail closed, on purpose.** Anything minted before this has no `sid` and is
+  refused, so everyone signs in once more. Accepting a token without one "for compatibility" would have
+  left a permanent bypass of the entire mechanism.
+- **The cost is one indexed lookup per authenticated request, and it is unavoidable.** Any design that can
+  revoke keeps server state somewhere; the only real choice is where. `last_seen_at` is written at most
+  once every five minutes, because otherwise every authenticated read becomes a write and a polled
+  endpoint like `/me` churns the row continuously.
+- **Column names now match LeapDesk where the two schemas mean the same thing.** The owner's point was
+  that a developer moving between the projects should not have to translate. `user_invitations` turned out
+  to be an **exact** match already, and `permission_groups` nearly so. Renamed `phone` →
+  `personal_mobile_number`; added `personal_email`, `profile_photo_path` and `sidebar_preference`
+  (LeapDesk's inverted `ACTIVE = collapsed` semantics kept verbatim, with the comment, because matching
+  matters more than improving); and renamed the `auth_provider` enum value `'credentials'` → `'password'`.
+  Postgres renames an enum label in place, so all four existing rows converted with no data migration.
+- **Four LeapDesk columns were deliberately not copied, and the reasoning is recorded.** `guard_name`
+  would be the string `'web'` on every row forever. `remember_token` is Laravel cookie auth, not JWT.
+  Spatie's polymorphic `model_has_roles` exists so roles can attach to any model — we have exactly one, so
+  `model_type` would be `App\Models\User` on every row and `user_roles(user_id, role_id)` says what it
+  actually is. And `sessions.payload`/`last_activity` is a server-side session blob, where ours is a
+  revocation registry. Adding a column nothing reads is worse than not having it.
+- **We also keep four things LeapDesk does not have:** the lockout columns (`failed_login_attempts`,
+  `locked_until`, `last_login_at`, `last_login_ip` — LeapDesk has **no lockout columns at all**),
+  `is_system` and `description` on roles, and `account_type` / `company_name`.
+- **The audit's good news, which is worth recording as much as the gap:** enforcement coverage is
+  **complete**. Every route was checked programmatically — all of them are permission-gated, and every
+  ungated one (`register`, `login`, `logout`, `refresh`, `forgot`/`reset-password`, the Google endpoints,
+  `invitations/preview`) is intentionally public. Every rule in LeapDesk's `UserPolicy` and `RolePolicy`
+  is already ported into `user_service` / `rbac_service`.
+- **Three gaps found and recorded rather than half-built:** **PM-31**, `/refresh` reissues rather than
+  rotates, so a superseded refresh token stays usable while its session lives — proper rotation needs a
+  `jti` and reuse detection. **PM-32**, no audit log; LeapDesk has `spatie/laravel-activitylog` with a
+  dirty-field diff trait and a `failed_login` listener, and `created_by`/`updated_by` cannot answer "who
+  granted this role". **PM-33**, no security response headers; LeapDesk registers a `SecurityHeaders`
+  middleware globally.
+- **Verified:** backend imports clean, both migrations applied (head `a7d92c4f1b83`), `tsc --noEmit`
+  clean, `next build` green, lint unchanged at 17 pre-existing PM-30 errors. `/me` confirmed returning
+  `auth_provider: "password"` with the new field names.
+
+---
+
 ## August 3, 2026 — Tech-debt sweep: seven items closed, and a register that had drifted
 
 **The day in one line:** the ranked tech-debt queue was worked top to bottom. Seven items closed, two of

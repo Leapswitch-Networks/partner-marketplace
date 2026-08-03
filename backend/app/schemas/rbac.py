@@ -111,7 +111,8 @@ class UserDetailResponse(UserListItem):
     first_name: str
     last_name: str
     employee_id: str | None
-    phone: str | None
+    personal_mobile_number: str | None
+    personal_email: str | None
     timezone_preference: str
     email_verified_at: datetime | None
     failed_login_attempts: int
@@ -142,7 +143,8 @@ class CreateUserRequest(BaseModel):
     role_ids: list[int] = Field(default_factory=list)
     designation: str | None = Field(default=None, max_length=150)
     employee_id: str | None = Field(default=None, max_length=50)
-    phone: str | None = Field(default=None, max_length=30)
+    personal_mobile_number: str | None = Field(default=None, max_length=30)
+    personal_email: EmailStr | None = None
     company_name: str | None = Field(default=None, max_length=255)
     timezone_preference: str = "Asia/Kolkata"
 
@@ -170,7 +172,8 @@ class UpdateUserRequest(BaseModel):
     role_ids: list[int] | None = None
     designation: str | None = Field(default=None, max_length=150)
     employee_id: str | None = Field(default=None, max_length=50)
-    phone: str | None = Field(default=None, max_length=30)
+    personal_mobile_number: str | None = Field(default=None, max_length=30)
+    personal_email: EmailStr | None = None
     company_name: str | None = Field(default=None, max_length=255)
     timezone_preference: str | None = Field(default=None, max_length=50)
 
