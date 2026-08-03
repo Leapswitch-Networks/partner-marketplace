@@ -67,7 +67,7 @@ since 2026-07-31 — only the documentation was wrong, and wrong in a way that b
 | [PM-29](#pm-29--eslint-cannot-run-v6-resolves-against-a-v9-flat-config--resolved) | ✅ | ~~ESLint cannot run — v6 binary vs v9 flat config~~ | Quality |
 | [PM-30](#pm-30--17-react-hooks-errors-from-rules-that-arrive-with-the-wrong-config-version) | 🟡 | 17 react-hooks errors, from `eslint-config-next` 16 on Next 14 | Quality |
 | [PM-31](#pm-31--refresh-reissues-rather-than-rotates-no-token-reuse-detection) | 🟡 | `/refresh` reissues rather than rotates — no reuse detection | Auth |
-| [PM-32](#pm-32--no-audit-log-leapdesk-has-one) | 🟠 | No audit log — LeapDesk has `activity_log` | Quality |
+| [PM-32](#pm-32--no-audit-log-leapdesk-has-one--recording-done-read-surface-pending) | 🟡 | ~~No audit log~~ recording done; **no read surface** | Quality |
 | [PM-33](#pm-33--no-security-response-headers--backend-done-frontend-pending) | 🟡 | ~~No security response headers~~ backend done; **frontend pending** | Infra |
 
 ---
@@ -893,7 +893,53 @@ replayed it or an attacker has it, and neither should continue.
 
 ---
 
-### PM-32 — No audit log; LeapDesk has one
+### PM-32 — No audit log; LeapDesk has one ⚠️ RECORDING DONE, READ SURFACE PENDING
+
+**Recording resolved 2026-08-03.** `activity_log` table, `app/models/activity_log.py`,
+`app/services/activity_service.py`. **There is no way to read it yet** — no endpoint, no permission, no
+screen. LeapDesk has an Activity Log Index; ours is write-only until that is built.
+
+Column names are LeapDesk's verbatim: `log_name`, `description`, `subject_type`, `subject_id`, `event`,
+`causer_type`, `causer_id`, `properties`, `batch_uuid`, `created_at`, `updated_at`. Its index names
+`subject` and `causer` are kept too.
+
+**What is recorded**, all verified against the running stack:
+
+| Event | Where |
+|---|---|
+| `login` | after a session exists — so the row means "a session was created", not "the password matched" |
+| `failed_login` | unknown email, bad password, locked account, **and credentials-valid-but-status-blocked** |
+| `logout` | only when a session was actually revoked |
+| `created` / `updated` / `deleted` | user create, update, delete — with a before/after diff |
+| `status_changed` | toggle, approve, and bulk status, rather than hidden inside an `updated` diff |
+| `roles_changed` | its own event, with `granted` / `revoked` lists |
+| `lockout_cleared` | an admin overriding a control that fired for repeated failures |
+| `password_changed` | when an administrator sets someone else's password |
+
+**Design decisions worth keeping:**
+
+- **Two column types diverge while the names do not.** `subject_id`/`causer_id` are `String(36)` because
+  our ids are UUIDs and one column holds both a user UUID and a role integer; `properties` is `JSONB`
+  rather than `json` so it can be indexed and queried, which is the point of a database over a log file.
+- **`*_type` holds `User` / `Role`, not `App\Models\User`.** Storing a PHP namespace in a Python codebase
+  would be a lie someone would eventually try to resolve.
+- **Nothing here may raise.** Every entry point swallows and logs its own exceptions, matching LeapDesk's
+  try/catch around `activity()`. Failing a login because an audit write failed would turn observability
+  into an outage.
+- **Recording is explicit, not a global ORM hook.** A hook cannot be forgotten, which is its advantage;
+  the reason to reject it is that it would log the inherited test-platform domain and every session
+  `last_seen_at` touch, burying the role grants. The trade-off is named in the service docstring.
+- **`password`, hashes and reset tokens are stripped from every diff.** An audit trail is read by more
+  people than the database is, so it is a worse place for a secret.
+- **`batch_uuid` groups bulk operations**, so deleting nine accounts reads as one action.
+- **A failed login has no causer and no subject.** Nobody authenticated, and the submitted address may
+  match no account — inventing a subject for it would be fiction. The address goes in `properties`.
+
+**Still open:** a read endpoint gated on a new `activity-view` permission, and a UI. Also no retention
+policy — this table grows forever, and unlike `user_sessions` it must not simply be purged, so the
+policy is a real decision rather than a cron job.
+
+Original entry follows.
 
 **Where:** whole backend
 

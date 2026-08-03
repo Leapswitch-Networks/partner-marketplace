@@ -115,6 +115,72 @@
 
 ---
 
+## August 3, 2026 — Audit trail and security headers
+
+- **There is an audit trail now, and it can answer questions the old columns could not (PM-32).**
+  `created_by` and `updated_by` record who last touched a row and then overwrite themselves, so nothing
+  could answer *who granted this user the Admin role*, *who deactivated this account*, or *what did this
+  role's permissions look like before*. `activity_log` is append-only and keeps the history. Structured
+  logging was not a substitute: those lines go to stdout, are not queryable, and vanish with the
+  container.
+- **Column names are LeapDesk's verbatim**, because it is `spatie/laravel-activitylog`'s table and a
+  developer who knows one schema should read the other without translating: `log_name`, `description`,
+  `subject_type`, `subject_id`, `event`, `causer_type`, `causer_id`, `properties`, `batch_uuid`,
+  timestamps — down to Spatie's index names `subject` and `causer`.
+- **Two column *types* diverge while the names do not.** `subject_id`/`causer_id` are strings, because our
+  ids are UUIDs and one column has to hold both a user's UUID and a role's integer id. `properties` is
+  `JSONB` rather than `json`, so it can be indexed and queried — storing an audit trail in a database
+  rather than a log file is pointless if it cannot be searched. And `*_type` holds `User` or `Role`, not
+  `App\Models\User`; a PHP namespace in a Python codebase is a lie someone would eventually try to
+  resolve.
+- **Every auth outcome is recorded, including the failures.** `failed_login` fires on an unknown email, a
+  bad password, a locked account, and — the one that is easy to miss — **credentials correct but status
+  blocked**. That last case is not a login, because no session was created, and dropping it would hide
+  someone repeatedly probing a suspended account. A failed login has **no causer and no subject**: nobody
+  authenticated, and the submitted address may match no account, so inventing a subject would be fiction.
+- **Role changes get their own event rather than hiding inside a diff.** In an RBAC system a role grant is
+  the change most likely to be the subject of "who did that?", so `roles_changed` carries explicit
+  `granted` and `revoked` lists. Verified: *"abcd@gmail.com — granted Staff; revoked Admin"*. A status flip
+  likewise becomes `status_changed` rather than a generic `updated`, copying LeapDesk's rewrite.
+- **Testing found a gap in my own wiring.** The first pass covered create, update and delete but **missed
+  `toggle_status`, `approve_user`, `unlock_user` and both bulk operations** — which is to say it missed
+  most of the administrative actions actually worth auditing. Caught only because the verification ran a
+  toggle and no row appeared. Now wired, with `batch_uuid` grouping bulk operations so deleting nine
+  accounts reads as one action instead of nine unrelated ones.
+- **Three deliberate constraints.** Nothing in the service may raise — every entry point swallows and logs
+  its own exceptions, matching LeapDesk's try/catch, because failing a login over an audit write would turn
+  observability into an outage. Passwords, hashes and reset tokens are stripped from every diff, since a
+  trail is read by more people than the database is. And a deletion stores a snapshot of what was removed,
+  because after a hard delete a row reading "deleted #7" answers nothing a year later.
+- **Recording is explicit rather than a global ORM hook, and that trade-off is named.** A hook cannot be
+  forgotten, which is its advantage — and it would have logged the inherited test-platform domain and every
+  session `last_seen_at` touch, burying the role grants. The mitigation is that the security-relevant paths
+  are listed in the register so a reviewer can check the list against the routes.
+- **Security response headers (PM-33).** The API sent none. Now `nosniff`, `Referrer-Policy`,
+  `X-Frame-Options`, a CSP `frame-ancestors` and a `Permissions-Policy` on every response — verified
+  present on a `429`, since an error is exactly the response someone probing receives. HSTS is behind its
+  own flag, verified to emit `max-age=31536000; includeSubDomains` when on and nothing when off.
+- **Two deliberate divergences from LeapDesk's middleware.** `X-XSS-Protection` is **not** set: it
+  controlled an auditor every current browser has removed, Chrome dropped it in 2019, and it could itself
+  be abused to block scripts selectively. And HSTS is not tied to `COOKIE_SECURE`, because the two answer
+  different questions — whether cookies need TLS, versus whether every browser that has seen this host
+  should refuse plain HTTP to it for a year. Enabling that against a host without a valid certificate is
+  not a warning, it is an outage no server-side change can clear.
+- **Being honest about what the headers buy here:** this service returns JSON, so framing and sniffing
+  protections matter far less than they do on LeapDesk's HTML. The ones that genuinely count are `nosniff`,
+  `Referrer-Policy` (reset and invitation links carry a token in the query string) and HSTS.
+- **Two halves left open, both stated rather than implied.** The audit log has **no read surface** — no
+  endpoint, no permission, no screen — so it is write-only until an Activity Log index is built, and it has
+  no retention policy, which is a real decision rather than a cron job. And the frontend still has no
+  security headers: `next.config.mjs` is a protected file, and a header on the API does nothing for a page
+  the API did not serve.
+- **Verified:** migrations applied (head `b6e15d3a9f27`), backend imports clean, and the audit rows checked
+  by driving the live API — failed logins with reasons and no causer, login and logout self-attributed,
+  role changes both directions, status change on toggle. The test account modified during verification was
+  restored to `ACTIVE` / `Admin`.
+
+---
+
 ## August 3, 2026 — Auth foundation: sessions, revocation, and LeapDesk column parity
 
 - **Logging out now actually ends the session, which it did not before.** Authentication is stateless

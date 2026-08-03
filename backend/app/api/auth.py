@@ -27,6 +27,7 @@ from app.schemas.auth import (
     UpdateProfileRequest,
 )
 from app.services import (
+    activity_service,
     auth_service,
     invitation_service,
     mail_service,
@@ -149,13 +150,14 @@ def login(
     response: Response,
     db: Session = Depends(get_db),
 ) -> LoginResponse:
-    user = auth_service.authenticate(db, data.email, data.password, get_client_ip(request))
-    session = session_service.create(
-        db,
-        user,
-        ip=get_client_ip(request),
-        user_agent=request.headers.get("User-Agent"),
-    )
+    ip = get_client_ip(request)
+    user_agent = request.headers.get("User-Agent")
+
+    user = auth_service.authenticate(db, data.email, data.password, ip)
+    session = session_service.create(db, user, ip=ip, user_agent=user_agent)
+    # Recorded here rather than in `authenticate`, because the audit entry should
+    # mean "a session now exists", and only this point knows that it does.
+    activity_service.record_login(db, user, ip, user_agent)
     set_auth_cookies(response, user.id, session.id)
     return LoginResponse(
         message="Login successful",
@@ -165,6 +167,7 @@ def login(
 
 @router.post("/logout", response_model=MessageResponse)
 def logout(
+    request: Request,
     response: Response,
     access_token: str | None = Cookie(default=None),
     refresh_token: str | None = Cookie(default=None),
@@ -190,6 +193,10 @@ def logout(
         session = session_service.get_active(db, session_id, user_id)
         if session is not None:
             session_service.revoke(db, session, reason="logout")
+            # Only recorded when a session was actually ended. Logging every call
+            # would fill the trail with rows for repeat clicks and for clients
+            # clearing cookies they no longer have a session for.
+            activity_service.record_logout(db, user_id, get_client_ip(request))
 
     clear_auth_cookies(response)
     return MessageResponse(message="Logged out")

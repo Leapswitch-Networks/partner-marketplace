@@ -22,10 +22,11 @@ from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.security import hash_password
+from app.models.activity_log import EVENT_STATUS_CHANGED
 from app.models.role import Role
 from app.models.user import User
 from app.schemas.rbac import CreateUserRequest, UpdateUserRequest
-from app.services import session_service
+from app.services import activity_service, session_service
 from app.services.auth_service import email_exists, normalise_email
 from app.services.rbac_service import resolve_roles
 
@@ -183,6 +184,24 @@ def create_user(db: Session, data: CreateUserRequest, actor: User) -> User:
     db.add(user)
     db.commit()
     db.refresh(user)
+
+    activity_service.record_created(
+        db,
+        subject_type="User",
+        subject_id=user.id,
+        values={
+            "email": user.email,
+            "status": user.status,
+            "account_type": user.account_type,
+            "roles": sorted(role.name for role in user.roles),
+            # Recorded because an admin-created account is pre-verified without
+            # the holder proving anything, which is a decision worth being able
+            # to trace back to whoever made it.
+            "email_verified_at": user.email_verified_at.isoformat() if user.email_verified_at else None,
+        },
+        actor=actor,
+        label=user.email,
+    )
     return user
 
 
@@ -196,6 +215,15 @@ def update_user(db: Session, user_id: str, data: UpdateUserRequest, actor: User)
         )
 
     updates = data.model_dump(exclude_unset=True)
+
+    # Snapshot before anything mutates, for the audit diff (PM-32). Taken here
+    # rather than field by field so the recorded "old" values are genuinely the
+    # pre-change state and cannot drift as the assignments below run.
+    _audited = ("email", "status", "account_type", "first_name", "last_name",
+                "designation", "employee_id", "personal_mobile_number",
+                "personal_email", "company_name", "timezone_preference")
+    before = {field: getattr(target, field) for field in _audited}
+    roles_before = sorted(role.name for role in target.roles)
 
     # --- privileged fields ---
     if "status" in updates and updates["status"] is not None:
@@ -263,6 +291,40 @@ def update_user(db: Session, user_id: str, data: UpdateUserRequest, actor: User)
     target.updated_by = actor.id
     db.commit()
     db.refresh(target)
+
+    # Audit after the commit: the trail should say what happened, and nothing
+    # happened until it committed.
+    activity_service.record_change(
+        db,
+        subject_type="User",
+        subject_id=target.id,
+        before=before,
+        after={field: getattr(target, field) for field in _audited},
+        actor=actor,
+        label=target.email,
+    )
+    activity_service.record_roles_changed(
+        db,
+        target=target,
+        before=roles_before,
+        after=sorted(role.name for role in target.roles),
+        actor=actor,
+    )
+
+    # A password set by an administrator ends every session the account has. The
+    # holder of the old password — which may be the legitimate user, or may not —
+    # must not keep a live session after someone else changed their credential.
+    if updates.get("password"):
+        session_service.revoke_all(db, target.id, reason="password_change")
+        activity_service.record(
+            db,
+            description=f"{target.email} — password set by an administrator",
+            event="password_changed",
+            subject_type="User",
+            subject_id=target.id,
+            actor=actor,
+        )
+
     return target
 
 
@@ -277,8 +339,31 @@ def delete_user(db: Session, user_id: str, actor: User) -> str:
         )
 
     name = target.full_name
+    # Snapshot before the delete: this is a hard delete, so afterwards there is
+    # nothing left to describe. An audit row reading only "deleted #7" answers
+    # nothing a year later.
+    snapshot = {
+        "email": target.email,
+        "first_name": target.first_name,
+        "last_name": target.last_name,
+        "status": target.status,
+        "account_type": target.account_type,
+        "company_name": target.company_name,
+        "roles": sorted(role.name for role in target.roles),
+    }
+    target_id = target.id
+
     db.delete(target)
     db.commit()
+
+    activity_service.record_deleted(
+        db,
+        subject_type="User",
+        subject_id=target_id,
+        values=snapshot,
+        actor=actor,
+        label=snapshot["email"],
+    )
     return name
 
 
@@ -295,12 +380,25 @@ def approve_user(db: Session, user_id: str, actor: User) -> User:
             status.HTTP_403_FORBIDDEN, "A super-admin account cannot be approved here."
         )
 
+    was = target.status
     target.status = "ACTIVE"
     target.failed_login_attempts = 0
     target.locked_until = None
     target.updated_by = actor.id
     db.commit()
     db.refresh(target)
+
+    # Approval is the gate SSO does not open, so who opened it and when is one of
+    # the more important things this trail holds.
+    activity_service.record(
+        db,
+        description=f"{target.email} — approved",
+        event=EVENT_STATUS_CHANGED,
+        subject_type="User",
+        subject_id=target.id,
+        actor=actor,
+        properties={"attributes": {"status": "ACTIVE"}, "old": {"status": was}},
+    )
     return target
 
 
@@ -320,6 +418,7 @@ def toggle_status(db: Session, user_id: str, actor: User) -> User:
             "A suspended account must be updated explicitly, not toggled.",
         )
 
+    was = target.status
     target.status = "INACTIVE" if target.status == "ACTIVE" else "ACTIVE"
     if target.status == "ACTIVE":
         target.failed_login_attempts = 0
@@ -327,6 +426,16 @@ def toggle_status(db: Session, user_id: str, actor: User) -> User:
     target.updated_by = actor.id
     db.commit()
     db.refresh(target)
+
+    activity_service.record(
+        db,
+        description=f"{target.email} — status {was} to {target.status}",
+        event=EVENT_STATUS_CHANGED,
+        subject_type="User",
+        subject_id=target.id,
+        actor=actor,
+        properties={"attributes": {"status": target.status}, "old": {"status": was}},
+    )
 
     # Deactivating must end their live sessions, not merely stop new sign-ins.
     # `get_current_user` already re-reads status on every request, so access is
@@ -346,11 +455,24 @@ def unlock_user(db: Session, user_id: str, actor: User) -> User:
     if not can_edit(actor, target):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "You cannot modify this account.")
 
+    was_locked = target.locked_until
     target.failed_login_attempts = 0
     target.locked_until = None
     target.updated_by = actor.id
     db.commit()
     db.refresh(target)
+
+    # Worth a row: clearing a lockout removes a control that fired because of
+    # repeated failures, so the trail should show who overrode it.
+    activity_service.record(
+        db,
+        description=f"{target.email} — lockout cleared",
+        event="lockout_cleared",
+        subject_type="User",
+        subject_id=target.id,
+        actor=actor,
+        properties={"old": {"locked_until": was_locked.isoformat() if was_locked else None}},
+    )
     return target
 
 
@@ -362,6 +484,11 @@ def bulk_delete(db: Session, user_ids: list[str], actor: User) -> tuple[int, int
     skipped: list[str] = []
     deleted = 0
 
+    # One batch id shared by every row this operation writes, so "who deleted
+    # these nine accounts" reads as one action rather than nine unrelated ones.
+    batch = activity_service.new_batch()
+    snapshots: list[dict] = []
+
     for target in targets:
         if target.id == actor.id:
             skipped.append(f"{target.email}: cannot delete your own account")
@@ -369,10 +496,31 @@ def bulk_delete(db: Session, user_ids: list[str], actor: User) -> tuple[int, int
         if target.is_super_admin:
             skipped.append(f"{target.email}: super-admin accounts are protected")
             continue
+        snapshots.append(
+            {
+                "id": target.id,
+                "email": target.email,
+                "status": target.status,
+                "account_type": target.account_type,
+                "roles": sorted(role.name for role in target.roles),
+            }
+        )
         db.delete(target)
         deleted += 1
 
     db.commit()
+
+    for snapshot in snapshots:
+        activity_service.record_deleted(
+            db,
+            subject_type="User",
+            subject_id=snapshot["id"],
+            values={k: v for k, v in snapshot.items() if k != "id"},
+            actor=actor,
+            label=snapshot["email"],
+            batch_uuid=batch,
+        )
+
     skipped.extend(_missing_ids(user_ids, targets))
     return deleted, len(skipped), skipped
 
@@ -383,6 +531,8 @@ def bulk_set_status(
     targets = _load_bulk_targets(db, user_ids)
     skipped: list[str] = []
     deactivated: list[str] = []
+    changes: list[dict] = []
+    batch = activity_service.new_batch()
     updated = 0
 
     for target in targets:
@@ -395,6 +545,7 @@ def bulk_set_status(
         if target.status == new_status:
             skipped.append(f"{target.email}: already {new_status}")
             continue
+        changes.append({"id": target.id, "email": target.email, "was": target.status})
         target.status = new_status
         if new_status == "ACTIVE":
             target.failed_login_attempts = 0
@@ -404,6 +555,21 @@ def bulk_set_status(
         updated += 1
 
     db.commit()
+
+    for change in changes:
+        activity_service.record(
+            db,
+            description=f"{change['email']} — status {change['was']} to {new_status}",
+            event=EVENT_STATUS_CHANGED,
+            subject_type="User",
+            subject_id=change["id"],
+            actor=actor,
+            properties={
+                "attributes": {"status": new_status},
+                "old": {"status": change["was"]},
+            },
+            batch_uuid=batch,
+        )
 
     # Same reasoning as `toggle_status`: a bulk deactivation has to evict, or
     # re-activating later would silently restore every outstanding token. Done

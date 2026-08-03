@@ -14,6 +14,7 @@ effect of loading the package — registers all of them, so any import order wor
 Add every new model to this list.
 """
 
+from app.models.activity_log import ActivityLog
 from app.models.associations import role_permissions, user_roles
 from app.models.candidate import Candidate
 from app.models.category import Category
@@ -37,6 +38,7 @@ __all__ = [
     "PermissionGroup",
     "UserInvitation",
     "UserSession",
+    "ActivityLog",
     "user_roles",
     "role_permissions",
     # Inherited test-platform domain (SCAFFOLD_CLEANUP_PLAN § 2)

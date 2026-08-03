@@ -31,6 +31,7 @@ from app.schemas.auth import (
     RegisterRequest,
     UpdateProfileRequest,
 )
+from app.services import activity_service
 from app.services.rbac_service import get_role_by_name
 
 #: Deliberately identical for "no such user" and "wrong password".
@@ -114,15 +115,22 @@ def authenticate(db: Session, email: str, password: str, ip: str) -> User:
     """Verify credentials and return the user, or raise.
 
     Ordering is deliberate: lockout, then credentials, then status.
+
+    Every outcome is written to the audit trail (PM-32), including the failures.
+    A failed-login trail is the half people skip and then wish they had: without
+    it there is no way to see a spray in progress, and no way to answer "was my
+    account being attacked before it locked?".
     """
     user = get_user_by_email(db, email)
 
     if user is None:
         # No user to throttle. Same error as a bad password.
+        activity_service.record_failed_login(db, email, ip, reason="unknown_email")
         raise _INVALID_CREDENTIALS
 
     if user.is_locked:
         remaining = int((user.locked_until - datetime.now(timezone.utc)).total_seconds() // 60) + 1
+        activity_service.record_failed_login(db, email, ip, reason="account_locked")
         raise HTTPException(
             status.HTTP_429_TOO_MANY_REQUESTS,
             f"Too many failed attempts. Try again in {remaining} minute(s).",
@@ -130,6 +138,7 @@ def authenticate(db: Session, email: str, password: str, ip: str) -> User:
 
     if not verify_password(password, user.password):
         _record_failure(db, user)
+        activity_service.record_failed_login(db, email, ip, reason="bad_password")
         raise _INVALID_CREDENTIALS
 
     # Credentials are good. Only now does account state matter.
@@ -138,6 +147,12 @@ def authenticate(db: Session, email: str, password: str, ip: str) -> User:
             "Your account is awaiting administrator approval."
             if user.status == "INACTIVE"
             else "Your account has been suspended. Contact an administrator."
+        )
+        # Recorded as a failure rather than a login: the credentials were right,
+        # but no session was created. Calling it a login would be wrong, and
+        # dropping it would hide someone repeatedly probing a suspended account.
+        activity_service.record_failed_login(
+            db, email, ip, reason=f"status_{user.status.lower()}"
         )
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail)
 
