@@ -7,7 +7,6 @@ another.
 """
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
-from jose import JWTError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -19,10 +18,11 @@ from app.core.dependencies import (
     require_password_confirmation,
 )
 from app.core.security import (
+    TokenError,
     create_access_token,
     create_refresh_token,
     create_two_factor_challenge_token,
-    decode_token,
+    decode_typed_token,
 )
 from app.models.user import User
 from app.models.user_session import UserSession
@@ -341,16 +341,12 @@ def _identify_session(
     Never raises. Used only by logout, where failing to identify the session must
     not prevent the cookies being cleared.
     """
-    for token in (access_token, refresh_token):
-        if not token:
-            continue
+    for token, kind in ((access_token, "access"), (refresh_token, "refresh")):
         try:
-            payload = decode_token(token)
-        except JWTError:
+            payload = decode_typed_token(token, kind, require=("sub", "sid"))
+        except TokenError:
             continue
-        session_id, user_id = payload.get("sid"), payload.get("sub")
-        if session_id and user_id:
-            return session_id, user_id
+        return payload["sid"], payload["sub"]
     return None, None
 
 
@@ -385,17 +381,13 @@ def refresh(
     credentials_exc = HTTPException(
         status.HTTP_401_UNAUTHORIZED, "Invalid or expired refresh token"
     )
-    if not refresh_token:
-        raise credentials_exc
     try:
-        payload = decode_token(refresh_token)
-        if payload.get("type") != "refresh":
-            raise credentials_exc
-        user_id: str = payload["sub"]
-        session_id: str = payload["sid"]
-        presented_jti: str | None = payload.get("jti")
-    except (JWTError, KeyError):
+        payload = decode_typed_token(refresh_token, "refresh", require=("sub", "sid"))
+    except TokenError:
         raise credentials_exc
+    user_id: str = payload["sub"]
+    session_id: str = payload["sid"]
+    presented_jti: str | None = payload.get("jti")
 
     user = db.get(User, user_id)
     session = session_service.get_active(db, session_id, user_id)
@@ -646,12 +638,10 @@ def two_factor_challenge(
     )
 
     try:
-        payload = decode_token(data.challenge_token)
-        if payload.get("type") != "two_factor":
-            raise invalid
-        user_id: str = payload["sub"]
-    except (JWTError, KeyError):
+        payload = decode_typed_token(data.challenge_token, "two_factor", require=("sub",))
+    except TokenError:
         raise invalid
+    user_id: str = payload["sub"]
 
     user = db.get(User, user_id)
     # Re-checked here, not trusted from the token: an account can be suspended in

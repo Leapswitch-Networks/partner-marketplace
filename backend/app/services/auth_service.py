@@ -15,15 +15,15 @@ Security decisions worth preserving:
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
-from jose import JWTError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.permissions import DEFAULT_PARTNER_ROLE
 from app.core.security import (
+    TokenError,
     create_email_verification_token,
-    decode_token,
+    decode_typed_token,
     generate_token,
     hash_password,
     verify_password,
@@ -284,13 +284,13 @@ def complete_email_verification(db: Session, token: str) -> User:
     )
 
     try:
-        payload = decode_token(token)
-        if payload.get("type") != "email_verification":
-            raise invalid
-        user_id: str = payload["sub"]
-        claimed_email: str = payload["email"]
-    except (JWTError, KeyError):
+        payload = decode_typed_token(
+            token, "email_verification", require=("sub", "email")
+        )
+    except TokenError:
         raise invalid
+    user_id: str = payload["sub"]
+    claimed_email: str = payload["email"]
 
     user = db.get(User, user_id)
     if user is None or user.email != normalise_email(claimed_email):

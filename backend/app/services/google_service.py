@@ -21,11 +21,12 @@ from urllib.parse import urlencode
 
 import httpx
 from fastapi import HTTPException, status
-from jose import JWTError, jwt
+from jose import jwt
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.security import TokenError, decode_typed_token
 from app.core.permissions import DEFAULT_STAFF_ROLE
 from app.models.user import User
 from app.services.rbac_service import get_role_by_name
@@ -59,16 +60,20 @@ def _issue_state(invitation_token: str | None) -> str:
 
 
 def _verify_state(state: str) -> str | None:
-    """Return the invitation token carried in `state`, or raise if state is bad."""
+    """Return the invitation token carried in `state`, or raise if state is bad.
+
+    Uses the shared typed decoder (PM-13), so the `type` assertion that keeps the
+    OAuth state token from being interchangeable with an access token lives in one
+    place rather than being re-implemented here. `inv` is intentionally NOT in
+    `require`: an empty invitation is the normal case for a plain sign-in.
+    """
     try:
-        payload = jwt.decode(state, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-    except JWTError:
+        payload = decode_typed_token(state, "oauth_state")
+    except TokenError:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             "The sign-in request expired or was tampered with. Please try again.",
         )
-    if payload.get("type") != "oauth_state":
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Invalid sign-in state")
     return payload.get("inv") or None
 
 

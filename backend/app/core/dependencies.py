@@ -20,12 +20,11 @@ from datetime import datetime, timedelta, timezone
 from typing import Callable, Generator
 
 from fastapi import Cookie, Depends, HTTPException, Request, status
-from jose import JWTError
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.permissions import SUPER_ADMIN_ROLES
-from app.core.security import decode_token
+from app.core.security import TokenError, decode_typed_token
 from app.db.session import SessionLocal
 from app.models.user import User
 from app.models.user_session import UserSession
@@ -90,15 +89,11 @@ def _decode_access_token(token: str | None) -> tuple[str, str]:
     therefore fail closed and the user signs in again — a one-off inconvenience
     in exchange for the guarantee being real.
     """
-    if not token:
-        raise _CREDENTIALS_EXC
     try:
-        payload = decode_token(token)
-        if payload.get("type") != "access":
-            raise _CREDENTIALS_EXC
-        return payload["sub"], payload["sid"]
-    except (JWTError, KeyError):
+        payload = decode_typed_token(token, "access", require=("sub", "sid"))
+    except TokenError:
         raise _CREDENTIALS_EXC
+    return payload["sub"], payload["sid"]
 
 
 #: Distinct from the generic 401 so the client can tell "your session ended" from

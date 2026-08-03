@@ -48,7 +48,7 @@ since 2026-07-31 — only the documentation was wrong, and wrong in a way that b
 | [PM-10](#pm-10--no-error-logging-or-monitoring--logging-done-monitoring-still-open) | 🟡 | ~~No error logging~~; **no monitoring or alerting** | Infra |
 | [PM-11](#pm-11--no-automated-tests) | 🟠 | No automated tests | Quality |
 | [PM-12](#pm-12--root-readmemd-is-wrong-in-twelve-places--resolved) | ✅ | ~~Root `README.md` is wrong in twelve places~~ | Docs |
-| [PM-13](#pm-13--token-decoding-duplicated-in-routers) | 🟡 | Token decoding duplicated in routers | Auth |
+| [PM-13](#pm-13--token-decoding-duplicated-in-routers--resolved) | ✅ | ~~Token decoding duplicated in routers~~ | Auth |
 | [PM-14](#pm-14--inconsistent-password-validation-rules--resolved) | ✅ | ~~Inconsistent password validation rules~~ | Schemas |
 | [PM-15](#pm-15--patch-endpoints-require-every-field--resolved) | ✅ | ~~`PATCH` endpoints require every field~~ | API |
 | [PM-16](#pm-16--no-change-password-endpoint--resolved) | ✅ | ~~No change-password endpoint~~ | Auth |
@@ -418,7 +418,42 @@ test-engine flow diagram were all deleted.
 
 ---
 
-### PM-13 — Token decoding duplicated in routers
+### PM-13 — Token decoding duplicated in routers ✅ RESOLVED
+
+**Resolved 2026-08-03**, and it had grown since it was written. The two sites named below no longer exist
+— `whoami()` was removed in the account merge — but the *pattern* had spread to **five**:
+
+| Site | Token type |
+|---|---|
+| `dependencies._decode_access_token` | `access` |
+| `auth.refresh` | `refresh` |
+| `auth.two_factor_challenge` | `two_factor` |
+| `auth_service.complete_email_verification` | `email_verification` |
+| `google_service._verify_state` | `oauth_state` |
+
+Each independently decoded, asserted `type`, pulled its claims and caught `(JWTError, KeyError)`.
+
+**Why that mattered more than the duplication.** The `type` assertion is the *only* thing keeping the
+token kinds from being interchangeable — it is what stops a seven-day refresh token being replayed as an
+hour-long access token, and a 2FA challenge token being used as a session. Five copies meant five chances
+for a sixth token type to be added without it, and the failure would be silent: everything would work, and
+one kind of token would quietly be accepted where another belonged.
+
+**Fix:** `security.decode_typed_token(token, expected_type, require=(...))` — one decoder that asserts the
+type, asserts the named claims, and raises a single `TokenError` for every failure mode. Callers no longer
+know that `jose` raises `JWTError` or that a missing claim raises `KeyError`. `TokenError` deliberately
+does not distinguish expired from wrong-type from bad-signature: the caller turns it into a 401 or 400, and
+telling a client which part of a forgery to change next is not useful to anyone but the forger.
+
+`decode_token` remains for the one case that genuinely wants an unchecked payload, with a docstring
+pointing at the typed version.
+
+**Verified 2026-08-03**, all five paths after the refactor: login and `/me` `200`; **a refresh token used as
+an access token `401` and an access token used as a refresh token `401`**; refresh still rotates; logout
+`200` and still `200` when handed deliberate garbage in both cookies (it must never fail); email
+verification `200`, and an access token presented to `/verify-email` rejected with `400` as the wrong type.
+
+Original entry follows.
 
 **Where:** `backend/app/api/auth.py` — `refresh()` (112-123) and `whoami()` (143-155)
 

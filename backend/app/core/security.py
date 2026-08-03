@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 import bcrypt
-from jose import jwt
+from jose import JWTError, jwt
 
 from app.core.config import settings
 
@@ -189,5 +189,58 @@ def create_email_verification_token(subject: Any, email: str) -> str:
 
 
 def decode_token(token: str) -> dict:
-    """Raises JWTError if the token is invalid or expired."""
+    """Raises JWTError if the token is invalid or expired.
+
+    Prefer `decode_typed_token`. This returns a payload whose `type` nobody has
+    checked, and forgetting that check is how a seven-day refresh token gets
+    accepted as an hour-long access token.
+    """
     return jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+
+
+class TokenError(Exception):
+    """A token was absent, malformed, expired, the wrong type, or short a claim.
+
+    Deliberately one exception for all of those. The caller turns it into a 401 or
+    a 400, and the *reason* must not reach the client: "expired" versus "wrong
+    type" versus "bad signature" tells an attacker which part of a forgery attempt
+    to change next.
+    """
+
+
+def decode_typed_token(
+    token: str | None, expected_type: str, *, require: tuple[str, ...] = ()
+) -> dict:
+    """Decode a token, assert its `type`, and assert the claims the caller needs.
+
+    **This is the single place the `type` assertion lives** (TECH_DEBT PM-13). It
+    was previously re-implemented at four call sites — the access guard, refresh,
+    the 2FA challenge and email verification — and that assertion is the only thing
+    standing between the token kinds. Four copies means four chances for a fifth
+    token type to be added without it, and the failure would be silent: everything
+    would work, and one kind of token would be interchangeable with another.
+
+    `require` names the claims that must be present and non-empty, so a caller does
+    not have to write its own `KeyError` handling around `payload["sid"]`.
+
+    Raises `TokenError` for every failure, so no caller needs to know that `jose`
+    raises `JWTError` or that a missing claim raises `KeyError`.
+    """
+    if not token:
+        raise TokenError("No token supplied")
+
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+    except JWTError as exc:
+        raise TokenError("Token could not be decoded") from exc
+
+    if payload.get("type") != expected_type:
+        raise TokenError(
+            f"Expected a {expected_type!r} token, got {payload.get('type')!r}"
+        )
+
+    for claim in require:
+        if not payload.get(claim):
+            raise TokenError(f"Token is missing the {claim!r} claim")
+
+    return payload
