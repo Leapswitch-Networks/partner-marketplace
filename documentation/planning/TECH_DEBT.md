@@ -8,6 +8,7 @@
 **Last audited:** 2026-07-31, after the auth/RBAC rebuild.
 **Since then:** PM-25 added 2026-07-31 (containerisation); PM-26/27/28 added 2026-07-31
 during the auth/RBAC rebuild, which also closed PM-1, 3, 6, 7, 9, 14, 15, 16, 17 and 18.
+**2026-08-03:** PM-29 closed; PM-30 added — the 17 react-hooks errors that closing PM-29 revealed.
 
 ---
 
@@ -54,7 +55,8 @@ during the auth/RBAC rebuild, which also closed PM-1, 3, 6, 7, 9, 14, 15, 16, 17
 | [PM-26](#pm-26--no-http-rate-limiting-successor-to-pm-8) | 🟠 | No HTTP rate limiting | Auth |
 | [PM-27](#pm-27--no-email-transport-so-invitations-and-resets-are-manual) | 🟠 | No email transport — invitations/resets are manual | Infra |
 | [PM-28](#pm-28--google-sso-is-unverified-against-real-google) | 🟠 | Google SSO implemented but never run against Google | Auth |
-| [PM-29](#pm-29--eslint-cannot-run-v6-resolves-against-a-v9-flat-config) | 🟠 | ESLint cannot run — v6 binary vs v9 flat config | Quality |
+| [PM-29](#pm-29--eslint-cannot-run-v6-resolves-against-a-v9-flat-config--resolved) | ✅ | ~~ESLint cannot run — v6 binary vs v9 flat config~~ | Quality |
+| [PM-30](#pm-30--17-react-hooks-errors-from-rules-that-arrive-with-the-wrong-config-version) | 🟡 | 17 react-hooks errors, from `eslint-config-next` 16 on Next 14 | Quality |
 
 ---
 
@@ -525,20 +527,72 @@ happens, treat this code as untested.
 
 ---
 
-### PM-29 — ESLint cannot run: v6 resolves against a v9 flat config
+### PM-29 — ESLint cannot run: v6 resolves against a v9 flat config ✅ RESOLVED
 
-**Where:** `frontend/package.json` declares `eslint: ^9`, but `npx eslint --version` reports **6.4.0**
+**Resolved 2026-08-03.** `npm run lint` now lints, and the root cause was **not** what this entry
+originally guessed — the guess is left here because it was wrong in an instructive way.
 
-`eslint.config.mjs` is a flat config, which needs ESLint 9. The binary that actually resolves is 6.4.0,
-which looks for `.eslintrc` and fails with "couldn't find a configuration file". `npm run lint` is
-also just `eslint` with no path, so it prints help rather than linting anything.
+**What was guessed:** a hoisted transitive copy of ESLint 6 winning module resolution.
 
-Consequence: **no linting runs at all today**, on any workflow. `tsc --noEmit` and `next build` are the
-only checks. Pre-existing and unrelated to the peer-dependency issue in PM-25, though both stem from
-the same `--legacy-peer-deps` install.
+**What it actually was:** the local install is correct — `node_modules/eslint` is **9.39.4**. But every
+one of the 23 shims in `frontend/node_modules/.bin/` had **lost its execute bit** (`-rw-rw-rw-`), and
+they are Windows-style shell shims with `.cmd`/`.ps1` siblings rather than the symlinks npm creates on
+Linux. With `node_modules/.bin/eslint` not executable, `npx` and `npm run` both fall through to the
+next `eslint` on `PATH` — Debian's `/usr/bin/eslint`, which is **6.4.0** and wants `.eslintrc`. Nothing
+was wrong with the dependency tree at all; the "v6 vs v9" symptom was a file-permission artifact of
+how this checkout's `node_modules` was installed.
 
-**Fix:** work out why 6.4.0 wins (likely a hoisted transitive copy), pin the binary, and give the
-`lint` script a target: `"lint": "eslint app components lib types"`.
+**Fix applied:**
+
+1. `chmod +x frontend/node_modules/.bin/*` — restores all 23 shims. `node_modules` is gitignored, so
+   this is a **local repair, not a committed fix**; it must be repeated if `node_modules` is
+   reinstalled in a way that drops the bit again. The filesystem is ext4 and holds the bit fine, so
+   the cause is the install, not the disk.
+2. `package.json` scripts gained a target and two companions:
+   `"lint": "eslint app components lib types"`, `"lint:fix"`, and `"typecheck": "tsc --noEmit"`.
+
+**Diagnosing this again:** compare `npx eslint --version` against
+`grep '"version"' node_modules/eslint/package.json`. If they disagree, check `ls -la node_modules/.bin/`
+for the execute bit before suspecting the dependency tree.
+
+**What it surfaced:** 24 errors on first run. 7 were fixed immediately (see below); the remaining 17
+are recorded as PM-30.
+
+---
+
+### PM-30 — 17 react-hooks errors, from rules that arrive with the wrong config version
+
+**Where:** 12 files across `components/` and `app/`. Reproduce with `npm run lint`.
+
+The first real lint run reported 24 errors. Seven were fixed in the same change, because they were
+genuine defects rather than style opinions:
+
+| Fixed | Rule | What it was |
+|---|---|---|
+| `components/dashboard/Sidebar.tsx` (5) | `react-hooks/static-components`, `react/display-name` | `BottomExpanded` and `BottomCollapsed` were `memo()` components **declared inside `Sidebar`'s render**. A component created during render gets a new type every render, which discards the memoisation and resets any state it holds. Both are hoisted to module level and take `loggingOut`/`onLogout` as props; the now-dead `navIcons.logout` entry was removed in favour of a module-level `logoutIcon` |
+| `components/admin/Candidate.tsx` (2) | `react/no-unescaped-entities` | Raw `"` in JSX text, now `&ldquo;`/`&rdquo;` |
+
+**The 17 that remain**, and why they are deferred rather than fixed:
+
+| Count | Rule |
+|---|---|
+| 15 | `react-hooks/set-state-in-effect` |
+| 1 | `react-hooks/immutability` (`Sidebar.tsx`) |
+| 1 | `react-hooks/preserve-manual-memoization` (`Sidebar.tsx`) |
+
+These come from `eslint-plugin-react-hooks` v6 — the React-Compiler-era rule set — which is bundled by
+**`eslint-config-next@16.2.3`**, while the app runs **`next@14.2.35`**. So the codebase is being judged
+against a rule set from two major versions ahead of its framework. That overlaps **PM-25**: whichever
+way the React/Next version decision goes changes whether these 17 even apply. Fixing them before that
+decision risks refactoring 12 files to satisfy rules that get removed.
+
+Most of the 15 are the mount-flag pattern (`useEffect(() => setIsLoaded(true), [])` driving an entry
+animation) and state derived from a just-completed fetch. Neither is a live bug today; the rule exists
+because both defeat the React Compiler's assumptions.
+
+**Fix:** settle PM-25 first, then re-run and fix whatever the chosen config still reports. Do **not**
+blanket-disable the rules — the `static-components` findings above prove this rule set catches real
+defects in this codebase.
 
 ---
 
@@ -547,7 +601,7 @@ the same `--legacy-peer-deps` install.
 The 2026-07-31 auth/RBAC rebuild closed the four original blockers except PM-2 and PM-4. What is left,
 in order:
 
-1. **PM-29** (ESLint) — small, and it is why no linting protects anything below it
+1. ~~**PM-29** (ESLint)~~ — ✅ done 2026-08-03; linting runs now
 2. **PM-26** (rate limiting) + **PM-2** (`secure` cookies) — both required before public exposure
 3. **PM-5** (row-level scoping) — required before any partner-owned data exists; this is also
    Build Sequence step 2 in [`MARKETPLACE_DOMAIN_PLAN.md`](./MARKETPLACE_DOMAIN_PLAN.md)
@@ -568,8 +622,8 @@ recorded rather than quietly dropped:
 
 - **Row-level scoping (PM-5) will ship without a regression net.** A scoping bug does not raise an
   error — it returns another partner's rows. Nothing in the current toolchain would notice.
-- **`tsc --noEmit` and `next build` are the only automatic checks**, and until PM-29 is fixed there is
-  no linting at all. Neither checks behaviour.
+- **`tsc --noEmit`, `npm run lint` and `next build` are the only automatic checks.** Linting works as
+  of PM-29, but none of the three checks *behaviour* — they check types, style and that it compiles.
 - **The verification that does exist is manual** — a shell script over the auth surface and a
   Chrome-DevTools-Protocol harness over the UI. Both must be re-run by hand and neither runs in CI.
 

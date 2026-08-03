@@ -395,6 +395,70 @@ function NavItems({
   );
 }
 
+/** Sign-out icon. Module-level so the footer buttons below keep a stable element
+ *  identity across Sidebar renders. */
+const logoutIcon = (
+  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h6a2 2 0 012 2v1" />
+  </svg>
+);
+
+/**
+ * The sidebar footer's sign-out control, expanded and collapsed.
+ *
+ * Both are declared here at module level rather than inside `Sidebar`. A
+ * `memo()` component created during render gets a brand-new type on every
+ * render, which discards the memoisation entirely and resets any state it
+ * holds — the failure `react-hooks/static-components` exists to catch. They
+ * take what they need as props instead of closing over Sidebar's scope.
+ */
+const BottomExpanded = memo(function BottomExpanded({
+  large,
+  loggingOut,
+  onLogout,
+}: {
+  large?: boolean;
+  loggingOut: boolean;
+  onLogout: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onLogout}
+      disabled={loggingOut}
+      className={`flex w-full items-center gap-2 rounded-lg px-3 font-medium text-gray-500 transition-all duration-200 hover:bg-red-50 hover:text-red-500 disabled:opacity-50 dark:text-gray-400 dark:hover:bg-red-950/30 dark:hover:text-red-400 ${
+        large ? "py-2.5 text-base" : "py-2 text-sm"
+      }`}
+    >
+      {logoutIcon}
+      {loggingOut ? "Signing out…" : "Sign Out"}
+    </button>
+  );
+});
+
+const BottomCollapsed = memo(function BottomCollapsed({
+  loggingOut,
+  onLogout,
+}: {
+  loggingOut: boolean;
+  onLogout: () => void;
+}) {
+  return (
+    <div className="flex justify-center">
+      <Tooltip label={loggingOut ? "Signing out…" : "Sign Out"}>
+        <button
+          type="button"
+          onClick={onLogout}
+          disabled={loggingOut}
+          className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 transition-all duration-200 hover:bg-red-50 hover:text-red-500 disabled:opacity-50 dark:text-gray-500 dark:hover:bg-red-950/30 dark:hover:text-red-400"
+        >
+          {logoutIcon}
+        </button>
+      </Tooltip>
+    </div>
+  );
+});
+
 //Sidebar
 export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
   const router = useRouter();
@@ -456,11 +520,6 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
         <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
       </svg>
     ),
-    logout: (
-      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h6a2 2 0 012 2v1" />
-      </svg>
-    ),
     roles: (
       <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
@@ -487,35 +546,6 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
       </svg>
     ),
   };
-
-  const BottomExpanded = memo(({ large }: { large?: boolean }) => (
-    <button
-      type="button"
-      onClick={handleLogout}
-      disabled={loggingOut}
-      className={`flex w-full items-center gap-2 rounded-lg px-3 font-medium text-gray-500 transition-all duration-200 hover:bg-red-50 hover:text-red-500 disabled:opacity-50 dark:text-gray-400 dark:hover:bg-red-950/30 dark:hover:text-red-400 ${
-        large ? "py-2.5 text-base" : "py-2 text-sm"
-      }`}
-    >
-      {navIcons.logout}
-      {loggingOut ? "Signing out…" : "Sign Out"}
-    </button>
-  ));
-
-  const BottomCollapsed = memo(() => (
-    <div className="flex justify-center">
-      <Tooltip label={loggingOut ? "Signing out…" : "Sign Out"}>
-        <button
-          type="button"
-          onClick={handleLogout}
-          disabled={loggingOut}
-          className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 transition-all duration-200 hover:bg-red-50 hover:text-red-500 disabled:opacity-50 dark:text-gray-500 dark:hover:bg-red-950/30 dark:hover:text-red-400"
-        >
-          {navIcons.logout}
-        </button>
-      </Tooltip>
-    </div>
-  ));
 
   const navItemsProps = {
     activeSection,
@@ -605,7 +635,7 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
             </nav>
 
             <div className="border-t border-gray-100 px-3 py-3 dark:border-gray-800">
-              <BottomExpanded />
+              <BottomExpanded loggingOut={loggingOut} onLogout={handleLogout} />
             </div>
           </div>
         </div>
@@ -679,7 +709,11 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
         </nav>
 
         <div className={`border-t border-gray-100 flex-shrink-0 dark:border-gray-800 ${collapsed ? "px-2 py-3" : "px-3 py-3 2xl:px-4 2xl:py-4"}`}>
-          {collapsed ? <BottomCollapsed /> : <BottomExpanded />}
+          {collapsed ? (
+            <BottomCollapsed loggingOut={loggingOut} onLogout={handleLogout} />
+          ) : (
+            <BottomExpanded loggingOut={loggingOut} onLogout={handleLogout} />
+          )}
         </div>
       </aside>
     </>

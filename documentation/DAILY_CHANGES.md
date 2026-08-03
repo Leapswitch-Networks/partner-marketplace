@@ -32,6 +32,31 @@
   partner-owned table.
 - **One correction to the domain plan while it was open:** step 6 claimed the RBAC admin UI was still
   outstanding. Its admin half shipped on July 31; only the partner-facing side remains.
+- **Linting works for the first time (PM-29), and the recorded cause of the outage was wrong.** The
+  register said a hoisted transitive ESLint 6 was winning module resolution. It wasn't: the local
+  install is 9.39.4 and always was. What had actually happened is that all 23 shims in
+  `frontend/node_modules/.bin/` had lost their execute bit, so `npx` and `npm run` skipped straight past
+  them to Debian's `/usr/bin/eslint`, which is 6.4.0 and wants an `.eslintrc`. The dependency tree was
+  never the problem. Restoring the bit is a local repair because `node_modules` is gitignored; what is
+  committed is the script fix — `lint` finally has a target, plus `lint:fix` and `typecheck`. The
+  diagnostic worth remembering is written into PM-29: compare `npx eslint --version` against the
+  version in `node_modules/eslint/package.json`, and if they disagree check the execute bit before
+  suspecting the tree.
+- **The first real lint run found 24 errors; 7 were genuine defects and are fixed.** Five were one bug
+  wearing two rule names: `BottomExpanded` and `BottomCollapsed` were `memo()` components declared
+  *inside* `Sidebar`'s render, which hands them a new type on every render — the memoisation was doing
+  nothing and any state they held would reset. Both are hoisted to module level and take
+  `loggingOut`/`onLogout` as props, and the now-unused `navIcons.logout` gave way to a module-level
+  `logoutIcon`. The other two were raw quote characters in JSX text in `Candidate.tsx`.
+- **The remaining 17 are deferred on purpose, as PM-30.** Fifteen are `set-state-in-effect`, plus one
+  `immutability` and one `preserve-manual-memoization`. They come from `eslint-plugin-react-hooks` v6,
+  bundled by `eslint-config-next@16.2.3` — two major versions ahead of the `next@14.2.35` the app
+  actually runs. Fixing them now means refactoring twelve files to satisfy rules that the PM-25 version
+  decision could remove. They were not blanket-disabled either: the `static-components` findings above
+  prove this rule set catches real defects here.
+- **Verified:** `npm run typecheck` clean, `npm run build` green across all 10 routes, `npm run lint`
+  down from 24 errors to 17. The Sidebar refactor was **not** exercised in a browser — the build
+  compiles it, which is not the same as watching the sign-out button work.
 
 ---
 
