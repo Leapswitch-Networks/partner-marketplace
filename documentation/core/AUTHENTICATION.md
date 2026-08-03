@@ -36,7 +36,7 @@ add a role.
 |---|---|---|
 | Who may sign in | `status` | `INACTIVE` \| `ACTIVE` \| `SUSPENDED` — only ACTIVE |
 | Staff vs partner | `account_type` | `staff` \| `partner` — drives *signup policy*, never authorization |
-| How they sign in | `auth_provider` | `credentials` \| `google`; a `google` account has `password = NULL` |
+| How they sign in | `auth_provider` | `password` \| `google`; a `google` account has `password = NULL` |
 | What they may do | `roles` → `permissions` | See [`AUTHORIZATION.md`](./AUTHORIZATION.md) |
 
 ---

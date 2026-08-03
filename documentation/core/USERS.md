@@ -20,7 +20,7 @@
 | `email` | `String(255)` unique, indexed | **Lower-cased** on write and lookup |
 | `password` | `String(255)` nullable | **bcrypt digest.** NULL for Google-only accounts |
 | `email_verified_at` | `DateTime(tz)` | Auto-set for Google sign-ups and admin-created accounts |
-| `auth_provider` | enum | `credentials` \| `google` |
+| `auth_provider` | enum | `password` \| `google` (LeapDesk's values) |
 | `google_id` | `String(255)` unique, indexed | |
 | `google_avatar` | `String(500)` | Source for `avatar_url` |
 
