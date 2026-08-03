@@ -1,6 +1,46 @@
 import axiosInstance from "./axiosInstance";
 import type { CurrentUser } from "@/types";
 
+/** Successful sign-in: a session now exists and the cookies are set. */
+export interface LoginSuccess {
+  message: string;
+  user: CurrentUser;
+  two_factor_required?: false;
+}
+
+/**
+ * Password accepted, second factor outstanding. **No session and no cookie yet.**
+ */
+export interface TwoFactorRequired {
+  two_factor_required: true;
+  challenge_token: string;
+  message: string;
+  recovery_codes_remaining: number;
+}
+
+export type LoginResult = LoginSuccess | TwoFactorRequired;
+
+/** Narrowing helper, so no caller has to remember which field to test. */
+export function isTwoFactorRequired(result: LoginResult): result is TwoFactorRequired {
+  return result.two_factor_required === true;
+}
+
+export interface TwoFactorStatus {
+  enabled: boolean;
+  /** A secret exists but was never confirmed. 2FA is NOT enforced in this state. */
+  pending_confirmation: boolean;
+  confirmed_at: string | null;
+  recovery_codes_remaining: number;
+}
+
+export interface TwoFactorEnrolment {
+  secret: string;
+  /** Feed this to a QR renderer. The backend sends no image on purpose. */
+  otpauth_uri: string;
+  recovery_codes: string[];
+  message: string;
+}
+
 /**
  * Auth endpoints.
  *
@@ -21,8 +61,50 @@ export const authApi = {
     personal_email?: string;
   }) => axiosInstance.post<{ message: string }>("/api/auth/register", data),
 
+  /**
+   * Sign in. **Two possible shapes**, and the caller must branch on
+   * `two_factor_required` rather than assuming a `user` is present.
+   *
+   * When the account has 2FA enabled the password step succeeds but no session is
+   * created and no cookie is set — the response carries a short-lived
+   * `challenge_token` to exchange at `twoFactorChallenge`.
+   */
   login: (data: { email: string; password: string }) =>
-    axiosInstance.post<{ message: string; user: CurrentUser }>("/api/auth/login", data),
+    axiosInstance.post<LoginResult>("/api/auth/login", data),
+
+  /** Exchange a challenge token plus a TOTP **or** a recovery code for a session. */
+  twoFactorChallenge: (data: {
+    challenge_token: string;
+    code?: string;
+    recovery_code?: string;
+  }) =>
+    axiosInstance.post<{ message: string; user: CurrentUser }>(
+      "/api/auth/two-factor-challenge",
+      data
+    ),
+
+  /** Re-prove the password. Required before enabling or disabling 2FA. */
+  confirmPassword: (data: { password: string }) =>
+    axiosInstance.post<{ message: string }>("/api/auth/me/confirm-password", data),
+
+  twoFactorStatus: () =>
+    axiosInstance.get<TwoFactorStatus>("/api/auth/me/two-factor"),
+
+  /** Begin enrolment. Returns the secret and codes **once** — they are not retrievable. */
+  enableTwoFactor: () =>
+    axiosInstance.post<TwoFactorEnrolment>("/api/auth/me/two-factor"),
+
+  /** Prove a code works. This is what actually turns 2FA on. */
+  confirmTwoFactor: (data: { code: string }) =>
+    axiosInstance.post<{ message: string }>("/api/auth/me/two-factor/confirm", data),
+
+  disableTwoFactor: () =>
+    axiosInstance.delete<{ message: string }>("/api/auth/me/two-factor"),
+
+  regenerateRecoveryCodes: () =>
+    axiosInstance.post<{ recovery_codes: string[]; message: string }>(
+      "/api/auth/me/two-factor/recovery-codes"
+    ),
 
   logout: () => axiosInstance.post<{ message: string }>("/api/auth/logout"),
 

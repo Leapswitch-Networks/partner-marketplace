@@ -115,6 +115,64 @@
 
 ---
 
+## August 3, 2026 — 2FA frontend, security headers finished, admin 2FA reset
+
+- **The 2FA endpoints now have a UI.** They worked and nothing reached them — the same state the RBAC API
+  was in before July 31. Sign-in gained a challenge step, and the profile modal gained a security section
+  for enrolling, confirming, disabling and re-keying.
+- **Sign-in branches on an explicit flag, not on a missing field.** `/login` returns one of two shapes, and
+  the client tests `two_factor_required` rather than inferring from an absent `user`. A correct password
+  with 2FA enabled is **not** a sign-in, and treating it as one would drop the user at a dashboard with no
+  session. A typed `isTwoFactorRequired()` narrowing helper exists so no call site has to remember which
+  field to check.
+- **The challenge replaces the form rather than appearing beside it.** Leaving the email and password on
+  screen invites re-submitting them, which mints a second challenge token and invalidates nothing.
+- **Both ways in are offered, and that is not optional.** A phone is lost far more often than a password,
+  so a UI accepting only an authenticator code strands the user holding recovery codes they cannot use.
+  The recovery path shows how many codes remain, and the settings panel warns in amber at two or fewer —
+  running out is how losing a phone becomes losing the account.
+- **A 429 at the challenge is reported as rate limiting, not as a wrong code.** Saying "that code is
+  invalid" when the real problem is too many attempts sends people hunting for a fault in their
+  authenticator app.
+- **The UI mirrors the backend's three states instead of collapsing them to on/off.** A stored-but-
+  unconfirmed secret gets its own "Setup incomplete" badge and its own copy saying 2FA is *not* being
+  enforced. Collapsing that into "on" is precisely how a user believes they are protected when they are
+  not — or believes they are locked out when they are not.
+- **No QR image, deliberately, and that is a trade-off worth naming.** Rendering one means adding a QR
+  library to a project where `npm ci` is already broken on a peer conflict (PM-25). What ships instead
+  works everywhere: the `otpauth://` URI as a link, which opens the authenticator directly on a phone,
+  plus the secret grouped in fours for the manual-entry field every authenticator has. A QR is a nicety on
+  top of that, recorded as follow-up rather than pretended to be present.
+- **The password-confirmation gate is handled as a retry, not an error.** The backend answers `403` with
+  `X-Password-Confirmation-Required`; the UI catches that, prompts for the password, and then **re-runs
+  the original action**. Treating it as a `401` would have signed the user out instead of asking them a
+  question.
+- **Security headers are now on the frontend too, completing PM-33.** `next.config.mjs` sets them on every
+  page. Not duplication of the API's set — a header on the API does nothing for a page the API did not
+  serve, and framing and MIME-sniffing protections matter on HTML where they are close to decorative on
+  JSON. HSTS is deliberately absent here: it belongs on the TLS terminator, and emitting it from a dev
+  server on plain HTTP would pin `localhost` to HTTPS in every developer's browser for a year with no
+  server-side undo.
+- **Admin 2FA reset added, for the case recovery codes exist to cover and sometimes do not** — a lost
+  phone with every code already spent. `POST /api/users/{id}/reset-two-factor` clears the enrolment **and
+  revokes every session**, and the pairing is the point: if the phone was stolen rather than lost, whoever
+  has it may still hold a live session, so clearing only the secret would remove the second factor and
+  leave the attacker signed in. Gated on `user-update` plus the same protection rule as an edit — verified
+  `403` when an Admin targets a super-admin, `400` when there is nothing to reset rather than a silent
+  no-op, and recorded with the actor.
+- **Lint went 17 → 18, and it is not being hidden.** The new settings component fetches on mount, which is
+  the ordinary shape of a client component reading an API, and `set-state-in-effect` flags it. An honest
+  attempt to satisfy the rule — threading a cancellation flag so the effect cannot write state after
+  unmount — **did not clear it**, because the rule flags any call that transitively sets state and cannot
+  see that the function awaits first. The flag was kept regardless, since it fixes a real
+  setState-after-unmount in a component living inside a closable modal. The count was updated in PM-30
+  along with the point this proves: the rule set is a tax on every new component, not a fixed list of 17
+  legacy problems, which is the real argument for settling PM-25.
+- **Verified:** `tsc --noEmit` clean, `next build` green, security headers confirmed on `/sign-in`, and the
+  admin reset exercised through all four of its outcomes against the running API.
+
+---
+
 ## August 3, 2026 — Two-factor auth and password confirmation (Fortify parity)
 
 - **The ecosystem question first, because it decided the approach: there is no Fortify for FastAPI.**

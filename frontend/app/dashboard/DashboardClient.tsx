@@ -13,6 +13,7 @@ import AddTestSectionForm from "@/components/admin/AddTestSectionForm";
 import SelectQuestionType from "@/components/admin/SelectQuestionType";
 import AddQuestionForm from "@/components/admin/AddQuestionForm";
 import ProfileForm from "@/components/admin/ProfileForm";
+import TwoFactorSettings from "@/components/auth/TwoFactorSettings";
 import UsersModule from "@/components/admin/UsersModule";
 import RolesModule from "@/components/admin/RolesModule";
 import Candidate from "@/components/admin/Candidate";
@@ -193,6 +194,14 @@ export default function DashboardClient() {
             {/* Body */}
             <div className="px-6 py-6">
               <ProfileForm />
+
+              {/* Security lives in the same modal as the profile because that is
+                  where a user looks for it, and it is separated by a rule rather
+                  than a second tab — two clicks to find 2FA is two chances to not
+                  bother. */}
+              <div className="mt-8 border-t border-gray-100 pt-6 dark:border-gray-800">
+                <TwoFactorSettings />
+              </div>
             </div>
           </div>
         </div>,

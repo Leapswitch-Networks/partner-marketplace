@@ -7,7 +7,8 @@ import { z } from "zod";
 import { useRouter } from "next/navigation";
 import Input from "@/components/common/Input";
 import Button from "@/components/common/Button";
-import { authApi } from "@/lib/api/authApi";
+import { authApi, isTwoFactorRequired } from "@/lib/api/authApi";
+import TwoFactorChallenge from "@/components/auth/TwoFactorChallenge";
 import { setUser } from "@/lib/store/authSlice";
 import useAppDispatch from "@/lib/hooks/useAppDispatch";
 
@@ -32,6 +33,10 @@ export default function SignInForm({
   const router = useRouter();
   const dispatch = useAppDispatch();
   const [serverError, setServerError] = useState<string | null>(null);
+  const [challenge, setChallenge] = useState<{
+    token: string;
+    recoveryCodesRemaining: number;
+  } | null>(null);
 
   const {
     register,
@@ -45,6 +50,18 @@ export default function SignInForm({
       // One login endpoint for everyone — staff and partners share the `users`
       // table, and roles decide what happens next.
       const res = await authApi.login({ email: data.email, password: data.password });
+
+      // Two possible shapes. Branch on the explicit flag rather than checking for
+      // a missing `user`: a correct password with 2FA enabled is NOT a sign-in,
+      // and treating it as one would drop the user at a dashboard with no session.
+      if (isTwoFactorRequired(res.data)) {
+        setChallenge({
+          token: res.data.challenge_token,
+          recoveryCodesRemaining: res.data.recovery_codes_remaining,
+        });
+        return;
+      }
+
       dispatch(setUser(res.data.user));
       router.push("/dashboard");
     } catch (err: unknown) {
@@ -53,6 +70,19 @@ export default function SignInForm({
       setServerError(detail ?? "Invalid email or password.");
     }
   };
+
+  // The challenge replaces the form rather than appearing alongside it. Leaving
+  // the email and password fields on screen invites re-submitting them, which
+  // would mint a second challenge token and invalidate nothing — just confusion.
+  if (challenge) {
+    return (
+      <TwoFactorChallenge
+        challengeToken={challenge.token}
+        recoveryCodesRemaining={challenge.recoveryCodesRemaining}
+        onCancel={() => setChallenge(null)}
+      />
+    );
+  }
 
   return (
     <form onSubmit={handleSubmit(onSubmit)} method="post" noValidate className="flex flex-col gap-5">
