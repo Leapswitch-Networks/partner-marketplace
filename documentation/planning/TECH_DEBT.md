@@ -39,7 +39,7 @@ since 2026-07-31 — only the documentation was wrong, and wrong in a way that b
 | [PM-7](#pm-7--three-auth-guards-are-defined-but-unused--resolved) | ✅ | ~~Three auth guards are defined but unused~~ | Authz |
 | [PM-8](#pm-8--no-rate-limiting-and-no-lockout--partially-resolved) | ✅ | ~~No rate limiting and no lockout~~ — both now exist (PM-26) | Auth |
 | [PM-9](#pm-9--cors-origins-hardcoded-to-localhost--resolved) | ✅ | ~~CORS origins hardcoded to localhost~~ | Infra |
-| [PM-10](#pm-10--no-error-logging-or-monitoring) | 🟠 | No error logging or monitoring | Infra |
+| [PM-10](#pm-10--no-error-logging-or-monitoring--logging-done-monitoring-still-open) | 🟡 | ~~No error logging~~; **no monitoring or alerting** | Infra |
 | [PM-11](#pm-11--no-automated-tests) | 🟠 | No automated tests | Quality |
 | [PM-12](#pm-12--root-readmemd-is-wrong-in-twelve-places--resolved) | ✅ | ~~Root `README.md` is wrong in twelve places~~ | Docs |
 | [PM-13](#pm-13--token-decoding-duplicated-in-routers) | 🟡 | Token decoding duplicated in routers | Auth |
@@ -266,12 +266,79 @@ the problem — see `../system-design/DEPLOYMENT.md` § 1.
 
 ---
 
-### PM-10 — No error logging or monitoring
+### PM-10 — No error logging or monitoring ⚠️ LOGGING DONE, MONITORING STILL OPEN
 
-**Where:** whole backend
+**Logging resolved 2026-08-03** in `backend/app/core/logging.py` plus three exception handlers in
+`main.py`. **Monitoring is not done** — nothing alerts anyone, so the item stays open rather than being
+marked resolved. Splitting it honestly beats ticking it off.
 
-No exception handlers, no structured logging, no alerting. An unhandled exception becomes a bare 500
-with a traceback on stdout — and in a deployed environment, effectively invisible.
+#### What exists now
+
+| Piece | What it does |
+|---|---|
+| `configure_logging()` | One root handler. `LOG_FORMAT=console` for humans, `json` for aggregators; `LOG_LEVEL` configurable |
+| `RequestContextMiddleware` | Assigns each request an id, logs method/path/status/duration, echoes the id in `X-Request-ID` |
+| `RequestIdFilter` | Copies the id onto **every** record, so a line from deep inside a service is attributable without threading an id through every signature |
+| `RequestValidationError` handler | 422s logged at INFO — a caller's mistake is not an error |
+| `SQLAlchemyError` handler | Separate from the catch-all, because "the database refused this" and "the code has a bug" need different responses from whoever is on call |
+| `Exception` handler | Logs the traceback, returns `{"detail": …, "request_id": …}` |
+
+Uvicorn's own loggers are re-pointed at the root handler, so its access lines carry the request id too
+and nothing is printed twice in two different formats. `sqlalchemy.engine` is pinned to WARNING —
+its INFO level is every statement executed, which is useful deliberately and unbearable by accident.
+
+#### Two rules the implementation is built around
+
+**Request bodies are never logged.** Login, registration, change-password and reset all carry a
+plaintext password in the body. Logging bodies "for debugging" would write those passwords to disk in
+cleartext and undo PM-1. The 422 handler is where this nearly went wrong: `exc.errors()` can echo the
+submitted value, so it logs only field locations and messages. Verified with canary passwords through
+both the normal and the validation path — neither reached the logs.
+
+**Responses carry a correlation id and nothing else.** A traceback or a raw database error in a
+response body tells an attacker table names, driver versions and file paths. The id is what ties a
+user's "it broke at 3pm" to the traceback.
+
+#### Two bugs found while verifying, both in this implementation
+
+1. **The 500 body reported `request_id: "-"`.** The middleware reset the `ContextVar` in a `finally`,
+   which ran as the exception propagated — *before* Starlette's `ServerErrorMiddleware` invoked the
+   handler that builds the body. So the one response that exists to hand over an id handed over a dash.
+2. **Every access log line read `[-]`.** Same cause on the success path: the reset ran before the
+   summary line was emitted, and before uvicorn wrote its access line. The most useful line in the log
+   had no id on it.
+
+Both fixed by never resetting: every request sets its own id as its first act, so a stale value can
+never be read as a fresh one. Verified that the `X-Request-ID` response header now matches both the
+application's summary line and uvicorn's access line for the same request.
+
+Also trimmed: a 500 was logging **three** tracebacks — the middleware, the handler, and uvicorn. The
+middleware now logs the exception type and message without a traceback, contributing the route and
+duration that the other two lack. Uvicorn's copy is unavoidable: `ServerErrorMiddleware` always
+re-raises after calling a handler.
+
+#### Verified 2026-08-03
+
+| Check | Result |
+|---|---|
+| `X-Request-ID` generated when absent | 16-hex id present on the response |
+| Inbound id honoured | `my-trace-abc123` echoed back |
+| Malformed inbound id rejected | `bad id with spaces!!` replaced with a fresh id — blocks log injection via a newline in the header |
+| Unhandled exception | `500` with `{"detail": "Internal server error.", "request_id": "…"}` and **no traceback in the body** |
+| Traceback reaches the log | Present under the same id, alongside the access line |
+| Password leakage | Canary passwords absent from logs via both the normal and 422 paths |
+| `LOG_FORMAT=json` | One JSON object per line, extras as fields, traceback as an escaped string |
+
+The 500 was triggered with a temporary route that raised `RuntimeError`; it was removed afterwards and
+its absence confirmed (`404`, and gone from the source).
+
+#### Still open — the monitoring half
+
+- **Nothing alerts.** These lines go to stdout. Shipping them somewhere that pages a human is a
+  deployment concern and is not built.
+- **No error tracking service.** No Sentry or equivalent, so there is no aggregation, no deduplication
+  and no regression detection across releases.
+- **No log retention.** Container stdout, lost on `docker compose down`.
 
 ---
 
@@ -692,7 +759,7 @@ in order:
 3. ~~**PM-4** (seed credentials)~~ — ✅ was already fixed in code; the docs were the live problem
 4. ~~**PM-26** (rate limiting)~~ — ✅ done 2026-08-03; also closed PM-8 and fixed an
    `X-Forwarded-For` bypass that made the limiter useless
-5. **PM-10** (logging) — a 500 in production is currently invisible
+5. **PM-10** — logging ✅ done 2026-08-03; **monitoring and alerting still open**
 6. **PM-5** (row-level scoping) — required before any partner-owned data exists; this is also
    Build Sequence step 2 in [`MARKETPLACE_DOMAIN_PLAN.md`](./MARKETPLACE_DOMAIN_PLAN.md)
 7. **PM-27** (email) — invitations and password reset are not self-service without it

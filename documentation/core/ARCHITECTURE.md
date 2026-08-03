@@ -326,7 +326,8 @@ Still open:
 |-----|--------|
 | `COOKIE_SECURE` defaults to `False` | A **deployment requirement, not a code defect** — PM-2 is closed. The flag is honoured on both set and clear; it must be set `True` in any HTTPS environment |
 | No CSRF token | `samesite=lax` alone; no double-submit or synchroniser token |
-| **No HTTP rate limiting** | Lockout is per-account, so an attacker can still spray many accounts (PM-26) |
+| ~~No HTTP rate limiting~~ | **Done 2026-08-03** — per-IP, three tiers, in `core/rate_limit.py`. Counters are per process, so N workers multiply every limit by N (PM-26) |
+| No monitoring or alerting | Structured logging with request correlation exists as of 2026-08-03; **nothing alerts**, and container stdout is lost on `down` (PM-10) |
 | No email transport | Invitations return the accept URL; reset tokens are only readable in the DB (PM-27) |
 | Google SSO unverified | Implemented but never run against real Google credentials (PM-28) |
 | No row-level / partner scoping | Users and invitations are admin-or-self; no ownership model (PM-5) |

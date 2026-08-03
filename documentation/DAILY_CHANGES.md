@@ -14,7 +14,7 @@
   selected the Viho admin theme (Pixelstrap) and shared its login screen. Because the theme is
   **paid**, its source cannot enter this repo — so the design *decisions* were extracted into
   `documentation/design/VIHO_THEME_REFERENCE.md` and the source stays out. New folder
-  `documentation/design/` with `assets/inspiration/` for the owner's screenshots, plus a row in
+  `documentation/design/` with `assets/screenshots/` for the owner's screenshots, plus a row in
   `INDEX.md`.
 - **The values are parsed from the theme's stylesheets, not eyedropped from screenshots.** The demo
   serves two CSS bundles totalling 2.6 MB; `app.css` alone carries 3,878 hex literals across 258
@@ -40,10 +40,36 @@
 - **Also noted:** the theme's `success` is a shade of its own primary and its `info` is grey, so both
   read wrong semantically; and its login input sets `:focus { box-shadow: none }`, which our standards
   forbid. All three are called out as "do not copy".
-- **Verified:** values quoted from real selectors in the downloaded CSS; contrast ratios computed from
-  sRGB relative luminance, not estimated. **Documentation only — no application code changed**, so
-  there is nothing to build or test. The screenshots table is intentionally empty pending the owner's
-  images.
+- **The owner then supplied four screenshots, and checking the doc against them corrected two claims.**
+  The images went into `documentation/design/assets/screenshots/`; the parallel `assets/inspiration/`
+  folder was folded into it so the two could not drift, and three files were renamed to the documented
+  convention. Colours were then verified by sampling pixels rather than by eye.
+  - **Dark mode was documented backwards.** Reading the CSS alone suggested the content wrapper and the
+    cards were both `#111727`, and the doc warned cards would look flat. The pixels say the gutters are
+    `#202938` and the cards are `#111727` — so cards are **darker** than the page. That is an
+    inversion of the usual convention and of our own dark mode, where surfaces are *lighter* than the
+    page. It is now recorded as a fourth adoption conflict, because matching it means inverting our
+    surface tokens rather than re-hexing them. This only came to light because a dark-mode screenshot
+    arrived; static analysis of a 1.3 MB minified stylesheet could not settle it.
+  - **"Squared corners" was too broad.** Cards really are `border-radius: 0`, but corner-pixel scans
+    show the primary button at ~5–6px and the active sidebar item at ~8–10px. The theme pairs squared
+    surfaces with rounded controls, so our `rounded-lg` controls **already match** and only the card
+    radius conflicts. The adoption cost for that item dropped from "touch 11 primitives" to one
+    decision about `Card`.
+- **The screenshots also produced a dashboard-shell section the CSS could not give.** Sidebar profile
+  block, nav item states, header icon row, and the widget vocabulary — stat cards, gradient area
+  charts, ghost/track bars behind real bars, in-cell sparklines, borderless tables. Three of those
+  conflict with our patterns and are flagged: Viho renders status as plain text where our index spec
+  mandates an interactive `Badge` in a fixed column, its charts use a strictly two-colour categorical
+  palette, and in-cell sparklines would be a real `DataTable` feature rather than a style tweak.
+- **A ranked list of the screenshots still worth capturing is in the doc** rather than left to memory —
+  index/table page first, then the form wizard, then user edit/profile, then a modal and input error
+  states. The reasoning is recorded per item so the next person can re-prioritise instead of guessing.
+- **Verified:** values quoted from real selectors in the downloaded CSS, then cross-checked against the
+  four renders by pixel sampling and corner scans; contrast ratios computed from sRGB relative
+  luminance, not estimated. The login page's alpha washes composite to exactly the measured
+  `#eaf0ef` / `#eff3f2`, so extraction and render agree. **Documentation only — no application code
+  changed**, so there is nothing to build or test.
 
 ---
 
@@ -156,6 +182,44 @@
   parsing a two-hop chain. **What is not fixed:** counters live in process memory, so N workers
   multiply every limit by N and a restart clears them, and per-IP limiting does nothing against a
   botnet. Both are recorded rather than glossed.
+- **The backend logs now, and every line is attributable to a request (PM-10).** It previously logged
+  nothing: an unhandled exception became a bare 500 with a traceback on stdout and no way to tie it to
+  the request that caused it. Every request now gets an id, echoed back as `X-Request-ID` and stamped
+  onto every log record via a filter, so a line emitted deep inside a service is traceable without
+  passing an id through every function signature. Three exception handlers: validation errors at INFO
+  because a 422 is the caller's mistake, database errors separately from the catch-all because "the
+  database refused this" and "the code has a bug" need different responses from whoever is on call, and
+  a last-resort handler that logs the traceback and returns only a correlation id. `LOG_FORMAT=console`
+  for a human, `json` for an aggregator.
+- **Two rules shaped the implementation, and one of them nearly went wrong.** Request bodies are never
+  logged, because login, registration, change-password and reset all carry a plaintext password —
+  logging bodies would write them to disk in cleartext and undo the bcrypt work. The near-miss was the
+  validation handler: `exc.errors()` can echo the submitted value, so it logs only field locations and
+  messages. Checked with canary passwords through both the normal and the 422 path; neither appeared in
+  the logs. The second rule is that responses carry a correlation id and nothing else — a traceback in a
+  response body tells an attacker table names, driver versions and file paths.
+- **Verifying it found two bugs in the logging itself, both the same mistake.** The 500 body reported
+  `request_id: "-"`, and every access log line read `[-]`. Both because the middleware reset the
+  context variable too early — on the error path it ran before Starlette invoked the handler that builds
+  the body, and on the success path before the summary line was even emitted. So the one response whose
+  entire purpose is to hand over an id handed over a dash, and the most useful line in the log had no id
+  on it. Fixed by never resetting: each request sets its own id first thing, so a stale value can never
+  be mistaken for a fresh one. **Both were invisible without checking the actual output** — the code
+  read fine.
+- **A 500 was also logging three tracebacks.** The middleware, the handler, and uvicorn all recorded
+  the same failure. The middleware now logs the exception type and message without a traceback,
+  contributing the route and duration the other two lack. Uvicorn's copy cannot be removed —
+  `ServerErrorMiddleware` always re-raises after calling a handler.
+- **Seven checks, all passing:** id generated when absent; a valid inbound id honoured; a malformed one
+  (`bad id with spaces!!`) replaced with a fresh id, which is what blocks log injection through a
+  newline in the header; a deliberate unhandled exception returning 500 with an id and **no traceback in
+  the body**; the traceback present in the log under that same id; canary passwords absent; and
+  `LOG_FORMAT=json` emitting one object per line. The 500 was triggered with a temporary route that was
+  removed afterwards, and its removal confirmed.
+- **PM-10 is deliberately *not* marked resolved — only its logging half is.** Nothing alerts anyone,
+  there is no error-tracking service, and container stdout is lost on `docker compose down`. Ticking off
+  the whole item because logs exist is how a register stops being trustworthy, which is the same failure
+  this day already found twice.
 - **One thing left alone deliberately:** the four accounts in the local database still carry their
   pre-migration passwords, now bcrypt-hashed. `abc@gmail.com` therefore still signs in *on this
   machine*, which is why the onboarding checklist used to pass — but a fresh setup has only the root

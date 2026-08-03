@@ -1,12 +1,23 @@
-from fastapi import FastAPI
+import logging
+
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.api import auth, candidate, category, google, invitations, permissions, roles, users
 from app.core.config import settings
+from app.core.logging import RequestContextMiddleware, configure_logging, request_id_ctx
 from app.core.rate_limit import RateLimitMiddleware
 from app.db.session import engine
+
+# Before anything else, so import-time warnings land in the configured format.
+configure_logging()
+
+logger = logging.getLogger("app")
 
 app = FastAPI(title="Partner Marketplace API", version="1.0.0")
 
@@ -28,6 +39,80 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Outermost, so its timing covers gzip and rate limiting too and every log line
+# from any handler carries a request id (TECH_DEBT PM-10).
+app.add_middleware(RequestContextMiddleware)
+
+
+# --- Exception handling (TECH_DEBT PM-10) ------------------------------------
+#
+# The contract for every handler below: log everything the server needs, return
+# only what the client needs. A traceback or a database error string in a
+# response body tells an attacker about table names, driver versions and file
+# paths, so responses carry a correlation id and nothing else. The id is what
+# ties a user's "it broke" to the traceback in the logs.
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    """A 422 is the caller's mistake, so it is logged at INFO, not ERROR.
+
+    `exc.errors()` can echo submitted values, which on `/api/auth/login` means
+    the password. Only the field locations and messages are logged; the input is
+    dropped.
+    """
+    logger.info(
+        "request validation failed",
+        extra={
+            "path": request.url.path,
+            "fields": [
+                {"loc": ".".join(str(part) for part in err.get("loc", ())), "msg": err.get("msg")}
+                for err in exc.errors()
+            ],
+        },
+    )
+    return JSONResponse(status_code=422, content={"detail": exc.errors()})
+
+
+@app.exception_handler(SQLAlchemyError)
+async def database_exception_handler(request: Request, exc: SQLAlchemyError) -> JSONResponse:
+    """Database failures get their own handler so they are identifiable in logs.
+
+    Deliberately ahead of the catch-all: "the database refused this" and "the
+    code has a bug" need different responses from whoever is on call, and a
+    generic 500 makes them indistinguishable.
+    """
+    logger.exception(
+        "database error", extra={"path": request.url.path, "method": request.method}
+    )
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "A database error occurred. Please try again.",
+            "request_id": request_id_ctx.get(),
+        },
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Last resort. Logs the traceback, returns a correlation id.
+
+    Without this, FastAPI returns a bare 500 and the traceback goes to stdout
+    unattributed — the state PM-10 described.
+    """
+    logger.exception(
+        "unhandled exception", extra={"path": request.url.path, "method": request.method}
+    )
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": "Internal server error.",
+            "request_id": request_id_ctx.get(),
+        },
+    )
+
 
 app.include_router(auth.router, prefix="/api")
 app.include_router(google.router, prefix="/api")

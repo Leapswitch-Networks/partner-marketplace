@@ -75,6 +75,17 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_SECRET: str = ""
     GOOGLE_REDIRECT_URI: str = ""
 
+    # --- Logging (PM-10) ----------------------------------------------------
+    # `console` is readable by a human; `json` is one object per line for an
+    # aggregator. Deployed environments want json — grep does not survive
+    # multi-line tracebacks.
+    LOG_LEVEL: str = "INFO"
+    LOG_FORMAT: str = "console"
+    # Echoed back on every response and accepted on the way in, so a request can
+    # be followed across the proxy, the API and the logs. Inbound values are
+    # validated before use: see core/logging.py.
+    LOG_REQUEST_ID_HEADER: str = "X-Request-ID"
+
     # --- Frontend -----------------------------------------------------------
     # Where OAuth hands the browser back to, and the CORS allowlist. Comma
     # separated. Configurable so deploying never needs a code edit (PM-9).
