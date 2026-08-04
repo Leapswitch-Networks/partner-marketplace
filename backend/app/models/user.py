@@ -1,9 +1,10 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.config import settings
 from app.core.permissions import ADMIN_ACCESS_ROLES, SUPER_ADMIN_ROLES
 from app.db.base import Base
 from app.models.associations import user_roles
@@ -134,6 +135,21 @@ class User(Base):
         DateTime(timezone=True), nullable=True
     )
 
+    # --- Password OTP recovery (settings page) -------------------------------
+    # A signed-in user who does not know their current password proves ownership
+    # of their email instead. `password_otp_verified_at` is the grace marker that
+    # lets change-password omit the current password; LeapDesk keeps that flag in
+    # the session, which a stateless JWT has no equivalent for. The code itself is
+    # hashed — see migration e2b8d5c31f47 for why that diverges from LeapDesk.
+    password_otp: Mapped[str | None] = mapped_column(Text, nullable=True)
+    password_otp_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+        comment="Send cooldown derives from this — sent_at is expires_at minus the TTL",
+    )
+    password_otp_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     # --- Audit --------------------------------------------------------------
     created_by: Mapped[str | None] = mapped_column(
         String(36), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
@@ -210,6 +226,22 @@ class User(Base):
         if self.locked_until is None:
             return False
         return self.locked_until > datetime.now(timezone.utc)
+
+    @property
+    def password_otp_grace(self) -> bool:
+        """Recently proved control of their email, so may skip the current password.
+
+        A property rather than a service function because the API serialises it by
+        field name, and because `auth_service` and `rbac_service` both need it —
+        putting it in either one would make the other import it circularly.
+
+        The window is intentionally the same length as the code's own TTL: the
+        permission it grants should not outlive the evidence for it.
+        """
+        if self.password_otp_verified_at is None:
+            return False
+        window = timedelta(minutes=settings.PASSWORD_OTP_GRACE_MINUTES)
+        return self.password_otp_verified_at + window > datetime.now(timezone.utc)
 
     @property
     def role_names(self) -> set[str]:

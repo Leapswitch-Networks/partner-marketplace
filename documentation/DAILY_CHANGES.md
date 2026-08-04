@@ -8,6 +8,122 @@
 
 ---
 
+## August 4, 2026 — Password recovery from inside the app, and a real "System" appearance option
+
+First slice of the LeapDesk parity work. Backend only — the `/settings` pages themselves are not
+built yet, so **nothing here is reachable from the UI**; the endpoints and the theme groundwork are.
+
+- **A signed-in user who does not know their current password can now change it.** Previously the only
+  route was to sign out and use `/forgot-password`, which is useless for the three cases this actually
+  affects: a partner who has only ever signed in through a recovery flow, a Google SSO user who never
+  set a fallback password, and anyone who has simply forgotten and does not want to lose their session.
+  They now request a 6-digit code to their own address, enter it, and set a new password without the old
+  one. Ported from LeapDesk's `PasswordOtpController`.
+  - **The address is always read from the authenticated row, never the request body.** Accepting a
+    caller-supplied address would have turned an authenticated endpoint into a mail relay for our own
+    domain.
+  - **The code is stored hashed; LeapDesk stores it in plaintext.** Storing a live credential readable
+    is the exact debt PM-1 existed to remove, and `verify_password` already existed, so it cost nothing.
+    Six digits is a small enough space that the hash is not much of a barrier on its own — the real
+    protections remain the ten-minute expiry and single use — but a casual read of the table no longer
+    hands over a working code.
+  - **A wrong guess does not clear the pending code.** Clearing it would let anyone who can reach the
+    endpoint invalidate the real user's code at will, which is a denial-of-service dressed up as a
+    security measure. The expiry bounds guessing instead, and both the send and verify paths sit in the
+    strictest rate-limit tier alongside the 2FA challenge.
+  - **Requesting a new code revokes any grace already earned**, so a stale verification cannot be
+    paired with a fresh request.
+- **`current_password` became optional on change-password, and that is not a loosening.** It may be
+  omitted only when the server can see a recent, unexpired OTP verification for that user; a request
+  that omits it without one is still refused. The check lives in `auth_service`, not in the schema, so
+  the client cannot talk its way past it.
+  - **Where LeapDesk keeps that "already proved it" flag in the session, we cannot** — authentication
+    here is a stateless JWT and there is no session bag. It became a timestamp on the user row instead,
+    which has the side benefit of surviving a restart and being auditable. Three nullable columns,
+    migration `e2b8d5c31f47`.
+- **"System" is now a real appearance choice rather than a one-time guess.** The old theme hook seeded
+  itself from the OS preference and then wrote a concrete light/dark value on first toggle — so the OS
+  was consulted once, at first load, and never again. There are now three states, and while on
+  `system` a `matchMedia` listener keeps following the OS if it changes mid-session. The anti-FOUC
+  script in `<head>` was updated to agree on all three values, and treats an unrecognised stored value
+  as "follow the OS" so the values written by the old hook keep working.
+- **`employee_id` is now self-editable.** It already existed as a column and appears on LeapDesk's
+  profile form, but PM's profile endpoint silently dropped it.
+- **Email stays read-only on the profile page, diverging from LeapDesk deliberately.** LeapDesk's form
+  edits the address and clears the verification stamp. PM's `update_own_profile` excludes it on purpose
+  — changing it breaks the link to a Google account and to any pending invitation, so it is an admin
+  action. Flagged as an open decision rather than quietly changed in either direction.
+- **Verified against the running stack, not just the compiler.** `alembic upgrade head` applied and
+  `alembic_version` reads `e2b8d5c31f47`; all three columns present and nullable in
+  `information_schema`; both new paths appear in the live OpenAPI document and return **401**
+  unauthenticated; `password_otp_grace` is on `CurrentUserResponse` and `employee_id` on
+  `UpdateProfileRequest` in that same document; `tsc --noEmit` clean after the theme-hook rename, whose
+  only consumer was updated with it.
+  - **Not yet verified: a full send → verify → change round trip against a real mailbox.** That needs
+    SMTP configured and the UI to drive it, so it is listed as outstanding rather than claimed.
+
+---
+
+## August 4, 2026 — LeapDesk core parity: the eight admin modules specced against real source
+
+- **The project's focus changed, and the marketplace domain is now parked.** The owner set the near-term
+  goal as replicating LeapDesk's core admin shell rather than building the marketplace domain. The
+  eight modules named — Users, Roles, Data Access, Activity Log, API Credentials, Invitations, Global
+  Search, AI Assistant — turned out to map **exactly** onto LeapDesk's two lower sidebar sections
+  ("User Management" and "System Settings"), plus its self-service Settings area (Profile / Password /
+  Appearance). That made the scope precisely bounded rather than a wish list.
+  `MARKETPLACE_DOMAIN_PLAN.md` is marked parked in `INDEX.md`; nothing in it was deleted.
+- **The whole study was done against LeapDesk's source, not from memory.** Result:
+  `documentation/planning/LEAPDESK_PARITY_PLAN.md`, with a per-module spec covering schema, endpoints,
+  permissions, UI anatomy and business rules. LeapDesk's own docs cover Users, Roles, Invitations,
+  Activity Log and UI patterns — but **Data Access, API Credentials, Global Search and the AI Assistant
+  are undocumented there and exist only as code**, so those four were read line by line.
+- **Four of the eleven items are already done or nearly so, which shrank the real work considerably.**
+  Users and Activity Log are at or ahead of parity (PM has CSV export and a retention purge that
+  LeapDesk lacks). Invitations is complete on the backend and needs only an admin index page. And PM's
+  `users` table already carries **every** field LeapDesk's profile form edits — `first_name`,
+  `last_name`, `designation`, `employee_id`, `personal_email`, `personal_mobile_number` — so the
+  Profile page needs no migration at all.
+  - **The genuinely new work is four modules**, needing seven migrations and fourteen new permissions.
+    API Credentials is the largest (~1,040 backend lines, 4,057 frontend across eight pages) and gates
+    the AI Assistant, which cannot ship before it.
+- **Two findings are defects rather than parity gaps, and one is a live over-exposure.** PM's activity
+  list binds the actor to an unused `_actor` parameter, so **anyone holding `activity-view` reads the
+  whole organisation's audit trail**; LeapDesk sandboxes non-admins to rows where they were the causer.
+  Separately, `POST /api/auth/me/change-password` works and has **no UI anywhere** — a functioning
+  endpoint no user can reach. Both are argued in the plan for jumping the queue.
+- **Four things do not survive the Laravel→FastAPI translation and are flagged as decisions, not
+  assumptions.** LeapDesk's password-OTP recovery parks a grace flag in the session, and PM is
+  stateless JWT. `CredentialManager` and the search registry both use Laravel's cache store, and PM has
+  no Redis. Those two got options tables with a recommendation rather than a silent choice. The other
+  two resolve cleanly: Global Search runs on Scout with `SCOUT_DRIVER=database` — SQL `LIKE`, **no
+  external search engine** — so it ports to Postgres directly; and `Laravel\Ai` becomes the Anthropic
+  Python SDK's tool runner.
+  - **The AI model pin was deliberately not copied.** LeapDesk pins `claude-sonnet-4-6`; the plan
+    specifies `claude-opus-5` with adaptive thinking and effort control, notes that `budget_tokens`
+    and `temperature` now return 400, and requires handling the `refusal` stop reason before reading
+    the response. Copying the constant verbatim would have shipped a stale model and two dead
+    parameters.
+- **A convention conflict inside LeapDesk was surfaced rather than smoothed over.** Its own
+  `AUTHORIZATION.md` documents `{resource}-{action}` permission names — which is what PM already uses —
+  but its four newest modules ignore that and use dotted names (`data-access.manage`,
+  `api-credentials.providers.create`, `search.entities.manage`, `ai-assistant.use`). The plan
+  recommends adopting the dotted names verbatim **including the inconsistency**, so a future LeapDesk
+  feature ports without a rename table. That is one of eight open decisions listed at the end.
+- **An earlier claim of mine was wrong and is corrected in the plan.** I had said Data Access was
+  "LeapDesk's answer to PM-5". It is only half that: Data Access delegates by **record creator**
+  (`created_by`), while PM-5 and the marketplace plan specify scoping by **partner organisation**
+  (`partner_id`). They are complementary — building Data Access closes the "no row-scoping pattern
+  exists anywhere" half of PM-5 and leaves the tenant-isolation half open.
+- **Nothing was built.** No code, no migrations, no permission seeding — this entry is a spec and two
+  documentation updates only. The security-sensitive parts were written up in detail precisely because
+  they will ship without a test suite: the AI assistant's `DatabaseQuery` needs all five of its
+  controls (a read-only DB connection, a denied-table regex, column redaction, an operator allowlist,
+  output caps), and Global Search has three distinct permission layers. Per PM-11's recorded
+  mitigation, each of those gets its verification written into this file when it is built.
+
+---
+
 ## August 3, 2026 — Viho theme captured as a design reference
 
 - **The visual direction now has a written spec instead of living in a browser tab.** The owner

@@ -173,6 +173,10 @@ def current_user_payload(db: Session, user: User) -> dict:
         "permissions": effective_permissions(db, user),
         "is_super_admin": user.is_super_admin,
         "has_admin_access": user.has_admin_access,
+        # Lets the password page hide the current-password field after the user
+        # has verified an OTP, and keeps that state correct across a reload —
+        # LeapDesk gets the same effect from an Inertia prop backed by the session.
+        "password_otp_grace": user.password_otp_grace,
     }
 
 

@@ -147,3 +147,22 @@ def send_password_reset(to: str, reset_url: str, expires_hours: int) -> bool:
         "If you did not request this, no action is needed — your password has not changed.\n"
     )
     return send(to, "Reset your Partner Marketplace password", body)
+
+
+def send_password_otp(to: str, code: str, expires_minutes: int) -> bool:
+    """A 6-digit code proving the recipient controls this address.
+
+    Deliberately carries **no link**. This code is requested from inside an
+    authenticated settings page, so there is nothing to click through to — and a
+    code with no accompanying URL cannot be turned into a phishing landing page by
+    whoever forwards the mail.
+    """
+    body = (
+        "Use this code to change your Partner Marketplace password:\n\n"
+        f"    {code}\n\n"
+        f"It expires in {expires_minutes} minute{'s' if expires_minutes != 1 else ''} "
+        "and can be used once.\n\n"
+        "If you did not request it, no action is needed — your password has not "
+        "changed, and nobody can use this code without access to your account.\n"
+    )
+    return send(to, "Your password change code", body)

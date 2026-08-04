@@ -46,6 +46,7 @@ from app.schemas.auth import (
     TwoFactorRequiredResponse,
     TwoFactorStatusResponse,
     VerifyEmailRequest,
+    VerifyPasswordOtpRequest,
 )
 from app.services import (
     activity_service,
@@ -508,6 +509,49 @@ def change_password(
             )
         )
     return MessageResponse(message="Password updated")
+
+
+# --- Password OTP recovery ---------------------------------------------------
+#
+# Ports LeapDesk's `Settings/PasswordOtpController`. An already-signed-in user who
+# cannot supply their current password proves control of their email instead, then
+# sets a new password without it. Three real cases: a partner who only ever signed
+# in through a recovery flow, a Google SSO user with no fallback password, and
+# anyone who simply forgot and does not want to sign out to use /forgot-password.
+#
+# The address is always read from the authenticated row, never from the request
+# body — otherwise this would be an open mail relay for our own domain.
+
+
+@router.post("/me/password-otp/send", response_model=MessageResponse)
+def send_password_otp(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> MessageResponse:
+    """Email a fresh 6-digit code. Throttled by a 60-second cooldown per account."""
+    auth_service.send_password_otp(db, current_user)
+    return MessageResponse(
+        message=(
+            f"We emailed a 6-digit code to {current_user.email}. "
+            f"It expires in {settings.PASSWORD_OTP_TTL_MINUTES} minutes."
+        )
+    )
+
+
+@router.post("/me/password-otp/verify", response_model=CurrentUserResponse)
+def verify_password_otp(
+    data: VerifyPasswordOtpRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> CurrentUserResponse:
+    """Check the code and open the grace window.
+
+    Returns the refreshed identity rather than a bare message so the client picks
+    up `password_otp_grace` in the same round trip — the password form has to hide
+    its current-password field the moment this succeeds.
+    """
+    auth_service.verify_password_otp(db, current_user, data.otp)
+    return CurrentUserResponse(**rbac_service.current_user_payload(db, current_user))
 
 
 # --- Active sessions ---------------------------------------------------------

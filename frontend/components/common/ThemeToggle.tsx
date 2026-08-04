@@ -3,8 +3,10 @@
 import { useTheme } from "@/lib/hooks/useTheme";
 
 export function ThemeToggle() {
-  const { theme, toggleTheme } = useTheme();
-  const isDark = theme === "dark";
+  const { resolvedTheme, toggleTheme } = useTheme();
+  // Reflects what is on screen, not the stored preference — under `system` the
+  // stored value is neither light nor dark, and the icon has to show one of them.
+  const isDark = resolvedTheme === "dark";
 
   return (
     <button

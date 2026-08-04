@@ -96,6 +96,7 @@ class UpdateProfileRequest(BaseModel):
     first_name: str | None = Field(default=None, min_length=1, max_length=100)
     last_name: str | None = Field(default=None, min_length=1, max_length=100)
     designation: str | None = Field(default=None, max_length=150)
+    employee_id: str | None = Field(default=None, max_length=50)
     personal_mobile_number: str | None = Field(default=None, max_length=30)
     personal_email: EmailStr | None = None
     company_name: str | None = Field(default=None, max_length=255)
@@ -103,12 +104,30 @@ class UpdateProfileRequest(BaseModel):
 
 
 class ChangePasswordRequest(_PasswordPair):
-    """Self-service password change. Requires the current password.
+    """Self-service password change.
 
     There was previously no way at all to change a password (TECH_DEBT PM-16).
+
+    `current_password` is **optional**, and that is not a loosening: it may be
+    omitted only when the user has just proved control of their email address via
+    the OTP flow, which `auth_service.change_own_password` checks server-side. A
+    request that omits it without that grace is rejected. This mirrors LeapDesk's
+    `PasswordUpdateRequest`, which drops the rule when `otp_reset_pending_grace`
+    is set in the session.
     """
 
-    current_password: str
+    current_password: str | None = None
+
+
+class VerifyPasswordOtpRequest(BaseModel):
+    """The 6-digit code from the password-recovery email.
+
+    Exactly six characters, matching LeapDesk's `size:6`. Kept as a string rather
+    than an int so a leading zero survives — `012345` is a valid code and would
+    become `12345` through an integer.
+    """
+
+    otp: str = Field(min_length=6, max_length=6, pattern=r"^\d{6}$")
 
 
 class ForgotPasswordRequest(BaseModel):
@@ -164,6 +183,9 @@ class CurrentUserResponse(BaseModel):
     permissions: list[str]
     is_super_admin: bool
     has_admin_access: bool
+    #: Email ownership recently proved via OTP — the password page may omit the
+    #: current-password field. Server-enforced regardless of what the client sends.
+    password_otp_grace: bool = False
 
 
 class LoginResponse(BaseModel):

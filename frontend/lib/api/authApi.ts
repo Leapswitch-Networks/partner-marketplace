@@ -137,17 +137,38 @@ export const authApi = {
     first_name?: string;
     last_name?: string;
     designation?: string | null;
+    employee_id?: string | null;
     personal_mobile_number?: string | null;
     personal_email?: string | null;
     company_name?: string | null;
     timezone_preference?: string;
   }) => axiosInstance.patch<CurrentUser>("/api/auth/me", data),
 
+  /**
+   * `current_password` is omitted only when the user has verified an OTP —
+   * `password_otp_grace` on the current user says whether that is the case. The
+   * server re-checks regardless, so omitting it without grace is a 400.
+   */
   changePassword: (data: {
-    current_password: string;
+    current_password?: string;
     password: string;
     confirm_password: string;
   }) => axiosInstance.post<{ message: string }>("/api/auth/me/change-password", data),
+
+  /**
+   * Email a 6-digit code to the signed-in user's own address so they can change
+   * their password without knowing the current one. 429 while the 60-second
+   * cooldown is in force.
+   */
+  sendPasswordOtp: () =>
+    axiosInstance.post<{ message: string }>("/api/auth/me/password-otp/send"),
+
+  /**
+   * Verify the code. Returns the refreshed user so `password_otp_grace` is
+   * picked up in the same round trip.
+   */
+  verifyPasswordOtp: (data: { otp: string }) =>
+    axiosInstance.post<CurrentUser>("/api/auth/me/password-otp/verify", data),
 
   forgotPassword: (data: { email: string }) =>
     axiosInstance.post<{ message: string }>("/api/auth/forgot-password", data),

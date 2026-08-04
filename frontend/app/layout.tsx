@@ -11,7 +11,11 @@ export const metadata: Metadata = {
 };
 
 // Injected before React hydration — eliminates dark-mode flash on page load.
-const themeScript = `(function(){try{var t=localStorage.getItem('theme');var d=window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light';if((t||d)==='dark')document.documentElement.classList.add('dark');}catch(e){}})();`;
+//
+// Must agree with `lib/hooks/useTheme.ts` on all three stored values, including
+// the explicit 'system'. Treating an unrecognised value as "follow the OS" is what
+// makes the pre-3-way stored values keep working rather than forcing light mode.
+const themeScript = `(function(){try{var t=localStorage.getItem('theme');var dark=t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme: dark)').matches);if(dark)document.documentElement.classList.add('dark');}catch(e){}})();`;
 
 export default function RootLayout({
   children,

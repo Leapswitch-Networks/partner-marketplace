@@ -68,6 +68,13 @@ SENSITIVE_PATHS: frozenset[str] = frozenset(
         # while signed, is worth guessing at scale.
         "/api/auth/verify-email",
         "/api/auth/resend-verification",
+        # Password OTP recovery. `send` mails a code and must not become a way to
+        # bombard the account owner's inbox — the 60-second per-account cooldown
+        # bounds one caller, this bounds a distributed one. `verify` is a six-digit
+        # guess, so it belongs under the same limit as the 2FA challenge above for
+        # exactly the same reason.
+        "/api/auth/me/password-otp/send",
+        "/api/auth/me/password-otp/verify",
     }
 )
 

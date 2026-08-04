@@ -122,6 +122,18 @@ class Settings(BaseSettings):
     # default is 3 hours; kept, so the two projects behave the same.
     PASSWORD_CONFIRMATION_TIMEOUT_MINUTES: int = 180
 
+    # --- Password OTP recovery (settings page) -------------------------------
+    # A signed-in user who cannot supply their current password proves ownership
+    # of their email with a 6-digit code instead. All three values match LeapDesk
+    # so the two behave identically.
+    PASSWORD_OTP_TTL_MINUTES: int = 10
+    # Throttles resends. LeapDesk enforces this in the controller by looking for a
+    # code created in the last minute; here it is derived from the stored expiry.
+    PASSWORD_OTP_RESEND_COOLDOWN_SECONDS: int = 60
+    # How long proving email ownership authorises a password change for. Kept equal
+    # to the code's own TTL: the grace should not outlive the evidence for it.
+    PASSWORD_OTP_GRACE_MINUTES: int = 10
+
     # --- Security headers (PM-33) -------------------------------------------
     # HSTS is off by default and deliberately NOT tied to COOKIE_SECURE. The two
     # answer different questions: whether cookies require TLS, versus whether

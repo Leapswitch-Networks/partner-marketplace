@@ -41,6 +41,12 @@ export interface CurrentUser {
   permissions: string[];
   is_super_admin: boolean;
   has_admin_access: boolean;
+  /**
+   * Email ownership recently proved by OTP, so the password form may omit the
+   * current-password field. Advisory for the UI only — the server enforces it
+   * independently of what the client sends.
+   */
+  password_otp_grace: boolean;
 }
 
 /** One row of the admin users table, from GET /api/users. */

@@ -12,6 +12,7 @@ Security decisions worth preserving:
   * Emails are normalised to lower case on write AND on lookup (PM-17).
 """
 
+import secrets
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
@@ -34,7 +35,7 @@ from app.schemas.auth import (
     RegisterRequest,
     UpdateProfileRequest,
 )
-from app.services import activity_service
+from app.services import activity_service, mail_service
 from app.services.rbac_service import get_role_by_name
 
 #: Deliberately identical for "no such user" and "wrong password".
@@ -224,7 +225,13 @@ def update_own_profile(db: Session, user: User, data: UpdateProfileRequest) -> U
         if field in updates and updates[field] is not None:
             setattr(user, field, updates[field].strip())
 
-    for field in ("designation", "personal_mobile_number", "personal_email", "company_name"):
+    for field in (
+        "designation",
+        "employee_id",
+        "personal_mobile_number",
+        "personal_email",
+        "company_name",
+    ):
         if field in updates:
             value = (updates[field] or "").strip()
             setattr(user, field, value or None)
@@ -238,23 +245,150 @@ def update_own_profile(db: Session, user: User, data: UpdateProfileRequest) -> U
     return user
 
 
-def change_own_password(db: Session, user: User, data: ChangePasswordRequest) -> None:
-    """Change a password, requiring the current one.
+def send_password_otp(db: Session, user: User) -> None:
+    """Email a fresh 6-digit code to the signed-in user's own address.
 
-    A Google-only account has no password to verify, so it cannot use this — it
-    would be a way to add a credential path to an SSO account without proving
-    anything.
+    The address is taken from the row, never from the request — this endpoint is
+    authenticated, so accepting a caller-supplied address would turn it into a way
+    to send mail to arbitrary recipients from our domain.
     """
-    if user.password is None:
+    now = datetime.now(timezone.utc)
+
+    # Cooldown, derived rather than stored: a code sent at T expires at
+    # T + TTL, so the send time is expires_at - TTL.
+    if user.password_otp_expires_at is not None:
+        sent_at = user.password_otp_expires_at - timedelta(
+            minutes=settings.PASSWORD_OTP_TTL_MINUTES
+        )
+        cooldown_ends = sent_at + timedelta(
+            seconds=settings.PASSWORD_OTP_RESEND_COOLDOWN_SECONDS
+        )
+        if now < cooldown_ends:
+            raise HTTPException(
+                status.HTTP_429_TOO_MANY_REQUESTS,
+                "Please wait a minute before requesting another code.",
+            )
+
+    code = f"{secrets.randbelow(1_000_000):06d}"
+
+    user.password_otp = hash_password(code)
+    user.password_otp_expires_at = now + timedelta(
+        minutes=settings.PASSWORD_OTP_TTL_MINUTES
+    )
+    # Requesting a new code invalidates any grace already earned, so a stale
+    # verification cannot be combined with a fresh code request.
+    user.password_otp_verified_at = None
+    db.commit()
+
+    delivered = mail_service.send_password_otp(
+        user.email, code, settings.PASSWORD_OTP_TTL_MINUTES
+    )
+    if not delivered:
+        # Clear the code rather than leaving one the user never received — a
+        # pending code they cannot see would also hold the cooldown against them.
+        user.password_otp = None
+        user.password_otp_expires_at = None
+        db.commit()
         raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            "This account signs in with Google and has no password to change.",
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            "Could not send the code right now. Try again in a minute.",
         )
 
-    if not verify_password(data.current_password, user.password):
-        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Current password is incorrect")
+    activity_service.record(
+        db,
+        description="Requested a password-change code",
+        event="password_otp_sent",
+        log_name=activity_service.LOG_AUTH,
+        subject_type="User",
+        subject_id=user.id,
+        actor=user,
+    )
 
-    if verify_password(data.password, user.password):
+
+def verify_password_otp(db: Session, user: User, code: str) -> None:
+    """Check the code and open the grace window.
+
+    Single use: the code is cleared whether or not the caller goes on to change
+    their password, so a shoulder-surfed code cannot be replayed.
+    """
+    now = datetime.now(timezone.utc)
+
+    if user.password_otp is None or user.password_otp_expires_at is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Request a code before entering one.",
+        )
+
+    if user.password_otp_expires_at <= now:
+        user.password_otp = None
+        user.password_otp_expires_at = None
+        db.commit()
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "That code has expired. Request a fresh one and try again.",
+        )
+
+    if not verify_password(code, user.password_otp):
+        # The code is NOT cleared on a wrong guess — doing so would let anyone who
+        # can reach this endpoint invalidate the real user's code at will. The
+        # ten-minute expiry bounds guessing instead.
+        activity_service.record(
+            db,
+            description="Entered an incorrect password-change code",
+            event="password_otp_failed",
+            log_name=activity_service.LOG_AUTH,
+            subject_type="User",
+            subject_id=user.id,
+            actor=user,
+        )
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Invalid or expired code. Request a fresh one and try again.",
+        )
+
+    user.password_otp = None
+    user.password_otp_expires_at = None
+    user.password_otp_verified_at = now
+    db.commit()
+
+    activity_service.record(
+        db,
+        description="Proved email ownership for a password change",
+        event="password_otp_verified",
+        log_name=activity_service.LOG_AUTH,
+        subject_type="User",
+        subject_id=user.id,
+        actor=user,
+    )
+
+
+def change_own_password(db: Session, user: User, data: ChangePasswordRequest) -> None:
+    """Change a password, requiring the current one — or a verified OTP instead.
+
+    A Google-only account has no password to verify, so it cannot use the
+    current-password path — that would be a way to add a credential path to an SSO
+    account without proving anything. It *can* use the OTP path, which is one of
+    the three cases the OTP flow exists for.
+    """
+    via_otp = user.password_otp_grace
+
+    if user.password is None and not via_otp:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "This account signs in with Google. Verify your email below to set a password.",
+        )
+
+    if not via_otp:
+        if not data.current_password:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, "Current password is required"
+            )
+        if not verify_password(data.current_password, user.password or ""):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, "Current password is incorrect"
+            )
+
+    if user.password is not None and verify_password(data.password, user.password):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             "New password must be different from the current one",
@@ -263,6 +397,10 @@ def change_own_password(db: Session, user: User, data: ChangePasswordRequest) ->
     user.password = hash_password(data.password)
     user.password_reset_token = None
     user.password_reset_expires_at = None
+    # Consume the grace, so one verification authorises exactly one change.
+    user.password_otp = None
+    user.password_otp_expires_at = None
+    user.password_otp_verified_at = None
     user.updated_by = user.id
     db.commit()
 
