@@ -180,3 +180,33 @@ export interface Category {
   status: CategoryStatus;
   created_at: string;
 }
+
+/**
+ * One sidebar entry, from GET /api/navigation.
+ *
+ * The tree is built and permission-filtered server-side, so anything present here
+ * is something the user may use. `permission` is echoed back for debuggability
+ * only — the client never evaluates it. See `services/navigation_service.py`.
+ */
+export interface NavigationItem {
+  title: string;
+  /** `"#"` for a group heading that only contains children. */
+  href: string;
+  /** An icon *name*, not markup — the client owns the SVG. */
+  icon: string;
+  permission: string | string[] | null;
+  /** Match the pathname exactly. Needed for `/dashboard`, a prefix of everything. */
+  exact: boolean;
+  /** Pathname prefixes that should highlight this item. */
+  active_prefixes: string[];
+  items?: NavigationItem[] | null;
+}
+
+export interface NavigationSection {
+  /** `null` for the unlabelled first section. */
+  label: string | null;
+  /** Catalog slug that `roles.nav_preferences` keys on; `null` when unlabelled. */
+  key: string | null;
+  collapsible: boolean;
+  items: NavigationItem[];
+}

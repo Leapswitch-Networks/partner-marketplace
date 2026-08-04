@@ -8,6 +8,69 @@
 
 ---
 
+## August 4, 2026 — The sidebar now renders what the server sends, and a correction
+
+- **`GET /api/navigation` was committed and then left unconsumed for two commits.**
+  The Sidebar kept rendering its own hardcoded list, so the endpoint verified
+  earlier today was dead code. It now renders the server tree, which is what makes
+  the inversion actually mean anything: **there is no `can(...)` call left in the
+  nav path** except the one gating the inherited authoring group.
+  - `NavTree` handles sections, per-section collapse, and which entry is
+    highlighted. A collapsible section starts closed **unless it contains the
+    current page** — otherwise navigating to Roles would collapse the group you had
+    just used.
+  - Icons cross the wire as names and resolve through a client registry.
+    Cross-checked both directions: every one of the six names the server sends
+    resolves, and the registry has no unused entries. An unknown name renders a
+    visible fallback dot rather than nothing, so a future mismatch shows up instead
+    of leaving an invisible gap.
+  - The tree is keyed on the user id, not fetched once on mount. Signing in as
+    someone else in the same tab would otherwise render the previous user's nav.
+  - On failure the nav renders **empty rather than falling back to a guessed
+    tree** — a guessed tree would show items the API refuses, which is the exact
+    problem the inversion removes.
+- **The inherited authoring group stays client-side, deliberately.** Its five
+  sections have no URLs and real cross-section state — `select-question-type` sets a
+  type that `add-question` reads, and `add-category` sets an id that `add-job-role`
+  reads. Giving them routes means threading that through query params, on screens
+  already scheduled for deletion. It is the only nav item the client still gates for
+  itself, and it is commented as such.
+- **One lint finding was a real flaw in my own new code, not a false positive.**
+  `useNavigation` set state synchronously in its effect body — a cascading render,
+  and redundant, since the initial state can carry the loading flag itself. Rewritten
+  so every `setState` happens after an await, and so signing out empties the nav by
+  derivation rather than one render later. PM-30's count is back to 20, unchanged by
+  this work, with no findings in any of the new files.
+
+### Correction: there is no Activity Log over-exposure, and I said there was
+
+Earlier entries and commit messages today do not contain this claim, but it was
+stated repeatedly in working notes and it changed the order work was done in, so it
+is recorded here rather than dropped.
+
+The claim was that anyone holding `activity-view` reads the whole organisation's
+audit trail, described as a live over-exposure needing a priority fix. **Both halves
+were wrong.**
+
+- **`activity-view` is held only by Admin, RootUser and SuperAdmin** — verified
+  against the seeded matrix. All three are `has_admin_access` roles, and LeapDesk's
+  rule is `$viewAll = has_admin_access()`, which grants exactly those three full
+  visibility. **PM and LeapDesk behave identically today.** No non-admin role can
+  reach the endpoint at all.
+- **The non-scoping is deliberate and documented** in `list_entries`' own docstring:
+  *"a partial view of one is worse than none — someone reviewing an incident needs to
+  know they are seeing everything"* — and it already names itself as the query to
+  revisit when PM-5 lands. It was read as an oversight; it is a decision with a
+  rationale, and not one to reverse unilaterally.
+
+What remains in that module is smaller and not urgent: the `source` filter (which
+needs write-side stamping first), `hide_system`, module labels, and clickable subject
+URLs. Adding the causer sandbox is still worth doing as **defence in depth**, so the
+behaviour stays right if a non-admin role is ever granted `activity-view` — but that
+is a latent divergence, not a live one.
+
+---
+
 ## August 4, 2026 — Settings is a real area now, and change-password is reachable
 
 - **`POST /api/auth/me/change-password` had worked for a day with no way to reach

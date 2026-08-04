@@ -7,6 +7,9 @@ import useAppDispatch from "@/lib/hooks/useAppDispatch";
 import { logoutUser } from "@/lib/store/authSlice";
 import { ThemeToggle } from "@/components/common/ThemeToggle";
 import usePermissions from "@/lib/hooks/usePermissions";
+import useNavigation from "@/lib/hooks/useNavigation";
+import NavTree from "@/components/dashboard/NavTree";
+import type { NavigationSection } from "@/types";
 
 export type AdminSection =
   | "dashboard"
@@ -222,8 +225,6 @@ function IconButton({
   );
 }
 
-const userInfoSections: AdminSection[] = ["user-info", "user-add"];
-
 // ── Shared nav items renderer ─────────────────────────────────────────────────
 function NavItems({
   activeSection,
@@ -235,6 +236,8 @@ function NavItems({
   navIcons,
   isSubItemActive,
   large,
+  sections,
+  onNavigateHref,
 }: {
   activeSection: AdminSection;
   onNavigate: (s: AdminSection) => void;
@@ -245,107 +248,33 @@ function NavItems({
   navIcons: Record<string, React.ReactNode>;
   isSubItemActive: boolean;
   large?: boolean;
+  sections: NavigationSection[];
+  onNavigateHref: (href: string) => void;
 }) {
-  const isUserSubActive = userInfoSections.includes(activeSection);
-  // Nav mirrors the API's gating: an item the user cannot use is not shown.
-  // The API re-checks regardless — hiding a link is not the control.
+  // Still needed for the inherited Create group below, which is the only nav item
+  // the client still gates for itself. Everything above it arrives pre-filtered.
   const { can } = usePermissions();
 
   return (
     <>
-      {/* Dashboard */}
-      {collapsed ? (
-        <IconButton
-          active={activeSection === "dashboard"}
-          onClick={() => onNavigate("dashboard")}
-          icon={navIcons.dashboard}
-          label="Dashboard"
-        />
-      ) : (
-        <NavButton
-          active={activeSection === "dashboard"}
-          onClick={() => onNavigate("dashboard")}
-          icon={navIcons.dashboard}
-          label="Dashboard"
-          large={large}
-        />
-      )}
-
-      {/* Candidate — requires candidate-view */}
-      {can("candidate-view") &&
-        (collapsed ? (
-          <IconButton
-            active={activeSection === "candidate"}
-            onClick={() => onNavigate("candidate")}
-            icon={navIcons.candidate}
-            label="Candidate"
-          />
-        ) : (
-          <NavButton
-            active={activeSection === "candidate"}
-            onClick={() => onNavigate("candidate")}
-            icon={navIcons.candidate}
-            label="Candidate"
-            large={large}
-          />
-        ))}
-
-      {/* Users — requires user-view */}
-      {can("user-view") &&
-        (collapsed ? (
-          <IconButton
-            active={isUserSubActive}
-            onClick={() => onNavigate("user-info")}
-            icon={navIcons.userInfo}
-            label="Users"
-          />
-        ) : (
-          <NavButton
-            active={isUserSubActive}
-            onClick={() => onNavigate("user-info")}
-            icon={navIcons.userInfo}
-            label="Users"
-            large={large}
-          />
-        ))}
-
-      {/* Roles & Permissions — requires role-view */}
-      {can("role-view") &&
-        (collapsed ? (
-          <IconButton
-            active={activeSection === "roles"}
-            onClick={() => onNavigate("roles")}
-            icon={navIcons.roles}
-            label="Roles & Permissions"
-          />
-        ) : (
-          <NavButton
-            active={activeSection === "roles"}
-            onClick={() => onNavigate("roles")}
-            icon={navIcons.roles}
-            label="Roles & Permissions"
-            large={large}
-          />
-        ))}
-
-      {/* Activity Log — requires activity-view */}
-      {can("activity-view") &&
-        (collapsed ? (
-          <IconButton
-            active={activeSection === "activity"}
-            onClick={() => onNavigate("activity")}
-            icon={navIcons.activity}
-            label="Activity Log"
-          />
-        ) : (
-          <NavButton
-            active={activeSection === "activity"}
-            onClick={() => onNavigate("activity")}
-            icon={navIcons.activity}
-            label="Activity Log"
-            large={large}
-          />
-        ))}
+      {/*
+        Everything above the inherited Create group comes from the server. There is
+        deliberately no `can(...)` call here: the tree arrives already filtered, and
+        re-checking would restore the second source of truth the server-driven nav
+        exists to remove.
+      */}
+      <NavTree
+        sections={sections}
+        collapsed={collapsed}
+        onNavigate={onNavigateHref}
+        renderButton={({ active, label, icon, onClick }) =>
+          collapsed ? (
+            <IconButton active={active} onClick={onClick} icon={icon} label={label} />
+          ) : (
+            <NavButton active={active} onClick={onClick} icon={icon} label={label} large={large} />
+          )
+        }
+      />
 
       {/* Create (inherited test-platform authoring) — requires category-create */}
       {can("category-create") &&
@@ -515,6 +444,21 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
   }, [activeSection]);
   const [loggingOut, setLoggingOut] = useState(false);
 
+  // The nav tree, built and permission-filtered by the API.
+  const { sections } = useNavigation();
+
+  /**
+   * Server nav items carry a URL, so they route directly. The inherited authoring
+   * sections below have no URL and still go through `onNavigate(section)` — that is
+   * the whole reason both paths exist.
+   */
+  const onNavigateHref = useCallback(
+    (href: string) => {
+      if (href && href !== "#") router.push(href);
+    },
+    [router]
+  );
+
   const isSubItemActive = subItems.some((s) => s.id === activeSection);
 
   useEffect(() => {
@@ -598,6 +542,8 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
     setCreateTestOpen,
     navIcons,
     isSubItemActive,
+    sections,
+    onNavigateHref,
   };
 
   return (
