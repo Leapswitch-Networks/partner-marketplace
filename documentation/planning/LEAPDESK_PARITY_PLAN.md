@@ -1,6 +1,7 @@
 # LeapDesk Core Parity Plan
 
-**Status: SPEC — awaiting review.** No code or migrations written yet, deliberately.
+**Status: IN PROGRESS — 2 of 9 modules complete.** Spec below is unchanged except where
+a decision has been settled; see § Progress for what is actually built.
 
 > Scope was settled on 2026-08-04: replicate LeapDesk's **core admin shell** — the eight modules in its
 > two lower sidebar sections, plus the self-service Settings area — in Partner Marketplace's stack.
@@ -9,6 +10,83 @@
 >
 > Planning docs are reference only — once code exists, the code is the truth. Everything below was read
 > from LeapDesk source at `/opt/lampp/htdocs/LeapDesk` on 2026-08-04, not from memory.
+
+---
+
+## Progress
+
+**Last worked: 2026-08-04.** Five commits, `0054e64` → `807ab65`. Per-change detail is in
+[`../DAILY_CHANGES.md`](../DAILY_CHANGES.md); this is the map.
+
+| # | Module | State |
+|---|--------|-------|
+| 1 | **Settings** (Profile / Password / Appearance) | ✅ **Done.** OTP recovery verified 13/13 end to end. One decision open — see below |
+| 4 | **Navigation** (server-driven + per-role collapse) | ✅ **Done** end to end; Sidebar consumes the tree |
+| 2 | Invitations admin index | ⬜ Started — nothing committed. Backend already complete; needs UI + bulk create, stats, 60s cooldown |
+| 3 | Users `user-email`; Roles matrix / clone / role-users / route split | ⬜ Not started |
+| 6 | Activity Log parity gaps | ⬜ Not started. **Scope shrank** — see the correction below |
+| 5 | Data Access | ⬜ Not started |
+| 7 | API Credentials | ⬜ Not started. Largest; gates module 9 |
+| 8 | Global Search | ⬜ Not started. Gates `LocateData` in module 9 |
+| 9 | AI Assistant | ⬜ Not started. Needs 7 and 8 |
+
+**Migrations: 2 of 7.** Applied: `e2b8d5c31f47` (password OTP), `f5a3c81b7d29` (role nav
+preferences). Head is `f5a3c81b7d29`. The five remaining are the Data Access, API
+Credentials, Global Search, AI Assistant and activity-source items in § Migrations required.
+
+**Permissions: 0 of 14.** `permissions.py` has not been touched. Nothing in modules 5–9
+can be gated until this lands, so it is a prerequisite for those rather than a tidy-up
+at the end.
+
+### Correction — the Activity Log has no over-exposure
+
+Working notes during this session claimed that anyone holding `activity-view` reads the
+whole organisation's audit trail, called it live, and used it to reorder the queue. **That
+was wrong on both counts**, and it is recorded here because it affected decisions:
+
+- `activity-view` is held only by **Admin, RootUser and SuperAdmin** — verified against the
+  seeded matrix. All three are `has_admin_access` roles, which is exactly who LeapDesk's
+  `$viewAll = has_admin_access()` grants full visibility. The two systems behave
+  **identically** today; no non-admin role can reach the endpoint.
+- The non-scoping is **deliberate and documented** in `list_entries`' docstring, which also
+  names itself as the query to revisit when PM-5 lands.
+
+Module 6 therefore drops to ordinary priority: `source` filter (needs write-side stamping
+first), `hide_system`, module labels, clickable subject URLs, and the causer sandbox as
+**defence in depth** so behaviour stays correct if a non-admin role is ever granted
+`activity-view`.
+
+### Decisions settled while building
+
+| Decision | Taken | Where it shows |
+|---|---|---|
+| Permission naming | LeapDesk's dotted names verbatim | Not yet exercised — no new permissions seeded |
+| Password OTP grace | `users.password_otp_verified_at` + two sibling columns | `e2b8d5c31f47` |
+| `role-permissions` as its own route | Still pending — deferred to module 3 | — |
+| 2FA in the settings sub-nav | Left out, matching LeapDesk | `SettingsNav.tsx` |
+| Self-delete on profile | Not built; contradicts PM's protection rules | — |
+| Nav preference backfill | **Diverges from LeapDesk** — nothing backfilled, NULL means use code defaults | `f5a3c81b7d29` |
+| OTP storage | **Diverges from LeapDesk** — hashed, not plaintext | `auth_service` |
+
+### Still open — one of these blocks calling module 1 finished
+
+1. **Profile email: editable (LeapDesk parity) or read-only (PM's rule)?** Currently
+   read-only with the reason shown inline, because changing it breaks the Google account
+   and invitation links. LeapDesk edits it and clears the verification stamp. **Module 1
+   is not truly "done" until this is settled.**
+2. **`.claude/settings.json`** — commit it or keep it out of the public repo? Still the
+   only untracked file. `settings.local.json` is already gitignored.
+3. The five product questions in `MARKETPLACE_DOMAIN_PLAN.md` § Still Open remain parked
+   with that plan.
+
+### Known-unverified
+
+**Nothing built this session has been clicked in a browser.** Routing, typecheck, lint and
+`next build` are green, and the OTP flow is verified at the API. But the profile card, edit
+form, appearance tabs and the whole sidebar are client components gated on the hydrated
+store — absent from server HTML *by design*, so fetching HTML cannot confirm them.
+Confirming them needs the Chrome-DevTools-Protocol harness used on 2026-07-31. This is the
+single largest gap in confidence right now.
 
 ---
 
