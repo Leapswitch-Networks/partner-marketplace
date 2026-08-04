@@ -61,7 +61,8 @@ Planning docs are **reference only** — they describe intent, not current state
 
 | File | Purpose | Status |
 |------|---------|--------|
-| `planning/MARKETPLACE_DOMAIN_PLAN.md` | Marketplace domain model — partners, tiers, customers, catalog, quotes | **Design — awaiting review** |
+| `planning/LEAPDESK_PARITY_PLAN.md` | Port spec for LeapDesk's eight core admin modules + the Settings area — schemas, endpoints, permissions, build order | **Spec — awaiting review. Current focus** |
+| `planning/MARKETPLACE_DOMAIN_PLAN.md` | Marketplace domain model — partners, tiers, customers, catalog, quotes | Design — **parked** pending LeapDesk parity |
 | `planning/SCAFFOLD_CLEANUP_PLAN.md` | Retiring the inherited test-platform domain when the marketplace domain lands | Planning |
 | `planning/TECH_DEBT.md` | Known defects and inconsistencies carried in from the scaffold, ranked | Active |
 
