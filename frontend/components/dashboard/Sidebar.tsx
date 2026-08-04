@@ -20,7 +20,13 @@ export type AdminSection =
   | "add-job-role"
   | "add-test-section"
   | "select-question-type"
-  | "add-question";
+  | "add-question"
+  /**
+   * Not a dashboard section — the marker the /settings routes pass so that **no**
+   * sidebar item highlights while the user is in the settings area. Settings has
+   * its own sub-nav; highlighting Dashboard underneath it would be a lie.
+   */
+  | "settings";
 
 /** Pathname → AdminSection mapping for URL-routed sections */
 export const SECTION_URLS = {
@@ -30,8 +36,18 @@ export const SECTION_URLS = {
   "/dashboard/add-user": "user-add",
   "/dashboard/roles": "roles",
   "/dashboard/activity": "activity",
-  "/dashboard/profile": "profile",
 } as const satisfies Partial<Record<string, AdminSection>>;
+
+/**
+ * The URL that owns a section, or `null` for the in-page authoring sections.
+ *
+ * Shared so the dashboard and the settings shell agree on one mapping instead of
+ * each reversing `SECTION_URLS` themselves.
+ */
+export function urlForSection(section: AdminSection): string | null {
+  const match = Object.entries(SECTION_URLS).find(([, value]) => value === section);
+  return match ? match[0] : null;
+}
 
 interface SidebarProps {
   activeSection: AdminSection;

@@ -8,6 +8,81 @@
 
 ---
 
+## August 4, 2026 — Settings is a real area now, and change-password is reachable
+
+- **`POST /api/auth/me/change-password` had worked for a day with no way to reach
+  it.** There is now `/settings/profile`, `/settings/password` and
+  `/settings/appearance`, at LeapDesk's URLs, with its heading and description
+  verbatim. `/settings` redirects to Profile server-side so no blank shell is
+  painted first.
+- **Profile used to render an empty white panel if you visited its URL.**
+  `SECTION_URLS` mapped `/dashboard/profile` to a `profile` section, but profile
+  only ever existed as a modal opened by `onNavigate` — so a direct visit, a
+  bookmark or a refresh matched no render branch and drew an empty card. The
+  modal is gone, `/dashboard/profile` redirects to `/settings/profile`, and about
+  60 lines of portal code went with it.
+- **The shell was extracted so an area outside `/dashboard` can exist at all.**
+  `AppShell` (sidebar + top bar + scrolling content) is what made `/settings/*`
+  possible; previously the only way to get the chrome was to render
+  `DashboardClient`, which also owns the dashboard's section switch and the
+  inherited authoring state. `DashboardClient` deliberately does **not** use
+  `AppShell` yet — it needs a viewport-locked variant for the table modules, and
+  folding that in would push dashboard concerns back into the shared component.
+- **`TopNav` lost both its props.** `onNavigate` and `activeSection` existed only to
+  serve the profile modal — one to open it, one to highlight its menu entry. It now
+  derives "am I in settings" from the pathname, which also **fixes** the highlight:
+  it previously only worked in a shell that happened to pass
+  `activeSection="profile"`, so it was already broken everywhere else.
+- **Email is deliberately read-only on the profile form, and now says why.** LeapDesk
+  edits the address and clears its verification stamp; PM refuses because it would
+  break the link to a Google sign-in and to any pending invitation. Rather than
+  silently omit a field the user can see, the input renders disabled with the reason
+  beside it. `employee_id` was added, since it already existed as a column and the
+  API had been dropping it.
+- **Two form-state decisions worth recording, both prompted by lint and both real
+  fixes rather than appeasement.** The profile form no longer re-syncs from the store
+  on every change to `user` — the store is refreshed by unrelated things, including
+  an identity re-fetch after any 401 retry, and an effect on `user` would overwrite
+  half-typed input at an arbitrary moment. It seeds once and re-seeds from a save's
+  own response, which is the only moment the server's copy is genuinely newer. The
+  password form collapses its OTP block in the verify handler instead of in an effect
+  on `password_otp_grace`, because an effect also fires on a fresh page load and
+  would steal focus on arrival.
+  - Net effect on PM-30's count: **22 → 20**. Two came off by deleting the profile
+    modal, and the two the new forms would have added were avoided.
+- **A shared API-error unwrapper was added.** FastAPI returns `detail` as a string for
+  handled errors and as a *list* for a 422, and rendering the list directly prints
+  `[object Object]` at the user — the mistake PM-36 already had to fix twice. The
+  profile thunk was also discarding the server's message and substituting "Failed to
+  update profile", which left the user with no idea which field was wrong.
+- **The OTP flow is now verified end to end, which yesterday's entry listed as
+  outstanding.** Against the running stack with a throwaway account, 13 checks, all
+  passing: the gate holds (change-password without `current_password` is refused
+  while there is no grace); the 60-second resend cooldown returns 429; a wrong code
+  is refused; the right code opens the grace; the change then succeeds *without* a
+  current password; the grace is consumed by that change; the code cannot be
+  replayed; the old password stops working and the new one works.
+  - **One accident worth keeping.** The code drawn during the run was `099955` — a
+    leading zero — which exercised exactly the case that justified typing `otp` as a
+    string rather than an integer. It would have become `99955` and failed.
+  - The probe had to pause 62 seconds before its closing logins: the sensitive
+    rate-limit tier allows 10 requests a minute and the run spends most of them, so
+    a 429 there would have masqueraded as a wrong password. Worth knowing before
+    anyone re-runs it.
+  - The throwaway account was deleted afterwards; the root account was not touched.
+  - Two things about the test data rather than the code: `email-validator` rejects
+    reserved TLDs, so `@example.test` cannot be used for a probe account, and the
+    console mail backend prints the code on its own line inside a multiline body, so
+    a single-line grep misses it.
+- **What is still NOT verified: any of this in a browser.** Routing was checked —
+  all four settings paths 307 to sign-in unauthenticated and serve 200 with a session
+  cookie, and `/dashboard/profile` redirects — and `next build` generates all four
+  routes. But the profile card, the edit form and the appearance tabs are client
+  components gated on the hydrated store, so they are absent from the server HTML by
+  design and cannot be confirmed by fetching it. Nobody has clicked them.
+
+---
+
 ## August 4, 2026 — The sidebar is now decided on the server, and collapses per role
 
 Backend half of the navigation inversion. **The frontend still renders its own

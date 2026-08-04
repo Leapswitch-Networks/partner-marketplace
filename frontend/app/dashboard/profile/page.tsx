@@ -1,11 +1,14 @@
-import { Metadata } from "next";
-import DashboardClient from "../DashboardClient";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = {
-  title: "Profile — Partner Marketplace",
-  description: "Manage your profile on Partner Marketplace",
-};
-
-export default function ProfilePage() {
-  return <DashboardClient />;
+/**
+ * Profile moved to `/settings/profile`. This redirect keeps old links working.
+ *
+ * It also fixes a real bug rather than only relocating a page: `SECTION_URLS`
+ * mapped this path to the `profile` section, but profile only ever rendered as a
+ * modal opened by `onNavigate`. Visiting this URL directly therefore matched no
+ * render branch and painted an **empty white panel**. There is nothing left here to
+ * render wrongly.
+ */
+export default function DashboardProfileRedirect() {
+  redirect("/settings/profile");
 }

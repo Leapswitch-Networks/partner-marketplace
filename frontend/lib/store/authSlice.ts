@@ -1,5 +1,6 @@
 import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
 import { authApi } from "@/lib/api/authApi";
+import { extractApiError } from "@/lib/utils/apiError";
 import type { CurrentUser } from "@/types";
 
 interface AuthState {
@@ -26,6 +27,7 @@ export const updateUserProfile = createAsyncThunk(
       first_name?: string;
       last_name?: string;
       designation?: string | null;
+      employee_id?: string | null;
       personal_mobile_number?: string | null;
       personal_email?: string | null;
       company_name?: string | null;
@@ -36,8 +38,12 @@ export const updateUserProfile = createAsyncThunk(
     try {
       const res = await authApi.updateProfile(data);
       return res.data;
-    } catch {
-      return rejectWithValue("Failed to update profile");
+    } catch (err) {
+      // Surface the server's own message rather than a generic one. The API
+      // returns real reasons here — a malformed personal email, a field over its
+      // length — and replacing them with "Failed to update profile" left the user
+      // with no idea which field to fix.
+      return rejectWithValue(extractApiError(err, "Failed to update profile"));
     }
   }
 );

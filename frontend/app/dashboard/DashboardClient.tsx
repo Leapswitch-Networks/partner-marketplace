@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { createPortal } from "react-dom";
 import WelcomeBanner from "@/components/dashboard/WelcomeBanner";
 import DashboardOverview from "@/components/dashboard/DashboardOverview";
 import Sidebar, { type AdminSection, SECTION_URLS } from "@/components/dashboard/Sidebar";
@@ -12,9 +11,6 @@ import AddJobRoleForm from "@/components/admin/AddJobRoleForm";
 import AddTestSectionForm from "@/components/admin/AddTestSectionForm";
 import SelectQuestionType from "@/components/admin/SelectQuestionType";
 import AddQuestionForm from "@/components/admin/AddQuestionForm";
-import ProfileForm from "@/components/admin/ProfileForm";
-import TwoFactorSettings from "@/components/auth/TwoFactorSettings";
-import ActiveSessions from "@/components/auth/ActiveSessions";
 import UsersModule from "@/components/admin/UsersModule";
 import RolesModule from "@/components/admin/RolesModule";
 import ActivityModule from "@/components/admin/ActivityModule";
@@ -22,9 +18,12 @@ import Candidate from "@/components/admin/Candidate";
 
 type QuestionType = "mcq" | "true_false" | "descriptive";
 
-/** Sections that have a dedicated URL route (profile is excluded — it opens as a modal) */
+/**
+ * Sections that own a URL. Everything else is an in-page authoring section that
+ * lives in local state — see `handleNavigate`.
+ */
 const URL_ROUTED_SECTIONS = new Set<AdminSection>(
-  Object.values(SECTION_URLS).filter((s) => s !== "dashboard" && s !== "profile")
+  Object.values(SECTION_URLS).filter((s) => s !== "dashboard")
 );
 
 function pathnameToSection(pathname: string): AdminSection | null {
@@ -42,7 +41,6 @@ export default function DashboardClient() {
   const [localSection, setLocalSection] = useState<AdminSection>("dashboard");
   const [selectedQuestionType, setSelectedQuestionType] = useState<QuestionType | null>(null);
   const [createdCategoryId, setCreatedCategoryId] = useState<string | null>(null);
-  const [profileOpen, setProfileOpen] = useState(false);
 
   // When the URL has a routed section, sync local state to match
   useEffect(() => {
@@ -51,32 +49,16 @@ export default function DashboardClient() {
     }
   }, [urlSection]);
 
-  // Lock body scroll when profile modal is open
-  useEffect(() => {
-    if (profileOpen) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
-    }
-    return () => { document.body.style.overflow = ""; };
-  }, [profileOpen]);
 
-  // Close modal on Escape key
-  useEffect(() => {
-    if (!profileOpen) return;
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setProfileOpen(false);
-    };
-    document.addEventListener("keydown", handleKey);
-    return () => document.removeEventListener("keydown", handleKey);
-  }, [profileOpen]);
 
   // The section actually in use: URL wins when it maps to a routed section
   const activeSection: AdminSection = urlSection !== null ? urlSection : localSection;
 
   const handleNavigate = useCallback((section: AdminSection) => {
+    // Profile moved to /settings/profile. Kept as an explicit branch because
+    // DashboardOverview still offers it as a quick action.
     if (section === "profile") {
-      setProfileOpen(true);
+      router.push("/settings/profile");
       return;
     }
     if (URL_ROUTED_SECTIONS.has(section)) {
@@ -119,7 +101,7 @@ export default function DashboardClient() {
 
       {/* Page area: gray canvas so the rounded corner of the inner panel is visible */}
       <div className="flex flex-1 flex-col min-w-0 bg-gray-100 dark:bg-gray-950">
-        <TopNav onNavigate={handleNavigate} activeSection={activeSection} />
+        <TopNav />
 
         {isFullHeight ? (
           <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-gray-100 px-3 pb-3 pt-20 md:pt-3 sm:px-4 dark:bg-gray-950">
@@ -163,57 +145,6 @@ export default function DashboardClient() {
         )}
       </div>
 
-      {/* Profile modal — rendered via portal so it overlays the entire viewport */}
-      {profileOpen && typeof document !== "undefined" && createPortal(
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          role="dialog"
-          aria-modal="true"
-          aria-label="Profile"
-        >
-          {/* Backdrop */}
-          <div
-            className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-200"
-            onClick={() => setProfileOpen(false)}
-          />
-
-          {/* Panel */}
-          <div className="relative w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-2xl bg-white shadow-2xl ring-1 ring-gray-100 dark:bg-gray-900 dark:ring-gray-800 animate-scale-in">
-            {/* Header */}
-            <div className="sticky top-0 z-10 flex items-center justify-between border-b border-gray-100 bg-white px-6 py-4 dark:border-gray-800 dark:bg-gray-900">
-              <h2 className="text-base font-semibold text-gray-900 dark:text-gray-100">Profile</h2>
-              <button
-                type="button"
-                onClick={() => setProfileOpen(false)}
-                className="flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300"
-                aria-label="Close profile"
-              >
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            {/* Body */}
-            <div className="px-6 py-6">
-              <ProfileForm />
-
-              {/* Security lives in the same modal as the profile because that is
-                  where a user looks for it, and it is separated by a rule rather
-                  than a second tab — two clicks to find 2FA is two chances to not
-                  bother. */}
-              <div className="mt-8 border-t border-gray-100 pt-6 dark:border-gray-800">
-                <TwoFactorSettings />
-              </div>
-
-              <div className="mt-8 border-t border-gray-100 pt-6 dark:border-gray-800">
-                <ActiveSessions />
-              </div>
-            </div>
-          </div>
-        </div>,
-        document.body
-      )}
     </>
   );
 }
