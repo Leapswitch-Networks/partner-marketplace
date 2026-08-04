@@ -7,8 +7,12 @@ from app.core.dependencies import get_db, require_permission
 from app.core.permissions import ROLE_CREATE, ROLE_DELETE, ROLE_UPDATE, ROLE_VIEW
 from app.models.user import User
 from app.schemas.auth import MessageResponse
+from app.schemas.navigation import (
+    NavPreferencesResponse,
+    UpdateNavPreferencesRequest,
+)
 from app.schemas.rbac import CreateRoleRequest, RoleResponse, UpdateRoleRequest
-from app.services import rbac_service
+from app.services import navigation_service, rbac_service
 
 router = APIRouter(prefix="/roles", tags=["roles"])
 
@@ -75,3 +79,43 @@ def delete_role(
 ) -> MessageResponse:
     rbac_service.delete_role(db, role_id)
     return MessageResponse(message="Role deleted")
+
+
+# --- Navigation preferences --------------------------------------------------
+#
+# Which sidebar sections start collapsed, per role. Gated on role-view/role-update
+# rather than a permission of its own: this is an attribute of the role, and
+# anyone who may edit the role may set it.
+
+
+@router.get("/{role_id}/nav-preferences", response_model=NavPreferencesResponse)
+def get_role_nav_preferences(
+    role_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission(ROLE_VIEW)),
+) -> NavPreferencesResponse:
+    """Every catalog section with this role's effective value.
+
+    Returns the full catalog, not just stored overrides, so the UI can render a
+    complete toggle list without duplicating the defaults.
+    """
+    role = rbac_service.get_role_or_404(db, role_id)
+    return NavPreferencesResponse(
+        sections=navigation_service.role_nav_preferences(role)
+    )
+
+
+@router.post("/{role_id}/nav-preferences", response_model=NavPreferencesResponse)
+def update_role_nav_preferences(
+    role_id: int,
+    data: UpdateNavPreferencesRequest,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission(ROLE_UPDATE)),
+) -> NavPreferencesResponse:
+    """Replace this role's preferences. Unknown sections are rejected."""
+    role = rbac_service.get_role_or_404(db, role_id)
+    return NavPreferencesResponse(
+        sections=navigation_service.set_role_nav_preferences(
+            db, role, data.preferences
+        )
+    )

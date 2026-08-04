@@ -15,6 +15,7 @@ from app.api import (
     category,
     google,
     invitations,
+    navigation,
     permissions,
     roles,
     users,
@@ -134,6 +135,7 @@ app.include_router(auth.router, prefix="/api")
 app.include_router(google.router, prefix="/api")
 app.include_router(users.router, prefix="/api")
 app.include_router(roles.router, prefix="/api")
+app.include_router(navigation.router, prefix="/api")
 app.include_router(permissions.router, prefix="/api")
 app.include_router(invitations.router, prefix="/api")
 app.include_router(activity.router, prefix="/api")

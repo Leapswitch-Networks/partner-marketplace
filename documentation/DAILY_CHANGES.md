@@ -8,6 +8,72 @@
 
 ---
 
+## August 4, 2026 — The sidebar is now decided on the server, and collapses per role
+
+Backend half of the navigation inversion. **The frontend still renders its own
+hardcoded nav** — `GET /api/navigation` exists and is correct, but nothing consumes
+it yet. That is the next change; this one is committed separately because it is
+independently verifiable and large enough to review on its own.
+
+- **The sidebar had two sources of truth for authorization, and they could disagree
+  silently.** `Sidebar.tsx` hardcoded every item with its own `can("user-view")`
+  call, so an item could be shown that the API refuses, or hidden that the API
+  would allow, and nothing compared the two. The tree is now built and filtered in
+  `services/navigation_service.py` and the client will render what it receives.
+  Ported from LeapDesk's `NavigationService`, including the property that makes it
+  worth having: **to add or remove a nav item, you edit one file.**
+  - **Hiding a link was never the security control and still isn't.** Every route
+    stays independently gated by `require_permission`; an item omitted from the tree
+    and reached by typing the URL still returns 403.
+  - **Icons cross the wire as names, not markup.** The server says `"users"`; the
+    client owns the SVG. Sending markup would put presentation in the API and turn a
+    restyle into a backend deploy.
+- **Sections collapse per role, which the client could not have done.** A JSON
+  column on `roles` (migration `f5a3c81b7d29`) holds
+  `{"user-management": {"collapsible": false}}`. The client cannot know another
+  role's stored preference, so this was impossible before the inversion — it is the
+  concrete reason the inversion had to happen rather than a tidy-up.
+  - **NULL means "use the code defaults", not "collapse nothing", and nothing was
+    backfilled.** Writing the default map into every existing row would have frozen
+    the defaults: changing `default_nav_preferences()` later would not affect any
+    role that had been backfilled. A role with NULL contributes the default instead.
+  - **Where several roles disagree, the first role listed on the user wins.**
+    Preferences are merged across roles in reverse order, matching LeapDesk, where
+    Spatie returns the most recently assigned role first.
+  - **Unknown section keys are rejected twice, and that is not redundant.** The
+    schema refuses the request loudly; the service filters again before writing, so
+    the column cannot hold junk regardless of how a future caller arrives.
+- **The nav is now grouped the way LeapDesk groups it.** Users, Add User, Roles and
+  Activity Log sit under a collapsible "User Management"; an empty "System Settings"
+  is declared for the parity modules still to come. The inherited candidate item
+  moved into its own "Test Platform" section — grouped rather than mixed into the
+  flat list specifically so that retiring the scaffold
+  (`planning/SCAFFOLD_CLEANUP_PLAN.md`) is deleting one section, not hunting through
+  a list. **An empty section renders nothing** rather than an empty heading.
+- **Verified per role against the seeded role matrix**, which is the check that
+  matters for a permission-filtered tree:
+
+  | Role | Sections returned |
+  |---|---|
+  | RootUser / SuperAdmin / Admin | Dashboard · User Management (all four) · Test Platform |
+  | Staff | Dashboard · User Management (Users, Roles only) · Test Platform |
+  | Partner | Dashboard alone |
+  | User | Dashboard alone |
+
+  Partner-sees-Dashboard-alone reproduces the browser-driven result recorded on
+  2026-07-31, from a different direction. Staff correctly loses Add User (no
+  `user-create`) and Activity Log (no `activity-view`). "System Settings" is
+  correctly absent everywhere because it is empty.
+  - Also verified: the preference overlay flips `collapsible` and survives a
+    round trip through the column; a junk key is stripped by the service; the schema
+    rejects both an unknown section and a section missing `collapsible`; clearing the
+    column back to NULL restores the defaults.
+  - **Not verified: anything in a browser.** No UI consumes this yet, so there is
+    nothing to click. The endpoint is exercised through the service and the schema
+    only.
+
+---
+
 ## August 4, 2026 — Password recovery from inside the app, and a real "System" appearance option
 
 First slice of the LeapDesk parity work. Backend only — the `/settings` pages themselves are not

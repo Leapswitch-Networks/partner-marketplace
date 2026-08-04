@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.permissions import PROTECTED_ROLES, SUPER_ADMIN_ROLES
@@ -26,6 +27,17 @@ class Role(Base):
     is_system: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False,
         comment="Seeded role referenced by name in code; cannot be renamed or deleted",
+    )
+
+    #: Per-section sidebar preferences: ``{"user-management": {"collapsible": true}}``.
+    #:
+    #: NULL means "use the code defaults" rather than "collapse nothing" — see
+    #: migration f5a3c81b7d29 for why nothing was backfilled. Keys are validated
+    #: against `navigation_service.COLLAPSIBLE_SECTION_CATALOG` on write, so an
+    #: unknown section cannot land here even from a stale client.
+    nav_preferences: Mapped[dict | None] = mapped_column(
+        JSONB, nullable=True,
+        comment="Per-section {collapsible: bool}; NULL means use the code defaults",
     )
 
     created_by: Mapped[str | None] = mapped_column(
