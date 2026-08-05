@@ -8,6 +8,59 @@
 
 ---
 
+## August 5, 2026 — Viho is adopted in full, and the rebrand costs 20× what we thought
+
+- **The design direction is no longer an open question.** `VIHO_THEME_REFERENCE.md` had sat since
+  2026-08-03 with a § Adoption Decision marked *"Needs the Owner"* — four conflicts between the Viho
+  theme and our own written standards, recorded rather than decided because they are product calls.
+  The owner decided all four today, and decided them the same way: **full fidelity.** Teal `#24695c`
+  + tan `#ba895d` replacing orange, cards squared while controls stay rounded, Montserrat replacing
+  Inter, and Viho's **inverted** dark mode where cards are *darker* than the page. Card spacing goes
+  to 30px with them. The product should look like Viho, not like a compromise.
+- **Checking the cost before planning the work found the most important thing in this entry.** Both
+  `VIHO_THEME_REFERENCE.md` and `UI_PATTERNS.md` stated that only `Button.tsx` and `Input.tsx`
+  hardcode the brand hex, and that a rebrand therefore needed those two files migrated first. Against
+  commit `b144c24` the real figure is **242 occurrences across 37 files** — 44% of the frontend's 85
+  `.tsx` files. Only 6 files use the `brand` token at all.
+  - **The `orange-*` Tailwind utilities are why the original count was so far out.** A hex grep never
+    sees `bg-orange-50`, `dark:bg-orange-950/40` or `hover:text-orange-400`, and those are 91 of the
+    242. Anyone re-checking this must grep both patterns or they will reproduce the same undercount.
+  - **Nine orange shades are in use where the token defines two**, so this cannot be a
+    find-and-replace onto `brand` — the token layer needs a real tint ladder built first.
+  - The heaviest single file is `Sidebar.tsx` at **46** occurrences, more than five times `Button.tsx`
+    and `Input.tsx` combined — the two files the docs named.
+- **The plan's whole shape follows from that number.** `VIHO_ADOPTION_PLAN.md` sequences the work in
+  ten phases, and the ordering is the point rather than the effort: build a token layer *while still
+  orange* (no visual change, verified by an empty grep), and only then flip the values. That turns
+  "editing 37 files" into one commit that `git revert` undoes. Phases 1–4 are the spine and are worth
+  doing in that order even if everything after them slips.
+- **A third of the debt should be deleted, not migrated.** 85 of the 242 occurrences live in eight
+  inherited test-platform screens that `SCAFFOLD_CLEANUP_PLAN.md` already schedules for removal —
+  `Candidate.tsx`, the question/category/job-role forms, `RulesModal`, `TestCard`. Migrating them is
+  work thrown away. **That deletion needs its own approval and has not been given**, so it is flagged
+  as an open question rather than assumed; the fallback is a visibly two-tone app until they go.
+- **Four accessibility carve-outs are proposed against literal 100%, and they are not yet settled.**
+  Viho sets white text on its mustard warning at a contrast ratio of **1.70**, uses `#999` muted text
+  at **2.85**, white on tan at **3.08**, and removes the focus ring from its login inputs outright.
+  The first and last are the ones worth holding: 1.70 is unreadable rather than marginal, and
+  removing a focus indicator breaks keyboard use. They are listed as E1–E4 for the owner to veto.
+  - Two other Viho oddities the reference doc advised against — `success` being a dark primary shade
+    rather than a green, and `info` being grey rather than blue — are **adopted as-is**. Both pass
+    contrast; the objection to them is aesthetic, and fidelity wins where nothing is broken.
+- **A pre-existing contradiction surfaced while sizing the radius work.** `UI_PATTERNS.md` mandates
+  `rounded-lg` everywhere and says *"don't mix radii"*; the code uses five, including 49
+  `rounded-xl` and 23 `rounded-2xl`. That drift is unrelated to Viho and has to be resolved by the
+  same phase, so it is now recorded as its own Known Issue rather than being discovered mid-work.
+
+**Docs updated alongside:** `INDEX.md` (design section re-statused, plan added), `UI_PATTERNS.md` (a
+banner saying it describes today's code and naming which five sections each phase rewrites, plus the
+corrected counts), and `TECH_DEBT.md` PM-20 — **re-scoped from ⚪ Low to 🟡 Medium** and moved up the
+suggested order, since it now gates an approved piece of work rather than being a tidy-up.
+
+**No frontend code was changed today.** This is a decision and a plan; every phase is still pending.
+
+---
+
 ## August 4, 2026 — The sidebar now renders what the server sends, and a correction
 
 - **`GET /api/navigation` was committed and then left unconsumed for two commits.**

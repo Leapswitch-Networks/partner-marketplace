@@ -55,7 +55,7 @@ since 2026-07-31 — only the documentation was wrong, and wrong in a way that b
 | [PM-17](#pm-17--emails-are-not-normalised--resolved) | ✅ | ~~Emails are not normalised~~ | Data |
 | [PM-18](#pm-18--health-check-doesnt-check-the-database--resolved) | ✅ | ~~Health check doesn't check the database~~ | Infra |
 | [PM-19](#pm-19--no-error-boundaries-or-route-suspense--resolved) | ✅ | ~~No error boundaries or route suspense~~ | Frontend |
-| [PM-20](#pm-20--brand-colour-hardcoded-in-components) | ⚪ | Brand colour hardcoded in components | UI |
+| [PM-20](#pm-20--brand-colour-hardcoded-in-components--re-scoped) | 🟡 | Brand colour hardcoded in **242 places across 37 files** — blocks the Viho rebrand | UI |
 | [PM-21](#pm-21--stale-product-naming-throughout--mostly-resolved) | ✅ | ~~Stale product naming throughout~~ (2 items deferred) | Housekeeping |
 | [PM-22](#pm-22--unused-tailwind-v4-dependency) | ⚪ | Unused Tailwind v4 dependency | Frontend |
 | [PM-23](#pm-23--two-dead-virtualenvs-in-the-tree) | ⚪ | Two dead virtualenvs in the tree | Housekeeping |
@@ -593,14 +593,52 @@ not doing much work today.
 
 ---
 
-## ⚪ Low
+### PM-20 — Brand colour hardcoded in components ⬆️ RE-SCOPED
 
-### PM-20 — Brand colour hardcoded in components
+**Raised from ⚪ Low to 🟡 Medium on 2026-08-05.** Two things changed: the original entry undercounted
+the problem by an order of magnitude, and the owner's adoption of the Viho theme turned it from a
+tidy-up into the **blocker in front of the rebrand**.
 
-`components/common/Button.tsx` and `Input.tsx` write `#F97316` inline despite `brand` existing in
-`tailwind.config.ts`. A rebrand means editing components.
+**The original entry said** `components/common/Button.tsx` and `Input.tsx` write `#F97316` inline
+despite `brand` existing in `tailwind.config.ts`. Measured against commit `b144c24`:
+
+```bash
+grep -ro 'F97316\|EA6C0A'       app components   # 151 occurrences, 37 files
+grep -ro 'orange-[0-9]\{2,3\}'  app components   #  91 occurrences, 18 files
+                                         union   # 242 occurrences, 37 files
+```
+
+**37 of the frontend's 85 `.tsx` files — 44%.** Only 6 files use the `brand` token at all. This is the
+same undercount pattern as PM-21, which found 18 occurrences across 14 files where 6 were first listed.
+
+Two reasons the first count missed so much:
+
+1. **`orange-*` Tailwind utilities are brand colour, and a hex grep never sees them.** `bg-orange-50`,
+   `dark:bg-orange-950/40`, `hover:text-orange-400` — 91 of the 242.
+2. **Nine distinct orange shades are in use** (`orange-50` ×27, `950` ×26, `400` ×23, `600` ×6,
+   `500` ×4, `700` ×2, one each of `100/200/900`) where the token defines two. A find-and-replace onto
+   `brand` will not work; the token layer needs a tint ladder first.
+
+| Occurrences | File |
+|------------:|------|
+| 46 | `components/dashboard/Sidebar.tsx` |
+| 22 | `components/admin/Candidate.tsx` |
+| 15 | `components/admin/AddCategoryForm.tsx` |
+| 14 | `components/admin/AddQuestionForm.tsx` |
+| 12 | `components/admin/SelectQuestionType.tsx`, `components/admin/ProfileForm.tsx`, `app/not-found.tsx` |
+
+**The mitigation is sequencing, not effort.** Migrate every call site to tokens *while still orange*
+(no visual change, verifiable by grep), then flip the values in one revertible commit. Phases 1–3 of
+[`../design/VIHO_ADOPTION_PLAN.md`](../design/VIHO_ADOPTION_PLAN.md).
+
+**And 85 of the 242 — 35% — sit in 8 inherited screens that
+[`SCAFFOLD_CLEANUP_PLAN.md`](./SCAFFOLD_CLEANUP_PLAN.md) already schedules for deletion.** Retiring
+those first removes a third of this debt at no migration cost. That ordering is the single cheapest
+thing available here, and it is easy to miss.
 
 ---
+
+## ⚪ Low
 
 ### PM-21 — Stale product naming throughout ✅ MOSTLY RESOLVED
 
@@ -1332,8 +1370,12 @@ in order:
 8. **PM-28** (verify Google SSO end to end against a real OAuth client) — **needs credentials**
 9. ~~**PM-19** (error boundaries)~~ — ✅ done 2026-08-03; **PM-30** (react-hooks findings) remains
 10. **PM-25** (React/Next peer mismatch) — a framework-version decision; gates PM-30
-11. **PM-11** (tests) — **deliberately last**, see below
-12. Everything else as the surrounding code is worked on
+11. **PM-20** (brand colour in 242 places) — **re-scoped 2026-08-05**; it now gates the Viho rebrand
+    the owner approved, so it moves ahead of "everything else". Do
+    [`SCAFFOLD_CLEANUP_PLAN.md`](./SCAFFOLD_CLEANUP_PLAN.md)'s frontend deletions **first** — that
+    retires 35% of it without migrating anything
+12. **PM-11** (tests) — **deliberately last**, see below
+13. Everything else as the surrounding code is worked on
 
 > **Audit note, 2026-08-03.** Working this queue found that **PM-2 and PM-4 were already fixed in
 > code** and only the register said otherwise, and that `DEPLOYMENT.md` § 0 still listed five resolved

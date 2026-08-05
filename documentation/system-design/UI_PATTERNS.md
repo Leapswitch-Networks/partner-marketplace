@@ -5,6 +5,29 @@
 
 ---
 
+## 🔴 The design system is being replaced — read this before trusting a colour below
+
+**On 2026-08-05 the owner adopted the Viho theme in full** — new brand hue, squared card surfaces,
+Montserrat, and an inverted dark-mode elevation model. See
+[`../design/VIHO_ADOPTION_PLAN.md`](../design/VIHO_ADOPTION_PLAN.md).
+
+**No frontend code has changed yet.** Everything in this file still describes what the code actually
+does today, and remains the rule you follow when writing code *now*. But five sections are scheduled
+to be rewritten, and you should not invest in matching them:
+
+| Section | Changes in | To |
+|---------|-----------|-----|
+| § Colour System — Brand | Plan phase 4 | Teal `#24695c` + tan `#ba895d` |
+| § Colour System — Surfaces | Plan phase 5 | Viho surface tokens; **dark elevation inverts** |
+| § Typography | Plan phase 6 | Montserrat 14px |
+| § Layout Conventions — Radius | Plan phase 5 | Surfaces squared, controls stay rounded |
+| § Full-Page Index Layout | Plan phase 7 | `useAutoPerPage()`'s `433` constant must be re-measured |
+
+**Rewrite the relevant section as each phase lands.** A phase that ships without updating this file
+puts the project back where it was on 2026-08-05 — two documents disagreeing about what the UI is.
+
+---
+
 ## 📖 Scope of This File (Read First)
 
 | This file | Not this file |
@@ -55,9 +78,29 @@ Defined in `tailwind.config.ts`:
 
 Usage: `bg-brand`, `text-brand`, `border-brand`, `hover:bg-brand-dark`, `focus:ring-brand`.
 
-⚠️ **Existing components hardcode the hex** — `Button.tsx` and `Input.tsx` write `bg-[#F97316]` and
-`focus:border-[#F97316]` instead of using the token. **New code must use `brand`.** When you touch
-those files, migrate them; don't add more hardcoded hex.
+⚠️ **This is far more widespread than "a couple of components", which is what this file used to say.**
+Measured 2026-08-05 against commit `b144c24`:
+
+| Pattern | Occurrences | Files |
+|---------|------------:|------:|
+| `#F97316` / `#EA6C0A` | 151 | 37 |
+| `orange-*` utilities | 91 | 18 |
+| **Union** | **242** | **37** |
+
+**37 of the frontend's 85 `.tsx` files — 44% — paint the brand colour by hand. Only 6 files use the
+`brand` token at all.** The heaviest is `components/dashboard/Sidebar.tsx` at 46 occurrences.
+
+Two traps:
+
+1. **`orange-*` utilities are brand colour too**, and a hex grep will not find them. `bg-orange-50`,
+   `dark:bg-orange-950/40` and `hover:text-orange-400` are 91 of the 242.
+2. **Nine orange shades are in use** where the token defines two — so replacing them needs a tint
+   ladder, not a find-and-replace onto `brand`.
+
+**New code must use `brand`.** When you touch a file, migrate it; don't add more hardcoded hex. The
+sequenced migration is [`../design/VIHO_ADOPTION_PLAN.md`](../design/VIHO_ADOPTION_PLAN.md) phases 1–3,
+and it is now a **blocker for the rebrand** rather than the low-priority tidy-up
+[`../planning/TECH_DEBT.md`](../planning/TECH_DEBT.md) PM-20 originally recorded.
 
 ### Surfaces & text
 
@@ -380,7 +423,8 @@ Rules:
 
 | Issue | Detail |
 |-------|--------|
-| Hardcoded `#F97316` | `Button.tsx`, `Input.tsx` bypass the `brand` token |
+| Hardcoded brand colour | **242 occurrences across 37 files** (151 hex + 91 `orange-*`) bypass the `brand` token — not the two files this row used to claim. See § Colour System. Blocks the Viho rebrand |
+| Mixed radii | § Layout Conventions mandates `rounded-lg` and says "don't mix radii"; the code uses five — `rounded-lg` ×92, `rounded-xl` ×49, `rounded-full` ×31, `rounded-2xl` ×23, `rounded-md` ×7 |
 | No semantic colour tokens | Grey scale used directly; a rebrand means touching every component |
 | No `cn()` helper | Class strings are template literals; conditional classes get unwieldy. A 3-line `cn()` would help |
 | Only two Button variants | No `danger` variant, so destructive actions have nowhere consistent to live |

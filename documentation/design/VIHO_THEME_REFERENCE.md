@@ -1,11 +1,17 @@
-# Viho Theme — Design Reference (Inspiration Only)
+# Viho Theme — Design Reference (Adopted)
 
 > **What this is:** a design-token reference extracted from the **Viho** admin theme (Pixelstrap), the
-> visual direction the project owner selected on **2026-08-03**. It records colours, typography,
-> spacing and component anatomy so we can build the same *look* in our own stack.
+> visual direction the project owner selected on **2026-08-03** and **formally adopted in full on
+> 2026-08-05**. It records colours, typography, spacing and component anatomy so we can build the same
+> *look* in our own stack.
 >
 > **What this is not:** the theme's source code. Viho is a **paid, licensed** template and its source
 > is deliberately **not** in this repository.
+>
+> **What this is also not: a record of what we have built.** Adoption is decided; implementation has
+> **not started**. This file describes *Viho*. For what our code actually does today, read
+> [`../system-design/UI_PATTERNS.md`](../system-design/UI_PATTERNS.md); for how we get from one to the
+> other, read [`VIHO_ADOPTION_PLAN.md`](./VIHO_ADOPTION_PLAN.md).
 
 **Reference URL (login screen the owner shared):** <https://vue.pixelstrap.net/viho/auth/login>
 
@@ -726,38 +732,74 @@ Deliberate deviations baked into that proposal:
 | warning text `#fff` | `#242934` on warning | 1.70 → 8.58 |
 | `--theme-deafult` | `brand` | Don't propagate a typo into our config |
 
-Also note: the existing token is `brand: #F97316` and `UI_PATTERNS.md` § Known Issues records that
-`Button.tsx` and `Input.tsx` **hardcode `#F97316`** instead of using the token. **A rebrand is
-therefore not a one-line config change** — it needs those two files migrated to the token first. The
-same doc already asks for that migration, so the work is pre-agreed, just not done.
+### ⚠️ Correction 2026-08-05 — the rebrand cost was understated by an order of magnitude
+
+An earlier version of this section said `UI_PATTERNS.md` § Known Issues records that **`Button.tsx` and
+`Input.tsx`** hardcode `#F97316`, and that a rebrand needs "those two files" migrated first. **Both
+this document and `UI_PATTERNS.md` were wrong.** Measured against commit `b144c24`:
+
+```bash
+grep -ro 'F97316\|EA6C0A'       app components   # 151 occurrences, 37 files
+grep -ro 'orange-[0-9]\{2,3\}'  app components   #  91 occurrences, 18 files
+                                         union   # 242 occurrences, 37 files
+```
+
+**37 of the frontend's 85 `.tsx` files — 44% — paint the brand colour by hand. Only 6 files use the
+`brand` token at all.**
+
+Two things the original claim missed:
+
+1. **The `orange-*` Tailwind utilities are brand colour too**, and a hex grep never sees them —
+   `bg-orange-50`, `dark:bg-orange-950/40`, `hover:text-orange-400`. They are 91 of the 242.
+2. **Nine distinct orange shades are in use** (`orange-50` ×27, `950` ×26, `400` ×23, `600` ×6,
+   `500` ×4, `700` ×2, and one each of `100/200/900`) where the token defines two. So the token layer
+   needs a real tint ladder, not a `DEFAULT`/`dark` pair.
+
+The single heaviest file is `components/dashboard/Sidebar.tsx` at **46** occurrences — more than
+`Button.tsx` and `Input.tsx` combined ×5.
+
+**A rebrand is therefore not a one-line config change and not a two-file migration.** The mitigation
+is sequencing, not effort: migrate every call site to tokens *while still orange*, then flip the
+values in one commit. Full phase order in [`VIHO_ADOPTION_PLAN.md`](./VIHO_ADOPTION_PLAN.md) — which
+also notes that **85 of the 242 occurrences sit in inherited screens already scheduled for deletion**,
+so a third of this debt can be retired rather than migrated.
 
 ---
 
-## ⚠️ Adoption Decision — Needs the Owner
+## ✅ Adoption Decision — DECIDED 2026-08-05
 
-Three conflicts between Viho and our written standards. These are **product/design calls, not
-engineering ones**, so they are recorded here rather than decided:
+**The project owner chose full Viho fidelity: all four conflicts adopted, plus the card spacing.** The
+product should look like Viho, not like a compromise between Viho and what we have.
 
-| # | Conflict | Viho | Our standard | Cost of switching |
-|---|----------|------|--------------|-------------------|
-| 1 | **Brand hue** | Teal `#24695c` + tan `#ba895d` | Orange `#F97316` | Config + migrate 2 hardcoded files. Changes the product's whole personality |
-| 2 | **Surface radius** | `0` on cards (controls stay rounded) | `rounded-lg` everywhere | Narrower than it first looked — **only** `Card`; our buttons/inputs already match Viho's control radius |
-| 3 | **Body font** | Montserrat 14px | Inter, `text-sm` | One `next/font` swap; re-check the dense table layouts |
-| 4 | **Dark elevation** | Cards **darker** than page (`#111727` on `#202938`) | Cards **lighter** than page (`gray-800` on `gray-950`) | Invert the surface tokens — a conceptual flip, not a re-hex |
+| # | Conflict | Viho | Our previous standard | **Decision** |
+|---|----------|------|-----------------------|--------------|
+| 1 | **Brand hue** | Teal `#24695c` + tan `#ba895d` | Orange `#F97316` | ✅ **Adopt** |
+| 2 | **Surface radius** | `0` on cards (controls stay rounded) | `rounded-lg` everywhere | ✅ **Adopt** |
+| 3 | **Body font** | Montserrat 14px | Inter, `text-sm` | ✅ **Adopt** |
+| 4 | **Dark elevation** | Cards **darker** than page (`#111727` on `#202938`) | Cards **lighter** than page (`gray-800` on `gray-950`) | ✅ **Adopt** — the inversion is the point |
+| 4b | **Card spacing** | 30px padding + 30px bottom margin | Denser | ✅ **Adopt** |
 
-A fourth, smaller one: Viho's cards use **30px padding and 30px bottom margin**, considerably airier
-than our current dashboard density — and our mandatory full-height index layout
-(`UI_PATTERNS.md` § Full-Page Index Layout) is tuned around `useAutoPerPage()`'s
-`floor((h − 433) / 38)`. **Changing card padding changes how many rows fit, so that 433 constant
-must be re-measured** if we adopt Viho's spacing. This is the one place where a purely visual
-decision has a functional consequence, and it is easy to miss.
+The structural ideas that were never in conflict — brand-wash page background, tinted input addon, the
+`btn-primary-light` variant, soft badges, coloured shadows — are in scope too.
 
-**Recommendation:** adopt the *structural* ideas that cost little and clearly improve things — the
-brand-wash page background, the tinted input addon, the `btn-primary-light` variant, coloured
-shadows — and treat items 1–3 as one explicit rebrand decision rather than drifting into a
-half-Viho, half-current look. A partial adoption is the worst outcome: two visual languages in one
-app, which is precisely what `UI_PATTERNS.md` § Colour System already warns about with the hardcoded
-hex.
+This also settles the earlier recommendation against a *partial* adoption. The worry was two visual
+languages in one app; full adoption removes it.
+
+**Consequences that are easy to miss:**
+
+- **Item 4b has a functional consequence.** Our mandatory full-height index layout
+  (`UI_PATTERNS.md` § Full-Page Index Layout) is tuned around `useAutoPerPage()`'s
+  `floor((h − 433) / 38)`. Changing card padding changes how many rows fit, so **that 433 constant
+  must be re-measured** — by rendering, not by arithmetic.
+- **Item 1 is not a config change.** See the corrected cost in § Mapping to Our Stack below: **242
+  brand-colour occurrences across 37 files**, not the two files this document previously claimed.
+- **Four accessibility carve-outs are proposed** against literal 100% fidelity — white-on-warning at
+  1.70, `#999` muted at 2.85, white-on-tan at 3.08, and the removed focus ring. They are listed as
+  E1–E4 in the adoption plan and are **still open for the owner to veto**.
+
+➡️ **The sequenced implementation plan is [`VIHO_ADOPTION_PLAN.md`](./VIHO_ADOPTION_PLAN.md).** It
+carries the measured costs, the phase order and the remaining open decisions. This document stays what
+it has always been: the record of *what Viho looks like*, not of what we have built.
 
 ---
 

@@ -511,7 +511,7 @@ Checklist for `/dashboard/listings`:
 | No `error.tsx` / `loading.tsx` / `not-found.tsx` anywhere | No error boundaries and no route-level suspense. Errors surface as ad-hoc component state. |
 | `testSlice` is inherited state | Test-platform leftover; removal candidate |
 | Main sign-in uses `adminLogin` | `/sign-in` authenticates against `admin_users`; end users have no working entry point |
-| Hardcoded hex in components | `#F97316` appears inline in `Button.tsx` and `Input.tsx` despite `brand` existing in `tailwind.config.ts`. Prefer the token — see `UI_PATTERNS.md`. |
+| Hardcoded brand colour in components | **242 occurrences across 37 files** — 44% of the frontend — bypass the `brand` token: 151 × `#F97316`/`#EA6C0A` plus 91 × `orange-*` utilities, which a hex grep misses. Re-counted 2026-08-05; this row previously said "`Button.tsx` and `Input.tsx`". Now blocks the Viho rebrand — see [`../design/VIHO_ADOPTION_PLAN.md`](../design/VIHO_ADOPTION_PLAN.md) and `TECH_DEBT.md` PM-20. Prefer the token. |
 | `app/page.tsx` is unreachable | Middleware redirects `/` unconditionally |
 
 ---

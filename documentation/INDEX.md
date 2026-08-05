@@ -48,12 +48,15 @@ Each file has ONE clear purpose. Load only what the task needs.
 
 | File | Purpose | Status |
 |------|---------|--------|
-| `design/VIHO_THEME_REFERENCE.md` | Design tokens extracted from the **Viho** theme (the chosen visual direction) — colour hex values, contrast audit, type scale, spacing, login-screen anatomy, and how it maps to our Tailwind stack | **Inspiration — adoption not yet decided** |
+| `design/VIHO_ADOPTION_PLAN.md` | **The decision and the route to it** — what was adopted, the measured cost (242 brand-colour occurrences across 37 files), the 10-phase order, and the three questions still open | **Decided 2026-08-05 — implementation not started. Current design focus** |
+| `design/VIHO_THEME_REFERENCE.md` | Design tokens extracted from the **Viho** theme — colour hex values, contrast audit, type scale, spacing, login-screen anatomy, component anatomy, and the 34-screenshot catalogue | **Adopted in full 2026-08-05** — reference for what Viho looks like |
 | `design/assets/screenshots/` | Reference screenshots + the rules for adding them to a public repo | **Temporary — delete after the UI/UX component build-out** ([why, and the catch](design/assets/screenshots/README.md#retirement--these-are-temporary-by-decision)) |
 
-> ⚠️ `system-design/UI_PATTERNS.md` remains **authoritative** for how our UI is actually built. The
-> design folder records an external theme we are borrowing from; where the two disagree, the theme has
-> not won until the owner says so. Viho is a **paid** template — its source is not in this repo.
+> ⚠️ **`system-design/UI_PATTERNS.md` remains authoritative for how our UI is actually built today.**
+> The owner adopted Viho on 2026-08-05, but **no frontend code has changed yet** — so where the two
+> disagree, `UI_PATTERNS.md` still describes reality and the design folder describes the target. That
+> gap closes phase by phase; `VIHO_ADOPTION_PLAN.md` says which phase rewrites which section. Viho is a
+> **paid** template — its source is not in this repo.
 
 ## Planning
 
@@ -98,7 +101,8 @@ documentation/
 ├── DAILY_CHANGES.md         ← Per-task log
 ├── core/                    ← Architecture, auth, authorization, users
 ├── system-design/           ← Standards, patterns, migrations, deployment
-├── design/                  ← Theme inspiration + reference screenshots
+├── design/                  ← Adopted theme reference + the plan to implement it
+│   ├── VIHO_ADOPTION_PLAN.md    ← the decision, the cost, the phase order
 │   ├── VIHO_THEME_REFERENCE.md
 │   └── assets/screenshots/  ← owner-supplied screenshots
 ├── planning/                ← Domain plan, cleanup plan, tech debt
