@@ -180,3 +180,67 @@ Rotate them (PM-4).
 - [`AUTHORIZATION.md`](./AUTHORIZATION.md) — roles, permissions, protection rules
 - [`../system-design/DATABASE_MIGRATIONS.md`](../system-design/DATABASE_MIGRATIONS.md) — the revision chain
 - [`../planning/TECH_DEBT.md`](../planning/TECH_DEBT.md) — PM-4, PM-5, PM-11 remain open
+
+---
+
+## Pending
+
+> **Accounts and user-management work still outstanding.** Last audited **2026-08-06**. The unified
+> table and its 11 admin endpoints are complete and verified; what follows is the modelling that the
+> marketplace will force, plus housekeeping.
+
+### 🔴 Modelling the marketplace will force
+
+- [ ] **A partner is one login, not an organisation.** `company_name` is a **text field, not a foreign
+      key**, so two people at the same partner are two unrelated accounts with a string that happens to
+      match — and nothing prevents `"Acme Ltd"`, `"Acme Ltd."` and `"acme ltd"` coexisting. When
+      partners need several users under one org: add a `partners` table and a `partner_id` FK on `users`,
+      keeping accounts where they are. **Do not add a second identity table** — a third code path
+      through `refresh`, `/me` and every guard is exactly what migration `e7b41c9a2d10` removed.
+- [ ] **PM-5 — row-level scoping (see [`AUTHORIZATION.md`](./AUTHORIZATION.md) § Pending).** For this
+      table specifically: `list_users` is the query to design first, because it is paginated. Scoping by
+      post-filtering a page corrupts the count; the predicate has to reach the SQL.
+- [ ] **Deletion is hard delete, with no soft-delete or anonymisation path.** `created_by` / `updated_by`
+      are `ON DELETE SET NULL`, so removing an account **erases attribution on every row it touched** —
+      and the activity log stores `causer_id` as a plain `String(36)` with no FK, so those rows survive
+      pointing at an id that no longer resolves. Decide deliberately: soft delete, anonymise, or accept
+      it. Any GDPR-style erasure request makes this urgent, and the audit trail is the tension.
+
+### 🟠 Housekeeping with a real deadline
+
+- [ ] **PM-4 — rotate the four inherited accounts' passwords.** Their values were stored readable
+      before being hashed in place. The code is fixed; the credentials are still historically exposed.
+- [ ] **PM-11 — no test covers the protection rules.** `can_edit` / `can_delete` / `can_toggle_status` /
+      `can_approve` are the predicates that stop an Admin editing a SuperAdmin, and they are used in
+      **two** places each — the write path *and* the serialised row flags. Nothing asserts the two agree.
+      A drift there means the UI offers a button the API will refuse, or worse, hides one it would allow.
+- [ ] **`toggle-status` refusing SUSPENDED is deliberate and undiscoverable.** Un-suspending goes
+      through `PATCH`. Confirm the UI surfaces that rather than showing a disabled control with no
+      explanation.
+
+### 🟡 Data quality and lifecycle
+
+- [ ] **No uniqueness on `employee_id` or `personal_email`.** Both are plain nullable strings. If
+      `employee_id` is meant to identify a person, two accounts can hold the same one today.
+- [ ] **`timezone_preference` is a free-text `String(50)` defaulting to `Asia/Kolkata`.** Nothing
+      validates it against the IANA database, so an invalid value fails at render time rather than at
+      write time.
+- [ ] **`profile_photo_path` is a `String(2048)` and there is no upload endpoint.** The column
+      anticipates a feature that does not exist — the same shape as PM-6's dead columns, which
+      *"suggest features that don't exist"*. Either build the upload or note in the column comment that
+      only `google_avatar` is populated.
+- [ ] **Nothing purges anything (PM-43).** `user_sessions` grows by one row per sign-in forever;
+      `session_service.purge_expired` exists and no scheduler calls it. Session rows are cheap to look
+      up by primary key, but backups, `VACUUM` and the active-sessions screen all notice.
+
+### Documentation accuracy — this file
+
+- [ ] § *Profile & classification* lists **`phone`**; the column is
+      **`personal_mobile_number`** (`String(30)`). The table also omits `personal_email`,
+      `profile_photo_path`, `sidebar_preference`, and the 2FA and password-OTP column groups — all of
+      which exist on the model. A reader sizing up the schema from this table will undercount it.
+- [ ] § *What the Migration Did* says folding preserved each row's id **"so `tests.created_by` stayed
+      valid"**. The `tests` table was dropped by migration `c1e70a5d94b2` on 2026-08-06. The *reason*
+      was sound at the time; the justification now references a table that no longer exists.
+- [ ] § *Seeding* attributes the rotate-passwords warning to **PM-4**, which is closed. The rotation
+      itself is still genuinely outstanding — keep the item, correct the framing.

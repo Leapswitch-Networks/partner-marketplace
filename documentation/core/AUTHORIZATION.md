@@ -367,3 +367,74 @@ The seeder never touches an administrator-created role, so re-running is safe.
 - [`USERS.md`](./USERS.md) — the unified account table
 - [`../system-design/FASTAPI_STANDARDS.md`](../system-design/FASTAPI_STANDARDS.md) — router/service conventions
 - [`../planning/TECH_DEBT.md`](../planning/TECH_DEBT.md) — PM-5 and PM-11 remain open
+
+---
+
+## Pending
+
+> **Authorization work still outstanding.** Last audited **2026-08-06**. Enforcement *coverage* is
+> complete — every one of the 56 routes is permission-gated and every ungated one is intentionally
+> public — so nothing below is about a missing guard. What is missing is a **scoping model**, and the
+> means to prove any of it stays true.
+
+### 🔴 The one that blocks the marketplace
+
+- [ ] **PM-5 — there is no row-level scoping pattern anywhere.** This is the largest open item in the
+      project. Today every authenticated caller with a permission sees **every row** for that resource;
+      users and invitations are scoped admin-or-self, and that is the only ownership logic that exists.
+      Three things make it urgent rather than merely missing:
+  - [ ] **A scoping bug does not raise.** It returns another partner's rows. Nothing in the toolchain
+        — `tsc`, `ruff`, `next build`, or the 74 tests — would notice.
+  - [ ] **`has_admin_access` already exists and is the intended hinge** (`ADMIN_ACCESS_ROLES`,
+        `require_admin_access`). It is a Python property, so it **cannot appear in a SQL filter** —
+        the scoping layer has to translate it into a query predicate, not a post-filter. Post-filtering
+        a paginated list silently corrupts the page count.
+  - [ ] **Design it centrally, once.** Improvising per route is how tenants leak into each other. See
+        [`../planning/MARKETPLACE_DOMAIN_PLAN.md`](../planning/MARKETPLACE_DOMAIN_PLAN.md)
+        § Required Regardless.
+- [ ] **The activity log is the first query to revisit when scoping lands.** `activity-view` is
+      currently the entire authorisation, deliberately — a partial view of an audit trail is worse than
+      none when someone is reviewing an incident. That reasoning **stops holding** once partners exist:
+      a partner must never read another partner's history. This is a documented decision that becomes a
+      defect on a known date, so it needs revisiting rather than rediscovering.
+
+### 🟠 Provability
+
+- [ ] **PM-11 — nothing tests enforcement.** The 74 tests added 2026-08-06 cover authentication
+      primitives, not authorization. The suite this document needs asserts, per route, that a caller
+      **without** the permission gets 403 and a caller **with** it gets 200 — table-driven off the same
+      permission constants the guards use, so a new route with no test is visible.
+- [ ] **Nothing catches an accidentally-ungated route.** § *Common Issues* says to "grep the router for
+      `require_permission`", which is a human step that has to happen every time. A test that walks
+      `app.routes` and asserts every non-allowlisted path carries a permission dependency would make it
+      structural. The allowlist becomes the explicit record of what is intentionally public.
+- [ ] **Audit-trail coverage is recorded by hand.** § *Audit Trail Coverage* lists every wired event so
+      a reviewer can check it against the routes — necessary precisely because recording is **explicit
+      calls, not a global ORM hook** (a deliberate trade-off, documented in the service docstring).
+      Explicit calls can be forgotten, and the list can drift from them. There is no check that they
+      agree.
+
+### 🟡 Granularity the model does not have
+
+- [ ] **No permission dependencies.** `user-update` does not imply `user-view`; both must be granted
+      explicitly. Workable, and a real source of "why is this 403" confusion — a role granted only
+      `user-update` can save a user it cannot list.
+- [ ] **No per-field permissions.** Granularity is per endpoint. A partner-facing API that must expose
+      some columns and not others will need either separate endpoints or a serialisation layer that
+      takes the actor into account.
+- [ ] **No authorization decision log.** The audit trail records *what changed*
+      (`roles_changed`, `status_changed`, with granted/revoked lists), which covers the important half.
+      It does not record *denials* — a burst of 403s against one account is a signal nothing currently
+      captures.
+- [ ] **`require_roles` exists and hardcodes org structure into routes.** Its own docstring says prefer
+      `require_permission`. Worth a periodic grep to confirm it has not spread beyond the cases where
+      the rule genuinely is about the role itself.
+
+### 🟡 Consistency
+
+- [ ] **The super-admin bypass is not expanded into `permission_names`.** `has_permission` applies it;
+      the raw property does not. Any new code that reads `permission_names` directly instead of calling
+      `has_permission` will silently under-authorise a super admin. There is no lint or test for this.
+- [ ] **The frontend caches permissions in `authSlice` from `/api/auth/me`.** They go stale after a role
+      change until a refetch — listed under § *Common Issues* as a symptom, but there is no invalidation
+      mechanism, so it will keep being reported. PM-41's data layer is where a fix would live.

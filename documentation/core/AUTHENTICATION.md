@@ -422,3 +422,70 @@ curl -s -b /tmp/c.txt localhost:8002/api/auth/me | python3 -m json.tool
 - [`USERS.md`](./USERS.md) — the unified table and the admin endpoints
 - [`ARCHITECTURE.md`](./ARCHITECTURE.md) — where auth sits in the stack
 - [`../planning/TECH_DEBT.md`](../planning/TECH_DEBT.md) — PM-2, PM-4, PM-26, PM-27, PM-28 remain open
+
+---
+
+## Pending
+
+> **Authentication work still outstanding.** Last audited **2026-08-06**. The feature set here is close
+> to complete — hashing, sessions, rotation with reuse detection, 2FA, lockout, verification,
+> invitations, SSO. What remains is mostly *unverified*, *unreachable from the UI*, or *operational*.
+
+### 🟠 Implemented but never proven against the real thing
+
+- [ ] **PM-28 — Google SSO has never run against Google.** The whole flow exists (signed `state`, code
+      exchange, `email_verified` check, domain gate, three-step account resolution) and
+      `settings.google_oauth_configured` is false, so the endpoints return `503`. **Treat this code as
+      untested.** Needs an OAuth client, then `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` /
+      `GOOGLE_REDIRECT_URI=http://localhost:8002/api/auth/google/callback`, then walk the flow.
+- [ ] **Email deliverability is unproven.** The SMTP protocol path was verified against a purpose-built
+      fake relay, so *sending* works. **Nothing has ever landed in a real inbox** — SPF, DKIM and DMARC
+      are unconfigured, and authentication against a real provider is untested. The protocol is proven;
+      deliverability is not.
+- [ ] **The `accept_url`-withheld branch was never exercised live.** `smtp` + successful send →
+      `accept_url: null` is a two-term boolean asserted by reading, not by running.
+
+### 🟠 Backend exists, no way for a user to reach it
+
+- [ ] **PM-34 — 2FA has no frontend for enrolment.** Five endpoints work and
+      `TwoFactorSettings.tsx` / `TwoFactorChallenge.tsx` exist, but confirm the whole path is wired end
+      to end — enrol → scan → confirm → recovery codes → sign out → challenge → recover. This is the
+      feature most likely to lock a real user out if a step is missing.
+- [ ] **`GET /api/activity/export` has no UI button.** It is an API call only. Note it also needs
+      `LONG_TIMEOUT_MS` from `lib/api/axiosInstance.ts` — the 5s default kills a working export.
+
+### 🟡 Operational and lifecycle
+
+- [ ] **`SECRET_KEY` rotation is destructive and has no procedure.** Rotating it signs everyone out
+      **and permanently breaks 2FA for every enrolled user**, because TOTP secrets are Fernet-encrypted
+      with a key derived from it — see § *Rotating `SECRET_KEY` breaks 2FA for everyone*. A real
+      rotation must re-encrypt those secrets under the new key inside one transaction. Write the
+      procedure before anyone needs it in an incident.
+- [ ] **PM-4 — the four inherited accounts still hold pre-migration passwords.** Those values were
+      stored readable before migration `e7b41c9a2d10` hashed them in place. **Rotate them.** The code
+      is fixed; the credentials are still historically exposed.
+- [ ] **`MAIL_BACKEND=console` must never reach a deployed environment.** It writes password-reset
+      links — live credentials — to the log. **Now enforced**: `APP_ENV=production` refuses to boot on
+      it (PM-37). No further code needed; the pending part is remembering to set `APP_ENV`.
+- [ ] **Sends are synchronous.** A slow relay holds the worker; `SMTP_TIMEOUT_SECONDS` bounds it at 10s
+      rather than removing it. A queue is the real answer if invitation volume grows (PM-44).
+- [ ] **No email HTML or branding.** Plain text, which every client renders and nothing can break.
+      A product decision, not a defect.
+
+### 🟡 Hardening not yet designed
+
+- [ ] **No CSRF token.** `samesite=lax` is the only protection. It is adequate while the frontend and
+      API are same-site; it is **not** if `COOKIE_SAMESITE` ever becomes `none` for a split-origin
+      deployment. Decide alongside the topology question, not after it.
+- [ ] **Rate-limit counters are per process (PM-44).** N workers multiply every limit by N and a
+      restart clears them. Today this is a speed bump against spraying, **not** an authorisation
+      control — and per-IP limiting does nothing against a botnet, which is what the per-account
+      lockout is for. The two are complements; neither replaces the other.
+- [ ] **`TRUST_PROXY_HEADERS` must be enabled in the same change that deploys a proxy — never before.**
+      Enabling it without one restores a measured bypass exactly: 14 requests through a limit of 10.
+      Deliberately left as a warning rather than auto-corrected by PM-37's validator.
+- [ ] **PM-11 — no test covers a full login round trip.** The 74 tests added 2026-08-06 cover token
+      *types*, refresh *classification* and password *hashing* as pure logic. Nothing exercises
+      `POST /login` → cookie → `/me` → `/refresh` → `/logout` against a database. That is the next
+      suite, and it is the one that would have caught the `set_auth_cookies` signature mismatch on the
+      invitation path — which was found by reading the file, not by a test.

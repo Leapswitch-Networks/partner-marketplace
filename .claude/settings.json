@@ -19,7 +19,11 @@
       "Bash(python3 cdp.py http://localhost:3001/dashboard __TRACKED_VAR__/s-light.png light)",
       "Bash(python3 cdp.py http://localhost:3001/dashboard __TRACKED_VAR__/s-dark.png dark)",
       "Bash(python3 cdp.py http://localhost:3001/dashboard/all-users __TRACKED_VAR__/n-light.png light)",
-      "Bash(python3 cdp.py http://localhost:3001/dashboard/all-users __TRACKED_VAR__/n-dark.png dark)"
+      "Bash(python3 cdp.py http://localhost:3001/dashboard/all-users __TRACKED_VAR__/n-dark.png dark)",
+      "Bash(python3 cdp.py http://localhost:3001/dashboard/all-users __TRACKED_VAR__/h-light.png light)",
+      "Bash(python3 cdp.py http://localhost:3001/dashboard/all-users __TRACKED_VAR__/h-dark.png dark)",
+      "Bash(python3 cdp.py http://localhost:3001/dashboard __TRACKED_VAR__/z-light.png light)",
+      "Bash(python3 cdp.py http://localhost:3001/dashboard __TRACKED_VAR__/z-dark.png dark)"
     ]
   }
 }

@@ -9,7 +9,6 @@ import { ThemeToggle } from "@/components/common/ThemeToggle";
 import useNavigation from "@/lib/hooks/useNavigation";
 import NavTree from "@/components/dashboard/NavTree";
 import type { NavigationSection } from "@/types";
-import SidebarProfile from "@/components/dashboard/SidebarProfile";
 
 export type AdminSection =
   | "dashboard"
@@ -275,28 +274,6 @@ const BottomExpanded = memo(function BottomExpanded({
   );
 });
 
-const BottomCollapsed = memo(function BottomCollapsed({
-  loggingOut,
-  onLogout,
-}: {
-  loggingOut: boolean;
-  onLogout: () => void;
-}) {
-  return (
-    <div className="flex justify-center">
-      <Tooltip label={loggingOut ? "Signing out…" : "Sign Out"}>
-        <button
-          type="button"
-          onClick={onLogout}
-          disabled={loggingOut}
-          className="flex h-9 w-9 items-center justify-center rounded-[5px] text-gray-400 transition-all duration-200 hover:bg-tone-danger/10 hover:text-tone-danger disabled:opacity-50 dark:text-gray-500 dark:hover:bg-tone-danger/15 dark:hover:text-tone-danger"
-        >
-          {logoutIcon}
-        </button>
-      </Tooltip>
-    </div>
-  );
-});
 
 //Sidebar
 export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
@@ -462,8 +439,6 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
                 {navIcons.close}
               </button>
             </div>
-
-            <SidebarProfile />
             <nav className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-hide scroll-smooth px-3 py-4 space-y-1">
               <p className="mb-2 mt-6 border-b border-surface-border px-4 pb-2 text-[17px] font-semibold text-brand first:mt-2 dark:border-night-border dark:text-brand-on-dark">
                 Administration
@@ -471,6 +446,9 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
               <NavItems {...navItemsProps} collapsed={false} />
             </nav>
 
+            {/* Mobile only. The desktop sidebar's sign-out moved to the header
+                on 2026-08-06 to match the theme, but `TopNav` is `hidden md:flex`
+                — dropping this too would leave phone users unable to log out. */}
             <div className="border-t border-surface-border px-3 py-3 dark:border-night-border">
               <BottomExpanded loggingOut={loggingOut} onLogout={handleLogout} />
             </div>
@@ -535,8 +513,6 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
             </button>
           </div>
         )}
-
-        <SidebarProfile collapsed={collapsed} />
         <nav className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-hide scroll-smooth px-3 py-4 space-y-1 2xl:py-5 2xl:space-y-1.5">
           {!collapsed && (
             <p className="mb-2 mt-6 border-b border-surface-border px-4 pb-2 text-[17px] font-semibold text-brand first:mt-2 dark:border-night-border dark:text-brand-on-dark">
@@ -546,13 +522,6 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
           <NavItems {...navItemsProps} large={false} />
         </nav>
 
-        <div className={`border-t border-surface-border flex-shrink-0 dark:border-night-border ${collapsed ? "px-2 py-3" : "px-3 py-3 2xl:px-4 2xl:py-4"}`}>
-          {collapsed ? (
-            <BottomCollapsed loggingOut={loggingOut} onLogout={handleLogout} />
-          ) : (
-            <BottomExpanded loggingOut={loggingOut} onLogout={handleLogout} />
-          )}
-        </div>
       </aside>
     </>
   );

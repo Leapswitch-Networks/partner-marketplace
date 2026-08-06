@@ -465,3 +465,106 @@ tracked in `../planning/TECH_DEBT.md`.**
 - [`../core/AUTHORIZATION.md`](../core/AUTHORIZATION.md) — guards and role rules
 - [`DATABASE_MIGRATIONS.md`](./DATABASE_MIGRATIONS.md) — Alembic workflow
 - [`NEXTJS_STANDARDS.md`](./NEXTJS_STANDARDS.md) — the client that consumes these endpoints
+
+---
+
+## Pending
+
+> **Backend convention work still outstanding.** Last audited **2026-08-06**. Two sections of this file
+> — § 7 and § 12 — were overtaken by work on 2026-08-03 and 2026-08-06 and now describe the codebase
+> incorrectly. Those corrections are listed last, and they are the most urgent items here, because a
+> standards document that is wrong teaches the wrong thing to whoever reads it next.
+
+### 🔴 Conventions that do not exist yet and will be improvised without
+
+- [ ] **PM-40 — no API versioning convention.** All 56 routes mount at `/api`. § 11 *Adding a New
+      Resource* will keep producing unversioned routes until the prefix moves to `/api/v1` and § 11 says
+      so. Decide before the next resource, not after.
+- [ ] **PM-5 — no scoping convention.** § 3 tells a service to take `(db, …, actor)`, and every service
+      does — but **nothing says what to do with `actor` for a list query.** The next person writing a
+      partner-owned resource has no pattern to copy, so they will invent one. Document the query-level
+      predicate (not a post-filter — it corrupts pagination) as a numbered rule in § 3.
+- [ ] **No documented pagination contract.** `list_users` is paginated, searchable, filterable and
+      sortable, and it is the only example. The shape (`page` / `per_page`, envelope keys, max page
+      size, and the stable-sort requirement — the activity log sorts by `id` rather than `created_at`
+      precisely because rows sharing a timestamp make an unstable sort put a row on two pages) is
+      established in code and written down nowhere.
+- [ ] **No idempotency convention for mutating requests.** Nothing prevents a double-submitted
+      `POST /api/users` from creating two accounts beyond the email uniqueness constraint that happens
+      to catch it. Bulk endpoints have no such backstop.
+
+### 🟠 Adopt what now exists
+
+- [ ] **Use `unit_of_work` for new multi-write flows (PM-38).** Added 2026-08-06 in
+      `app/db/session.py`. The 49 existing `db.commit()` calls across 9 services are single-write and
+      deliberately left alone — **but do not wrap a call to one of them and assume it became atomic**;
+      the nested commit ends the outer transaction and the wrapper becomes decoration. Move the commit
+      out first. `activity_service` stays outside every boundary, deliberately: it swallows its own
+      exceptions, because failing a login because an audit write failed turns observability into an
+      outage.
+- [ ] **`ruff` is now the linter and CI runs it.** `backend/pyproject.toml` holds the config; `B008`,
+      `B904`, `SIM105`, `UP017` and `B905` are ignored with reasons written at each. This file has no
+      § on tooling — add one, and record that **`ruff format` is deliberately not configured** (the
+      backend has never been formatted, so enabling it would make reformatting every file a
+      prerequisite for the first green build).
+- [ ] **`app/db/migrations` is excluded from linting on purpose.** `env.py` is a protected file whose
+      import block carries a load-bearing comment; import sorting detached that comment from the list it
+      governs. Do not narrow the exclude back to `versions/` only.
+
+### 🟡 Scale and shape
+
+- [ ] **§ 10 *Everything Is Synchronous* is a live constraint, not just a note.** `mail_service` sends
+      inside the request; `SMTP_TIMEOUT_SECONDS=10` bounds the block rather than removing it. On a
+      synchronous stack every slow send is one fewer request served. A queue is the answer (PM-44), not
+      `async def`.
+- [ ] **PM-44 — no shared cache, and rate-limit state is an in-process dict.** The pool is sized for one
+      process (`pool_size=10, max_overflow=20`); N workers means N pools **and** N × every rate limit.
+      Revisit § 7's pool numbers in the same change that adds workers.
+- [ ] **`db.expire_all()` after bulk updates is a real pattern with no rule.**
+      `session_service._revoke_where` calls it because objects already loaded hold pre-UPDATE state, so
+      a caller re-reading one would see it as active. Any new bulk `UPDATE` needs the same, and § 7 does
+      not mention it.
+- [ ] **PM-11 — no service-layer tests.** The 74 tests added 2026-08-06 cover `core/security.py`,
+      `core/config.py` and one pure function in `session_service`. **No service and no router is tested**,
+      and services are where this document says the logic lives.
+
+### Documentation accuracy — two sections are now wrong
+
+- [ ] **§ 7's closing ⚠️ is out of date.** It states *"There is **no** `try/except` rollback wrapper
+      around requests"* and that a dirty session is discarded by `get_db()`'s `finally`. Since
+      2026-08-06 `get_db` rolls back **explicitly** on exception, and `unit_of_work` exists for
+      multi-write flows (PM-38). Its conclusion — *"partial multi-step writes are not atomic unless you
+      commit once at the end"* — is still true for any flow that does not use `unit_of_work`, so rewrite
+      the paragraph rather than deleting it. Also update § 7 *Rules*: "one session per request, closed
+      in `finally`" should now say rolled back **and** closed.
+- [ ] **§ 12 *Anti-Patterns Already in the Codebase* is stale in nine of its ten rows.** Every one now
+      describes code that no longer exists, which inverts the section's purpose from "don't copy this"
+      into a list of fixed problems presented as current. Details in the table below.
+
+#### § 12 row by row
+
+| Row | Reality |
+|---|---|
+| Plaintext password storage | Resolved — bcrypt 12 rounds (PM-1) |
+| Token decoding duplicated in routers | Resolved — `decode_typed_token` is the only decoder (PM-13). `whoami` does not exist |
+| `except Exception:` in `whoami` | The function is gone |
+| Dead dependencies (`require_admin`, `require_super_admin`, `get_client_ip`) | All wired (PM-7) |
+| Dead `admin_users` columns | The **table** is gone (PM-6) |
+| Privilege check in service instead of a guard | `update_admin_user` / `delete_admin_user` do not exist |
+| No role check on admin creation | `register_admin` is gone; `_guard_role_assignment` enforces it (PM-3) |
+| Inconsistent password rules | One `validate_password_strength` (PM-14) |
+| `PATCH` schemas with required fields | All-optional with `exclude_unset=True` (PM-15) |
+| Hardcoded CORS origins | `settings.allowed_origins` (PM-9) |
+
+The tenth row — *"Dead columns suggest features that don't exist"* — is the only one whose **shape** is
+still worth keeping, because a live example exists: `users.profile_photo_path` is a `String(2048)` that
+**nothing writes and nothing reads** (`avatar_url` returns `google_avatar` only, and there is no upload
+endpoint). Same trap PM-6 described, on the new table.
+
+Replace the rest with the anti-patterns that are **actually** live today:
+
+- Reading `permission_names` instead of calling `has_permission` — the raw property does **not** apply
+  the super-admin bypass, so this silently under-authorises a super admin.
+- Filtering on a Python property (`User.is_super_admin`, `Role.is_protected`, `User.is_locked`) —
+  none is a column, so `.filter()` raises. Join `roles` and filter on `Role.name`.
+- Post-filtering a paginated query for scoping — it corrupts the page count (PM-5).

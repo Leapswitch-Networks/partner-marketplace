@@ -410,3 +410,88 @@ One module per resource under `lib/api/`, all sharing `axiosInstance`:
 - [`../system-design/FASTAPI_STANDARDS.md`](../system-design/FASTAPI_STANDARDS.md) — backend conventions
 - [`../system-design/NEXTJS_STANDARDS.md`](../system-design/NEXTJS_STANDARDS.md) — frontend conventions
 - [`../planning/MARKETPLACE_DOMAIN_PLAN.md`](../planning/MARKETPLACE_DOMAIN_PLAN.md) — what replaces the inherited domain
+
+---
+
+## Pending
+
+> **Architecture-level work still outstanding.** Last audited **2026-08-06** against the code, not
+> against this document. Verify before starting — the § *What is missing* table above is older than
+> this section and contradicts it in places (see *Documentation accuracy* below).
+
+### 🔴 Structural — cheapest now, expensive after the first external consumer
+
+- [ ] **PM-40 — version the API.** All 56 routes are `/api/<resource>`; there is no `v1`. The frontend
+      hardcodes **38** `"/api/…"` literals across five `lib/api/` modules. Today this costs nothing —
+      one client, one repo, deployed together. It becomes a migration the moment a partner integrates.
+      Fix: `API_PREFIX = "/api/v1"` in `core/config.py`, an `API` constant in
+      `frontend/lib/utils/constants.ts`, and no compatibility alias (nothing is pinned yet, so keep
+      the OpenAPI clean).
+- [ ] **PM-5 — row-level / partner scoping.** Still the single largest architectural hole. Users and
+      invitations are scoped admin-or-self; there is **no ownership model**. Design it centrally —
+      improvising per route is how data leaks across tenants, and a scoping bug does not raise, it
+      returns another partner's rows. Do it **after** PM-40 and PM-42, so it is written against a
+      versioned API with a generated contract.
+- [ ] **PM-41 — the frontend has no data layer.** All 24 server components under `app/` are shells:
+      each sets `metadata` and renders one client component, and **not one fetches anything or reads a
+      cookie server-side**. Consequences: every screen is a two-round-trip waterfall, nothing is cached
+      or deduplicated or cancelled, `loading.tsx` almost never renders, and PM-30's climbing lint count
+      is a symptom rather than a lint problem. Fix in three steps — see
+      [`../planning/CORE_HARDENING_PLAN.md`](../planning/CORE_HARDENING_PLAN.md) PM-41.
+- [ ] **PM-42 — generate the API contract.** `frontend/types/index.ts` is 161 lines hand-mirroring
+      `backend/app/schemas/`. FastAPI already publishes an accurate `/openapi.json`. A renamed field
+      produces a `tsc`-clean frontend that reads `undefined` at runtime. Depends on PM-40.
+
+### 🟠 Runtime and operations
+
+- [ ] **PM-44 — three pieces of state live in process memory.** Rate-limit counters are an in-process
+      dict, nothing is cached, and email sends synchronously in-request. The trigger is the first
+      `gunicorn -w 4`: every rate limit silently multiplies by N. One Redis dependency answers all
+      three — **but introduce it with the production topology, not before.**
+- [ ] **PM-10 (monitoring half) — nothing alerts.** Structured logging with request-id correlation
+      exists; there is no error tracker, no aggregation, no deduplication, and container stdout is lost
+      on `docker compose down`. Needs a destination before it needs code.
+- [ ] **No production topology.** The Compose services are development-only — bind-mounted source,
+      reload servers, no reverse proxy, no TLS terminator. Every question is still open in
+      [`../system-design/DEPLOYMENT.md`](../system-design/DEPLOYMENT.md) § 1. **Same-origin is strongly
+      preferred**: it removes CORS entirely and simplifies cookie flags.
+- [ ] **PM-43 — two purge functions exist and nothing calls them.** `session_service.purge_expired`
+      and `activity_service.purge_older_than`. `user_sessions` gains one row per sign-in, kept forever.
+      A `python -m app.db.maintenance` entry point plus a cron line; session purge can ship with its
+      30-day default immediately, audit retention stays a policy decision.
+- [ ] **No CSRF token.** `samesite=lax` alone — no double-submit and no synchroniser token. Re-evaluate
+      if `COOKIE_SAMESITE` ever has to become `none` for a cross-site deployment, because that is the
+      configuration where `lax`'s protection disappears.
+- [ ] **`SECRET_KEY` has no rotation story.** Rotating it signs everyone out **and permanently breaks
+      2FA for every enrolled user** — the TOTP secrets are Fernet-encrypted with a key derived from it
+      (see [`AUTHENTICATION.md`](./AUTHENTICATION.md) § Rotating `SECRET_KEY`). A rotation procedure
+      needs to re-encrypt those secrets, not just re-issue tokens.
+
+### 🟡 Decisions that gate other work
+
+- [ ] **PM-25 — settle React/Next.** `package.json` pins React 19 against `next@14.2.35`'s
+      `peer react@^18.2.0`, so **plain `npm ci` fails outright**; CI and `Dockerfile.dev` both carry
+      `--legacy-peer-deps` as a documented workaround. This is a decision, not a task, and it gates
+      PM-30 and shapes PM-41's server-component step.
+- [ ] **PM-11 — extend the test suite.** 74 tests now cover token types, refresh reuse, password
+      hashing and config validation (PM-39). They do **not** cover RBAC enforcement across the 56
+      routes, which is the suite PM-5 needs before it can be trusted.
+- [ ] **Synchronous SQLAlchemy** is a deliberate choice, recorded in § Key Design Decisions. Revisit
+      only when concurrency is measured to be the bottleneck — it is a large migration, not a flag.
+
+### Documentation accuracy — this file is stale in six places
+
+The 2026-08-06 deletion of the inherited test-platform domain invalidated part of this document, and
+§ *What is missing* predates the 2026-08-03 work. Fix in one pass:
+
+- [ ] § *What is missing* — **"No email transport"** is wrong: resolved 2026-08-03 (PM-27,
+      `mail_service.py`, two backends). **"No automated tests | Verified by a 41-check shell script"**
+      is superseded by PM-39. **"No request logging or error monitoring | an unhandled exception is a
+      bare 500"** is both wrong and a duplicate of the monitoring row two lines above it.
+- [ ] § *Routing* still lists **`/dashboard/candidates`** — the route was deleted 2026-08-06.
+- [ ] § *State* still lists **`testSlice`** — deleted, along with its store registration.
+- [ ] § *API layer* still lists **`candidateApi.ts`, `categoryApi.ts`, `testApi.ts`** — all deleted.
+      It also omits `navigationApi.ts`, which does exist.
+- [ ] § *Performance choices* references **`TestCardSkeleton.tsx`** — deleted.
+- [ ] § *Security Architecture → What is in place* says email uniqueness is enforced **"on both
+      tables"** — there has been one account table since migration `e7b41c9a2d10`.

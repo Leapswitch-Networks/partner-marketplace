@@ -340,3 +340,104 @@ they currently publish the full API surface to anyone.
 - [`../core/AUTHENTICATION.md`](../core/AUTHENTICATION.md) — cookie flags and the plaintext debt
 - [`../core/AUTHORIZATION.md`](../core/AUTHORIZATION.md) — the escalation path in blocker 5
 - [`../planning/TECH_DEBT.md`](../planning/TECH_DEBT.md) — the full ranked list
+
+---
+
+## Pending
+
+> **Everything between here and a first deploy.** Last audited **2026-08-06**. § 0 is the authoritative
+> blocker list and is kept current; this section is the wider set — the decisions, the artefacts that do
+> not exist, and the corrections § 7 needs.
+>
+> **One thing changed on 2026-08-06 that reduces the risk of this whole document being wrong:** the § 0
+> configuration table is now **enforced at startup**. Set `APP_ENV=production` and the app refuses to boot
+> until every row is correct, listing all problems at once. That does not make it deployable — it makes
+> misconfiguring it loud instead of silent.
+
+### 🔴 Decide before anything else can be written
+
+Every row of § 1 is still open. These three shape all the others:
+
+- [ ] **Same origin, or split?** `example.com` + `example.com/api`, or separate hosts. **Same origin is
+      strongly preferred** and this is the highest-leverage decision in the document: it removes CORS
+      entirely, makes `samesite` cookies straightforward, and means the CSRF question
+      ([`../core/ARCHITECTURE.md`](../core/ARCHITECTURE.md) § Pending) stays answerable with `lax` alone.
+      Choosing split origins turns three currently-simple things into three designs.
+- [ ] **Where does it run, and how does each tier run?** `uvicorn --reload` is dev-only. If the answer is
+      `gunicorn -w N`, note that **N workers multiply every rate limit by N** and clear the counters on
+      restart (PM-44) — so the worker decision and the Redis decision are the same decision.
+- [ ] **Migrations on deploy: manual, or automated pre-start?** Currently manual and nothing runs them.
+      Whichever is chosen, it must be recorded here and in
+      [`DATABASE_MIGRATIONS.md`](./DATABASE_MIGRATIONS.md) § 3.
+
+### 🔴 Artefacts that do not exist
+
+- [ ] **No production Dockerfile.** `Dockerfile.dev` for both tiers bind-mounts source and runs reload
+      servers. A production image needs a multi-stage build, no dev dependencies (`requirements-dev.txt`
+      is not installed — fewer packages to audit), and `next build` output rather than `next dev`.
+- [ ] **No reverse proxy or TLS config.** Required for `COOKIE_SECURE=true`, which § 0 now **enforces** in
+      production — so the app will refuse to start before TLS exists. That ordering is deliberate.
+- [ ] **No CD pipeline.** `.github/workflows/ci.yml` (added 2026-08-06) tests and builds; nothing deploys.
+- [ ] **No secret management.** `.env` files on disk. A secret manager or platform env vars, and **fresh
+      values per environment** — § 0 enforces that `SECRET_KEY` is not a placeholder, but it cannot detect
+      the same real key reused across staging and production.
+- [ ] **No backup or restore procedure.** `data/db` is a bind mount. § 8 *Recovery* in
+      `DATABASE_MIGRATIONS.md` assumes a dump exists; nothing takes one on a schedule, and a restore has
+      never been rehearsed. **An untested restore is not a backup.**
+- [ ] **No `SECRET_KEY` rotation procedure, and rotation is destructive.** It signs everyone out **and
+      permanently breaks 2FA for every enrolled user** — TOTP secrets are Fernet-encrypted with a key
+      derived from it. A rotation must re-encrypt those secrets in one transaction. Write this before an
+      incident forces it.
+
+### 🟠 Operational readiness
+
+- [ ] **PM-10 — nothing alerts.** Structured JSON logging with request-id correlation exists and § 0
+      enforces `LOG_FORMAT=json` in production. There is **no error tracker, no aggregation, no
+      deduplication, no retention** — container stdout is lost on `docker compose down`. Needs a
+      destination before it needs code.
+- [ ] **No metrics and no uptime monitoring.** `/health` (shallow) and `/health/ready` (deep, `SELECT 1`)
+      exist and are correct — **`/health*` is exempt from rate limiting** so an orchestrator cannot
+      exhaust its own quota and get the service pulled from a load balancer. Nothing polls either one.
+- [ ] **PM-43 — no scheduled maintenance.** `session_service.purge_expired` and
+      `activity_service.purge_older_than` exist and nothing calls them. `user_sessions` grows by one row
+      per sign-in forever. Session purge can ship with its 30-day default; **audit retention is a policy
+      decision** (`ACTIVITY_LOG_RETENTION_DAYS` defaults to 730 as a default for whoever runs it, not an
+      active policy).
+- [ ] **Decide `/docs`.** FastAPI's interactive docs are open. § 7 already flags this as "probably
+      closed" — make it a decision, and note that closing it does not hide the routes, only the UI.
+- [ ] **Adminer on :8083 must not be exposed.** Already in § 7; it needs to be in a checklist someone
+      actually runs, not only in a comparison table.
+- [ ] **Email deliverability is unproven against any real provider.** SPF, DKIM and DMARC are
+      unconfigured. § 0 enforces `MAIL_BACKEND=smtp`, which prevents the *dangerous* failure (reset links
+      in logs) but does nothing about mail landing in spam. **Invitations and password resets are both
+      unusable if delivery fails**, and the first symptom is a user who cannot get in.
+
+### 🟡 Pre-deploy verification that must exist first
+
+- [ ] **PM-11 — the suite does not cover what a deploy risks.** 74 tests cover token types, refresh
+      reuse, password hashing and config validation. **No RBAC enforcement test, no login round trip, no
+      migration test.** § 0 blocker 2 is correct to stay open, and its instruction — run `npm run
+      typecheck`, `npm run lint` and `npm run build` by hand — is now CI's job, so the *manual* step to
+      keep is the one nothing automates: a smoke test against the deployed environment.
+- [ ] **PM-28 — Google SSO has never run against Google.** If SSO is part of the launch, this is a
+      blocker; if not, `GOOGLE_*` stays unset and the endpoints return `503`, which is a safe default.
+      Decide which, explicitly.
+- [ ] **Write § 6's checklist as something executable.** A prose checklist is what § 0 proved does not
+      survive — five resolved items sat in it as live blockers for weeks. Prefer a script that asserts
+      what it can (`/health/ready` green, `Secure` present on `Set-Cookie`, `X-Request-ID` echoed,
+      security headers present, `/docs` closed if that is the decision) over a list someone reads.
+
+### Documentation accuracy — § 7 has three stale rows
+
+- [ ] **§ 7 *Local vs Deployed* row "Passwords | plaintext (accepted debt) | Hashed — blocker"** — wrong.
+      bcrypt at 12 rounds since 2026-07-31 (PM-1); migration `e7b41c9a2d10` hashed every existing row in
+      place. **This is the single most misleading line left in the deployment documentation.**
+- [ ] **§ 7 row "CORS | hardcoded localhost | Environment-configured"** — the left column is wrong.
+      `CORS_ORIGINS` has been a setting since 2026-07-31 (PM-9); it *defaults* to localhost, which is a
+      different statement, and § 0 now refuses a localhost origin in production.
+- [ ] **§ 7 rows "Logging | uvicorn stdout" and "Seed admin | present"** — logging is structured with
+      request correlation as of 2026-08-03 (the *aggregation* half is what is missing), and `seed_admin.py`
+      **does not exist**; `seed_rbac.py` replaced it and ships no credential (PM-4).
+- [ ] **Add `APP_ENV` to § 4 *Environment Variables*.** It is now the setting that switches every other
+      check on, and it is the one thing nothing can validate for you — leave it at `development` in a
+      deployed environment and all of § 0's enforcement is skipped.

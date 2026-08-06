@@ -522,3 +522,93 @@ Checklist for `/dashboard/listings`:
 - [`FASTAPI_STANDARDS.md`](./FASTAPI_STANDARDS.md) — the API being consumed
 - [`../core/ARCHITECTURE.md`](../core/ARCHITECTURE.md) — how the tiers fit together
 - [`../core/AUTHENTICATION.md`](../core/AUTHENTICATION.md) — cookies and the refresh contract
+
+---
+
+## Pending
+
+> **Frontend convention work still outstanding.** Last audited **2026-08-06**. The largest item here is
+> architectural rather than a defect: **there is no data-fetching layer**, and § 13 *Known Issues* is
+> stale in five of its seven rows.
+
+### 🔴 The missing layer, and why the lint count keeps climbing
+
+- [ ] **PM-41 — introduce one data-fetching layer.** Measured: 76 `.tsx` files, **44 with
+      `"use client"`**, 22 using `useEffect`, and **all 24 server components under `app/` are shells** —
+      each sets `metadata` and renders one client component. Not one fetches anything or reads a cookie
+      server-side. Four consequences:
+  - [ ] **Every screen is a waterfall.** HTML → JS → mount → `useEffect` → `/api/auth/me` → the screen's
+        own data. Two sequential round trips a server component could collapse into zero.
+  - [ ] **Nothing is cached, deduplicated or cancelled.** Two components needing the same list fetch it
+        twice; navigating away leaves the response to arrive at an unmounted tree.
+  - [ ] **`loading.tsx` almost never renders.** § 9 already notes the fallback is "not doing much work
+        today" — the reason is that the segment resolves instantly because it fetches nothing.
+  - [ ] **This is PM-30's cause.** All 20 react-hooks errors are fetch-on-mount. The register recorded
+        the count going 17 → 18 → 19 → 20, one per new component, and recorded that an honest attempt to
+        satisfy the rule with a cancellation flag **did not clear the error**. The rule is not wrong and
+        the code is not wrong — the architecture is what it objects to. RTK Query is the natural fit; the
+        store is already Redux Toolkit. **This retires PM-30 by construction rather than by suppression.**
+- [ ] **PM-42 — generate types from OpenAPI.** `types/index.ts` is 161 lines hand-mirroring
+      `backend/app/schemas/`, connected to it by nothing. A renamed or newly-optional backend field
+      produces a `tsc --noEmit`-clean frontend that reads `undefined` at runtime — types that agree by
+      convention give the *appearance* of an enforced contract, which is worse than none because it stops
+      anyone checking. Use `openapi-typescript` against `/openapi.json`, commit the output, and have CI
+      fail if regenerating produces a diff. **Depends on PM-40** — generate against the versioned paths.
+- [ ] **PM-40 — 38 hardcoded `"/api/…"` literals across five `lib/api/` modules.** Add an `API` prefix
+      constant to `lib/utils/constants.ts` and template the paths, so the next version bump is one edit.
+      § 5 *Rules* should require it.
+
+### 🟠 Decisions that gate the above
+
+- [ ] **PM-25 — settle React/Next.** `package.json` pins React 19 against `next@14.2.35`'s
+      `peer react@^18.2.0`, so **plain `npm ci` fails outright**; both `Dockerfile.dev` and
+      `.github/workflows/ci.yml` carry `--legacy-peer-deps` as a documented workaround, and CI runs
+      `npm run lint` with `continue-on-error` because of PM-30. Three options — upgrade to Next 15+,
+      downgrade React to 18.3.x, or commit an `.npmrc` making the bypass explicit. **§ 1 of this file
+      presents "Next.js 14 + React 19" as the verified stack without recording that npm rejects the
+      pairing** — that line needs correcting whichever way the decision goes.
+- [ ] **Delete the two CI compromises once PM-25 lands**: the `--legacy-peer-deps` flag and
+      `continue-on-error` on the lint step. Both are marked for deletion in the workflow.
+
+### 🟡 Conventions worth writing down
+
+- [ ] **No convention for a long-running request.** `lib/api/axiosInstance.ts` now exports
+      `LONG_TIMEOUT_MS` for `GET /api/activity/export` — the one read with no upper bound, which the 5s
+      default was silently killing. § 5 does not mention it, so the next streaming or bulk endpoint will
+      hit the same wall.
+- [ ] **The refresh interceptor is now single-flight — § 5's description predates that.** It used to fire
+      N concurrent refreshes for N parallel 401s, surviving only because the backend's 30-second rotation
+      grace window absorbed the losers. Document that one shared promise is required, and *why*: without
+      it a client-side correctness property rests on a backend tolerance added for a different reason
+      (concurrent tabs), and narrowing that window would start revoking sessions under load.
+- [ ] **No `cn()` helper.** Class strings are template literals throughout; conditional classes get
+      unwieldy. Also tracked in [`UI_PATTERNS.md`](./UI_PATTERNS.md).
+- [ ] **`app/page.tsx` is unreachable** — middleware redirects `/` unconditionally. Either delete it or
+      note in the file that it exists only to satisfy the route tree.
+- [ ] **PM-22 — remove `@tailwindcss/postcss ^4`.** Dead weight: `postcss.config.mjs` uses the v3 plugin
+      form and `tailwindcss ^3.4.19` is installed. Safe to remove; **not** safe to activate.
+- [ ] **No frontend tests at all.** CI runs `tsc --noEmit`, `npm run lint` and `npm run build` — none of
+      which checks behaviour. `middleware.ts` is the highest-value target: it is the edge route guard, its
+      two path lists **must be edited together** (the 2026-08-06 deletion notes that editing one silently
+      changes protection), and nothing verifies they agree.
+
+### Documentation accuracy — § 13 is stale in five of seven rows
+
+- [ ] **"No `error.tsx` / `loading.tsx` / `not-found.tsx` anywhere"** — wrong since 2026-08-03. Eight
+      files exist and are confirmed registered in `.next/app-build-manifest.json` (PM-19). Note the
+      caveat worth keeping: **`next/dist/docs/` does not exist in `next@14.2.35`**, so `AGENTS.md`'s
+      instruction to read it cannot be followed literally — the conventions were read from the shipped
+      types instead.
+- [ ] **"`testSlice` is inherited state"** — deleted 2026-08-06, along with its store registration.
+- [ ] **"Main sign-in uses `adminLogin` / authenticates against `admin_users`"** — the `admin_users`
+      table has not existed since migration `e7b41c9a2d10`. There is one login path and one account table.
+- [ ] **"Hardcoded brand colour — 242 occurrences across 37 files"** — resolved 2026-08-05, all migrated
+      to tokens (PM-20). Keep the regression guard:
+      `grep -rn 'F97316\|EA6C0A\|orange-[0-9]' app components` must stay empty.
+- [ ] **The `metadata.title` row is already marked ✅** and can be dropped rather than carried.
+- [ ] **§ 5 is wrong in three ways.** The `axiosInstance` snippet predates `LONG_TIMEOUT_MS`; the
+      interceptor diagram predates single-flight and so omits the shared-promise step; and the
+      *One module per resource* table lists **`categoryApi.ts`, `candidateApi.ts` and `testApi.ts`, all
+      deleted**, credits `authApi.ts` with `adminLogin` and `whoami` which **no longer exist**, and omits
+      **`rbacApi.ts` and `navigationApi.ts`, which do**. Five of the six rows are wrong. Also correct the
+      fallback port while in `constants.ts`: it defaulted to `:8000` and **the API runs on `:8002`**.

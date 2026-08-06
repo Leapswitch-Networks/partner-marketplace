@@ -358,20 +358,43 @@ Matched to `dashboard-default-light-top.png` / `dashboard-default-dark.png` on 2
 |--------|-----------|
 | Surface | `bg-white` / `dark:bg-night-card`, right border, **no shadow** |
 | Logo row | Brand tile + wordmark, collapse toggle on the right |
-| **Profile block** | `SidebarProfile` — avatar in a `bg-brand/10` ring, a solid status pill overlapping its base, name in **brand colour**, muted secondary line, and a **three-up stat row** divided by hairline vertical rules, with a gear link floated top-right |
 | **Section heading** | `text-[17px] font-semibold text-brand`, **sentence case**, hairline rule beneath. **Not** a 10px uppercase micro-label, and **not** clickable |
 | Nav item | **Bare outline icon** (never in a tinted tile) + bold label, `rounded-[10px]` |
 | Nav item — active | Solid `bg-brand`, white text and icon, **no shadow** |
 | Nav item — hover | `bg-brand/10` + `text-brand` |
 | Nav item — expandable | Chevron on the right, rotating 90° when open |
 
-Two rules that are easy to get wrong, both corrected after a render:
+**No profile block, and no sign-out.** Viho's sidebar carries a user card (avatar, name, department,
+a three-up `Follow`/`Experience`/`Follower` row); one was built and then **removed on the owner's
+instruction** — the identity already lives in the header's account menu, and the three stats had no
+real source. Sign-out moved to the header for the same reason. **The mobile drawer keeps its sign-out**,
+because `TopNav` is `hidden md:flex` and dropping it there would leave phone users unable to log out.
 
-1. **Chevrons belong to nav items, not section headings.** Sections are inert labels whose items are
-   always visible; a collapsible heading is indistinguishable from a static one at this type size, and
-   it hid a whole group behind a chevron on first load.
-2. **Viho's three profile stats are `Follow` / `Experience` / `Follower`.** We have no source for those,
-   so the slots carry role, join year and status. Keep the composition; never invent the figures.
+**Chevrons belong to nav items, not section headings.** Sections are inert labels whose items are
+always visible. A collapsible heading is indistinguishable from a static one at this type size, and it
+hid a whole group behind a chevron on first load.
+
+---
+
+## Header Anatomy
+
+Matched to `dashboard-default-light-top.png`. Left to right: a **bare search** (magnifier +
+placeholder, no border and no fill), then the action cluster, then a tinted `Log out`.
+
+| Control | State |
+|---------|-------|
+| Search | **Disabled** — Global Search is an unbuilt parity module |
+| Fullscreen | **Real** — Fullscreen API |
+| Language · Bookmarks · Messages | **Disabled** — no such features |
+| Notifications | **Disabled.** Viho shows a red unread dot; ours does not — a badge that can never clear is worse than no badge |
+| Dark mode | **Real** — the `useTheme` cycle |
+| `Log out` | **Real.** `bg-brand/10` + brand text + brand icon — Viho's `.btn-primary-light` |
+| Account menu | Ours, not Viho's. Profile needs a home now the sidebar footer is gone |
+
+**Rule: a decorative control must announce itself.** The dead icons are `aria-disabled` with a
+"— coming soon" title so keyboard and screen-reader users are told rather than left clicking nothing.
+Each becomes live in place when its feature lands. They exist because the owner asked for the theme's
+full action row; that is a deliberate trade, not an oversight.
 
 ---
 
@@ -525,3 +548,72 @@ Rules:
 
 - [`NEXTJS_STANDARDS.md`](./NEXTJS_STANDARDS.md) — page composition, forms, state
 - [`../core/ARCHITECTURE.md`](../core/ARCHITECTURE.md) — frontend architecture overview
+
+---
+
+## Pending
+
+> **Design-system work still outstanding.** Last audited **2026-08-06**. The Viho migration is complete
+> and § *Known Issues* is accurate — unusually, this file is the least stale of the standards docs. What
+> remains is mostly consistency debt the migration exposed rather than created.
+
+### 🟠 Rules this file mandates that the code does not follow
+
+- [ ] **Mixed radii — § *Layout Conventions* says "don't mix radii" and the code uses five.**
+      `rounded-lg` ×92, `rounded-xl` ×49, `rounded-full` ×31, `rounded-2xl` ×23, `rounded-md` ×7. Either
+      the rule is wrong or the code is; **a mandatory rule with 110 violations is not a rule.** Decide
+      which, then either fix the outliers or rewrite the rule to describe the intended ladder (there
+      probably *is* one — `rounded-full` for avatars and pills, `rounded-xl`/`2xl` for cards, `rounded-lg`
+      for controls — in which case write that down and keep the guard).
+- [ ] **No semantic colour tokens.** The grey scale is used directly, so the next rebrand touches every
+      component again. The Viho migration is the proof: 242 occurrences across 37 files had to move
+      because the brand colour was written at the call site. **The same exposure still exists for
+      surfaces and text** — it was only the brand hue that got a token layer.
+- [ ] **`brand-on-dark` is marked 🔴 mandatory and has no automated guard.** The brand-hex regression
+      guard exists (`grep -rn 'F97316\|EA6C0A\|orange-[0-9]' app components` must stay empty) — add the
+      equivalent for this rule, or it will be violated silently by the next component.
+
+### 🟡 Primitives that are missing and get improvised
+
+- [ ] **Only two Button variants — no `danger`.** Destructive actions have nowhere consistent to live, so
+      each one invents its own red. This matters more now than when it was written: the app has
+      delete, bulk-delete, suspend, revoke-session and reset-2FA actions.
+- [ ] **No `cn()` helper.** Class strings are template literals; conditional classes get unwieldy. Three
+      lines. Also tracked in [`NEXTJS_STANDARDS.md`](./NEXTJS_STANDARDS.md).
+- [ ] **`Skeleton` is generic and most pages have no matching shape.** Worth pairing with PM-41 rather
+      than doing alone — today `loading.tsx` barely renders because every page fetches client-side, so a
+      shaped skeleton has almost nowhere to appear. **Do the data layer first, then the skeletons have a
+      job.**
+- [ ] **No `focus-visible` distinction.** `focus:` fires on mouse click too. A tidy-up, but it is the
+      difference between a keyboard user seeing a ring where they need it and every user seeing one where
+      they do not.
+- [ ] **No toast/confirm convention for destructive actions.** `Toast.tsx` and `Modal.tsx` exist; nothing
+      in this file says which destructive actions must confirm, or what the copy should be. Improvised
+      per screen today.
+
+### 🟡 Product gaps that surface as UI defects
+
+- [ ] **No privacy-policy route.** Sign-up's required *"Agree With Privacy Policy"* renders "Privacy
+      Policy" as **plain text, not a link**, because the page does not exist. Asking a user to agree to a
+      document they cannot read is the kind of thing that only looks fine until someone asks.
+      Make it a `<Link>` when it exists.
+- [ ] **`GET /api/activity/export` has no UI.** The endpoint streams CSV and is gated on `activity-view`;
+      there is no button. When adding one, pass `LONG_TIMEOUT_MS` from `lib/api/axiosInstance.ts` — the
+      5s default kills a working export, and the failure will look like a server error.
+- [ ] **2FA enrolment UI needs an end-to-end pass.** `TwoFactorSettings.tsx` and
+      `TwoFactorChallenge.tsx` exist; confirm the whole path renders and recovers — enrol → QR → confirm →
+      recovery codes → challenge → recover. **This is the screen where a missing state locks a real user
+      out of their account.**
+
+### 🟡 Verification the design system has never had
+
+- [ ] **No component renders have been checked in a browser since the Viho migration completed.** The
+      register is explicit that error boundaries were verified via the build manifest and **not** rendered
+      (PM-19), and that proving a fallback's appearance needs the Chrome-DevTools-Protocol harness. The
+      same gap applies to dark mode across all 76 components — § *Dark Mode Rules* is mandatory and
+      unenforced.
+- [ ] **No accessibility audit.** § *Focus & Accessibility* sets rules; nothing measures contrast,
+      keyboard traps in `Modal`, or whether `DataTable` is navigable. The teal-on-dark combinations from
+      the rebrand are exactly where a contrast regression would hide.
+- [ ] **PM-22 — remove `@tailwindcss/postcss ^4`.** Dead dependency. Safe to remove; **not** safe to
+      activate without a full v3→v4 migration.

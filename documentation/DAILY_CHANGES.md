@@ -8,6 +8,69 @@
 
 ---
 
+## August 6, 2026 — Every core doc now ends with a Pending section, and the audit found them stale
+
+**Each of the nine live core documents now carries a `## Pending` section at the end** — the outstanding
+work for that document's own area, as checkboxes, scoped so the list is useful to someone working in
+that file rather than being the same global backlog copied nine times.
+
+| Document | Pending items |
+|---|---|
+| `core/ARCHITECTURE.md` | Structural (PM-40/5/41/42), runtime & ops, gating decisions |
+| `core/AUTHENTICATION.md` | Implemented-but-unproven (SSO, deliverability), no-UI-path, `SECRET_KEY` rotation |
+| `core/AUTHORIZATION.md` | PM-5 in depth, provability, granularity the model lacks |
+| `core/USERS.md` | Partner-as-organisation modelling, deletion/attribution, data quality |
+| `system-design/FASTAPI_STANDARDS.md` | Missing conventions (versioning, scoping, pagination), adopting `unit_of_work` |
+| `system-design/NEXTJS_STANDARDS.md` | The missing data layer, PM-25, per-request timeouts |
+| `system-design/DATABASE_MIGRATIONS.md` | Protecting `env.py` from tooling, untested migrations, schema debt |
+| `system-design/UI_PATTERNS.md` | Rules the code violates, missing primitives, unverified rendering |
+| `system-design/DEPLOYMENT.md` | The § 1 decisions, artefacts that don't exist, executable pre-deploy checks |
+
+`documentation/architecture.md` was **deliberately skipped** — `INDEX.md` marks it stale inherited
+documentation ("Logic Test Platform", Nginx, ports 3000/8000, none of which is true). Adding a to-do list
+to a document scheduled for deletion would be work with negative value.
+
+**The audit's real finding is that the standards docs have drifted badly from the code**, so each Pending
+section ends with a *Documentation accuracy* subsection naming the specific false statements. The worst,
+in rough order:
+
+- **`DATABASE_MIGRATIONS.md` § 2 is eight revisions behind.** It says *"Linear, eight revisions. Head is
+  `e7b41c9a2d10`"*; there are **16** and the head is **`c1e70a5d94b2`**. Anyone checking `alembic current`
+  against it concludes their database is ahead of the code.
+- **`FASTAPI_STANDARDS.md` § 12 *Anti-Patterns* is stale in nine of ten rows** — every row describes code
+  that no longer exists, which inverts the section from "don't copy this" into a list of fixed problems
+  presented as current. Its § 7 also still states there is no rollback wrapper, which PM-38 changed
+  earlier the same day.
+- **`DEPLOYMENT.md` § 7 still says passwords are plaintext** — the single most misleading line left in the
+  deployment docs.
+- **`NEXTJS_STANDARDS.md` § 5's API-module table is wrong in five of six rows**, and § 13 in five of seven.
+- **`core/ARCHITECTURE.md` is stale in six places**, mostly from yesterday's domain deletion — it still
+  lists `/dashboard/candidates`, `testSlice`, and three deleted API modules.
+
+**Three code-level facts were found while grounding the claims, and each is now an item rather than a
+guess:**
+
+- **`users.profile_photo_path` is a dead column.** A `String(2048)` that nothing writes and nothing reads
+  — `avatar_url` returns `google_avatar` only, and there is no upload endpoint. This is exactly the trap
+  PM-6 described ("columns that suggest features that don't exist"), reappearing on the new table.
+- **`activity_log.causer_id` / `subject_id` have no foreign key and cannot have one** — a single column
+  holds both a user UUID and a role integer. Correct for an audit trail, and worth stating so nobody
+  "fixes" it with a constraint that would then block user deletion.
+- **`updated_at`'s `onupdate` is Python-side on 5 models, so any Core-level `UPDATE` bypasses it.**
+  Nothing is wrong today — the one bulk Core update targets `user_sessions`, which has no `updated_at` —
+  but the next one written against a table that has one will silently leave the timestamp stale. Checked
+  rather than asserted.
+
+**Two claims were corrected during the pass rather than shipped wrong:** an earlier draft said a bulk
+update already broke `updated_at` (it does not — the table has no such column), and
+`requirements-dev.txt`'s comment claimed keeping it separate stops a test client reaching production
+(it does not — `TestClient` comes from starlette, a runtime dependency; the real reason is fewer packages
+to audit).
+
+**No code changed.** Documentation only, plus that one comment correction.
+
+---
+
 ## August 6, 2026 — The core is audited, and the first three gaps are closed
 
 **The security core turned out to be far stronger than the docs claim, and far less defended than it
@@ -94,6 +157,36 @@ TypeScript codegen), PM-43 (two purge functions exist and nothing calls them), P
 counters are per-process). The plan's main recommendation is an ordering: **PM-40 and PM-42 before
 PM-5**, because scoping is the change most likely to leak data across tenants and it should not be the
 first thing written on top of an unversioned API with no generated contract.
+
+---
+
+## August 6, 2026 — The header gets Viho's action row, and the sidebar loses what it should not have had
+
+- **The sidebar profile block is gone.** It was added earlier the same day to match Viho, and the owner
+  removed it: the user's identity is already in the header's account menu, so the block repeated it —
+  and its three stats (role, join year, status) only existed because Viho's slot needed filling. Viho's
+  own `19.8k Follow / 2 year Experience / 95.2k Follower` map onto nothing here. Deleting it was the
+  right call; the composition was faithful but the content was filler.
+- **The header is now Viho's, action for action.** Bare search on the left — magnifier and placeholder,
+  no border, no fill — then fullscreen, language, bookmarks, notifications, dark mode and messages,
+  then a tinted `Log out` in `bg-brand/10` with brand text, which is the theme's `.btn-primary-light`.
+- **Six of those eight controls have no feature behind them**, and that is stated rather than hidden:
+
+  | Control | Real? |
+  |---|---|
+  | Fullscreen, dark mode, log out | **Yes** |
+  | Search | No — Global Search is an unbuilt parity module |
+  | Language, bookmarks, messages, notifications | No |
+
+  The dead ones are `aria-disabled` and titled "— coming soon", so a keyboard or screen-reader user is
+  told instead of clicking into nothing. **Viho's red unread dot on the bell is deliberately omitted**:
+  an unread badge that can never clear is worse than no badge. It comes back with the feature.
+- **Sign-out moved out of the sidebar, except on mobile.** `TopNav` is `hidden md:flex`, so removing the
+  drawer's sign-out too would have left phone users with no way to log out. The desktop footer is gone;
+  the mobile one stays and is commented as to why.
+
+**Verification.** `tsc` clean, lint **18 errors 0 warnings** (unchanged), build compiles. Header and
+dashboard rendered and checked in both themes.
 
 ---
 

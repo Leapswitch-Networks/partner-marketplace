@@ -2,8 +2,10 @@
 #
 #   pip install -r requirements.txt -r requirements-dev.txt
 #
-# Kept separate from requirements.txt so a production install cannot accidentally
-# ship a test client that can construct requests against the app.
+# Kept separate from requirements.txt so a production image carries no dev
+# tooling — fewer packages to audit and to keep patched. Note this is NOT what
+# keeps a test client out of production: FastAPI's TestClient comes from
+# starlette, which is a runtime dependency and is always present.
 -r requirements.txt
 
 pytest==8.3.4
