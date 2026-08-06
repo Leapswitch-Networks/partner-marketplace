@@ -70,16 +70,7 @@ ACTIVITY_VIEW = "activity-view"
 # Dashboard
 DASHBOARD_VIEW = "dashboard-view"
 
-# Inherited test-platform domain — kept so those endpoints stay gated while they
-# exist. Removed together with the routers in SCAFFOLD_CLEANUP_PLAN § 2.
-CATEGORY_VIEW = "category-view"
-CATEGORY_CREATE = "category-create"
-CATEGORY_UPDATE = "category-update"
-CATEGORY_DELETE = "category-delete"
-CANDIDATE_VIEW = "candidate-view"
-CANDIDATE_CREATE = "candidate-create"
-CANDIDATE_UPDATE = "candidate-update"
-CANDIDATE_DELETE = "candidate-delete"
+
 
 
 #: Permission groups, in display order. The seeder creates these verbatim.
@@ -144,28 +135,6 @@ PERMISSION_CATALOG: dict[str, tuple[str, int, str, list[tuple[str, str]]]] = {
             (ACTIVITY_VIEW, "View the activity log"),
         ],
     ),
-    "categories": (
-        "Categories (inherited)",
-        900,
-        "legacy",
-        [
-            (CATEGORY_VIEW, "View categories"),
-            (CATEGORY_CREATE, "Create categories"),
-            (CATEGORY_UPDATE, "Update categories"),
-            (CATEGORY_DELETE, "Delete categories"),
-        ],
-    ),
-    "candidates": (
-        "Candidates (inherited)",
-        910,
-        "legacy",
-        [
-            (CANDIDATE_VIEW, "View candidates"),
-            (CANDIDATE_CREATE, "Create candidates"),
-            (CANDIDATE_UPDATE, "Update candidates"),
-            (CANDIDATE_DELETE, "Delete candidates"),
-        ],
-    ),
 }
 
 
@@ -182,8 +151,6 @@ ROLE_PERMISSION_MATRIX: dict[str, list[str] | str] = {
         PERMISSION_VIEW,
         INVITATION_VIEW,
         INVITATION_CREATE,
-        CATEGORY_VIEW,
-        CANDIDATE_VIEW,
     ],
     ROLE_PARTNER: [
         DASHBOARD_VIEW,

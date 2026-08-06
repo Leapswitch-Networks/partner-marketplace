@@ -2,9 +2,9 @@
 
 Ported in behaviour from LeapDesk's `LogsAllActivity` trait and `LogAuthEvents`
 listener. Laravel gets model diffs for free from Eloquent events; SQLAlchemy has
-equivalent hooks, but wiring them globally would log every write in the app
-including the inherited test-platform domain and the session `last_seen_at`
-touches. So this is explicit: call sites decide what is worth auditing.
+equivalent hooks, but wiring them globally would log every write in the app,
+including the session `last_seen_at` touches. So this is explicit: call sites
+decide what is worth auditing.
 
 That is a real trade-off and worth naming. Explicit calls can be forgotten, where
 a global hook cannot. The reason to accept it: an audit trail full of noise is one

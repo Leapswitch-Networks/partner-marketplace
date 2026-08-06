@@ -26,7 +26,7 @@ export default function WelcomeBanner() {
               {greeting}, {firstName}! 👋
             </h2>
             <p className="mt-2 max-w-md text-sm text-white/80">
-              Create and manage your tests, add questions, and track candidate performance all in one place.
+              Manage users, roles and permissions, and keep an eye on what is happening across the platform.
             </p>
           </div>
 
@@ -47,7 +47,7 @@ export default function WelcomeBanner() {
           </div>
           <div className="inline-flex items-center gap-1 rounded-full bg-white/15 px-3 py-1.5 text-xs font-medium backdrop-blur">
             <span>⚡</span>
-            <span>Ready to create tests</span>
+            <span>Partner Marketplace</span>
           </div>
         </div>
       </div>

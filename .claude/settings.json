@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(awk '/^## .*Build Sequence/,0' documentation/planning/MARKETPLACE_DOMAIN_PLAN.md)",
+      "Bash(awk '/^### PM-2 /,/^---$/' documentation/planning/TECH_DEBT.md)",
+      "Bash(awk '/^### PM-26 /,/^---$/' documentation/planning/TECH_DEBT.md)",
+      "Bash(npx eslint *)",
+      "Bash(cd \"/opt/lampp/htdocs/Partner Market Place/frontend\" && echo \"=== eslint.config.mjs ===\" && cat eslint.config.mjs && echo \"=== is .bin/eslint a shim or symlink? ===\" && file node_modules/.bin/eslint && head -5 node_modules/.bin/eslint && echo \"=== system eslint ===\" && ls -la /usr/bin/eslint && echo \"=== eslint-config-next installed version ===\" && grep '\"version\"' node_modules/eslint-config-next/package.json 2>/dev/null | head -1)",
+      "Read(//usr/share/nodejs/eslint/bin/**)",
+      "Bash(node ./node_modules/eslint/bin/eslint.js --version)",
+      "Bash(node ./node_modules/eslint/bin/eslint.js app components lib types)",
+      "Bash(node ./node_modules/eslint/bin/eslint.js app components lib types -f json)",
+      "Bash(node -e ' *)",
+      "Bash(findmnt -T . -o TARGET,FSTYPE,OPTIONS)",
+      "Bash(chmod +x node_modules/.bin/eslint)",
+      "Bash(chmod +x node_modules/.bin/*)",
+      "Bash(npm run *)"
+    ]
+  }
+}

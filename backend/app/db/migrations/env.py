@@ -21,13 +21,6 @@ import app.models.user_session  # noqa: F401
 import app.models.activity_log  # noqa: F401
 
 # Inherited test-platform domain — see SCAFFOLD_CLEANUP_PLAN § 2
-import app.models.test  # noqa: F401
-import app.models.question  # noqa: F401
-import app.models.option  # noqa: F401
-import app.models.test_session  # noqa: F401
-import app.models.session_answer  # noqa: F401
-import app.models.candidate  # noqa: F401
-import app.models.category  # noqa: F401
 
 config = context.config
 

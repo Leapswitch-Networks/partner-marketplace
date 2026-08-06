@@ -6,8 +6,8 @@ A full-stack web application built on Next.js and FastAPI, backed by PostgreSQL.
 > working foundation — authentication, an admin dashboard shell, and local infrastructure — inherited
 > from a previous logic-test platform whose tech stack and folder structure were kept deliberately.
 >
-> The inherited test/question/candidate domain is still present and is **not** part of the marketplace.
-> See [`documentation/planning/SCAFFOLD_CLEANUP_PLAN.md`](documentation/planning/SCAFFOLD_CLEANUP_PLAN.md).
+> The inherited test/question/candidate domain has been **deleted** (2026-08-06) — code, RBAC rows and
+> database tables. See [`documentation/planning/SCAFFOLD_CLEANUP_PLAN.md`](documentation/planning/SCAFFOLD_CLEANUP_PLAN.md).
 
 ---
 
@@ -60,7 +60,7 @@ a production topology has not been defined yet.
 Partner Market Place/
 ├── frontend/               # Next.js App Router application
 │   ├── app/                # routes: (auth) group, dashboard
-│   ├── components/         # common/, auth/, dashboard/, admin/
+│   ├── components/         # common/, auth/, dashboard/, admin/, settings/
 │   ├── lib/                # api/, store/, hooks/, utils/
 │   ├── middleware.ts       # edge route protection
 │   └── Dockerfile.dev      # dev container: node 20, npm ci, next dev
@@ -135,10 +135,11 @@ from `backend/` because both `.env` discovery and Alembic's `script_location` ar
 ```
 /  →  /sign-in
         └── /dashboard
-              ├── /dashboard/profile
-              ├── /dashboard/all-users      (admin management)
+              ├── /dashboard/all-users      (user management)
               ├── /dashboard/add-user
-              └── /dashboard/candidates     (inherited — not marketplace)
+              ├── /dashboard/roles          (roles & permissions)
+              ├── /dashboard/activity       (audit trail)
+              └── /settings                 (profile · password · appearance)
 ```
 
 Authentication uses JWTs in `httpOnly` cookies, with an access/refresh pair and transparent

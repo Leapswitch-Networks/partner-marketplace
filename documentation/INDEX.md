@@ -21,6 +21,10 @@ That means two kinds of content live side by side:
 The inherited docs were kept on purpose (nothing was stripped), but they describe features that
 are **not** what this project is becoming. Never cite them as current state.
 
+> **The inherited test-platform *code* is gone as of 2026-08-06** — components, routes, models, RBAC
+> permissions and database tables. These four documents are now the only trace of it, which makes the
+> warning above more important, not less: they describe a product that no longer exists in this repo.
+
 ---
 
 ## Core Platform
@@ -48,15 +52,15 @@ Each file has ONE clear purpose. Load only what the task needs.
 
 | File | Purpose | Status |
 |------|---------|--------|
-| `design/VIHO_ADOPTION_PLAN.md` | **The decision and the route to it** — what was adopted, the measured cost (242 brand-colour occurrences across 37 files), the 10-phase order, and the three questions still open | **Decided 2026-08-05 — implementation not started. Current design focus** |
-| `design/VIHO_THEME_REFERENCE.md` | Design tokens extracted from the **Viho** theme — colour hex values, contrast audit, type scale, spacing, login-screen anatomy, component anatomy, and the 34-screenshot catalogue | **Adopted in full 2026-08-05** — reference for what Viho looks like |
+| `design/VIHO_ADOPTION_PLAN.md` | **The decision and the route to it** — what was adopted, the measured cost (242 brand-colour occurrences across 37 files), the 10-phase order, and the three questions still open | **Decided 2026-08-05 · implemented app-wide 2026-08-06** |
+| `design/VIHO_THEME_REFERENCE.md` | Design tokens extracted from the **Viho** theme — colour hex values, contrast audit, type scale, spacing, login-screen anatomy, component anatomy, and the 36-screenshot catalogue | **Adopted in full 2026-08-05** — reference for what Viho looks like |
 | `design/assets/screenshots/` | Reference screenshots + the rules for adding them to a public repo | **Temporary — delete after the UI/UX component build-out** ([why, and the catch](design/assets/screenshots/README.md#retirement--these-are-temporary-by-decision)) |
 
-> ⚠️ **`system-design/UI_PATTERNS.md` remains authoritative for how our UI is actually built today.**
-> The owner adopted Viho on 2026-08-05, but **no frontend code has changed yet** — so where the two
-> disagree, `UI_PATTERNS.md` still describes reality and the design folder describes the target. That
-> gap closes phase by phase; `VIHO_ADOPTION_PLAN.md` says which phase rewrites which section. Viho is a
-> **paid** template — its source is not in this repo.
+> ⚠️ **`system-design/UI_PATTERNS.md` remains authoritative for how our UI is actually built.** Viho
+> was adopted on 2026-08-05 and implemented across every route on 2026-08-06, so the two now agree —
+> but when they drift, `UI_PATTERNS.md` describes reality and the design folder describes the theme.
+> What is still outstanding is listed in `VIHO_ADOPTION_PLAN.md`'s phase table. Viho is a **paid**
+> template — its source is not in this repo, and its illustrations are deliberately not reproduced.
 
 ## Planning
 
@@ -66,7 +70,7 @@ Planning docs are **reference only** — they describe intent, not current state
 |------|---------|--------|
 | `planning/LEAPDESK_PARITY_PLAN.md` | Port spec for LeapDesk's eight core admin modules + the Settings area — schemas, endpoints, permissions, build order | **Spec — awaiting review. Current focus** |
 | `planning/MARKETPLACE_DOMAIN_PLAN.md` | Marketplace domain model — partners, tiers, customers, catalog, quotes | Design — **parked** pending LeapDesk parity |
-| `planning/SCAFFOLD_CLEANUP_PLAN.md` | Retiring the inherited test-platform domain when the marketplace domain lands | Planning |
+| `planning/SCAFFOLD_CLEANUP_PLAN.md` | Retiring the inherited test-platform domain | **Tiers 2–3 executed 2026-08-06** — the domain is gone. Tier 1 housekeeping remains |
 | `planning/TECH_DEBT.md` | Known defects and inconsistencies carried in from the scaffold, ranked | Active |
 
 ## Project Tracking

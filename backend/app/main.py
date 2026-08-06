@@ -11,8 +11,6 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.api import (
     activity,
     auth,
-    candidate,
-    category,
     google,
     invitations,
     navigation,
@@ -140,8 +138,6 @@ app.include_router(permissions.router, prefix="/api")
 app.include_router(invitations.router, prefix="/api")
 app.include_router(activity.router, prefix="/api")
 # Inherited test-platform domain — gated but scheduled for removal.
-app.include_router(candidate.router, prefix="/api")
-app.include_router(category.router, prefix="/api")
 
 
 @app.get("/health", tags=["health"])

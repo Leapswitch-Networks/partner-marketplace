@@ -26,9 +26,7 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.core.permissions import (
-    ACTIVITY_VIEW,
-    CANDIDATE_VIEW,
-    DASHBOARD_VIEW,
+    ACTIVITY_VIEW,    DASHBOARD_VIEW,
     ROLE_VIEW,
     USER_CREATE,
     USER_VIEW,
@@ -46,7 +44,6 @@ from app.models.user import User
 COLLAPSIBLE_SECTION_CATALOG: dict[str, str] = {
     "user-management": "User Management",
     "system-settings": "System Settings",
-    "test-platform": "Test Platform",
 }
 
 
@@ -165,18 +162,6 @@ def build_sections(user: User) -> list[dict[str, Any]]:
             # `filter_sections`, so this renders nothing until then rather than
             # showing an empty heading.
             "items": [],
-        },
-        {
-            "label": "Test Platform",
-            "key": "test-platform",
-            "collapsible": True,
-            # Inherited from the retired logic-test product and scheduled for
-            # deletion (planning/SCAFFOLD_CLEANUP_PLAN.md). Grouped under its own
-            # label rather than mixed into the real nav so that deletion is one
-            # section, not a hunt through a flat list.
-            "items": [
-                _item("Candidate", "/dashboard/candidates", "candidate", CANDIDATE_VIEW),
-            ],
         },
     ]
 

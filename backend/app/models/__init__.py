@@ -16,16 +16,9 @@ Add every new model to this list.
 
 from app.models.activity_log import ActivityLog
 from app.models.associations import role_permissions, user_roles
-from app.models.candidate import Candidate
-from app.models.category import Category
-from app.models.option import Option
 from app.models.permission import Permission
 from app.models.permission_group import PermissionGroup
-from app.models.question import Question
 from app.models.role import Role
-from app.models.session_answer import SessionAnswer
-from app.models.test import Test
-from app.models.test_session import TestSession
 from app.models.user import User
 from app.models.user_invitation import UserInvitation
 from app.models.user_session import UserSession
@@ -42,11 +35,4 @@ __all__ = [
     "user_roles",
     "role_permissions",
     # Inherited test-platform domain (SCAFFOLD_CLEANUP_PLAN § 2)
-    "Candidate",
-    "Category",
-    "Test",
-    "Question",
-    "Option",
-    "TestSession",
-    "SessionAnswer",
 ]

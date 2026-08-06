@@ -1,5 +1,25 @@
 # Scaffold Cleanup Plan
 
+> ## ✅ EXECUTED 2026-08-06 — the inherited domain is gone
+>
+> The owner confirmed none of Test Platform, Candidate, Create, Add Category, Add Job Role,
+> Add Test Section, Select Question Type or Add Question serve the marketplace. **Tier 2 (frontend and
+> backend code) and Tier 3.1–3.2 (the tables) are done.** What was removed:
+>
+> | Layer | Removed |
+> |---|---|
+> | Frontend | 9 components, `/dashboard/candidates`, `testSlice`, `testApi`/`candidateApi`/`categoryApi`, the test/question/candidate types, `/test` + `/result` from **both** middleware lists, the sidebar's Create group, and `RoleToggle` (found dead) |
+> | Backend | `candidate`/`category` routers, services and schemas; 7 models; their `env.py` imports; the Test Platform nav section; 8 RBAC permissions and 2 permission groups |
+> | Database | 7 tables dropped by migration `c1e70a5d94b2`, in verified reverse-dependency order, plus the orphaned RBAC rows |
+>
+> Two findings worth keeping. **`categories` had no foreign keys at all** — nothing ever referenced it,
+> so § 3.2's "questions might depend on it" concern was unfounded. And **`DashboardOverview`'s four
+> stat figures were hardcoded `"0"`**; it was rewritten to fetch real counts rather than deleted.
+>
+> Permissions went 25 → 17. `/dashboard` First Load JS went 193 kB → 143 kB. A pre-migration dump was
+> taken as § 3.1 requires. **Tier 1 housekeeping and § 3.3 (renaming the database) are still open.**
+
+
 > **Status: Planning — do not execute yet.**
 >
 > The decision on 2026-07-30 was to **keep everything** and build the marketplace alongside the
