@@ -130,8 +130,21 @@ def build_sections(user: User) -> list[dict[str, Any]]:
     """
     return [
         {
-            "label": None,
-            "key": None,
+            # Labelled "Administration" here rather than left null.
+            #
+            # The Sidebar used to hardcode this heading client-side while the
+            # server sent `label: None`, which broke the rule at the top of this
+            # file — *to add or remove a nav item, edit ONLY this file*. It also
+            # produced a visible bug: when the nav fetch fails or returns nothing
+            # (an expired session, say), `NavTree` correctly renders no items, but
+            # the hardcoded heading had nothing to hide it, so the sidebar showed
+            # a lone "Administration" over empty space.
+            #
+            # Not collapsible, and deliberately absent from
+            # COLLAPSIBLE_SECTION_CATALOG, so having a label does not make it a
+            # candidate for the per-role collapse preference.
+            "label": "Administration",
+            "key": "administration",
             "collapsible": False,
             "items": [
                 _item("Dashboard", "/dashboard", "dashboard", DASHBOARD_VIEW, exact=True),

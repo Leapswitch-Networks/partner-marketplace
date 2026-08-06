@@ -446,9 +446,6 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
               </button>
             </div>
             <nav className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-hide scroll-smooth px-3 py-4 space-y-1">
-              <p className="mb-2 mt-6 border-b border-surface-border px-4 pb-2 text-[15px] font-semibold text-brand first:mt-2 dark:border-night-border dark:text-brand-on-dark">
-                Administration
-              </p>
               <NavItems {...navItemsProps} collapsed={false} />
             </nav>
 
@@ -520,11 +517,6 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
           </div>
         )}
         <nav className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-hide scroll-smooth px-3 py-4 space-y-1 2xl:py-5 2xl:space-y-1.5">
-          {!collapsed && (
-            <p className="mb-2 mt-6 border-b border-surface-border px-4 pb-2 text-[15px] font-semibold text-brand first:mt-2 dark:border-night-border dark:text-brand-on-dark">
-              Administration
-            </p>
-          )}
           <NavItems {...navItemsProps} large={false} />
         </nav>
 
