@@ -30,7 +30,6 @@ from app.core.permissions import (
     DASHBOARD_VIEW,
     ROLE_VIEW,
     SETTINGS_MANAGE,
-    USER_CREATE,
     USER_VIEW,
 )
 from app.models.user import User
@@ -143,14 +142,24 @@ def build_sections(user: User) -> list[dict[str, Any]]:
             "key": "user-management",
             "collapsible": True,
             "items": [
+                # One conceptual item over two routes, which is exactly what
+                # `_item`'s docstring describes `active_prefixes` for — the code
+                # just wasn't doing it. "Add User" was a second entry pointing at
+                # `/dashboard/add-user`, which renders the same Users module with
+                # its create modal already open. The Users page carries an
+                # "Add user" button directly above the table, so the nav entry
+                # duplicated a control that is on screen the moment you arrive.
+                #
+                # The route stays: the dashboard's Add User quick action uses it,
+                # and it is a legitimate deep link. It simply keeps Users
+                # highlighted rather than owning a nav row of its own.
                 _item(
                     "Users",
                     "/dashboard/all-users",
                     "users",
                     USER_VIEW,
-                    active_prefixes=["/dashboard/all-users"],
+                    active_prefixes=["/dashboard/all-users", "/dashboard/add-user"],
                 ),
-                _item("Add User", "/dashboard/add-user", "userAdd", USER_CREATE),
                 _item("Roles & Permissions", "/dashboard/roles", "roles", ROLE_VIEW),
                 _item("Activity Log", "/dashboard/activity", "activity", ACTIVITY_VIEW),
             ],

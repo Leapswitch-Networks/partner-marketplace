@@ -25,6 +25,15 @@ export type Branding = {
    * release.
    */
   theme_css_variables: Record<string, string>;
+  /**
+   * Cache-busted path to the uploaded logo, or `null` to fall back to the monogram.
+   *
+   * Relative to the API, not to this app — prefix with `API_BASE_URL` for a browser
+   * `<img src>`. The `?v=` is the asset's last-write epoch, which is what lets the
+   * serve route cache for a year without ever going stale.
+   */
+  logo_url: string | null;
+  favicon_url: string | null;
 };
 
 /**
@@ -44,6 +53,10 @@ export const FALLBACK_BRANDING: Branding = {
   // channels would create a second copy to keep in sync.
   theme_preset: "teal",
   theme_css_variables: {},
+  // No uploaded assets by default: the monogram and the bundled favicon are the
+  // fallbacks, and both are complete rather than placeholder states.
+  logo_url: null,
+  favicon_url: null,
 };
 
 /**
@@ -94,6 +107,8 @@ export async function getBranding(): Promise<Branding> {
       tagline: data.tagline || FALLBACK_BRANDING.tagline,
       theme_preset: data.theme_preset || FALLBACK_BRANDING.theme_preset,
       theme_css_variables: data.theme_css_variables ?? {},
+      logo_url: data.logo_url ?? null,
+      favicon_url: data.favicon_url ?? null,
     };
   } catch {
     return FALLBACK_BRANDING;

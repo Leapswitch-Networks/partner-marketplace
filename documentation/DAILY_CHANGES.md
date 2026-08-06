@@ -319,6 +319,24 @@ first thing written on top of an unversioned API with no generated contract.
 
 ---
 
+## August 6, 2026 — "Add User" leaves the sidebar
+
+- **It duplicated a button that is already on screen.** `/dashboard/add-user` renders the same Users
+  module with its create modal open, and the Users page carries an **"Add user" button directly above
+  the table** — so the nav row offered a second route to a control the user is already looking at.
+- **`_item`'s own docstring described the right design and the code did not follow it:** *"`/dashboard/
+  all-users` and `/dashboard/add-user` are two routes under one conceptual Users item."* That is what
+  `active_prefixes` is for. Users now claims both prefixes and `Add User` is gone as a separate entry.
+- **The route stays.** The dashboard's Add User quick action navigates to it and it is a legitimate
+  deep link — it simply no longer owns a nav row. `USER_CREATE` became an unused import and went too.
+
+**Verified in a browser on both routes:** the nav reads Dashboard · Users · Roles & Permissions ·
+Activity Log · Branding, and **Users is the highlighted item on `/dashboard/add-user`** as well as on
+`/dashboard/all-users` — the prefix change works rather than just removing the row and leaving nothing
+lit. Backend imports clean.
+
+---
+
 ## August 6, 2026 — A 500 was hiding every validation message in the API
 
 - **Reported as "the branding form didn't even work."** It didn't, and the cause was not in the
