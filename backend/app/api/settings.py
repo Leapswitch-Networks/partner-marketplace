@@ -16,7 +16,16 @@ Anything non-public belongs behind a second, gated endpoint.
 
 from typing import Literal
 
-from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Request,
+    Response,
+    UploadFile,
+    status,
+)
 from sqlalchemy.orm import Session
 
 from app.core import images
@@ -72,16 +81,28 @@ def list_themes() -> ThemePresetsResponse:
 AssetName = Literal["logo", "favicon"]
 
 
-@router.get("/branding/{asset}", responses={404: {"description": "No such asset stored"}})
-def read_asset(asset: AssetName, db: Session = Depends(get_db)) -> Response:
+@router.get(
+    "/branding/{asset}",
+    responses={
+        304: {"description": "Unchanged since the client's ETag"},
+        404: {"description": "No such asset stored"},
+    },
+)
+def read_asset(
+    asset: AssetName, request: Request, db: Session = Depends(get_db)
+) -> Response:
     """Serve a stored brand image. Public, like the branding it belongs to.
 
     **Cached hard, and safe to be.** The URL carries `?v=<epoch of last write>`, so a
     replacement is a different URL and a long `max-age` cannot serve a stale logo.
     `immutable` tells the browser not to revalidate at all for that version.
 
-    The `ETag` covers the case the query string does not: a client that requests the
-    bare path without `?v=` still gets a 304 rather than the bytes.
+    The `ETag` and the `If-None-Match` handling below cover what the query string does
+    not: a client that requests the bare path — which is what a browser does for a
+    favicon — gets a 304 instead of the bytes. **Starlette does not do this for you.**
+    Returning an `ETag` without checking the request header was the first version of
+    this, and it looked correct while every conditional request still transferred the
+    whole image.
 
     `Content-Type` is the **detected** MIME stored at upload, never anything the
     client said, and `X-Content-Type-Options: nosniff` (set globally by
@@ -94,17 +115,24 @@ def read_asset(asset: AssetName, db: Session = Depends(get_db)) -> Response:
 
     data, mime, version = stored
     etag = f'"{asset}-{version}"'
-    return Response(
-        content=data,
-        media_type=mime,
-        headers={
-            "Cache-Control": "public, max-age=31536000, immutable",
-            "ETag": etag,
-            # Belt and braces with nosniff: even if a browser were coaxed into
-            # treating this as a document, it would download rather than render.
-            "Content-Disposition": f'inline; filename="{asset}"',
-        },
-    )
+    headers = {
+        "Cache-Control": "public, max-age=31536000, immutable",
+        "ETag": etag,
+        # Belt and braces with nosniff: even if a browser were coaxed into treating
+        # this as a document, it would download rather than render.
+        "Content-Disposition": f'inline; filename="{asset}"',
+    }
+
+    # `If-None-Match` is a comma-separated list and may carry a `W/` weak prefix, so a
+    # bare `== etag` misses legitimate matches. `*` means "any current representation",
+    # which one exists, so it matches too.
+    if_none_match = request.headers.get("If-None-Match", "")
+    candidates = {token.strip().removeprefix("W/") for token in if_none_match.split(",")}
+    if etag in candidates or "*" in candidates:
+        # No body, and no Content-Type: a 304 must not carry one.
+        return Response(status_code=status.HTTP_304_NOT_MODIFIED, headers=headers)
+
+    return Response(content=data, media_type=mime, headers=headers)
 
 
 @router.post(

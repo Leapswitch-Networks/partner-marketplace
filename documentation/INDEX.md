@@ -52,6 +52,7 @@ Each file has ONE clear purpose. Load only what the task needs.
 
 | File | Purpose | Status |
 |------|---------|--------|
+| `design/LOGO_BRIEF.md` | **Hand-off spec for a logo designer** — the two surfaces, the 32px size floor, upload constraints, every brand hex, the eight swappable presets, and the measured contrast that rules out a single-colour mark | **Ready to hand over** |
 | `design/VIHO_ADOPTION_PLAN.md` | **The decision and the route to it** — what was adopted, the measured cost (242 brand-colour occurrences across 37 files), the 10-phase order, and the three questions still open | **Decided 2026-08-05 · implemented app-wide 2026-08-06** |
 | `design/VIHO_THEME_REFERENCE.md` | Design tokens extracted from the **Viho** theme — colour hex values, contrast audit, type scale, spacing, login-screen anatomy, component anatomy, and the 36-screenshot catalogue | **Adopted in full 2026-08-05** — reference for what Viho looks like |
 | `design/assets/screenshots/` | Reference screenshots + the rules for adding them to a public repo | **Temporary — delete after the UI/UX component build-out** ([why, and the catch](design/assets/screenshots/README.md#retirement--these-are-temporary-by-decision)) |
@@ -72,7 +73,7 @@ Planning docs are **reference only** — they describe intent, not current state
 | `planning/MARKETPLACE_DOMAIN_PLAN.md` | Marketplace domain model — partners, tiers, customers, catalog, quotes | Design — **parked** pending LeapDesk parity |
 | `planning/SCAFFOLD_CLEANUP_PLAN.md` | Retiring the inherited test-platform domain | **Tiers 2–3 executed 2026-08-06** — the domain is gone. Tier 1 housekeeping remains |
 | `planning/CORE_HARDENING_PLAN.md` | The platform layer under the features — config safety, transactions, tests/CI, API versioning, the frontend data layer. PM-37 to PM-44 | **Active — PM-37/38/39 closed 2026-08-06** |
-| `planning/DYNAMIC_BRANDING_PLAN.md` | Making project identity (name, monogram, favicon, theme) configurable so the core is reusable across projects. **Read § 6 to rebrand a deployment** | **Phases 1–2 shipped 2026-08-06.** Phase 3 needs `tailwind.config.ts` sign-off; phase 4 needs a storage decision |
+| `planning/DYNAMIC_BRANDING_PLAN.md` | Project identity — name, monogram, tagline, theme, logo, favicon — configurable so the core is reusable across projects. **Read § 6 to rebrand a deployment**, § 7 for how theming and uploads work | **All four phases shipped 2026-08-06** |
 | `planning/TECH_DEBT.md` | Known defects and inconsistencies carried in from the scaffold, ranked | Active |
 
 ## Project Tracking

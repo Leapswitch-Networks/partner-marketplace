@@ -12,22 +12,17 @@ import { APP_NAME, APP_TAGLINE } from "@/lib/utils/constants";
 // 100–900 range costs one file.
 const montserrat = Montserrat({ subsets: ["latin"], variable: "--font-montserrat" });
 
-// Static, so the 16 routes stay prerendered (DYNAMIC_BRANDING_PLAN § 3.2). The icon
-// is a STABLE path — `/favicon.ico` — whose *bytes* vary, rather than a URL that
-// varies. That distinction is what lets the favicon be runtime-configurable without
-// making metadata dynamic:
+// Static, so the 16 routes stay prerendered (DYNAMIC_BRANDING_PLAN § 3.2). `icons` is
+// a CONSTANT string pointing at a handler whose *bytes* vary — that is what makes the
+// favicon runtime-configurable without making metadata dynamic.
 //
-//   * `app/favicon.ico` (the App Router file convention, baked at build) was moved
-//     to `public/favicon.ico`, where it is the fallback rather than the only answer
-//   * `next.config.mjs` rewrites `/favicon.ico` to the API's favicon route, which
-//     serves an uploaded icon or 404s through to the static file
-//
-// Browsers request `/favicon.ico` directly regardless of any <link> tag, which is
-// why the rewrite targets that exact path instead of pointing `icons` at the API.
+// `app/favicon.ico` (the file convention, baked at build) moved to `public/`, where it
+// still answers the bare path as the fallback. See `app/brand/favicon/route.ts` for why
+// the handler cannot simply live at `/favicon.ico`.
 export const metadata: Metadata = {
   title: APP_NAME,
   description: APP_TAGLINE,
-  icons: { icon: "/favicon.ico" },
+  icons: { icon: "/brand/favicon" },
 };
 
 // Injected before React hydration — eliminates dark-mode flash on page load.

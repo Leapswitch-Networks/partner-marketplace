@@ -1,4 +1,4 @@
-import axiosInstance from "./axiosInstance";
+import axiosInstance, { LONG_TIMEOUT_MS } from "./axiosInstance";
 import type { Branding } from "@/lib/branding";
 
 /**
@@ -59,6 +59,25 @@ const settingsApi = {
   /** The theme catalog. Public, and it needs no database. */
   getThemes: () =>
     axiosInstance.get<ThemePresetsResponse>("/api/settings/branding/themes"),
+
+  /**
+   * Replace a brand image. Returns the whole updated branding, so a caller never has
+   * to re-read it to learn the new cache-busted URL.
+   *
+   * No explicit `Content-Type`: axios sets the multipart boundary from the FormData
+   * itself, and hardcoding `multipart/form-data` omits the boundary and the server
+   * cannot parse the body.
+   */
+  uploadAsset: (asset: "logo" | "favicon", form: FormData) =>
+    axiosInstance.post<Branding>(`/api/settings/branding/${asset}`, form, {
+      // The 5s default is a fail-fast for an unreachable backend, not a budget for
+      // sending half a megabyte. On a slow uplink it would abort a working upload and
+      // report it as a server problem.
+      timeout: LONG_TIMEOUT_MS,
+    }),
+
+  deleteAsset: (asset: "logo" | "favicon") =>
+    axiosInstance.delete<Branding>(`/api/settings/branding/${asset}`),
 };
 
 export default settingsApi;

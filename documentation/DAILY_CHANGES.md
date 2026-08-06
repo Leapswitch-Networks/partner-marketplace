@@ -8,6 +8,86 @@
 
 ---
 
+## August 6, 2026 — Branding is complete: eight themes, logo and favicon upload
+
+**Phases 3 and 4 of [`planning/DYNAMIC_BRANDING_PLAN.md`](./planning/DYNAMIC_BRANDING_PLAN.md) are
+done, so all four are.** A project built on this core is now rebranded end to end —
+name, monogram, tagline, brand colour, logo and favicon — with no code change.
+
+**Theme presets.** `tailwind.config.ts`'s brand literals became CSS custom properties, with the
+**complete default theme in `globals.css`** — byte-for-byte Viho's teal, so nothing changed visually
+and all 261 `brand` call sites kept working untouched. Keeping a full default in CSS matters: the app
+is styled with no JavaScript and no API call, so a failed fetch degrades to the default theme rather
+than an unstyled page.
+
+The channels are **space-separated RGB, never hex** — that is what makes Tailwind's `<alpha-value>`
+work, and **12 opacity variants are in use** (`bg-brand/[.04]` through `bg-brand/70`). A hex there
+would make every one of them silently render opaque. Verified in the compiled CSS.
+
+**Eight presets, and the colour space is closed on purpose.** `UI_PATTERNS.md` records
+`brand-on-dark` as a 🔴 mandatory rule because the failure already shipped once — auth-screen links
+unreadable in dark mode. A colour picker cannot honour that, so `core/theme.py` is the only place a
+theme may be defined, each ships both halves, and **67 tests enforce AA on both axes**: Teal
+(default), Indigo, Azure, Plum, Crimson, Forest, Bronze, Graphite. Every one clears 6.4:1 for white
+label text and 7.0:1 for dark-mode brand text.
+
+**Logo and favicon upload**, stored as `bytea` — two rows of ~50 KB that change once a project, no new
+infrastructure, included in the database backup. `core/images.py` is the **first upload validation in
+the codebase**, so it is written as the pattern everything later copies and tested as a security
+boundary (32 tests): the type comes from **magic bytes** not `Content-Type`; **SVG is rejected**
+(a document that can carry `<script>`, served from our origin — stored XSS on every page); size is
+capped **before the body is fully read**; and dimensions are capped **independently of size**, because
+a 30,000 × 30,000 PNG is under 1 KB and passes any byte check.
+
+**Four bugs found by verifying rather than assuming:**
+
+- **`ETag` without `If-None-Match` handling.** Starlette does not do conditional requests for you. The
+  first version returned a correct `ETag` and answered every conditional request with a full 200 —
+  which looks right until you measure it. Now handles lists, the `W/` weak prefix and `*`.
+- **`app/favicon.ico/route.ts` fails the build.** Next 14 treats that name as the metadata convention
+  even as a *directory*. The handler moved to `/brand/favicon`; `public/favicon.ico` answers the bare
+  path. A `next.config.mjs` rewrite cannot express "uploaded, else default" either.
+- **A redirect built from `request.url` emitted `http://0.0.0.0:3001`** — the container's bind address,
+  which curl follows and a browser cannot reach. Now a relative `Location`.
+- **Route order:** `/branding/{asset}` before `/branding/themes` made the catalog answer **422**.
+
+**A pre-existing 500-instead-of-422 bug this feature exposed.** A `field_validator` raising
+`ValueError` made `main.py`'s 422 handler crash: Pydantic v2 puts the exception *object* in `ctx` and
+`json.dumps` cannot serialise it, so the caller got a generic 500 instead of the message explaining
+what was wrong. **Every schema with a custom validator was affected.** Fixed, and now covered by
+`tests/test_validation_error_serialisation.py`.
+
+**The cache defect worth knowing about.** `getBranding` caches for 300 s — which is what keeps 16
+routes prerendered — so a save landed in the database *and the audit log* while the page visibly did
+not change. `router.refresh()` does not help; it reuses the cached fetch. Fixed with
+`POST /api/revalidate-branding` calling `revalidateTag("branding")`.
+
+| Check | Result |
+|---|---|
+| Page static/dynamic split | **16 / 3** — unchanged; the two new route handlers are 0 B and not pages |
+| New react-hooks lint errors | **0.** Still 18 errors, **0 warnings** — the PM-30 baseline |
+| Backend suite | **197 passed** (74 at the start of the day) |
+| `ruff`, `tsc --noEmit`, `next build` | Clean |
+| Theme switch, live | indigo + revalidate → `--brand:77 84 182` in the rendered `<head>`, no restart |
+| Asset serve | Bytes byte-identical; correct `Content-Type`, `ETag`, `nosniff` |
+| Conditional requests | matching / `W/` / list / `*` → **304**; stale / absent → **200** |
+| Favicon, none uploaded | `307 → /favicon.ico` → the bundled default |
+
+**Verified by real use, not just by me:** the audit trail records `Root User updated the application
+branding` with a full before/after diff including `theme_preset: crimson → teal` — so super-admin
+gating, password confirmation and the audit diff were all exercised through the UI with a real login.
+
+**⚠️ `tailwind.config.ts` was edited** (a protected file), as agreed. `next.config.mjs` was **not** —
+the favicon handler was designed to avoid needing it.
+
+**Still open:** `Navbar.tsx` renders a hardcoded `"Super Admin"` where the sidebar renders
+`chrome_subtitle` — a *role* label shown to every user regardless of role. Pre-existing, and left
+rather than guessed at: it needs a decision. Also, clients that request `/favicon.ico` directly rather
+than reading the `<link>` tag get the bundled default; closing that needs a proxy rule, which belongs
+with the deployment topology.
+
+---
+
 ## August 6, 2026 — Project identity is configurable: the core can now be reused by renaming it
 
 **Phases 1 and 2 of [`planning/DYNAMIC_BRANDING_PLAN.md`](./planning/DYNAMIC_BRANDING_PLAN.md) are

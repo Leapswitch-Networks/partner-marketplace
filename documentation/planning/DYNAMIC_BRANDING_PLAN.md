@@ -286,9 +286,9 @@ sees.
 |---|---|---|---|
 | 1 | ✅ **Text identity** — table, public GET, `settings-manage`, PUT, groups A + B + D, env fallbacks | The name, monogram, subtitle and tagline are configurable. **Shipped 2026-08-06.** | — |
 | 2 | ✅ **Group C → env constants** | 16 literals became one constant; a new project sets `NEXT_PUBLIC_APP_NAME` and rebuilds. **Shipped 2026-08-06.** | — |
-| 3 | **Theme presets** — CSS custom properties + curated set | Colour becomes configurable, accessibly | **Sign-off on `tailwind.config.ts`** (protected) |
-| 4 | **Logo + favicon upload** | Full visual identity | The § 3.4 storage decision. `bytea` unblocks it immediately if accepted |
-| 5 | *(deferred)* Runtime-dynamic `<title>`/favicon | Rename without a redeploy | Accepting § 3.2's cost. **Only if a customer asks.** |
+| 3 | ✅ **Theme presets** — CSS custom properties + curated set | Colour is configurable, accessibly. **Shipped 2026-08-06.** | — |
+| 4 | ✅ **Logo + favicon upload** | Full visual identity, `bytea` storage. **Shipped 2026-08-06.** | — |
+| 5 | *(deferred)* Runtime-dynamic `<title>` | Rename without a redeploy | Accepting § 3.2's cost. **Only if a customer asks.** The favicon no longer needs this — see § 7. |
 
 **Phases 1 and 2 need no decisions and no protected files.** They are the ones to build.
 
@@ -379,7 +379,142 @@ exactly what would send the next person looking in the wrong place.
 
 ---
 
-## 7. Related
+## 7. What shipped, 2026-08-06 (phases 3 and 4)
+
+### Phase 3 — theme presets
+
+`tailwind.config.ts`'s `brand`/`accent` literals became
+`rgb(var(--brand) / <alpha-value>)`, with the **complete default theme in
+`globals.css` `:root`** — byte-for-byte Viho's teal, so nothing changed visually and
+all 261 `brand` call sites kept working untouched. Keeping a full default in CSS is
+load-bearing: the app is styled with no JavaScript and no API call, so a failed
+branding fetch degrades to the default theme rather than an unstyled page, and
+`next build` prerenders without a reachable backend.
+
+**Channels are space-separated RGB (`36 105 92`), never a hex.** That is what makes
+`<alpha-value>` work, and **12 distinct opacity variants are in use** —
+`bg-brand/[.04]` through `bg-brand/70`. A hex in the variable makes every one of them
+silently render fully opaque. Verified in the compiled CSS:
+
+```css
+.bg-brand      { background-color: rgb(var(--brand)/var(--tw-bg-opacity,1)) }
+.bg-brand\/10  { background-color: rgb(var(--brand)/.1) }
+.bg-brand\/\[\.05\] { background-color: rgb(var(--brand)/.05) }
+```
+
+**Eight presets, and the colour space is closed.** `core/theme.py` is the only place a
+theme may be defined, because § 3.5's `brand-on-dark` rule is a 🔴 mandatory
+accessibility constraint that a colour picker cannot honour. Every preset ships both
+halves and `tests/test_theme_presets.py` (67 tests) enforces AA on both axes:
+
+| Preset | brand | on-dark | white-on-brand | on-dark-on-card |
+|---|---|---|---:|---:|
+| Teal *(default)* | `#24695c` | `#5ec8b4` | 6.46 | 8.84 |
+| Indigo | `#4d54b6` | `#9a9ed8` | 6.44 | 7.02 |
+| Azure | `#29638e` | `#6aa9d7` | 6.42 | 7.03 |
+| Plum | `#89448b` | `#c98fca` | 6.44 | 7.03 |
+| Crimson | `#a93540` | `#dd8c93` | 6.42 | 7.01 |
+| Forest | `#296b33` | `#43b955` | 6.47 | 7.07 |
+| Bronze | `#815531` | `#cb986e` | 6.41 | 7.02 |
+| Graphite | `#575f6b` | `#9ba3af` | 6.45 | 7.02 |
+
+Note the implementation computes **2.76 / 8.84** for the teal where `UI_PATTERNS.md`
+quotes 2.83 / 9.03. The small gap is a rounding or measurement difference; the
+conclusions — fails AA / passes AA, by a wide margin either way — agree exactly, and
+that is what the rule depends on. A test asserts the *failure* as a property rather
+than quoting the doc.
+
+`accent` is deliberately left fixed: it is a companion colour at 22 call sites, and
+theming it would turn every preset into a two-colour design decision.
+
+### Phase 4 — logo and favicon
+
+Stored as `bytea`, per § 3.4. `core/images.py` is the first upload validation in the
+codebase, so it is written as the pattern everything later copies — **and tested as a
+security boundary** (32 tests):
+
+- **The type comes from magic bytes**, never `Content-Type` or the filename. A PHP
+  payload named `logo.png` is refused.
+- **SVG is rejected** despite being the obvious logo format: it is a document that can
+  carry `<script>`, and served from our own origin that is stored XSS on every page
+  including the login screen.
+- **Size is capped at 512 KB before the body is fully read** — the route reads
+  `MAX_UPLOAD_BYTES + 1` and stops, so a caller cannot choose the process's memory use.
+- **Dimensions are capped at 2048 independently of size**, by parsing PNG `IHDR` and
+  walking JPEG segments. A 30,000 × 30,000 PNG is under 1 KB and passes any byte check.
+  WebP and ICO report `None` dimensions — a documented gap, bounded by the size cap.
+
+Serving is version-keyed: URLs carry `?v=<epoch>`, `Cache-Control` is a year with
+`immutable`, and `If-None-Match` is handled — including comma-separated lists, the
+`W/` weak prefix and `*`.
+
+### Four bugs found by verifying rather than assuming
+
+1. **`ETag` without `If-None-Match` handling.** Starlette does not do conditional
+   requests for you. The first version returned a correct `ETag` and answered every
+   conditional request with a full 200 — which looks right until you measure it.
+2. **`app/favicon.ico/route.ts` fails the build.** Next 14 treats that name as the
+   metadata convention even as a *directory*:
+   `Module not found: Can't resolve '.../app/favicon.ico?__next_metadata__'`. The
+   handler moved to `/brand/favicon`, with `public/favicon.ico` still answering the
+   bare path. A `next.config.mjs` rewrite cannot express "uploaded, else default"
+   either — `beforeFiles` returns the API's 404, `afterFiles` never reaches the API.
+3. **`NextResponse.redirect(new URL(..., request.url))` emitted
+   `http://0.0.0.0:3001`** — the container's bind address, which curl follows and a
+   browser cannot reach. Now a **relative** `Location`, resolved by the client against
+   the host it actually used, which is also correct behind a proxy.
+4. **Route order.** `/branding/{asset}` declared before `/branding/themes` made the
+   catalog answer **422** — FastAPI bound `asset="themes"`, which failed the `Literal`.
+
+### The 500-instead-of-422 bug this feature exposed
+
+Adding a `field_validator` that raises `ValueError` surfaced a **pre-existing defect in
+`main.py`'s 422 handler**. Pydantic v2 puts the exception *object* in the error entry's
+`ctx`, and `json.dumps` cannot serialise it — so the handler raised inside the error
+path and the caller got a **500 with a generic message instead of the 422 explaining
+what was wrong**. Every schema with a custom validator was affected;
+`tests/test_validation_error_serialisation.py` now covers three of them.
+
+### Verified end to end
+
+| Check | Result |
+|---|---|
+| Page static/dynamic split | **16 static / 3 dynamic** — unchanged. The two new route handlers are 0 B and are not pages |
+| New react-hooks lint errors | **0.** Still 18 errors, 0 warnings — the PM-30 baseline |
+| Backend suite | **197 passed** (was 74 before this work) |
+| `ruff`, `tsc --noEmit`, `next build` | Clean |
+| Theme switch, live | `theme_preset='indigo'` + revalidate → `--brand:77 84 182` in the rendered `<head>`, **no restart** |
+| Asset serve | Bytes byte-identical to the upload; correct `Content-Type`, `ETag`, `nosniff` |
+| Conditional requests | matching / `W/` / list / `*` → **304**; stale / absent → **200** |
+| Favicon with none uploaded | `307 → /favicon.ico` → 200, the bundled default |
+| Write path, by a real administrator | The audit trail records `Root User updated the application branding` with a full before/after diff including `theme_preset: crimson → teal` — password confirmation and super-admin gating exercised with a real login |
+
+### The cache defect worth knowing about
+
+`getBranding` caches for 300 s, which is what keeps 16 routes prerendered — and it
+meant **a save landed in the database and the audit log while the page visibly did not
+change**, for up to five minutes. `router.refresh()` does not help: it re-renders
+server components and reuses the cached fetch. Fixed with
+`POST /api/revalidate-branding`, which calls `revalidateTag("branding")`; both server
+fetches carry that tag. Remove the tags and the route silently does nothing.
+
+### Still open
+
+- **`Navbar.tsx` renders a hardcoded `"Super Admin"`** where the sidebar renders
+  `chrome_subtitle`. A *role* label shown to every user regardless of role — a
+  pre-existing bug, left rather than guessed at. Decide: the user's actual role, or the
+  branding subtitle.
+- **Clients requesting `/favicon.ico` directly** — some bookmark and crawler behaviour —
+  get the bundled default rather than the uploaded icon, because the dynamic handler
+  cannot live at that path. Tabs read the `<link>` tag and are correct. Closing it needs
+  a proxy rule, which belongs with the deployment topology.
+- **No test drives an upload through HTTP.** `images.validate` is covered thoroughly as
+  a pure function; the route's own 413/422 mapping and the `set_asset` write are not,
+  because both need an authenticated super-admin session (PM-11).
+
+---
+
+## 8. Related
 
 - [`CORE_HARDENING_PLAN.md`](./CORE_HARDENING_PLAN.md) — PM-37…44; **PM-41's data layer changes how phase 1 is wired**, so prefer doing that first if both are in scope
 - [`../system-design/UI_PATTERNS.md`](../system-design/UI_PATTERNS.md) § Colour System — the `brand-on-dark` rule § 3.5 must not break

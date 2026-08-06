@@ -10,6 +10,7 @@ import useNavigation from "@/lib/hooks/useNavigation";
 import NavTree from "@/components/dashboard/NavTree";
 import type { NavigationSection } from "@/types";
 import { useBranding } from "@/components/common/BrandingProvider";
+import BrandMark from "@/components/common/BrandMark";
 
 export type AdminSection =
   | "dashboard"
@@ -385,7 +386,7 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
           onClick={() => onNavigate("dashboard")}
           className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[5px] bg-brand text-sm font-bold text-white"
         >
-          {branding.monogram}
+          <BrandMark />
         </button>
         <div className="ml-2.5">
           <p className="text-sm font-bold text-gray-900 leading-tight dark:text-white">{branding.app_name}</p>
@@ -427,7 +428,7 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
                 onClick={() => onNavigate("dashboard")}
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[5px] bg-brand text-sm font-bold text-white"
               >
-                {branding.monogram}
+                <BrandMark />
               </button>
               <div className="ml-2.5">
                 <p className="text-sm font-bold text-gray-900 leading-tight dark:text-white">{branding.app_name}</p>
@@ -476,7 +477,7 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[5px] bg-brand text-sm font-bold text-white transition-colors duration-200 hover:bg-brand-dark 2xl:h-10 2xl:w-10 2xl:text-base"
             title="Dashboard"
           >
-            {branding.monogram}
+            <BrandMark />
           </button>
 
           <div

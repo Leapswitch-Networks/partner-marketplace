@@ -6,6 +6,7 @@ import Button from "@/components/common/Button";
 import Input from "@/components/common/Input";
 import { authApi } from "@/lib/api/authApi";
 import settingsApi, { type UpdateBrandingPayload } from "@/lib/api/settingsApi";
+import BrandAssetUpload from "@/components/settings/BrandAssetUpload";
 import type { Branding, ThemePreset } from "@/lib/branding";
 import usePermissions from "@/lib/hooks/usePermissions";
 import { extractApiError } from "@/lib/utils/apiError";
@@ -92,6 +93,23 @@ export default function BrandingForm({
   const [pendingAction, setPendingAction] = useState<(() => Promise<void>) | null>(null);
   const [password, setPassword] = useState("");
 
+  /**
+   * Adopt a `Branding` the API just returned, and make the change visible.
+   *
+   * Shared by the text save and both uploads so all three invalidate the cache the
+   * same way. Without the revalidation the sidebar, brand colour and favicon keep
+   * their previous values for up to five minutes — observed, and it reads as a save
+   * that did nothing.
+   */
+  const applyBranding = (next: Branding) => {
+    setValues(next);
+    setResolved(next);
+    setSaved(true);
+    void fetch("/api/revalidate-branding", { method: "POST" })
+      .catch(() => undefined)
+      .then(() => router.refresh());
+  };
+
   const setField = (key: TextField, value: string) => {
     setValues((current) => ({ ...current, [key]: value }));
     setSaved(false);
@@ -106,27 +124,7 @@ export default function BrandingForm({
     }
 
     const res = await settingsApi.updateBranding(payload);
-    setValues(res.data);
-    setResolved(res.data);
-    setSaved(true);
-
-    // Two steps, and both are required — this was got wrong once.
-    //
-    // The chrome and the injected theme come from a server-side fetch cached for
-    // 300s. `router.refresh()` alone re-renders the server components but reuses
-    // that cached fetch, so the sidebar and brand colour would keep their old
-    // values for up to five minutes: observed as a save that landed in the database
-    // and the audit log while the page visibly did not change.
-    //
-    // So bust the cache tag first, then re-render. Failing to revalidate must not
-    // fail the save — the write already succeeded, and the worst case is the old
-    // stale-for-5-minutes behaviour.
-    try {
-      await fetch("/api/revalidate-branding", { method: "POST" });
-    } catch {
-      // Non-fatal by design; see above.
-    }
-    router.refresh();
+    applyBranding(res.data);
   };
 
   /**
@@ -202,6 +200,25 @@ export default function BrandingForm({
         Clearing a field restores this deployment&rsquo;s configured default rather than
         leaving it blank.
       </p>
+
+      <BrandAssetUpload
+        asset="logo"
+        label="Logo"
+        hint="Replaces the monogram badge in the sidebar and top bar. PNG, JPEG or WebP, up to 512 KB."
+        currentUrl={values.logo_url}
+        onChanged={applyBranding}
+        onNeedsPassword={(retry) => setPendingAction(() => retry)}
+      />
+
+      <BrandAssetUpload
+        asset="favicon"
+        label="Favicon"
+        hint="The browser tab icon. PNG or ICO, up to 512 KB. Square works best."
+        currentUrl={values.favicon_url}
+        square
+        onChanged={applyBranding}
+        onNeedsPassword={(retry) => setPendingAction(() => retry)}
+      />
 
       <div>
         <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Brand colour</p>

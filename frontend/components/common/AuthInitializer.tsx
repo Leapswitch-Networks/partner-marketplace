@@ -5,10 +5,9 @@ import { useRouter } from "next/navigation";
 import useAppDispatch from "@/lib/hooks/useAppDispatch";
 import useAppSelector from "@/lib/hooks/useAppSelector";
 import { fetchCurrentUser } from "@/lib/store/authSlice";
-import { useBranding } from "@/components/common/BrandingProvider";
+import BrandMark from "@/components/common/BrandMark";
 
 export default function AuthInitializer({ children }: { children: React.ReactNode }) {
-  const branding = useBranding();
   const dispatch = useAppDispatch();
   const router = useRouter();
   const { isAuthenticated, loading } = useAppSelector((s) => s.auth);
@@ -52,7 +51,7 @@ export default function AuthInitializer({ children }: { children: React.ReactNod
       <div className="flex min-h-screen items-center justify-center bg-[#F3F4F6]">
         <div className="flex flex-col items-center gap-3">
           <span className="flex h-10 w-10 items-center justify-center rounded-[5px] bg-brand text-lg font-bold text-white">
-            {branding.monogram}
+            <BrandMark />
           </span>
           <p className="text-sm font-medium text-gray-500">Loading…</p>
         </div>

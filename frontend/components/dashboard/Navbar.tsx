@@ -8,6 +8,7 @@ import useAppDispatch from "@/lib/hooks/useAppDispatch";
 import { logoutUser } from "@/lib/store/authSlice";
 import { getUserDisplayName } from "@/lib/utils/user";
 import { useBranding } from "@/components/common/BrandingProvider";
+import BrandMark from "@/components/common/BrandMark";
 
 export default function Navbar() {
   const branding = useBranding();
@@ -38,7 +39,7 @@ export default function Navbar() {
         {/* Brand */}
         <Link href="/dashboard" className="flex items-center gap-2.5">
           <span className="flex h-8 w-8 items-center justify-center rounded-[5px] bg-brand text-sm font-bold text-white">
-            {branding.monogram}
+            <BrandMark />
           </span>
           <div className="hidden sm:block">
             <p className="text-sm font-bold text-gray-900 leading-tight dark:text-gray-100">{branding.app_name}</p>
