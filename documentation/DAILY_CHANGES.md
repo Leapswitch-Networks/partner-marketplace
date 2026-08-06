@@ -351,8 +351,15 @@ first thing written on top of an unversioned API with no generated contract.
   drawer's sign-out too would have left phone users with no way to log out. The desktop footer is gone;
   the mobile one stays and is commented as to why.
 
-- **`Log out` sits in the corner, account block to its left.** It first shipped the other way round.
+- **`Log out` sits in the corner, avatar badge to its left.** It first shipped the other way round.
   Viho puts log out last in the row, and so does the owner.
+- **The account block is now the badge alone.** The name and role beside it, and the email inside the
+  dropdown, are gone on the owner's call — the badge already identifies you. The name survives as
+  `aria-label`/`title` so screen-reader and hover users keep it.
+  - **The dropdown went with them.** Once `Log out` became its own button it contained exactly one
+    item, so the avatar is now a plain `Link` to `/settings/profile`. A menu that opens to reveal a
+    single choice is ceremony. `TopNav` lost its open state, its ref and its click-outside effect with
+    it — **280 lines down to 157**.
 
 **Verification.** `tsc` clean, lint **18 errors 0 warnings** (unchanged), build compiles. Header and
 dashboard rendered and checked in both themes.

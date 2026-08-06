@@ -1,12 +1,13 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useCallback } from "react";
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import useAppSelector from "@/lib/hooks/useAppSelector";
 import useAppDispatch from "@/lib/hooks/useAppDispatch";
 import { logoutUser } from "@/lib/store/authSlice";
 import { useTheme } from "@/lib/hooks/useTheme";
-import { getRoleLabel, getUserDisplayName } from "@/lib/utils/user";
+import { getUserDisplayName } from "@/lib/utils/user";
 
 /**
  * The dashboard top bar — Viho's `.page-main-header`.
@@ -64,9 +65,7 @@ export default function TopNav() {
   const dispatch = useAppDispatch();
   const user = useAppSelector((s) => s.auth.user);
   const { appearance, resolvedTheme, toggleTheme } = useTheme();
-  const [dropdownOpen, setDropdownOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
 
   const displayName = getUserDisplayName(user);
   const initials =
@@ -77,29 +76,12 @@ export default function TopNav() {
       .slice(0, 2)
       .join("")
       .toUpperCase() || "SA";
-  const roleLabel = getRoleLabel(user) || null;
-
-  useEffect(() => {
-    function handleClickOutside(e: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
-        setDropdownOpen(false);
-      }
-    }
-    if (dropdownOpen) document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [dropdownOpen]);
 
   const handleLogout = useCallback(async () => {
     setLoggingOut(true);
-    setDropdownOpen(false);
     await dispatch(logoutUser());
     router.push("/sign-in");
   }, [dispatch, router]);
-
-  const handleProfile = useCallback(() => {
-    setDropdownOpen(false);
-    router.push("/settings/profile");
-  }, [router]);
 
   const toggleFullscreen = useCallback(() => {
     if (typeof document === "undefined") return;
@@ -132,68 +114,31 @@ export default function TopNav() {
           )}
         </HeaderIcon>
 
-        {/* The account menu. Not in the theme, but Profile needs a home now the
-            sidebar footer is gone. Sits before Log out, not after. */}
-        <div className="relative ml-2" ref={dropdownRef}>
-          <button
-            type="button"
-            onClick={() => setDropdownOpen((o) => !o)}
-            aria-haspopup="true"
-            aria-expanded={dropdownOpen}
-            className={`flex items-center gap-2.5 rounded-[5px] px-2 py-1.5 transition-colors ${
-              inSettings ? "bg-brand/10 dark:bg-brand/20" : "hover:bg-brand/10 dark:hover:bg-brand/20"
-            }`}
-          >
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand text-xs font-bold text-white">
-              {initials}
-            </span>
-            <div className="hidden text-left xl:block">
-              <p className="text-sm font-semibold leading-tight text-ink dark:text-white">
-                {displayName || "—"}
-              </p>
-              {roleLabel && (
-                <p className="text-[10px] font-medium leading-tight text-ink-muted dark:text-night-muted">
-                  {roleLabel}
-                </p>
-              )}
-            </div>
-          </button>
+        {/* Just the avatar badge. The name and role used to sit beside it and the
+            email inside a dropdown — all of it removed on the owner's call: the
+            badge already identifies you, and repeating the name in the chrome of
+            every page earns nothing.
 
-          {dropdownOpen && (
-            <div className="absolute right-0 top-full z-50 mt-2 w-52 overflow-hidden rounded-[5px] border border-surface-border bg-white shadow-lg dark:border-night-border dark:bg-night-card">
-              <div className="border-b border-surface-border px-4 py-3 dark:border-night-border">
-                <p className="truncate text-sm font-semibold text-ink dark:text-white">
-                  {displayName || "—"}
-                </p>
-                {user?.email && (
-                  <p className="truncate text-xs text-ink-muted dark:text-night-muted">{user.email}</p>
-                )}
-              </div>
-              <div className="py-1">
-                <button
-                  type="button"
-                  onClick={handleProfile}
-                  className={`flex min-h-[44px] w-full items-center gap-2.5 px-4 py-2.5 text-sm transition-colors md:min-h-0 ${
-                    inSettings
-                      ? "bg-brand/10 font-semibold text-brand dark:bg-brand/20 dark:text-brand-on-dark"
-                      : "text-ink hover:bg-brand/10 dark:text-gray-300 dark:hover:bg-brand/20"
-                  }`}
-                >
-                  <svg
-                    className={`h-4 w-4 ${inSettings ? "text-brand dark:text-brand-on-dark" : "text-ink-muted"}`}
-                    fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                  </svg>
-                  Profile
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
+            With Log out promoted to its own button, the dropdown had exactly one
+            item left, so it is gone too and the avatar links straight to profile
+            settings. A menu that opens to reveal a single choice is ceremony.
+
+            The name survives as the accessible name, so screen-reader and
+            hover users still get it. */}
+        <Link
+          href="/settings/profile"
+          aria-label={`${displayName || "Account"} — profile settings`}
+          title={displayName || "Profile settings"}
+          className={`ml-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white transition-colors focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 ${
+            inSettings ? "bg-brand-dark ring-2 ring-brand/30" : "bg-brand hover:bg-brand-dark"
+          }`}
+        >
+          {initials}
+        </Link>
+
         {/* Viho's btn-primary-light: tinted brand fill, brand text, no border.
             Last in the row, hard against the corner — the theme puts it there and
-            so does the owner. The account menu sits to its left. */}
+            so does the owner. The avatar badge sits to its left. */}
         <button
           type="button"
           onClick={handleLogout}

@@ -385,11 +385,17 @@ placeholder, no border and no fill), then the action cluster, then a tinted `Log
 |---------|-------|
 | Fullscreen | **Real** — Fullscreen API |
 | Dark mode | **Real** — the `useTheme` cycle |
-| Account menu | Ours, not Viho's. Profile needs a home now the sidebar footer is gone |
+| Avatar badge | Ours, not Viho's. **Initials only** — a `Link` straight to `/settings/profile`, no name, no email, no dropdown |
 | `Log out` | **Real.** `bg-brand/10` + brand text + brand icon — Viho's `.btn-primary-light` |
 
-**Order matters: `Log out` is last, hard against the corner**, with the account block to its left.
+**Order matters: `Log out` is last, hard against the corner**, with the avatar badge to its left.
 That is where the theme puts it.
+
+**The badge is initials only.** The name and role beside it, and the email inside a dropdown, were all
+removed — the badge already identifies you, and repeating the name in the chrome of every page earns
+nothing. The full name survives as `aria-label` and `title`, so screen-reader and hover users still get
+it. With `Log out` promoted to its own button the dropdown held a single item, so it went too: **a menu
+that opens to reveal one choice is ceremony**, and a direct link is better.
 
 ### 🔴 Only render a control that does something
 
