@@ -19,22 +19,34 @@ const config: Config = {
       // Viho spells its own primary custom property `--theme-deafult` (sic).
       // Ours is spelled correctly — do not propagate the typo.
       colors: {
+        // ── brand + accent are CSS custom properties, not literals ───────────
+        //
+        // Changed 2026-08-06 for runtime theming (DYNAMIC_BRANDING_PLAN phase 3).
+        // The DEFAULTS still live in `app/globals.css` `:root` and are byte-for-byte
+        // Viho's values, so nothing changed visually — verified by grep, since all
+        // 261 `brand` call sites keep saying `bg-brand`.
+        //
+        // ⚠️ The channels must be SPACE-SEPARATED RGB (`36 105 92`), never a hex.
+        // That is what makes `<alpha-value>` work, and **12 distinct opacity
+        // variants are in use** — `bg-brand/[.04]` through `bg-brand/70`. Put a hex
+        // in the variable and every one of them silently renders opaque.
         brand: {
-          DEFAULT: "#24695c", // Viho --theme-deafult
-          dark: "#17433b", // its own hover shade
-          darker: "#10302a",
-          light: "#236559",
-          // Brand text/icons on a DARK surface must not use the base brand:
-          // #24695c on the #111727 card is 2.83:1 and fails AA outright. This is
-          // Viho's own light teal — it uses it for the primary button's focus
-          // ring (`0 0 0 .2rem #5ec8b4`) — and it scores 9.03:1 on that card.
+          DEFAULT: "rgb(var(--brand) / <alpha-value>)",
+          dark: "rgb(var(--brand-dark) / <alpha-value>)",
+          darker: "rgb(var(--brand-darker) / <alpha-value>)",
+          light: "rgb(var(--brand-light) / <alpha-value>)",
+          // Brand text/icons on a DARK surface must not use the base brand: the
+          // teal on the #111727 card measures ~2.8:1 and fails AA outright, while
+          // its light counterpart scores ~8.8:1. Every preset ships both values
+          // contrast-checked — see `backend/app/core/theme.py`, which is the only
+          // place a new one may be added.
           // Use `dark:text-brand-on-dark` wherever brand text sits on night.card.
-          "on-dark": "#5ec8b4",
+          "on-dark": "rgb(var(--brand-on-dark) / <alpha-value>)",
         },
         accent: {
-          DEFAULT: "#ba895d", // Viho --theme-secondary
-          dark: "#a07044",
-          light: "#d1b093",
+          DEFAULT: "rgb(var(--accent) / <alpha-value>)",
+          dark: "rgb(var(--accent-dark) / <alpha-value>)",
+          light: "rgb(var(--accent-light) / <alpha-value>)",
         },
         surface: {
           page: "#f5f7fb",

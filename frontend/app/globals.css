@@ -2,6 +2,36 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Brand theme tokens ──────────────────────────────────────────────────── */
+/*
+ * The DEFAULT theme. `tailwind.config.ts` reads these as
+ * `rgb(var(--brand) / <alpha-value>)`, so `bg-brand`, `text-brand-on-dark` and all
+ * 12 opacity variants in use resolve from here.
+ *
+ * Values are Viho's teal, byte for byte — this file is where they moved to on
+ * 2026-08-06, they were not changed. Keeping them in CSS rather than only injecting
+ * them from the API is deliberate and load-bearing:
+ *
+ *   - the app is fully styled with **no JavaScript and no API call**, so a failed
+ *     branding fetch degrades to the default theme instead of an unstyled page
+ *   - there is no flash of unstyled colour on first paint
+ *   - `next build` prerenders correctly without a reachable backend
+ *
+ * A selected preset overrides these with an inline `<style>` in the root layout.
+ * ⚠️ SPACE-SEPARATED RGB CHANNELS ONLY. A hex here makes every `/opacity` utility
+ * silently render opaque.
+ */
+:root {
+  --brand: 36 105 92; /* #24695c — Viho --theme-deafult (sic) */
+  --brand-dark: 23 67 59; /* #17433b — its own hover shade */
+  --brand-darker: 16 48 42; /* #10302a — pressed */
+  --brand-light: 35 101 89; /* #236559 */
+  --brand-on-dark: 94 200 180; /* #5ec8b4 — ~8.8:1 on night.card, AA pass */
+  --accent: 186 137 93; /* #ba895d — Viho --theme-secondary */
+  --accent-dark: 160 112 68; /* #a07044 */
+  --accent-light: 209 176 147; /* #d1b093 */
+}
+
 /* ── Background texture ──────────────────────────────────────────────────── */
 /* CSS-only dot-grid, rendered once by the browser, zero JS, zero extra files */
 :root {
