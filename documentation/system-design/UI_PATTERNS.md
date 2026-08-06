@@ -385,8 +385,11 @@ placeholder, no border and no fill), then the action cluster, then a tinted `Log
 |---------|-------|
 | Fullscreen | **Real** — Fullscreen API |
 | Dark mode | **Real** — the `useTheme` cycle |
-| `Log out` | **Real.** `bg-brand/10` + brand text + brand icon — Viho's `.btn-primary-light` |
 | Account menu | Ours, not Viho's. Profile needs a home now the sidebar footer is gone |
+| `Log out` | **Real.** `bg-brand/10` + brand text + brand icon — Viho's `.btn-primary-light` |
+
+**Order matters: `Log out` is last, hard against the corner**, with the account block to its left.
+That is where the theme puts it.
 
 ### 🔴 Only render a control that does something
 

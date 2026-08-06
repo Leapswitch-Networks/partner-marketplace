@@ -132,22 +132,9 @@ export default function TopNav() {
           )}
         </HeaderIcon>
 
-        {/* Viho's btn-primary-light: tinted brand fill, brand text, no border. */}
-        <button
-          type="button"
-          onClick={handleLogout}
-          disabled={loggingOut}
-          className="ml-2 inline-flex items-center gap-2 rounded-[8px] bg-brand/10 px-4 py-2.5 text-sm font-semibold text-brand transition-colors hover:bg-brand hover:text-white focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-brand/20 dark:text-brand-on-dark dark:hover:bg-brand dark:hover:text-white"
-        >
-          <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h6a2 2 0 012 2v1" />
-          </svg>
-          {loggingOut ? "Signing out…" : "Log out"}
-        </button>
-
-        {/* The account menu stays. The theme has no equivalent, but Profile needs
-            somewhere to live now that the sidebar footer is gone. */}
-        <div className="relative ml-1" ref={dropdownRef}>
+        {/* The account menu. Not in the theme, but Profile needs a home now the
+            sidebar footer is gone. Sits before Log out, not after. */}
+        <div className="relative ml-2" ref={dropdownRef}>
           <button
             type="button"
             onClick={() => setDropdownOpen((o) => !o)}
@@ -204,6 +191,21 @@ export default function TopNav() {
             </div>
           )}
         </div>
+        {/* Viho's btn-primary-light: tinted brand fill, brand text, no border.
+            Last in the row, hard against the corner — the theme puts it there and
+            so does the owner. The account menu sits to its left. */}
+        <button
+          type="button"
+          onClick={handleLogout}
+          disabled={loggingOut}
+          className="ml-2 inline-flex items-center gap-2 rounded-[8px] bg-brand/10 px-4 py-2.5 text-sm font-semibold text-brand transition-colors hover:bg-brand hover:text-white focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-brand/20 dark:text-brand-on-dark dark:hover:bg-brand dark:hover:text-white"
+        >
+          <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h6a2 2 0 012 2v1" />
+          </svg>
+          {loggingOut ? "Signing out…" : "Log out"}
+        </button>
+
       </div>
     </header>
   );

@@ -4,7 +4,7 @@ import {
   APP_NAME,
   APP_SHORT_NAME,
   APP_TAGLINE,
-  API_BASE_URL,
+  SERVER_API_BASE_URL,
 } from "@/lib/utils/constants";
 
 /** The project's identity, fully resolved. Mirrors the backend's `BrandingResponse`. */
@@ -59,7 +59,7 @@ const REVALIDATE_SECONDS = 300;
  */
 export async function getBranding(): Promise<Branding> {
   try {
-    const res = await fetch(`${API_BASE_URL}/api/settings/branding`, {
+    const res = await fetch(`${SERVER_API_BASE_URL}/api/settings/branding`, {
       next: { revalidate: REVALIDATE_SECONDS, tags: ["branding"] },
     });
     if (!res.ok) return FALLBACK_BRANDING;

@@ -8,6 +8,93 @@
 
 ---
 
+## August 6, 2026 — Project identity is configurable: the core can now be reused by renaming it
+
+**Phases 1 and 2 of [`planning/DYNAMIC_BRANDING_PLAN.md`](./planning/DYNAMIC_BRANDING_PLAN.md) are
+done.** Starting a new project on this core is now four environment variables, not a find-and-replace
+across 35 files — and an administrator can override any of it at runtime from **Settings → Branding**.
+
+**Rebranding a deployment:**
+
+```bash
+# backend/.env
+APP_NAME="Acme Cloud Portal"
+APP_MONOGRAM="AC"
+APP_CHROME_SUBTITLE="Operations"
+APP_TAGLINE="Provision and bill customer infrastructure."
+
+# frontend/.env.local
+NEXT_PUBLIC_APP_NAME="Acme Cloud Portal"
+NEXT_PUBLIC_APP_TAGLINE="Provision and bill customer infrastructure."
+```
+
+Everything else follows from `APP_NAME`: the FastAPI title, all five `mail_service` messages, and
+**`TWO_FACTOR_ISSUER` and `MAIL_FROM_NAME`, which were hardcoded literals.** That second pair mattered
+more than it looks — a wrong issuer name is written into an authenticator app at enrolment and cannot be
+corrected afterwards without every user re-enrolling.
+
+**What was built.** A single-row `app_settings` table (migration `a4f19c72e8d3`) whose every column is
+nullable, where **NULL means "use the environment"** rather than "empty". That one decision is what makes
+the core reusable: a fresh install has no row and still renders, clearing a field in the form restores
+the deployment default instead of blanking the application's name, and the database is an *override*
+layer rather than the only source of truth. `CHECK (id = 1)` enforces the single row — "there is one row"
+maintained by convention is how a settings table ends up with two, and two rows give branding no defined
+value. Plus a public `GET /api/settings/branding`, a `PUT` gated on **super-admin *and* a recent password
+confirmation**, a `settings-manage` permission, and `/settings/branding`.
+
+**Two guards on the write, both deliberate.** `require_super_admin` rather than the permission alone,
+because `ROLE_PERMISSION_MATRIX` gives `ROLE_ADMIN` the `"*"` wildcard — the re-seed confirmed it,
+granting `settings-manage` to all three admin roles automatically, exactly as predicted. And password
+confirmation because repainting the application is a convincing setup for a phishing screen served from
+the real domain; someone holding a hijacked session should not be able to do it.
+
+**The design constraint held, which was the point.** The naive version — everything reads the settings
+table — would have converted **15 prerendered routes into server-rendered-on-demand ones** to make a
+`<title>` editable. Instead, document metadata is build-time (`NEXT_PUBLIC_APP_NAME`) and the in-app
+chrome is runtime, resolved server-side with a revalidating `fetch` and passed down as a prop.
+
+| Check | Result |
+|---|---|
+| Static/dynamic split | **16 static / 3 dynamic** — was 15/3, the addition being the new page. Nothing flipped |
+| New react-hooks errors | **0.** Still 18, the PM-30 baseline — no component gained a fetch-on-mount |
+| `pytest` | **87 passed** (was 74) |
+| `ruff`, `tsc --noEmit` | Clean |
+| Unauthenticated `GET` / `PUT` | `200` / `401` |
+| Second row | Refused: `violates check constraint "app_settings_single_row"` |
+| End to end | Row set to "Acme Cloud Portal" → the rendered `/sign-in` heading and tagline changed; `<title>` stayed build-time, as designed |
+
+**A 35th hardcoded site, one more than the audit predicted:** `AuthInitializer.tsx` was still rendering a
+**`"T"` monogram** — a "Test Platform" leftover PM-21 believed it had removed. It only shows on the
+loading screen during the session check, which is why three brand audits walked past it.
+
+**The bug worth recording, because it failed silently.** Server-side fetching needs a *different* API
+address than the browser. `NEXT_PUBLIC_API_URL` is `http://localhost:8002`, and inside the frontend
+container `localhost:8002` **is the frontend** — so the root layout's fetch got `ECONNREFUSED`,
+`getBranding`'s catch-all returned the build-time defaults, and the page rendered them. Everything looked
+correct: the API saved, the endpoint returned the new value, the UI never changed. It was caught by
+curling the rendered HTML instead of trusting the endpoint. Fixed with `INTERNAL_API_URL`
+(`http://backend:8002` in Compose — the backend listens on 8002 *inside* the container too, not 8000),
+with no `NEXT_PUBLIC_` prefix so it can never reach the browser.
+
+**⚠️ Two protected files were edited**, both required rather than incidental:
+
+- **`backend/app/db/migrations/env.py`** — registering `app_settings`. Skipping it is precisely the
+  failure its own comment warns about: an unregistered model gets a `DROP` from the next autogenerate.
+- **`docker-compose.yml`** — adding `INTERNAL_API_URL`. Its existing comment asserted *"there is no
+  server-side fetching"*, which this change made false; that comment is now corrected, because it is
+  exactly what would send the next person looking in the wrong place.
+
+**Left alone deliberately:** `Navbar.tsx` renders a hardcoded **`"Super Admin"`** subtitle where the
+sidebar renders `chrome_subtitle`. It is a *role* label shown to every user regardless of role — a
+pre-existing bug, not branding, so it was not guessed at. It needs a decision: the user's actual role, or
+the branding subtitle.
+
+**Still open:** phase 3 (theme presets) needs sign-off on `tailwind.config.ts`, and phase 4
+(logo/favicon upload) needs the storage decision `DEPLOYMENT.md` § 1 has not made. `bytea` is the
+recommendation and would unblock it immediately.
+
+---
+
 ## August 6, 2026 — Design for making project identity configurable, so the core is reusable
 
 **The owner asked whether the project name, icon and favicon could be driven from a Settings module in
@@ -264,8 +351,17 @@ first thing written on top of an unversioned API with no generated contract.
   drawer's sign-out too would have left phone users with no way to log out. The desktop footer is gone;
   the mobile one stays and is commented as to why.
 
+- **`Log out` sits in the corner, account block to its left.** It first shipped the other way round.
+  Viho puts log out last in the row, and so does the owner.
+
 **Verification.** `tsc` clean, lint **18 errors 0 warnings** (unchanged), build compiles. Header and
 dashboard rendered and checked in both themes.
+
+> **Process note, worth not repeating.** A `/dashboard` render came back completely blank mid-session
+> and recovered on the next attempt. Nothing was broken: `npm run build` was being run **on the host
+> while the dev container serves the same bind-mounted `.next`**, and the production build stomps the
+> dev server's state until it recompiles. Verify against the dev server, and save the production build
+> for last — or a transient blank page reads as a regression that isn't one.
 
 ---
 

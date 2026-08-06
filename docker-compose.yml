@@ -82,10 +82,22 @@ services:
     container_name: pmp-frontend
     restart: unless-stopped
     environment:
-      # Resolved by the browser, not by the container: every API call goes
-      # through lib/api/axiosInstance.ts on the client, and there is no
-      # server-side fetching. So this must be a host-visible URL.
+      # Resolved by the BROWSER, not by the container: NEXT_PUBLIC_* values are
+      # inlined into the client bundle, so this must be a host-visible URL.
       NEXT_PUBLIC_API_URL: "http://localhost:${BACKEND_PORT:-8002}"
+      # Resolved by the CONTAINER. Since 2026-08-06 the root layout and the auth
+      # layout fetch branding server-side, so there IS server-side fetching now —
+      # the comment above used to say otherwise.
+      #
+      # These have to be two different addresses. Inside this container
+      # `localhost:8002` is the frontend itself, so a server-side fetch to
+      # NEXT_PUBLIC_API_URL gets ECONNREFUSED — and it fails *silently*, because
+      # lib/branding.ts falls back to the build-time defaults. The symptom is
+      # branding that saves correctly and never appears.
+      #
+      # `backend` is the Compose service name; the backend listens on 8002 inside
+      # the container too (see its --port), not on 8000.
+      INTERNAL_API_URL: "http://backend:${BACKEND_PORT:-8002}"
       # inotify events don't always cross a bind mount; polling keeps Fast
       # Refresh reliable. Remove it if watching works without it on your setup.
       WATCHPACK_POLLING: "true"

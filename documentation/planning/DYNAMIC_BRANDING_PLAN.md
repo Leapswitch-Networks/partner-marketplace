@@ -284,8 +284,8 @@ sees.
 
 | # | Phase | Delivers | Blocked on |
 |---|---|---|---|
-| 1 | **Text identity** — table, public GET, `settings-manage`, PUT, groups A + B + D, env fallbacks | The name, monogram, subtitle and tagline become configurable. **This is ~80% of the felt benefit.** | Nothing |
-| 2 | **Group C → env constants** | 16 literals become one constant; a new project sets `APP_NAME` and rebuilds | Nothing |
+| 1 | ✅ **Text identity** — table, public GET, `settings-manage`, PUT, groups A + B + D, env fallbacks | The name, monogram, subtitle and tagline are configurable. **Shipped 2026-08-06.** | — |
+| 2 | ✅ **Group C → env constants** | 16 literals became one constant; a new project sets `NEXT_PUBLIC_APP_NAME` and rebuilds. **Shipped 2026-08-06.** | — |
 | 3 | **Theme presets** — CSS custom properties + curated set | Colour becomes configurable, accessibly | **Sign-off on `tailwind.config.ts`** (protected) |
 | 4 | **Logo + favicon upload** | Full visual identity | The § 3.4 storage decision. `bytea` unblocks it immediately if accepted |
 | 5 | *(deferred)* Runtime-dynamic `<title>`/favicon | Rename without a redeploy | Accepting § 3.2's cost. **Only if a customer asks.** |
@@ -301,7 +301,85 @@ up; do not hedge.
 
 ---
 
-## 6. Related
+## 6. What shipped, 2026-08-06 (phases 1 and 2)
+
+**35 hardcoded sites cleared** — one more than the 34 this document predicted. The extra was
+`AuthInitializer.tsx`, still rendering a **`"T"` monogram**: a "Test Platform" leftover that PM-21
+believed it had removed. It only appears on the loading screen during the session check, which is why
+three brand audits missed it.
+
+### How to rebrand a project built on this core
+
+```bash
+# backend/.env
+APP_NAME="Acme Cloud Portal"
+APP_MONOGRAM="AC"
+APP_CHROME_SUBTITLE="Operations"
+APP_TAGLINE="Provision and bill customer infrastructure."
+
+# frontend/.env.local  (build-time: page titles and the pre-fetch initial render)
+NEXT_PUBLIC_APP_NAME="Acme Cloud Portal"
+NEXT_PUBLIC_APP_TAGLINE="Provision and bill customer infrastructure."
+```
+
+No migration, no database write. Everything else follows: `TWO_FACTOR_ISSUER` and `MAIL_FROM_NAME`
+default to `APP_NAME` (both were hardcoded literals — an authenticator app showing the wrong product
+name is baked into already-enrolled devices and cannot be corrected without re-enrolment), the FastAPI
+title becomes `{APP_NAME} API`, and all five `mail_service` messages follow.
+
+Then `/settings/branding` overrides any of it at runtime, without a redeploy.
+
+### The constraint held
+
+| Check | Result |
+|---|---|
+| Static/dynamic route split | **16 static / 3 dynamic** — was 15/3; the one addition is the new page, and **nothing flipped to dynamic** |
+| New react-hooks lint errors | **0.** Still 18, the PM-30 baseline. Branding is resolved server-side and passed as a prop, so no component gained a fetch-on-mount |
+| `pytest` | 87 passed (was 74) |
+| `ruff`, `tsc --noEmit` | Clean |
+| `GET /api/settings/branding` unauthenticated | `200`, resolved from the environment with an empty table |
+| `PUT` unauthenticated | `401` |
+| `CHECK (id = 1)` | A second row is refused: `violates check constraint "app_settings_single_row"` |
+| Per-field fallback | Override `app_name` + `monogram`, NULL the rest → stored values served, others fall back |
+| End to end | Row set to "Acme Cloud Portal" → the rendered `/sign-in` `<h2>` and tagline changed; `<title>` stayed on the build-time value, exactly as § 3.2 intends |
+
+### The bug this shipped with, and how it was caught
+
+**Server-side fetching needs a different API address than the browser, and getting it wrong fails
+silently.**
+
+`NEXT_PUBLIC_API_URL` is `http://localhost:8002` — correct for the browser, and *inside the frontend
+container `localhost:8002` is the frontend itself*. So the root layout's fetch got `ECONNREFUSED`,
+`getBranding`'s catch-all returned `FALLBACK_BRANDING`, and the page rendered the build-time defaults.
+**Everything looked like it worked**: the API saved correctly, the endpoint returned the new value, and
+the UI never changed.
+
+It was found by curling the rendered HTML rather than trusting the endpoint — a check worth repeating for
+anything server-rendered.
+
+Fixed with `INTERNAL_API_URL` (no `NEXT_PUBLIC_` prefix, so it never reaches the browser), defaulting to
+the public URL — correct whenever the two are the same address, which includes a same-origin deployment
+behind one proxy. In Compose it is `http://backend:8002`; note the backend listens on **8002 inside the
+container too**, not 8000.
+
+⚠️ **`docker-compose.yml` was edited** (a protected file) to add it. Its existing comment claimed *"there
+is no server-side fetching"*, which this change made false — that comment is now corrected, because it is
+exactly what would send the next person looking in the wrong place.
+
+### Deliberately not done
+
+- **`Navbar.tsx` renders a hardcoded `"Super Admin"` subtitle** where the sidebar renders
+  `chrome_subtitle`. That is a *role* label, shown to every user regardless of role — a pre-existing bug
+  rather than branding, so it was left rather than guessed at. Decide whether it should be the user's
+  actual role or the branding subtitle.
+- **A settings-row cache invalidation hook.** `getBranding` revalidates every 300s and the form calls
+  `router.refresh()`, so the editor sees the change at once and other users within five minutes. Making it
+  instant everywhere is `revalidateTag("branding")` from the settings route — the tag is already set on
+  the fetch, so it is a few lines when someone wants it.
+
+---
+
+## 7. Related
 
 - [`CORE_HARDENING_PLAN.md`](./CORE_HARDENING_PLAN.md) — PM-37…44; **PM-41's data layer changes how phase 1 is wired**, so prefer doing that first if both are in scope
 - [`../system-design/UI_PATTERNS.md`](../system-design/UI_PATTERNS.md) § Colour System — the `brand-on-dark` rule § 3.5 must not break

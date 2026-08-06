@@ -7,6 +7,26 @@ export const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8002";
 
 /**
+ * Where **server-side** code reaches the API. Not the same address as the browser's.
+ *
+ * `API_BASE_URL` is a *browser* address: `NEXT_PUBLIC_*` values are inlined into the
+ * client bundle, so it has to be resolvable from the user's machine. Inside the
+ * frontend container `localhost:8002` is the frontend itself, and a server-side
+ * fetch to it gets `ECONNREFUSED` — measured, and it failed **silently**, because
+ * `getBranding` catches everything and falls back to the build-time defaults. The
+ * symptom was branding that saved correctly and never appeared.
+ *
+ * Docker Compose resolves service names on its network, so the server address is
+ * `http://backend:8002` — the backend listens on 8002 *inside* the container too
+ * (`--port ${BACKEND_PORT:-8002}`), not on 8000.
+ *
+ * Falls back to `API_BASE_URL`, which is correct whenever the two are the same
+ * address: running both on the host, or a same-origin deployment behind one proxy.
+ * There is no `NEXT_PUBLIC_` prefix on purpose — this must never reach the browser.
+ */
+export const SERVER_API_BASE_URL = process.env.INTERNAL_API_URL ?? API_BASE_URL;
+
+/**
  * The project's name, read at BUILD time.
  *
  * This is deliberately not fetched from `/api/settings/branding`, and the reason is

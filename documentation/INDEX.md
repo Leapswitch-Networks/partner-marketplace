@@ -72,7 +72,7 @@ Planning docs are **reference only** — they describe intent, not current state
 | `planning/MARKETPLACE_DOMAIN_PLAN.md` | Marketplace domain model — partners, tiers, customers, catalog, quotes | Design — **parked** pending LeapDesk parity |
 | `planning/SCAFFOLD_CLEANUP_PLAN.md` | Retiring the inherited test-platform domain | **Tiers 2–3 executed 2026-08-06** — the domain is gone. Tier 1 housekeeping remains |
 | `planning/CORE_HARDENING_PLAN.md` | The platform layer under the features — config safety, transactions, tests/CI, API versioning, the frontend data layer. PM-37 to PM-44 | **Active — PM-37/38/39 closed 2026-08-06** |
-| `planning/DYNAMIC_BRANDING_PLAN.md` | Making project identity (name, monogram, favicon, theme) configurable so the core is reusable across projects — 34 hardcoded sites, and why only some should become runtime-dynamic | Design — **awaiting review** |
+| `planning/DYNAMIC_BRANDING_PLAN.md` | Making project identity (name, monogram, favicon, theme) configurable so the core is reusable across projects. **Read § 6 to rebrand a deployment** | **Phases 1–2 shipped 2026-08-06.** Phase 3 needs `tailwind.config.ts` sign-off; phase 4 needs a storage decision |
 | `planning/TECH_DEBT.md` | Known defects and inconsistencies carried in from the scaffold, ranked | Active |
 
 ## Project Tracking
