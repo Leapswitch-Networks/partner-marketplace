@@ -34,16 +34,31 @@ get lost among the six that aren't.
 | # | Blocker | Where | Required change |
 |---|---------|-------|-----------------|
 | 1 | **No error logging or monitoring** | — | No exception handler, no structured logging, no alerting. A 500 in production would be invisible. PM-10 |
-| 2 | **No automated tests** | — | Nothing verifies a deploy didn't break auth. The production build was **silently broken** by a type error until 2026-07-30 (PM-24) precisely because no workflow ran `npm run build`. PM-11, and by the owner's 2026-08-03 decision it is deliberately last in the queue — so **run `npm run typecheck`, `npm run lint` and `npm run build` by hand before every deploy** until it lands |
+| 2 | **No automated tests** — *partially addressed 2026-08-06* | — | Nothing verified a deploy didn't break auth. The production build was **silently broken** by a type error until 2026-07-30 (PM-24) precisely because no workflow ran `npm run build`. **Since 2026-08-06** there are 74 tests and a CI workflow running `ruff`, `pytest`, `tsc --noEmit`, `npm run lint` and `npm run build` on every push (PM-39) — so the hand-run instruction below is now a fallback rather than the only line of defence. **Still blocking**, because the suite covers three properties (token types, refresh reuse, password hashing) and **not RBAC enforcement across the 56 routes** — which is what a deploy most needs proven. PM-11 stays open |
 | 3 | **No production topology** | — | The Compose services are development-only: bind-mounted source, reload servers, no Nginx, no TLS terminator. See § 1 |
 
 ### Configuration that must change per environment — not defects
 
+> **Since 2026-08-06 this table is enforced, not advisory.** Set `APP_ENV=production` and the app
+> **refuses to start** until every row below is correct, listing all the problems at once rather than
+> one per failed deploy. See `CORE_HARDENING_PLAN.md` PM-37.
+>
+> That change exists because of this document's own history: § 0 above listed five already-fixed items
+> as live blockers for weeks. A written rule about configuration drifts from the configuration; an
+> assertion cannot. **`APP_ENV` is the one setting nothing can check for you** — leave it at
+> `development` in a deployed environment and every other check below is skipped.
+>
+> Two are warnings rather than refusals, because both are legitimate production choices:
+> `HSTS_ENABLED=false` (the TLS terminator may set the header itself) and `TRUST_PROXY_HEADERS=false`
+> (correct with no proxy — and enabling it *without* one is the measured PM-26 bypass, so it must never
+> be auto-corrected).
+
 | Setting | Why it matters |
 |---|---|
+| **`APP_ENV=production`** | Turns on every check in this table. Without it they are all skipped, and this list goes back to being something a human has to remember |
 | `COOKIE_SECURE=true` | Honoured on both set and clear, but defaults to `false` so local HTTP works. Without it, session cookies travel in cleartext. Verify with `curl -si … \| grep -i set-cookie` — `Secure` must be present |
 | `CORS_ORIGINS` | Defaults to localhost. Set to the real frontend origin |
-| `SECRET_KEY` | Must be a fresh strong value per environment, never the development one |
+| `SECRET_KEY` | Must be a fresh strong value per environment, never the development one. **Now enforced**: at least 32 characters, no placeholder substring, and at least 12 distinct characters (so a repeated word cannot clear the length floor). Generate with `python -c "import secrets; print(secrets.token_urlsafe(48))"`. Note that **this project's current development key is refused** — it contains a placeholder string |
 | `ROOT_PASSWORD` | Only read at seed time. Omit it and the seeder generates and prints one once |
 | `MAIL_BACKEND=smtp` | **Must not stay `console` in a deployed environment.** `console` writes password-reset links to the log, and a reset link is a working credential to anyone who can read logs. Set `SMTP_HOST`/`SMTP_USERNAME`/`SMTP_PASSWORD` with it |
 | `TRUST_PROXY_HEADERS=true` | Only in the same change that puts a reverse proxy in front. Enabling it without one lets any caller spoof `X-Forwarded-For` and bypass rate limiting entirely (PM-26) |

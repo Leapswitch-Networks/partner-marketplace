@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { usePathname } from "next/navigation";
 import { navIcon } from "@/components/dashboard/navIcons";
 import type { NavigationItem, NavigationSection } from "@/types";
@@ -28,12 +27,6 @@ function isActive(item: NavigationItem, pathname: string): boolean {
   return prefixes.some((p) => p !== "#" && (pathname === p || pathname.startsWith(`${p}/`)));
 }
 
-function anyActive(items: NavigationItem[], pathname: string): boolean {
-  return items.some(
-    (i) => isActive(i, pathname) || (i.items ? anyActive(i.items, pathname) : false)
-  );
-}
-
 function Section({
   section,
   pathname,
@@ -45,48 +38,36 @@ function Section({
   collapsed: boolean;
   renderItem: (item: NavigationItem, active: boolean) => React.ReactNode;
 }) {
-  const holdsCurrentPage = anyActive(section.items, pathname);
-
-  // A collapsible section starts closed unless it contains the current page —
-  // otherwise navigating to Roles would collapse the group you just used.
-  const [open, setOpen] = useState(!section.collapsible || holdsCurrentPage);
-
-  // No heading and no collapse affordance in the icon-only rail: there is no room
-  // for a label, and a collapse toggle with nothing to label it is a mystery box.
+  // No heading in the icon-only rail: there is no room for a label.
   if (collapsed || !section.label) {
     return <>{section.items.map((item) => renderItem(item, isActive(item, pathname)))}</>;
   }
 
-  const expanded = section.collapsible ? open || holdsCurrentPage : true;
-
+  /*
+   * **Sections are plain headings, and their items are always visible.**
+   *
+   * They used to be collapsible, defaulting to closed unless the section held the
+   * current page. Two problems, both visible in a render: on `/dashboard` the
+   * whole of User Management was hidden behind a chevron, and — because Viho's
+   * section headings are large teal text — a collapsible heading was visually
+   * indistinguishable from a static one.
+   *
+   * Viho does not do this. In `dashboard-default-light-top.png` "General" and
+   * "Applications" are inert labels with a rule beneath and every item listed;
+   * the chevrons belong to nav *items* that own children ("Dashboard", "Widgets",
+   * "Project"). `section.collapsible` still arrives from the API and is
+   * deliberately ignored here — the server is describing structure, and this is
+   * the presentation decision.
+   */
   return (
     <div className="mt-3 first:mt-0">
-      {section.collapsible ? (
-        <button
-          type="button"
-          onClick={() => setOpen((o) => !o)}
-          aria-expanded={expanded}
-          className="mb-1 flex w-full items-center justify-between border-b border-surface-border px-3 pb-2 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-brand transition-colors hover:text-brand-dark dark:border-night-border dark:text-night-muted dark:hover:text-brand-on-dark"
-        >
-          <span>{section.label}</span>
-          <svg
-            className={`h-3.5 w-3.5 transition-transform duration-200 ${expanded ? "rotate-90" : ""}`}
-            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-          </svg>
-        </button>
-      ) : (
-        <p className="mb-1 border-b border-surface-border px-3 pb-2 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-brand dark:border-night-border dark:text-night-muted">
-          {section.label}
-        </p>
-      )}
+      <p className="mb-2 mt-6 border-b border-surface-border px-4 pb-2 text-[17px] font-semibold text-brand first:mt-2 dark:border-night-border dark:text-brand-on-dark">
+        {section.label}
+      </p>
 
-      {expanded && (
-        <div className="mt-0.5 space-y-1">
-          {section.items.map((item) => renderItem(item, isActive(item, pathname)))}
-        </div>
-      )}
+      <div className="mt-0.5 space-y-1">
+        {section.items.map((item) => renderItem(item, isActive(item, pathname)))}
+      </div>
     </div>
   );
 }

@@ -1,0 +1,12 @@
+# Development and CI only. Never installed in a deployed image.
+#
+#   pip install -r requirements.txt -r requirements-dev.txt
+#
+# Kept separate from requirements.txt so a production install cannot accidentally
+# ship a test client that can construct requests against the app.
+-r requirements.txt
+
+pytest==8.3.4
+# `httpx` is already a runtime dependency (Google token exchange), and FastAPI's
+# TestClient is built on it — so API tests need no additional HTTP library.
+ruff==0.8.6

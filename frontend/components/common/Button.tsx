@@ -22,8 +22,13 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
  * is where the theme's buttons get their proportions. Those come from Bootstrap's
  * scale rather than Tailwind's, so they are arbitrary values on purpose.
  *
- * The primary shadow is **brand-tinted, not black** (`shadow-brand`). Viho
- * colours its shadows throughout and removes them more often than it adds them.
+ * **No shadow.** `app.css` does define `box-shadow: 0 5px 10px 2px
+ * rgba(36,105,92,.19)` for `.btn-primary`, and an earlier version of this file
+ * applied it — but it does not render. Sampling the pixels directly below and
+ * beside real Viho buttons (`auth-login-light.png`, `file-manager-light.png`)
+ * gives pure `#ffffff`. The theme's 69 `box-shadow: none` rules win, which is
+ * what "removes shadows more than it adds them" in the reference doc means in
+ * practice. Buttons are flat.
  */
 const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   (
@@ -42,7 +47,7 @@ const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       "inline-flex items-center justify-center gap-2 rounded-[5px] px-7 py-1.5 text-sm font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand disabled:cursor-not-allowed disabled:opacity-60";
 
     const variants = {
-      primary: "bg-brand text-white shadow-brand hover:bg-brand-dark",
+      primary: "bg-brand text-white hover:bg-brand-dark",
       outline: "border border-brand bg-transparent text-brand dark:text-brand-on-dark hover:bg-brand/10",
       light: "bg-brand/10 text-brand dark:text-brand-on-dark hover:bg-brand/50 hover:text-white",
     };

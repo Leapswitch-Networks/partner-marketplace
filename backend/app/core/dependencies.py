@@ -16,8 +16,8 @@ Every guard raises; none returns None. That means a router can treat the value
 as non-optional.
 """
 
+from collections.abc import Callable, Generator
 from datetime import datetime, timedelta, timezone
-from typing import Callable, Generator
 
 from fastapi import Cookie, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
@@ -32,9 +32,24 @@ from app.services import session_service
 
 
 def get_db() -> Generator[Session, None, None]:
+    """The request-scoped session, rolled back on failure and always closed.
+
+    The rollback is explicit rather than left to `close()` (PM-38). `close()` does
+    discard an uncommitted transaction, so this is not a correctness fix — it is
+    the difference between a failed request's transaction ending because someone
+    decided it should and ending as a side effect of releasing the connection. A
+    service that catches an exception and carries on gets a session whose state it
+    chose, and the connection returns to the pool clean rather than incidentally.
+
+    This does NOT commit. Services commit their own single writes; a flow writing
+    more than one table declares its boundary with `db.session.unit_of_work`.
+    """
     db = SessionLocal()
     try:
         yield db
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
 

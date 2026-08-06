@@ -70,10 +70,10 @@ const config: Config = {
           dark: "#2c323f",
         },
       },
-      boxShadow: {
-        // Viho tints its shadows with the brand colour instead of using black.
-        brand: "0 5px 10px 2px rgba(36, 105, 92, 0.19)",
-      },
+      // NOTE: no `boxShadow.brand` token. `app.css` declares a brand-tinted
+      // shadow for `.btn-primary`, but it never renders — the pixels below a real
+      // Viho button are pure #ffffff. Viho separates surfaces with borders, not
+      // elevation. Don't reintroduce it from the CSS without checking a render.
       keyframes: {
         "pulse-glow": {
           "0%, 100%": { 

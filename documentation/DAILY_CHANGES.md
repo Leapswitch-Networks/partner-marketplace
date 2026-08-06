@@ -8,6 +8,137 @@
 
 ---
 
+## August 6, 2026 — The core is audited, and the first three gaps are closed
+
+**The security core turned out to be far stronger than the docs claim, and far less defended than it
+looks.** A read of the code — not the register — found 28 of 36 tracked debt items closed, bcrypt where
+`README.md` still promises plaintext, and an auth layer with session revocation, refresh rotation with
+reuse detection, 2FA, rate limiting and an audit trail. What is missing is the layer *underneath* the
+features: the parts that make correctness survive the next change rather than survive a review.
+
+Eight new items, PM-37 to PM-44, are recorded in the new
+[`planning/CORE_HARDENING_PLAN.md`](./planning/CORE_HARDENING_PLAN.md). **The headline is that the
+core's correctness currently lives in prose.** Three of the eight are now closed.
+
+**PM-37 — production can no longer boot on a development default.** `Settings` had 60-odd fields and
+none of them said which environment it was, so `DEPLOYMENT.md` § 0's seven-row *"configuration that
+must change per environment"* table was seven things a human had to remember. There is now an `APP_ENV`
+field and a validator that **refuses to start** and lists every problem at once. Verified both ways:
+with the real `.env` and `APP_ENV=production` it refused with 5 named problems — including that **this
+project's own development `SECRET_KEY` contains a placeholder string** — and with a correct production
+config it booted. `MAIL_BACKEND=console` is the entry that matters most, because it is the only one
+that fails *successfully*: it works perfectly and writes password-reset links, which are live
+credentials, into a log file with a wider audience than the database has.
+
+**PM-38 — a request now has a transaction boundary available to it.** `get_db` neither committed nor
+rolled back, and 49 `db.commit()` calls were spread across 9 services, so a flow writing two tables
+could leave half of it durable. `get_db` now rolls back explicitly, and `db/session.py` gained
+`unit_of_work(db)`. The 49 existing commits are **deliberately left alone** — they are single-write and
+correct, and rewriting them would be a large diff with no behaviour change. This matters most for what
+comes next: PM-5's row-level scoping is about to add exactly the multi-table writes that need it.
+
+**PM-39 — this repository has automated checks for the first time.** 74 tests over the three properties
+the register proves are worth protecting: **token type confusion** (the full 4×4 matrix — a refresh
+token must not work as an access token, and the matrix grows automatically when a fifth token type is
+added), **refresh reuse detection**, and **password hashing**. Plus `.github/workflows/ci.yml`, which
+runs `ruff`, `pytest`, `tsc --noEmit`, `npm run lint` and `npm run build` — and **three of those five
+already existed and had only ever been run by hand.** That is not hypothetical: `npm run build` was
+broken by a type error and stayed broken because nothing ran it (PM-24).
+
+**The test suite immediately found a bug in the code it was written for.** PM-37's first version matched
+placeholder secrets by equality, so `"changeme" * 4` — 32 characters — cleared the length floor, matched
+no placeholder, and would have signed production tokens. Placeholders are now matched as a substring,
+with a distinct-character floor behind it for a repeated string nobody thought to blocklist. Both
+paths are asserted, along with 20 real `token_urlsafe(48)` keys to prove the floor does not reject the
+thing the error message tells you to generate.
+
+**Also fixed, small and worth naming:**
+
+- **The frontend's refresh had no single-flight.** Four parallel 401s sent four `POST /refresh` calls.
+  It worked — but only because the backend's 30-second rotation grace window absorbed them, and that
+  window exists for concurrent *tabs*, not for one tab's parallel requests. A correctness property of
+  the client was resting on a backend tolerance it never asked for; narrowing the window would have
+  started revoking sessions under load, which is near-undiagnosable from the frontend. Now one shared
+  promise.
+- **`API_BASE_URL` defaulted to port 8000; the API runs on 8002.** A developer with no
+  `NEXT_PUBLIC_API_URL` got connection-refused against a port nothing serves.
+- **`GET /api/activity/export` was unreachable in practice.** The 5s global axios timeout would kill
+  the one endpoint deliberately streamed because it has no upper bound. A `LONG_TIMEOUT_MS` is now
+  exported for it, and the default stays short so an unreachable backend still fails fast.
+- **One genuinely unused import** (`Boolean` in `models/user.py`) and five un-sorted import blocks.
+
+**A linter incident worth recording, because it nearly did real damage.** The first `ruff` config used
+`exclude` rather than `extend-exclude`, which *replaces* ruff's defaults instead of adding to them — so
+it linted `backend/.venv` (the dead virtualenv from PM-23) and reported **32,488 errors across 1,256
+files**. Worse, before that was noticed, `--fix` reordered the imports in
+`app/db/migrations/env.py` — a **protected file** — and hoisted an import above the comment reading
+*"EVERY model must be imported here or --autogenerate cannot see it, and may emit a migration that
+drops its table."* Detaching that warning from the list it governs is exactly the kind of quiet damage
+a formatter can do. The whole `app/db/migrations` tree is now excluded with that reason written down.
+
+**⚠️ In reverting it, `git checkout` also discarded an uncommitted change that file had at the start of
+the session.** The content is unrecoverable — unstaged working-tree content is never hashed by git. The
+file now matches `HEAD`, and it is functionally correct: all 8 model imports resolve, no deleted model
+is referenced, `alembic heads` reports the single head `c1e70a5d94b2`. The captured diff showed a pure
+24-line permutation, so the lost change appears to have been import ordering only — but that is an
+inference, not a certainty, and **`backend/app/db/migrations/env.py` is worth a look before committing.**
+
+**Verification.** `ruff check .` clean. `pytest` 74 passed, 4 skipped. `tsc --noEmit` clean. Backend
+restarted and `/health/ready` reports the database reachable; OpenAPI still serves 58 operations across
+47 paths. Production validator exercised in both directions against the running container.
+
+**Not done, and named in the plan rather than left implied:** PM-40 (`/api/v1` — 56 unversioned routes
+and 38 hardcoded frontend paths), PM-41 (the frontend has no data layer and does zero server-side
+fetching — this is the *cause* of PM-30's climbing lint count, not a lint problem), PM-42 (OpenAPI →
+TypeScript codegen), PM-43 (two purge functions exist and nothing calls them), PM-44 (rate-limit
+counters are per-process). The plan's main recommendation is an ordering: **PM-40 and PM-42 before
+PM-5**, because scoping is the change most likely to leak data across tenants and it should not be the
+first thing written on top of an unversioned API with no generated contract.
+
+---
+
+## August 6, 2026 — The shadows were wrong, and the sidebar was only half Viho
+
+- **The owner was right about the shadows, and the reference doc was wrong.** `app.css` declares
+  `box-shadow: 0 5px 10px 2px rgba(36,105,92,.19)` for `.btn-primary`, the reference doc recorded it,
+  and I applied it to `Button` and the active sidebar item. **It does not render.** Sampling the pixels
+  directly below and beside real Viho buttons gives pure `#ffffff` — `auth-login-light.png`'s LOGIN
+  button, `file-manager-light.png`'s Add New, and the filled nav item in
+  `tables-datatable-light-pagination.png`, none of them cast anything. The theme's **69**
+  `box-shadow: none` rules win.
+  - Removed from `Button`, the active nav item, the sidebar surface itself and the logo tile's hover.
+    The **`shadow-brand` token is deleted** rather than left unused, with a comment in
+    `tailwind.config.ts` saying why, so nobody re-adds it from the CSS.
+  - **The general lesson is one this doc set already states and I failed to apply: where the CSS and
+    the pixels disagree, the pixels win.** A declaration inside a 1.3 MB minified stylesheet is not
+    evidence that it reaches the screen. Recorded as a correction in the reference doc.
+- **The sidebar was rebuilt against the screenshots rather than approximated.** Four things were wrong:
+  - **Nav icons were wrapped in grey tinted tiles.** Viho's are bare outline glyphs on the row; the
+    tiles made every item look like a button.
+  - **Section headings were 10px uppercase micro-labels.** Viho's are ~17px, semibold, **sentence
+    case**, brand-coloured, with a hairline rule beneath — much more prominent than what was there.
+  - **There was no profile block at all.** Added: avatar in a tinted ring, a status pill overlapping
+    its base, the name in brand colour, a muted secondary line, and a three-up stat row divided by
+    hairline rules, with a gear link top-right.
+  - **The active row had a pulsing dot.** Invented. Viho uses a chevron on expandable items and
+    nothing on leaf items.
+- **Sections are no longer collapsible, deliberately.** They defaulted to closed unless they held the
+  current page, so landing on `/dashboard` hid the whole of User Management behind a chevron — and at
+  Viho's heading size a collapsible heading looked identical to a static one. In the reference,
+  "General" and "Applications" are inert labels with every item listed; chevrons belong to nav *items*
+  that own children. `section.collapsible` still arrives from the API and is now ignored in the view.
+
+**On the profile stats.** Viho's three are `19.8k Follow`, `2 year Experience`, `95.2k Follower`. We
+have no source for any of them, and filling the shape with invented numbers would be worse than leaving
+it empty — so the slots carry the user's role, join year and account status. Same composition, true
+figures. The pill likewise shows real status rather than Viho's decorative "New".
+
+**Verification.** `tsc` clean, lint **18 errors 0 warnings** (unchanged), build compiles. The absence of
+the shadow was confirmed by measurement, not by eye: 16 sampled pixels around our own Add-user button
+are all `#ffffff`. Sidebar rendered and checked in both themes.
+
+---
+
 ## August 6, 2026 — The inherited test-platform domain is deleted, end to end
 
 - **The owner confirmed none of it serves the marketplace**: Test Platform, Candidate, Create, Add

@@ -26,7 +26,8 @@ from typing import Any
 from sqlalchemy.orm import Session
 
 from app.core.permissions import (
-    ACTIVITY_VIEW,    DASHBOARD_VIEW,
+    ACTIVITY_VIEW,
+    DASHBOARD_VIEW,
     ROLE_VIEW,
     USER_CREATE,
     USER_VIEW,

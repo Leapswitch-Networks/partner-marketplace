@@ -71,6 +71,7 @@ Planning docs are **reference only** — they describe intent, not current state
 | `planning/LEAPDESK_PARITY_PLAN.md` | Port spec for LeapDesk's eight core admin modules + the Settings area — schemas, endpoints, permissions, build order | **Spec — awaiting review. Current focus** |
 | `planning/MARKETPLACE_DOMAIN_PLAN.md` | Marketplace domain model — partners, tiers, customers, catalog, quotes | Design — **parked** pending LeapDesk parity |
 | `planning/SCAFFOLD_CLEANUP_PLAN.md` | Retiring the inherited test-platform domain | **Tiers 2–3 executed 2026-08-06** — the domain is gone. Tier 1 housekeeping remains |
+| `planning/CORE_HARDENING_PLAN.md` | The platform layer under the features — config safety, transactions, tests/CI, API versioning, the frontend data layer. PM-37 to PM-44 | **Active — PM-37/38/39 closed 2026-08-06** |
 | `planning/TECH_DEBT.md` | Known defects and inconsistencies carried in from the scaffold, ranked | Active |
 
 ## Project Tracking

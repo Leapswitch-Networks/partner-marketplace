@@ -1,0 +1,125 @@
+# CI — the first automated check this repository has had (TECH_DEBT PM-39).
+#
+# Three of the five steps below are commands that ALREADY EXIST and have only ever
+# been run by hand. That is not a hypothetical gap: `npm run build` was broken by a
+# type error and stayed broken, unnoticed, because nothing ran it (PM-24).
+#
+# Frontend and backend are separate jobs so a Python failure still reports the
+# TypeScript result. One job with both would stop at the first error and hide half
+# the picture on every red build.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A new push to the same branch makes the previous run's answer irrelevant.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend — ruff + pytest
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # 3.12 EXACTLY. The pinned dependencies have no wheels for 3.13/3.14,
+          # which is the main reason the dev containers exist (README § Quick Start).
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/requirements-dev.txt
+
+      - name: Install
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Lint
+        run: ruff check .
+
+      # No `ruff format --check` step. The backend has never been run through a
+      # formatter, so adding one would make "reformat every file" a prerequisite for
+      # the first green build. That is a decision for its own commit, not a side
+      # effect of turning CI on. See the note at the end of backend/pyproject.toml.
+
+      # No `services: postgres` block, deliberately. The suite is pure logic today
+      # and `create_engine` opens no socket, so a database would be 30 seconds of
+      # startup per run buying nothing. Add it in the same change as the first test
+      # that needs it — the `db` marker already exists to select those.
+      - name: Test
+        run: pytest -m "not db"
+
+      # The check that would have caught what PM-37 was built for. A default that is
+      # safe locally and unsafe in production is invisible until something asserts
+      # it, and asserting it here means the assertion itself cannot rot.
+      - name: Production config must refuse development defaults
+        env:
+          APP_ENV: production
+          DATABASE_URL: postgresql+psycopg2://u:p@db:5432/x
+          SECRET_KEY: this-is-a-development-placeholder-key-do-not-use
+        run: |
+          if python -c "import app.core.config" 2>/dev/null; then
+            echo "::error::APP_ENV=production accepted an unsafe SECRET_KEY. PM-37's validator is not working."
+            exit 1
+          fi
+          echo "Correctly refused."
+
+  frontend:
+    name: Frontend — typecheck + lint + build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # --legacy-peer-deps because package.json pins react 19 while next@14.2.35
+      # declares peer react@^18.2.0, so plain `npm ci` FAILS OUTRIGHT. This mirrors
+      # frontend/Dockerfile.dev. It is a documented workaround, not a fix — the fix
+      # is the framework-version decision in TECH_DEBT PM-25, and this flag should
+      # be deleted in the same change that settles it.
+      - name: Install
+        run: npm ci --legacy-peer-deps
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # continue-on-error, and this is the one compromise in the file. `npm run
+      # lint` currently reports 20 react-hooks errors (PM-30) which come from
+      # eslint-config-next@16 judging a Next 14 codebase, and which PM-25 may make
+      # moot. Blocking on them would mean every PR is red on day one, and a red CI
+      # nobody can turn green is a CI nobody reads.
+      #
+      # DELETE THIS LINE when PM-25 is settled and PM-30's count is zero. Until
+      # then the output is visible in the log and the count is tracked in the
+      # register.
+      - name: Lint
+        run: npm run lint
+        continue-on-error: true
+
+      # The step that matters most, because this is the one that was silently
+      # broken for an unknown length of time (PM-24). Type errors are fatal to
+      # `next build` — next.config.mjs does not set typescript.ignoreBuildErrors.
+      - name: Build
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:8002

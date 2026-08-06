@@ -10,14 +10,13 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
-from app.core.permissions import PROTECTED_ROLES, SUPER_ADMIN_ROLES, ROLE_PERMISSIONS
+from app.core.permissions import PROTECTED_ROLES, ROLE_PERMISSIONS, SUPER_ADMIN_ROLES
 from app.models.associations import user_roles
 from app.models.permission import Permission
 from app.models.permission_group import PermissionGroup
 from app.models.role import Role
 from app.models.user import User
 from app.schemas.rbac import CreateRoleRequest, UpdateRoleRequest
-
 
 # --- Reads ------------------------------------------------------------------
 

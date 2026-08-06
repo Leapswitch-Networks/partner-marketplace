@@ -26,8 +26,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.security import TokenError, decode_typed_token
 from app.core.permissions import DEFAULT_STAFF_ROLE
+from app.core.security import TokenError, decode_typed_token
 from app.models.user import User
 from app.services.rbac_service import get_role_by_name
 

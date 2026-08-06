@@ -359,6 +359,28 @@ is mostly **flat** — it separates with borders and background washes rather th
 `rgba(88,103,221,…)` indigo and `rgba(25,124,207,…)` blue are Pixelstrap boilerplate shared across
 their theme family and are **not** part of Viho's palette — don't carry them over.
 
+### ⚠️ Correction 2026-08-06 — the button shadow does not render. Do not apply it.
+
+The `0 5px 10px 2px rgba(36,105,92,.19)` row above is real in `app.css` and it is also **misleading**.
+It was taken at face value and applied to our `Button` and to the active sidebar item; the owner spotted
+immediately that the theme has no such shadow. Checking the pixels settles it — sampled directly below
+and beside real Viho buttons:
+
+| Screenshot | Element | 6 px below | 6 px right |
+|---|---|---|---|
+| `auth-login-light.png` | `LOGIN` button | `#ffffff` ×6 | `#ffffff` ×6 |
+| `file-manager-light.png` | `Add New` button | `#fbfcfc`, then `#ffffff` ×5 | `#ffffff` ×6 |
+| `tables-datatable-light-pagination.png` | active `Tables` nav item | clean, no falloff | — |
+
+Not a trace of a shadow. **The 69 `box-shadow: none` / `none!important` rules win** — which is what
+"the theme removes shadows more than it adds them" means in practice, and the row count in the table
+above should be read that way rather than as eight shadows in use.
+
+**The general lesson, which § Neutrals & Surfaces — Dark already states: where the CSS and the pixels
+disagree, the pixels win.** A declaration in a 1.3 MB minified stylesheet is not evidence that it
+reaches the screen. There is no `boxShadow.brand` token in `tailwind.config.ts` as a result, and the
+config carries a comment saying why so nobody re-adds it from the CSS.
+
 ---
 
 ## 🔐 Login Screen Anatomy — the URL the owner shared

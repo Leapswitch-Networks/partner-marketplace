@@ -9,6 +9,7 @@ import { ThemeToggle } from "@/components/common/ThemeToggle";
 import useNavigation from "@/lib/hooks/useNavigation";
 import NavTree from "@/components/dashboard/NavTree";
 import type { NavigationSection } from "@/types";
+import SidebarProfile from "@/components/dashboard/SidebarProfile";
 
 export type AdminSection =
   | "dashboard"
@@ -89,45 +90,70 @@ function Tooltip({ label, children }: { label: string; children: React.ReactNode
 }
 
 // ── NavButton (expanded sidebar) ──────────────────────────────────────────────
+/**
+ * A nav row, matched to `dashboard-default-light-top.png`.
+ *
+ * Three corrections against the first attempt, all from measuring the reference
+ * rather than reading the CSS:
+ *
+ *  - **The icon is bare.** Viho does not put nav icons in a tinted tile; it is an
+ *    outline glyph sitting directly on the row. The tile made every row look like
+ *    a button.
+ *  - **No shadow on the active row.** Sampled directly beneath the filled
+ *    "Tables" item in `tables-datatable-light-pagination.png`: clean white, no
+ *    falloff. Viho removes shadows far more than it adds them.
+ *  - **A chevron, not a dot.** Expandable rows get a chevron that points right
+ *    when closed and down when open. The pulsing dot was invented.
+ */
 function NavButton({
   active,
   onClick,
   icon,
   label,
   large,
+  expandable = false,
+  expanded = false,
 }: {
   active: boolean;
   onClick: () => void;
   icon: React.ReactNode;
   label: string;
   large?: boolean;
+  expandable?: boolean;
+  expanded?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`group relative flex w-full items-center gap-3 rounded-[9px] px-3 font-semibold transition-all duration-200 overflow-hidden ${
+      className={`group flex w-full items-center gap-3 rounded-[10px] px-4 font-semibold transition-colors ${
         large ? "py-3 text-base" : "py-2.5 text-sm"
       } ${
         active
-          ? "bg-brand text-white shadow-brand"
-          : "text-gray-700 hover:bg-brand/10 hover:text-brand dark:text-gray-300 dark:hover:bg-brand/20 dark:hover:text-brand-on-dark"
+          ? "bg-brand text-white"
+          : "text-ink hover:bg-brand/10 hover:text-brand dark:text-gray-200 dark:hover:bg-brand/20 dark:hover:text-brand-on-dark"
       }`}
     >
       <span
-        className={`flex shrink-0 items-center justify-center rounded-[5px] transition-all duration-200 ${
-          large ? "h-10 w-10" : "h-8 w-8"
-        } ${
-          active
-            ? "bg-white/20 text-white"
-            : "bg-gray-100 text-gray-500 group-hover:bg-brand/10 group-hover:text-brand dark:bg-gray-700 dark:text-gray-400 dark:group-hover:bg-brand/20 dark:group-hover:text-brand-on-dark"
-        }`}
+        className={`flex shrink-0 items-center justify-center transition-colors ${
+          large ? "h-6 w-6" : "h-5 w-5"
+        } ${active ? "text-white" : "text-ink dark:text-gray-300"}`}
       >
         {icon}
       </span>
-      <span className="truncate relative z-10">{label}</span>
-      {active && (
-        <span className="ml-auto h-2 w-2 rounded-full bg-white/70" />
+      <span className="truncate">{label}</span>
+      {expandable && (
+        <svg
+          className={`ml-auto h-4 w-4 shrink-0 transition-transform duration-200 ${
+            expanded ? "rotate-90" : ""
+          } ${active ? "text-white" : "text-ink-muted dark:text-night-muted"}`}
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+        </svg>
       )}
     </button>
   );
@@ -437,8 +463,9 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
               </button>
             </div>
 
+            <SidebarProfile />
             <nav className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-hide scroll-smooth px-3 py-4 space-y-1">
-              <p className="mb-1 border-b border-surface-border px-3 pb-2 text-[10px] font-semibold uppercase tracking-widest text-brand dark:border-night-border dark:text-night-muted">
+              <p className="mb-2 mt-6 border-b border-surface-border px-4 pb-2 text-[17px] font-semibold text-brand first:mt-2 dark:border-night-border dark:text-brand-on-dark">
                 Administration
               </p>
               <NavItems {...navItemsProps} collapsed={false} />
@@ -453,7 +480,7 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
 
       {/* ── Desktop / tablet sidebar (hidden below md) ── */}
       <aside
-        className={`hidden md:flex flex-col shrink-0 bg-white border-r border-surface-border h-screen transition-[width] duration-300 ease-in-out 2xl:transition-none shadow-sm dark:bg-night-card dark:border-night-border animate-slide-in-left ${
+        className={`hidden md:flex flex-col shrink-0 bg-white border-r border-surface-border h-screen transition-[width] duration-300 ease-in-out 2xl:transition-none dark:bg-night-card dark:border-night-border animate-slide-in-left ${
           collapsed
             ? "w-[68px]"
             : "w-64 2xl:w-72"
@@ -463,7 +490,7 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
           <button
             type="button"
             onClick={() => onNavigate("dashboard")}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[5px] bg-brand text-sm font-bold text-white transition-all duration-200 hover:bg-brand-dark hover:shadow-md 2xl:h-10 2xl:w-10 2xl:text-base"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[5px] bg-brand text-sm font-bold text-white transition-colors duration-200 hover:bg-brand-dark 2xl:h-10 2xl:w-10 2xl:text-base"
             title="Dashboard"
           >
             P
@@ -509,9 +536,10 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
           </div>
         )}
 
+        <SidebarProfile collapsed={collapsed} />
         <nav className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-hide scroll-smooth px-3 py-4 space-y-1 2xl:py-5 2xl:space-y-1.5">
           {!collapsed && (
-            <p className="mb-1 border-b border-surface-border px-3 pb-2 text-[10px] font-semibold uppercase tracking-widest text-brand dark:border-night-border dark:text-night-muted">
+            <p className="mb-2 mt-6 border-b border-surface-border px-4 pb-2 text-[17px] font-semibold text-brand first:mt-2 dark:border-night-border dark:text-brand-on-dark">
               Administration
             </p>
           )}

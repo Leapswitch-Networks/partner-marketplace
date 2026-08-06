@@ -73,6 +73,34 @@ since 2026-07-31 — only the documentation was wrong, and wrong in a way that b
 | [PM-35](#pm-35--email-verification-is-not-enforced-anywhere--resolved) | ✅ | ~~Email verification not enforced~~ | Auth |
 | [PM-36](#pm-36--every-emailed-link-landed-on-a-404--resolved) | ✅ | ~~Every emailed link landed on a 404~~ | Frontend |
 
+### PM-37 onwards live in a separate file
+
+**Added 2026-08-06.** A code-first audit of the *platform layer* — as opposed to the auth features this
+register grew up around — found eight items. They are tracked in
+[`CORE_HARDENING_PLAN.md`](./CORE_HARDENING_PLAN.md) rather than here, because they share a cause and
+an ordering that only reads correctly together.
+
+| ID | Sev | Title | Status |
+|----|:---:|-------|--------|
+| PM-37 | 🔴 | No environment concept — every deployment-safety rule unenforced | ✅ closed 2026-08-06 |
+| PM-38 | 🟠 | No transaction boundary: 49 commits, a session that never rolls back | ✅ closed 2026-08-06 |
+| PM-39 | 🟠 | Nothing mechanical verifies anything — no tests, no CI | ⏳ floor laid 2026-08-06 |
+| PM-40 | 🟠 | 56 routes are unversioned | Open |
+| PM-41 | 🟠 | The frontend has no data layer and does no server-side fetching | Open |
+| PM-42 | 🟡 | The API contract is hand-copied into TypeScript | Open |
+| PM-43 | 🟡 | Two purge functions exist and nothing runs them | Open |
+| PM-44 | 🟡 | Three pieces of state live in process memory | Open |
+
+**Two of those change how items already in this register should be read:**
+
+- **PM-41 is PM-30's cause.** The 20 react-hooks errors are not a lint problem and not only a
+  consequence of PM-25. Every one is the fetch-on-mount pattern, which is what a codebase does when it
+  has no data-fetching layer — so the count rises with every new client component regardless of which
+  way the React/Next version decision goes.
+- **PM-39 partially discharges PM-11.** 74 tests and a CI workflow now exist. PM-11 stays open: this is
+  a floor over three properties, not coverage, and it does not touch RBAC enforcement across the 56
+  routes — which is the suite **PM-5** will need before it can be trusted.
+
 ---
 
 ## 🔴 Blockers

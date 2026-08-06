@@ -99,7 +99,6 @@ Defined in `tailwind.config.ts`. **Viho tokens as of 2026-08-05** — every valu
 | `ink` `-label` `-muted` | `#242934` `#59667a` `#6b7280` | Text. `muted` is **ours** — Viho's `#999` is 2.85:1 and fails AA |
 | `night-body` `-card` `-border` `-muted` | `#202938` `#111727` `#142831` `#98a6ad` | Dark surfaces. **`card` is darker than `body` on purpose** |
 | `tone-success` `-danger` `-warning` `-info` `-light` `-dark` | `#1b4c43` `#d22d3d` `#e2c636` `#717171` `#e6edef` `#2c323f` | The six semantic tones, which double as Viho's categorical palette |
-| `shadow-brand` | `0 5px 10px 2px rgba(36,105,92,.19)` | Viho tints shadows with the brand, not black |
 
 Usage: `bg-brand`, `text-brand`, `border-brand`, `hover:bg-brand-dark`, `focus:ring-brand`.
 
@@ -268,7 +267,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 | Prop | Default | Behaviour |
 |------|---------|-----------|
-| `variant` | `"primary"` | `primary` = filled brand + `shadow-brand`; `outline` = brand border, transparent fill; `light` = Viho's `.btn-primary-light`, brand@10% fill that inverts to solid brand on hover |
+| `variant` | `"primary"` | `primary` = filled brand, no shadow; `outline` = brand border, transparent fill; `light` = Viho's `.btn-primary-light`, brand@10% fill that inverts to solid brand on hover |
 | `loading` | `false` | Renders a spinner **and** sets `disabled` |
 | `fullWidth` | `false` | Adds `w-full` |
 
@@ -280,6 +279,11 @@ text-sm font-semibold transition-colors
 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand
 disabled:cursor-not-allowed disabled:opacity-60
 ```
+
+**No shadow.** `app.css` declares a brand-tinted `box-shadow` for `.btn-primary`, and it was applied
+here at first — but it does not render. Pixels directly below and beside real Viho buttons are pure
+`#ffffff`. Viho separates with borders, not elevation, and there is deliberately **no `shadow-brand`
+token** to reach for. See `../design/VIHO_THEME_REFERENCE.md` § Elevation → Correction 2026-08-06.
 
 **Radius is `rounded-[5px]`, not `rounded-lg`.** Viho's system is squared *surfaces* with rounded
 *controls*, so a control keeping its curve is the rule, not an exception. Padding `px-7 py-1.5`
@@ -343,6 +347,31 @@ otherwise it trades a spinner for layout shift.
 
 `components/common/ThemeToggle.tsx`, backed by `lib/hooks/useTheme.ts`. Place it in a nav/header;
 there should be exactly one per page.
+
+---
+
+## Sidebar Anatomy
+
+Matched to `dashboard-default-light-top.png` / `dashboard-default-dark.png` on 2026-08-06.
+
+| Region | Treatment |
+|--------|-----------|
+| Surface | `bg-white` / `dark:bg-night-card`, right border, **no shadow** |
+| Logo row | Brand tile + wordmark, collapse toggle on the right |
+| **Profile block** | `SidebarProfile` — avatar in a `bg-brand/10` ring, a solid status pill overlapping its base, name in **brand colour**, muted secondary line, and a **three-up stat row** divided by hairline vertical rules, with a gear link floated top-right |
+| **Section heading** | `text-[17px] font-semibold text-brand`, **sentence case**, hairline rule beneath. **Not** a 10px uppercase micro-label, and **not** clickable |
+| Nav item | **Bare outline icon** (never in a tinted tile) + bold label, `rounded-[10px]` |
+| Nav item — active | Solid `bg-brand`, white text and icon, **no shadow** |
+| Nav item — hover | `bg-brand/10` + `text-brand` |
+| Nav item — expandable | Chevron on the right, rotating 90° when open |
+
+Two rules that are easy to get wrong, both corrected after a render:
+
+1. **Chevrons belong to nav items, not section headings.** Sections are inert labels whose items are
+   always visible; a collapsible heading is indistinguishable from a static one at this type size, and
+   it hid a whole group behind a chevron on first load.
+2. **Viho's three profile stats are `Follow` / `Experience` / `Follower`.** We have no source for those,
+   so the slots carry role, join year and status. Keep the composition; never invent the figures.
 
 ---
 
