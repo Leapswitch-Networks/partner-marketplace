@@ -383,18 +383,22 @@ placeholder, no border and no fill), then the action cluster, then a tinted `Log
 
 | Control | State |
 |---------|-------|
-| Search | **Disabled** — Global Search is an unbuilt parity module |
 | Fullscreen | **Real** — Fullscreen API |
-| Language · Bookmarks · Messages | **Disabled** — no such features |
-| Notifications | **Disabled.** Viho shows a red unread dot; ours does not — a badge that can never clear is worse than no badge |
 | Dark mode | **Real** — the `useTheme` cycle |
 | `Log out` | **Real.** `bg-brand/10` + brand text + brand icon — Viho's `.btn-primary-light` |
 | Account menu | Ours, not Viho's. Profile needs a home now the sidebar footer is gone |
 
-**Rule: a decorative control must announce itself.** The dead icons are `aria-disabled` with a
-"— coming soon" title so keyboard and screen-reader users are told rather than left clicking nothing.
-Each becomes live in place when its feature lands. They exist because the owner asked for the theme's
-full action row; that is a deliberate trade, not an oversight.
+### 🔴 Only render a control that does something
+
+Viho's row also has search, language, bookmarks, notifications and messages. All five were built,
+greyed out and `aria-disabled` — and then **removed on the owner's instruction**, which was right. A
+permanently dead control is not a placeholder, it is noise that teaches people to ignore that corner of
+the screen, and greying it out advertises the absence rather than hiding it.
+
+**Add each one back here, live, when its feature lands.** The full row is recorded in
+`../design/VIHO_THEME_REFERENCE.md` § Dashboard Shell so nothing is lost. Viho's bell also carries a red
+unread dot; it stays unimplemented for the same reason — a badge that can never clear is worse than no
+badge.
 
 ---
 

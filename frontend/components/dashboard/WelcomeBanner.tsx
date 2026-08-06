@@ -1,8 +1,10 @@
 "use client";
 
 import useAppSelector from "@/lib/hooks/useAppSelector";
+import { useBranding } from "@/components/common/BrandingProvider";
 
 export default function WelcomeBanner() {
+  const branding = useBranding();
   const user = useAppSelector((s) => s.auth.user);
   const displayName = "full_name" in (user ?? {}) ? (user as { full_name: string }).full_name : (user as { name?: string } | null)?.name ?? "Admin";
   const firstName = displayName.split(" ")[0];
@@ -47,7 +49,7 @@ export default function WelcomeBanner() {
           </div>
           <div className="inline-flex items-center gap-1 rounded-full bg-white/15 px-3 py-1.5 text-xs font-medium backdrop-blur">
             <span>⚡</span>
-            <span>Partner Marketplace</span>
+            <span>{branding.app_name}</span>
           </div>
         </div>
       </div>

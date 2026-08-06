@@ -15,6 +15,7 @@ Add every new model to this list.
 """
 
 from app.models.activity_log import ActivityLog
+from app.models.app_settings import AppSettings
 from app.models.associations import role_permissions, user_roles
 from app.models.permission import Permission
 from app.models.permission_group import PermissionGroup
@@ -34,5 +35,6 @@ __all__ = [
     "ActivityLog",
     "user_roles",
     "role_permissions",
-    # Inherited test-platform domain (SCAFFOLD_CLEANUP_PLAN § 2)
+    # Installation settings (DYNAMIC_BRANDING_PLAN phase 1)
+    "AppSettings",
 ]

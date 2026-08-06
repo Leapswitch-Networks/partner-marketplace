@@ -8,6 +8,8 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
+# `settings` is aliased because `app.api.settings` (the router module) and
+# `app.core.config.settings` (the config object) would otherwise collide here.
 from app.api import (
     activity,
     auth,
@@ -16,6 +18,7 @@ from app.api import (
     navigation,
     permissions,
     roles,
+    settings as settings_api,
     users,
 )
 from app.core.config import settings
@@ -29,7 +32,10 @@ configure_logging()
 
 logger = logging.getLogger("app")
 
-app = FastAPI(title="Partner Marketplace API", version="1.0.0")
+# Title comes from configuration so a project built on this core renames its own
+# API docs by setting APP_NAME, rather than editing this line. Not read from the
+# database: the app object is built at import time, before a session exists.
+app = FastAPI(title=f"{settings.APP_NAME} API", version="1.0.0")
 
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 
@@ -137,7 +143,7 @@ app.include_router(navigation.router, prefix="/api")
 app.include_router(permissions.router, prefix="/api")
 app.include_router(invitations.router, prefix="/api")
 app.include_router(activity.router, prefix="/api")
-# Inherited test-platform domain — gated but scheduled for removal.
+app.include_router(settings_api.router, prefix="/api")
 
 
 @app.get("/health", tags=["health"])

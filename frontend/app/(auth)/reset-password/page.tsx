@@ -1,8 +1,9 @@
 import { Metadata } from "next";
 import ResetPasswordClient from "@/components/auth/ResetPasswordClient";
+import { pageTitle } from "@/lib/utils/constants";
 
 export const metadata: Metadata = {
-  title: "Choose a new password — Partner Marketplace",
+  title: pageTitle("Choose a new password"),
   // The URL carries a live credential. Never index it.
   robots: { index: false, follow: false },
 };

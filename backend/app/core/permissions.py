@@ -70,6 +70,16 @@ ACTIVITY_VIEW = "activity-view"
 # Dashboard
 DASHBOARD_VIEW = "dashboard-view"
 
+# Application settings — project identity (DYNAMIC_BRANDING_PLAN phase 1)
+#
+# ⚠️ Listing this in the catalog does NOT make it super-admin-only. ROLE_ADMIN is
+# `"*"` in ROLE_PERMISSION_MATRIX below, so every permission added here is granted
+# to Admin on the next seed — the same consequence PM-32 hit with `activity-view`.
+# The write routes are therefore gated on `require_super_admin` as well, and that
+# guard is the actual control. The permission exists so the capability is visible
+# in the catalog and on the role permissions page.
+SETTINGS_MANAGE = "settings-manage"
+
 
 
 
@@ -133,6 +143,14 @@ PERMISSION_CATALOG: dict[str, tuple[str, int, str, list[tuple[str, str]]]] = {
         "core",
         [
             (ACTIVITY_VIEW, "View the activity log"),
+        ],
+    ),
+    "settings": (
+        "Application Settings",
+        70,
+        "core",
+        [
+            (SETTINGS_MANAGE, "Change the application's name, monogram and branding"),
         ],
     ),
 }

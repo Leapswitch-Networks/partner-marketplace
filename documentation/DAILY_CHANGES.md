@@ -8,6 +8,78 @@
 
 ---
 
+## August 6, 2026 — Design for making project identity configurable, so the core is reusable
+
+**The owner asked whether the project name, icon and favicon could be driven from a Settings module in
+the sidebar, so this core can be the foundation for future projects.** The answer is yes, and the design
+is in [`planning/DYNAMIC_BRANDING_PLAN.md`](./planning/DYNAMIC_BRANDING_PLAN.md). **No code changed** —
+this is design, and two of the four phases need decisions that are not mine to make.
+
+**34 hardcoded sites**, measured: 26 in the frontend across 20 files, 8 in the backend. But they split
+into four groups that behave completely differently, and that split is the whole finding:
+
+| Group | Count | Can it be runtime-dynamic? |
+|---|---:|---|
+| In-app chrome — `Sidebar` ×3, `Navbar`, `WelcomeBanner` | 5 | **Free** — already client components fed by an API call |
+| Anonymous chrome — the auth layout's name + tagline | 2 | Free, but needs a **public** endpoint |
+| Document metadata — 16 × `export const metadata` + `app/favicon.ico` | 17 | **Expensive** — see below |
+| Backend text — FastAPI title, 5 × `mail_service`, 2 config defaults | 8 | Trivial |
+
+Also easy to miss, and part of identity: the **`"P"` monogram** (3 places in `Sidebar.tsx`), the
+**`"Admin Panel"` subtitle** (2 places), and the auth tagline *"One place to manage partners, catalogue
+and quotes"* — which is product copy that a reused core would be **lying about**.
+
+**The trap the naive design walks into.** Measured from `npm run build`: **15 routes are prerendered
+static, 3 dynamic.** `export const metadata` is a static export and cannot read a database — making it
+dynamic means `generateMetadata()`, which **converts all 15 to server-rendered-on-demand**, adding a
+round trip per page view to render a `<title>`. So "one settings table, everything reads from it" pays
+the largest cost in the design to make the least valuable thing on the list editable.
+
+**The recommendation is to split by surface, not by setting.** Env vars are the source of truth at build
+time and the fallback before the database is seeded (which matters — the sign-in page must render on a
+fresh install); the database overrides only the surfaces that are *already* dynamic. Groups A and B are
+rendered by client components that already fetch from the API, so adding branding costs **one extra
+field on a request already being made.** Group C stays on `NEXT_PUBLIC_APP_NAME` — free, still
+prerendered, and correct for a reusable core since a new project rebuilds anyway.
+
+**Five constraints found by reading the code, not assuming:**
+
+- **Branding must be readable anonymously**, so it **cannot** ride on `GET /api/navigation` — that
+  endpoint is gated on `get_current_user`, and the sign-in page and favicon are seen before any session.
+- **The favicon is an App Router file convention** (`app/favicon.ico`, 25,931 bytes), baked at build.
+  Making it dynamic means deleting it and pointing `metadata.icons` at a route. Verified from the
+  installed types — and **`node_modules/next/dist/docs/` does not exist in `next@14.2.35`**, so
+  `AGENTS.md`'s instruction to read it cannot be followed literally (the same finding as PM-19).
+- **There is no upload infrastructure at all** — no `StaticFiles` mount, no upload endpoint, and
+  `users.profile_photo_path` is a dead column. Recommended storage is Postgres `bytea`: two rows that
+  change once a year, no new infrastructure, included in the backup. The usual "don't put files in the
+  database" objection is about user-generated volume, which this is not.
+- **Brand colour is compile-time hex in `tailwind.config.ts`** — `UI_PATTERNS.md` says so outright. The
+  2026-08-05 token migration **pre-paid** for fixing this: all 242 call sites already say `bg-brand`, so
+  converting the token to a CSS custom property leaves them untouched. But `tailwind.config.ts` is a
+  **protected file**, so that phase needs sign-off.
+- **A free-form colour picker would silently break accessibility.** `brand-on-dark` is a 🔴 mandatory
+  rule with measured ratios — `#24695c` on the dark card is **2.83:1, fails AA**; `#5ec8b4` is 9.03:1.
+  A picker that sets `--brand` and not `--brand-on-dark` reproduces the exact bug that shipped and was
+  fixed on 2026-08-05. **Recommendation: curated presets with both tokens measured, not a colour wheel.**
+
+**One more trap, verified in `core/permissions.py:143`:** `ROLE_PERMISSION_MATRIX` has
+`ROLE_ADMIN: "*"`, so adding a `settings-manage` permission to the catalog **grants it to every Admin on
+the next seed** — PM-32 hit this same consequence with `activity-view`. Gate the route on
+`require_super_admin` instead. Worth raising separately: `"*"` means every permission added from now on
+silently widens what an Admin can do.
+
+**Phases 1 and 2 — text identity via a single-row `app_settings` table with env fallbacks, and the 16
+metadata literals to a build-time constant — need no decisions and touch no protected files.** Those are
+the ones to build. Phase 3 (theme presets) needs `tailwind.config.ts` sign-off; phase 4 (logo/favicon
+upload) needs the storage decision that `DEPLOYMENT.md` § 1 has not made.
+
+**Explicitly not designed in:** a tenant dimension. Reusing the core means a separate deployment and
+database per project, so one row is right. Adding `tenant_id` "just in case" costs complexity now and
+still would not be enough for real multi-tenancy later.
+
+---
+
 ## August 6, 2026 — Every core doc now ends with a Pending section, and the audit found them stale
 
 **Each of the nine live core documents now carries a `## Pending` section at the end** — the outstanding
@@ -170,7 +242,14 @@ first thing written on top of an unversioned API with no generated contract.
 - **The header is now Viho's, action for action.** Bare search on the left — magnifier and placeholder,
   no border, no fill — then fullscreen, language, bookmarks, notifications, dark mode and messages,
   then a tinted `Log out` in `bg-brand/10` with brand text, which is the theme's `.btn-primary-light`.
-- **Six of those eight controls have no feature behind them**, and that is stated rather than hidden:
+- **Six of those eight controls had no feature behind them, and were then removed.** They were first
+  shipped greyed out and `aria-disabled`; the owner had them taken out the same day, which is the
+  better call — a permanently dead control is noise that teaches people to ignore that corner of the
+  screen, and greying it out advertises the absence rather than hiding it. **What ships is fullscreen,
+  dark mode, log out and the account menu**; search, language, bookmarks, notifications and messages
+  are gone until their features exist. The full row stays recorded in the reference doc.
+
+  The original inventory, for the record:
 
   | Control | Real? |
   |---|---|

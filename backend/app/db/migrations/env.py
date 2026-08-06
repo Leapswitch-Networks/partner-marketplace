@@ -20,7 +20,8 @@ import app.models.user_invitation  # noqa: F401
 import app.models.user_session  # noqa: F401
 import app.models.activity_log  # noqa: F401
 
-# Inherited test-platform domain — see SCAFFOLD_CLEANUP_PLAN § 2
+# Installation settings — see DYNAMIC_BRANDING_PLAN.md
+import app.models.app_settings  # noqa: F401
 
 config = context.config
 

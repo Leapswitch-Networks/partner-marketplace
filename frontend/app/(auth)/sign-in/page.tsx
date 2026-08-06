@@ -1,8 +1,9 @@
 import { Metadata } from "next";
 import AuthHub from "@/components/auth/AuthHub";
+import { pageTitle } from "@/lib/utils/constants";
 
 export const metadata: Metadata = {
-  title: "Sign In — Partner Marketplace",
+  title: pageTitle("Sign In"),
 };
 
 export default function SignInPage() {

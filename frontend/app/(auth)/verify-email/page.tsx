@@ -1,8 +1,9 @@
 import { Metadata } from "next";
 import VerifyEmailClient from "@/components/auth/VerifyEmailClient";
+import { pageTitle } from "@/lib/utils/constants";
 
 export const metadata: Metadata = {
-  title: "Confirm your email — Partner Marketplace",
+  title: pageTitle("Confirm your email"),
   // Emailed links should never be indexed: the URL contains a token.
   robots: { index: false, follow: false },
 };

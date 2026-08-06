@@ -1,9 +1,10 @@
 import { Metadata } from "next";
 import AppearanceTabs from "@/components/settings/AppearanceTabs";
+import { APP_NAME, pageTitle } from "@/lib/utils/constants";
 
 export const metadata: Metadata = {
-  title: "Appearance settings — Partner Marketplace",
-  description: "Choose how Partner Marketplace looks",
+  title: pageTitle("Appearance settings"),
+  description: `Choose how ${APP_NAME} looks`,
 };
 
 export default function AppearanceSettingsPage() {

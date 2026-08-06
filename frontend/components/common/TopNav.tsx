@@ -11,31 +11,26 @@ import { getRoleLabel, getUserDisplayName } from "@/lib/utils/user";
 /**
  * The dashboard top bar — Viho's `.page-main-header`.
  *
- * Rebuilt 2026-08-06 against `dashboard-default-light-top.png`, which has, left
- * to right: a **bare search** (magnifier + placeholder, no bordered input and no
- * fill), then the action cluster — fullscreen, language, bookmark, notifications,
- * dark mode, chat — and finally a **tinted `Log out` button**: `bg-brand/10` with
- * brand text and a brand icon, which is Viho's `.btn-primary-light` pattern.
+ * Built against `dashboard-default-light-top.png`, whose action row is
+ * fullscreen · language · bookmarks · notifications · dark mode · messages, then
+ * a tinted `Log out` — `bg-brand/10` with brand text and icon, which is Viho's
+ * `.btn-primary-light` pattern. **Sign-out lives here, not in the sidebar
+ * footer**, matching the theme.
  *
- * **Sign-out lives here now, not in the sidebar footer**, matching the theme.
+ * **Only the controls that do something are rendered.** The first pass included
+ * the theme's full row, greying out the six with no feature behind them; the
+ * owner had them removed, which is the better call — a permanently dead control
+ * is visual noise that teaches users to ignore that corner of the screen. Gone
+ * with them: the bare search (Global Search is an unbuilt parity module),
+ * language, bookmarks, notifications and messages.
  *
- * Honest inventory, because most of these icons decorate features we do not have:
+ * So what remains is real: **fullscreen**, **dark mode**, **log out**, and the
+ * account menu. Add each of the others back here, live, when its feature lands —
+ * `VIHO_THEME_REFERENCE.md` § Dashboard Shell records the full row.
  *
- * | Icon | Real behaviour |
- * |---|---|
- * | Search | **Disabled.** Global Search is an unbuilt LEAPDESK_PARITY_PLAN module |
- * | Fullscreen | **Real** — toggles the Fullscreen API |
- * | Language | Disabled — English only |
- * | Bookmarks | Disabled — no such feature |
- * | Notifications | Disabled. **The theme's red unread dot is deliberately omitted**: a badge that can never clear is worse than no badge. It returns with the feature |
- * | Dark mode | **Real** — same `useTheme` cycle as `ThemeToggle` |
- * | Messages | Disabled — no such feature |
- * | Log out | **Real** |
- *
- * The dead ones are `aria-disabled` with a "coming soon" title so keyboard and
- * screen-reader users are told rather than left guessing, and each becomes live
- * in place when its feature lands. They are rendered because the owner asked for
- * the theme's full action row.
+ * Viho's bell also carries a red unread dot. It is not reproduced, and would not
+ * have been even if the bell had stayed: a badge that can never clear is worse
+ * than no badge.
  */
 
 const ICON = "h-[22px] w-[22px]";
@@ -43,26 +38,19 @@ const ICON = "h-[22px] w-[22px]";
 function HeaderIcon({
   label,
   onClick,
-  disabled = false,
   children,
 }: {
   label: string;
-  onClick?: () => void;
-  disabled?: boolean;
+  onClick: () => void;
   children: React.ReactNode;
 }) {
   return (
     <button
       type="button"
-      onClick={disabled ? undefined : onClick}
+      onClick={onClick}
       aria-label={label}
-      aria-disabled={disabled || undefined}
-      title={disabled ? `${label} — coming soon` : label}
-      className={`flex h-10 w-10 items-center justify-center rounded-full text-ink transition-colors focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 dark:text-gray-200 ${
-        disabled
-          ? "cursor-default opacity-45"
-          : "hover:bg-brand/10 hover:text-brand dark:hover:bg-brand/20 dark:hover:text-brand-on-dark"
-      }`}
+      title={label}
+      className="flex h-10 w-10 items-center justify-center rounded-full text-ink transition-colors hover:bg-brand/10 hover:text-brand focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 dark:text-gray-200 dark:hover:bg-brand/20 dark:hover:text-brand-on-dark"
     >
       {children}
     </button>
@@ -120,52 +108,11 @@ export default function TopNav() {
   }, []);
 
   return (
-    <header className="hidden h-16 shrink-0 items-center gap-2 border-b border-surface-border bg-white px-4 sm:px-6 md:flex lg:px-8 dark:border-night-border dark:bg-night-card">
-      {/* Bare search — no border, no fill, exactly as the theme renders it. */}
-      <div className="flex min-w-0 flex-1 items-center gap-3">
-        <svg
-          className="h-5 w-5 shrink-0 text-ink dark:text-gray-300"
-          fill="none"
-          viewBox="0 0 24 24"
-          stroke="currentColor"
-          strokeWidth={2}
-          aria-hidden="true"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z" />
-        </svg>
-        <input
-          type="search"
-          disabled
-          aria-label="Search (coming soon)"
-          title="Search — coming soon"
-          placeholder="Search.."
-          className="w-full max-w-md cursor-default border-0 bg-transparent p-0 text-sm text-ink placeholder:text-ink-muted focus:outline-none focus:ring-0 dark:text-white dark:placeholder:text-night-muted"
-        />
-      </div>
-
+    <header className="hidden h-16 shrink-0 items-center justify-end gap-2 border-b border-surface-border bg-white px-4 sm:px-6 md:flex lg:px-8 dark:border-night-border dark:bg-night-card">
       <div className="flex shrink-0 items-center gap-0.5">
         <HeaderIcon label="Fullscreen" onClick={toggleFullscreen}>
           <svg className={ICON} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M4 9V5a1 1 0 011-1h4M20 9V5a1 1 0 00-1-1h-4M4 15v4a1 1 0 001 1h4M20 15v4a1 1 0 01-1 1h-4" />
-          </svg>
-        </HeaderIcon>
-
-        <HeaderIcon label="Language" disabled>
-          <svg className={ICON} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-            <circle cx="12" cy="12" r="9" />
-            <path strokeLinecap="round" d="M3 12h18M12 3a15 15 0 010 18M12 3a15 15 0 000 18" />
-          </svg>
-        </HeaderIcon>
-
-        <HeaderIcon label="Bookmarks" disabled>
-          <svg className={ICON} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M11.48 3.5l2.2 4.46 4.92.72-3.56 3.47.84 4.9-4.4-2.31-4.4 2.31.84-4.9L4.36 8.68l4.92-.72 2.2-4.46z" />
-          </svg>
-        </HeaderIcon>
-
-        <HeaderIcon label="Notifications" disabled>
-          <svg className={ICON} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.4-1.4A2 2 0 0118 14.2V11a6 6 0 10-12 0v3.2a2 2 0 01-.6 1.4L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
           </svg>
         </HeaderIcon>
 
@@ -183,12 +130,6 @@ export default function TopNav() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
             </svg>
           )}
-        </HeaderIcon>
-
-        <HeaderIcon label="Messages" disabled>
-          <svg className={ICON} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4 5h16a1 1 0 011 1v9a1 1 0 01-1 1H9l-5 4V6a1 1 0 011-1z" />
-          </svg>
         </HeaderIcon>
 
         {/* Viho's btn-primary-light: tinted brand fill, brand text, no border. */}

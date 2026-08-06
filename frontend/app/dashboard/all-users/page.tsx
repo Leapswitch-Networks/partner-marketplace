@@ -1,9 +1,10 @@
 import { Metadata } from "next";
 import DashboardClient from "../DashboardClient";
+import { APP_NAME, pageTitle } from "@/lib/utils/constants";
 
 export const metadata: Metadata = {
-  title: "All Users — Partner Marketplace",
-  description: "Manage admin users on Partner Marketplace",
+  title: pageTitle("All Users"),
+  description: `Manage admin users on ${APP_NAME}`,
 };
 
 export default function AllUsersPage() {

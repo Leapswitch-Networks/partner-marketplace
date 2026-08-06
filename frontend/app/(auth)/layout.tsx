@@ -1,4 +1,5 @@
 import AuthArt from "@/components/auth/AuthArt";
+import { getBranding } from "@/lib/branding";
 
 /**
  * Auth shell — Viho's split-screen auth layout.
@@ -26,7 +27,9 @@ import AuthArt from "@/components/auth/AuthArt";
  * from the screenshots. It swaps per route, and a commissioned illustration can
  * replace it without touching this file.
  */
-export default function AuthLayout({ children }: { children: React.ReactNode }) {
+export default async function AuthLayout({ children }: { children: React.ReactNode }) {
+  const branding = await getBranding();
+
   return (
     <div className="flex min-h-screen">
       {/* Artwork panel — hidden until there is room for it.
@@ -49,10 +52,10 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           <AuthArt />
           <div className="mt-2 flex flex-col items-center text-center">
             <h2 className="text-[22px] font-semibold text-ink dark:text-white">
-              Partner Marketplace
+              {branding.app_name}
             </h2>
             <p className="mt-1 max-w-sm text-sm text-ink-muted dark:text-night-muted">
-              One place to manage partners, catalogue and quotes.
+              {branding.tagline}
             </p>
           </div>
         </div>

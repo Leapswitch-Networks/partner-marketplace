@@ -1,8 +1,9 @@
 import { Metadata } from "next";
 import ForgotPasswordClient from "@/components/auth/ForgotPasswordClient";
+import { pageTitle } from "@/lib/utils/constants";
 
 export const metadata: Metadata = {
-  title: "Reset your password — Partner Marketplace",
+  title: pageTitle("Reset your password"),
 };
 
 export default function ForgotPasswordPage() {

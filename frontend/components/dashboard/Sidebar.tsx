@@ -9,6 +9,7 @@ import { ThemeToggle } from "@/components/common/ThemeToggle";
 import useNavigation from "@/lib/hooks/useNavigation";
 import NavTree from "@/components/dashboard/NavTree";
 import type { NavigationSection } from "@/types";
+import { useBranding } from "@/components/common/BrandingProvider";
 
 export type AdminSection =
   | "dashboard"
@@ -279,6 +280,10 @@ const BottomExpanded = memo(function BottomExpanded({
 export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
   const router = useRouter();
   const dispatch = useAppDispatch();
+  // The three `branding.app_name` call sites below had the import but no hook
+  // call, which failed the type check. Runtime branding, so the sidebar name
+  // follows `/api/settings/branding` rather than a build-time constant.
+  const branding = useBranding();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobileVisible, setMobileVisible] = useState(false);
@@ -380,12 +385,12 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
           onClick={() => onNavigate("dashboard")}
           className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[5px] bg-brand text-sm font-bold text-white"
         >
-          P
+          {branding.monogram}
         </button>
         <div className="ml-2.5">
-          <p className="text-sm font-bold text-gray-900 leading-tight dark:text-white">Partner Marketplace</p>
+          <p className="text-sm font-bold text-gray-900 leading-tight dark:text-white">{branding.app_name}</p>
           <p className="text-[10px] font-medium text-brand dark:text-brand-on-dark uppercase tracking-widest leading-tight">
-            Admin Panel
+            {branding.chrome_subtitle}
           </p>
         </div>
         <div className="ml-auto flex items-center gap-1">
@@ -422,12 +427,12 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
                 onClick={() => onNavigate("dashboard")}
                 className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[5px] bg-brand text-sm font-bold text-white"
               >
-                P
+                {branding.monogram}
               </button>
               <div className="ml-2.5">
-                <p className="text-sm font-bold text-gray-900 leading-tight dark:text-white">Partner Marketplace</p>
+                <p className="text-sm font-bold text-gray-900 leading-tight dark:text-white">{branding.app_name}</p>
                 <p className="text-[10px] font-medium text-brand dark:text-brand-on-dark uppercase tracking-widest leading-tight">
-                  Admin Panel
+                  {branding.chrome_subtitle}
                 </p>
               </div>
               <button
@@ -471,7 +476,7 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[5px] bg-brand text-sm font-bold text-white transition-colors duration-200 hover:bg-brand-dark 2xl:h-10 2xl:w-10 2xl:text-base"
             title="Dashboard"
           >
-            P
+            {branding.monogram}
           </button>
 
           <div
@@ -479,9 +484,9 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
               collapsed ? "w-0 opacity-0" : "w-full opacity-100"
             }`}
           >
-            <p className="truncate text-sm font-bold text-gray-900 leading-tight 2xl:text-base dark:text-white">Partner Marketplace</p>
+            <p className="truncate text-sm font-bold text-gray-900 leading-tight 2xl:text-base dark:text-white">{branding.app_name}</p>
             <p className="truncate text-[10px] font-medium text-brand dark:text-brand-on-dark uppercase tracking-widest leading-tight">
-              Admin Panel
+              {branding.chrome_subtitle}
             </p>
           </div>
 

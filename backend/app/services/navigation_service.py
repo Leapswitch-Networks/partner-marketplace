@@ -29,6 +29,7 @@ from app.core.permissions import (
     ACTIVITY_VIEW,
     DASHBOARD_VIEW,
     ROLE_VIEW,
+    SETTINGS_MANAGE,
     USER_CREATE,
     USER_VIEW,
 )
@@ -158,11 +159,18 @@ def build_sections(user: User) -> list[dict[str, Any]]:
             "label": "System Settings",
             "key": "system-settings",
             "collapsible": True,
-            # Populated as the parity modules land — API Credentials, Invitations,
-            # Global Search, AI Assistant. An empty section is dropped by
-            # `filter_sections`, so this renders nothing until then rather than
-            # showing an empty heading.
-            "items": [],
+            # Filling up as the parity modules land — API Credentials, Invitations,
+            # Global Search, AI Assistant still to come. An empty section is dropped
+            # by `filter_sections`, so this rendered nothing until Branding arrived.
+            "items": [
+                # Gated on SETTINGS_MANAGE so the entry is hidden from anyone who
+                # cannot use it. Note the route itself is guarded by
+                # `require_super_admin` — because ROLE_ADMIN holds the `"*"`
+                # wildcard, this permission alone would show the link to every
+                # Admin, and they would reach a 403. Both layers are needed: this
+                # one for the nav, that one for the authorisation.
+                _item("Branding", "/settings/branding", "settings", SETTINGS_MANAGE),
+            ],
         },
     ]
 

@@ -73,6 +73,26 @@ class Settings(BaseSettings):
     # and the validator below refuses to boot on any unsafe default.
     APP_ENV: str = "development"
 
+    # --- Project identity (DYNAMIC_BRANDING_PLAN phase 1) --------------------
+    # These are the BUILD-TIME defaults and the fallback whenever `app_settings`
+    # is empty or a column is NULL. That fallback is load-bearing rather than
+    # defensive: a fresh install has no settings row, and the sign-in page still
+    # has to render a name.
+    #
+    # For a new project built on this core, setting these five is the whole job —
+    # no database write required. The Settings module then lets an administrator
+    # override them at runtime without a redeploy.
+    APP_NAME: str = "Partner Marketplace"
+    #: Shown where horizontal space is tight — the collapsed sidebar, narrow chrome.
+    APP_SHORT_NAME: str = "Partner MP"
+    #: The square badge beside the name. One or two characters; more will clip.
+    APP_MONOGRAM: str = "P"
+    #: The small uppercase line under the name in the sidebar.
+    APP_CHROME_SUBTITLE: str = "Admin Panel"
+    #: The sentence on the sign-in screen. This is product copy, not branding —
+    #: a reused core that keeps this default is describing a product it is not.
+    APP_TAGLINE: str = "One place to manage partners, catalogue and quotes."
+
     # --- Database -----------------------------------------------------------
     DATABASE_URL: str
 
@@ -184,7 +204,12 @@ class Settings(BaseSettings):
     # short enough that a leaked challenge token is nearly worthless.
     TWO_FACTOR_CHALLENGE_TTL_MINUTES: int = 5
     # Issuer shown in the authenticator app next to the account name.
-    TWO_FACTOR_ISSUER: str = "Partner Marketplace"
+    #
+    # Empty means "follow APP_NAME", resolved in model_post_init. A literal default
+    # here would put this project's name in the authenticator app of every project
+    # built on this core — and unlike most branding slips, that one is baked into
+    # already-enrolled devices and cannot be corrected without re-enrolment.
+    TWO_FACTOR_ISSUER: str = ""
 
     # --- Password confirmation ----------------------------------------------
     # How long a re-entered password authorises sensitive actions for. Laravel's
@@ -229,7 +254,8 @@ class Settings(BaseSettings):
     # logs. Listed in DEPLOYMENT § 0.
     MAIL_BACKEND: str = "console"
     MAIL_FROM: str = "no-reply@leapswitch.com"
-    MAIL_FROM_NAME: str = "Partner Marketplace"
+    #: Empty means "follow APP_NAME" — see TWO_FACTOR_ISSUER.
+    MAIL_FROM_NAME: str = ""
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587
     SMTP_USERNAME: str = ""
@@ -298,7 +324,16 @@ class Settings(BaseSettings):
 
         The flaw was that nothing knew which environment it was in, so nothing
         could object. This does.
+
+        Also resolves the two identity fields that default to APP_NAME. Done here
+        rather than as properties so `settings.TWO_FACTOR_ISSUER` keeps working at
+        its existing call site and nothing has to know the value is derived.
         """
+        if not self.TWO_FACTOR_ISSUER.strip():
+            self.TWO_FACTOR_ISSUER = self.APP_NAME
+        if not self.MAIL_FROM_NAME.strip():
+            self.MAIL_FROM_NAME = self.APP_NAME
+
         problems, warnings = self.audit_environment()
 
         for warning in warnings:

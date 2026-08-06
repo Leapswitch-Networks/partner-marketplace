@@ -1,8 +1,9 @@
 import { Metadata } from "next";
 import AcceptInvitationClient from "@/components/auth/AcceptInvitationClient";
+import { pageTitle } from "@/lib/utils/constants";
 
 export const metadata: Metadata = {
-  title: "Accept your invitation — Partner Marketplace",
+  title: pageTitle("Accept your invitation"),
   // The URL carries an invitation token. Never index it.
   robots: { index: false, follow: false },
 };
