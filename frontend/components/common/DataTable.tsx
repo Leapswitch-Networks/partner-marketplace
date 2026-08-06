@@ -212,7 +212,7 @@ export default function DataTable<T>({
             type="button"
             onClick={() => setColsOpen((o) => !o)}
             aria-expanded={colsOpen}
-            className="flex h-7 items-center gap-1 rounded-lg border border-gray-300 px-2 text-[11px] font-medium text-gray-600 transition-colors hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800"
+            className="flex h-7 items-center gap-1 rounded-[5px] border border-surface-border px-2 text-[11px] font-medium text-gray-600 transition-colors hover:bg-gray-50 dark:border-night-border dark:text-gray-400 dark:hover:bg-gray-800"
           >
             Cols
             <span className={`transition-transform ${colsOpen ? "rotate-180" : ""}`}>▾</span>
@@ -225,7 +225,7 @@ export default function DataTable<T>({
                 className="fixed inset-0 z-10 cursor-default"
                 onClick={() => setColsOpen(false)}
               />
-              <div className="absolute right-0 top-full z-20 mt-1 w-48 overflow-hidden rounded-xl border border-gray-200 bg-white py-1 shadow-lg dark:border-gray-700 dark:bg-gray-900">
+              <div className="absolute right-0 top-full z-20 mt-1 w-48 overflow-hidden rounded-[5px] border border-surface-border bg-white py-1 shadow-lg dark:border-night-border dark:bg-night-card">
                 {columns
                   .filter((c) => c.hideable !== false)
                   .map((c) => (
@@ -237,7 +237,7 @@ export default function DataTable<T>({
                         type="checkbox"
                         checked={!hidden.has(c.id)}
                         onChange={() => toggleHidden(c.id)}
-                        className="h-3.5 w-3.5 accent-[#F97316]"
+                        className="h-3.5 w-3.5 accent-brand"
                       />
                       <span className="truncate">
                         {typeof c.header === "string" ? c.header : c.id}
@@ -255,10 +255,10 @@ export default function DataTable<T>({
       <div
         ref={scrollRef}
         style={{ maxHeight }}
-        className="min-h-0 flex-1 overflow-auto rounded-xl border border-gray-200 scrollbar-thin dark:border-gray-800"
+        className="min-h-0 flex-1 overflow-auto rounded-[5px] border border-surface-border scrollbar-thin dark:border-night-border"
       >
         <table className="w-full border-collapse text-left text-xs 2xl:text-sm">
-          <thead className="sticky top-0 z-10 bg-blue-50 dark:bg-gray-800">
+          <thead className="sticky top-0 z-10 bg-brand/10 dark:bg-night-card">
             <tr>
               {selectable && (
                 <th className="w-8 px-2 py-2">
@@ -267,7 +267,7 @@ export default function DataTable<T>({
                     aria-label="Select all on this page"
                     checked={allOnPageSelected}
                     onChange={toggleAllOnPage}
-                    className="h-3.5 w-3.5 accent-[#F97316]"
+                    className="h-3.5 w-3.5 accent-brand"
                   />
                 </th>
               )}
@@ -284,7 +284,7 @@ export default function DataTable<T>({
                       <button
                         type="button"
                         onClick={() => handleSort(c)}
-                        className="inline-flex items-center gap-1 hover:text-[#F97316]"
+                        className="inline-flex items-center gap-1 hover:text-brand dark:hover:text-brand-on-dark"
                       >
                         {c.header}
                         <span className="text-[9px] text-gray-400">
@@ -303,7 +303,7 @@ export default function DataTable<T>({
           <tbody>
             {loading &&
               Array.from({ length: Math.min(perPage, 8) }).map((_, i) => (
-                <tr key={`sk-${i}`} className="border-t border-gray-100 dark:border-gray-800">
+                <tr key={`sk-${i}`} className="border-t border-surface-border dark:border-night-border">
                   {selectable && <td className="px-2 py-2" />}
                   {visible.map((c) => (
                     <td key={c.id} className="px-2 py-2">
@@ -319,8 +319,8 @@ export default function DataTable<T>({
                 return (
                   <tr
                     key={key}
-                    className={`border-t border-gray-100 transition-colors hover:bg-orange-50/40 dark:border-gray-800 dark:hover:bg-orange-950/10 ${
-                      index % 2 === 0 ? "" : "bg-gray-50/50 dark:bg-gray-800/20"
+                    className={`border-t border-surface-border transition-colors hover:bg-brand/10/40 dark:border-night-border dark:hover:bg-brand/20 ${
+                      index % 2 === 0 ? "" : "bg-gray-50/50 dark:bg-night-card/20"
                     }`}
                   >
                     {selectable && (
@@ -330,7 +330,7 @@ export default function DataTable<T>({
                           aria-label="Select row"
                           checked={selected?.has(key) ?? false}
                           onChange={() => toggleOne(key)}
-                          className="h-3.5 w-3.5 accent-[#F97316]"
+                          className="h-3.5 w-3.5 accent-brand"
                         />
                       </td>
                     )}
@@ -360,7 +360,7 @@ export default function DataTable<T>({
                   <button
                     type="button"
                     onClick={onResetFilters}
-                    className="text-xs font-semibold text-[#F97316] hover:underline"
+                    className="text-xs font-semibold text-brand dark:text-brand-on-dark hover:underline"
                   >
                     Clear filters
                   </button>
@@ -381,12 +381,12 @@ export default function DataTable<T>({
 
         {error && (
           <div className="flex flex-col items-center justify-center gap-2 px-4 py-12 text-center">
-            <p className="text-sm font-semibold text-red-600 dark:text-red-400">{error}</p>
+            <p className="text-sm font-semibold text-tone-danger dark:text-tone-danger">{error}</p>
             {onRetry && (
               <button
                 type="button"
                 onClick={onRetry}
-                className="text-xs font-semibold text-[#F97316] hover:underline"
+                className="text-xs font-semibold text-brand dark:text-brand-on-dark hover:underline"
               >
                 Try again
               </button>
@@ -417,7 +417,7 @@ function PagerButton({
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
-      className="flex h-7 w-7 items-center justify-center rounded-lg border border-gray-300 text-xs text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800"
+      className="flex h-7 w-7 items-center justify-center rounded-[5px] border border-surface-border text-xs text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-night-border dark:text-gray-400 dark:hover:bg-gray-800"
     >
       {children}
     </button>

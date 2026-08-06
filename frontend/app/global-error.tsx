@@ -59,7 +59,7 @@ export default function GlobalError({
               alignItems: "center",
               justifyContent: "center",
               fontSize: 26,
-              color: "#F97316",
+              color: "#24695c",
             }}
             aria-hidden="true"
           >
@@ -95,7 +95,7 @@ export default function GlobalError({
               padding: "10px 20px",
               borderRadius: 8,
               border: "none",
-              background: "#F97316",
+              background: "#24695c",
               color: "#ffffff",
               fontSize: 14,
               fontWeight: 600,

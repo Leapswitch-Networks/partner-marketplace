@@ -58,17 +58,17 @@ export default function Toast({
 
   const tones: Record<ToastTone, string> = {
     success:
-      "border-green-200 bg-green-50 text-green-800 dark:border-green-800 dark:bg-green-950 dark:text-green-300",
+      "border-tone-success/40 bg-tone-success/10 text-tone-success dark:border-tone-success/50 dark:bg-tone-success/15 dark:text-brand-on-dark",
     error:
-      "border-red-200 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-950 dark:text-red-300",
-    info: "border-blue-200 bg-blue-50 text-blue-800 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300",
+      "border-tone-danger/40 bg-tone-danger/10 text-tone-danger dark:border-tone-danger/50 dark:bg-tone-danger/15 dark:text-tone-danger",
+    info: "border-brand/30 bg-brand/10 text-brand dark:border-brand/40 dark:bg-brand/15 dark:text-brand-on-dark",
   };
 
   return createPortal(
     <div
       role="status"
       aria-live="polite"
-      className={`fixed bottom-5 right-5 z-[70] max-w-sm rounded-xl border px-4 py-3 shadow-lg ${tones[toast.tone]}`}
+      className={`fixed bottom-5 right-5 z-[70] max-w-sm rounded-none border px-4 py-3 shadow-lg ${tones[toast.tone]}`}
     >
       <div className="flex items-start gap-3">
         <div className="min-w-0 flex-1">

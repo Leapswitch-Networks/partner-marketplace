@@ -36,12 +36,12 @@ export default function RulesModal({ test, onAgree, onClose, loading }: RulesMod
       aria-labelledby="rules-title"
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/50 sm:items-center sm:p-4"
     >
-      <div className="flex w-full max-w-lg flex-col overflow-hidden rounded-t-2xl bg-white sm:rounded-2xl shadow-xl dark:bg-gray-900">
+      <div className="flex w-full max-w-lg flex-col overflow-hidden rounded-t-2xl bg-white sm:rounded-none shadow-xl dark:bg-night-card">
 
         {/* Fixed header */}
-        <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4 dark:border-gray-800">
+        <div className="flex items-center justify-between border-b border-surface-border px-6 py-4 dark:border-night-border">
           <div className="flex items-center gap-3">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-orange-50 text-[#F97316]">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[5px] bg-brand/10 text-brand dark:text-brand-on-dark">
               <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
               </svg>
@@ -64,7 +64,7 @@ export default function RulesModal({ test, onAgree, onClose, loading }: RulesMod
           {/* Test Overview */}
           <section>
             <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
-              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#F97316] text-[10px] font-bold text-white">1</span>
+              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-brand text-[10px] font-bold text-white">1</span>
               Test Overview
             </h3>
             <ul className="space-y-1.5 pl-7 list-disc text-gray-600 dark:text-gray-400">
@@ -77,7 +77,7 @@ export default function RulesModal({ test, onAgree, onClose, loading }: RulesMod
           {/* Attempt Rules */}
           <section>
             <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
-              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#F97316] text-[10px] font-bold text-white">2</span>
+              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-brand text-[10px] font-bold text-white">2</span>
               Attempt Rules
             </h3>
             <ul className="space-y-1.5 pl-7 list-disc text-gray-600 dark:text-gray-400">
@@ -90,7 +90,7 @@ export default function RulesModal({ test, onAgree, onClose, loading }: RulesMod
           {/* Time & Submission */}
           <section>
             <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
-              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#F97316] text-[10px] font-bold text-white">3</span>
+              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-brand text-[10px] font-bold text-white">3</span>
               Time &amp; Submission
             </h3>
             <ul className="space-y-1.5 pl-7 list-disc text-gray-600 dark:text-gray-400">
@@ -103,7 +103,7 @@ export default function RulesModal({ test, onAgree, onClose, loading }: RulesMod
           {/* Integrity Guidelines */}
           <section>
             <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
-              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#F97316] text-[10px] font-bold text-white">4</span>
+              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-brand text-[10px] font-bold text-white">4</span>
               Integrity Guidelines
             </h3>
             <ul className="space-y-1.5 pl-7 list-disc text-gray-600 dark:text-gray-400">
@@ -115,7 +115,7 @@ export default function RulesModal({ test, onAgree, onClose, loading }: RulesMod
           {/* Scoring */}
           <section>
             <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-gray-900 dark:text-gray-100">
-              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-[#F97316] text-[10px] font-bold text-white">5</span>
+              <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-brand text-[10px] font-bold text-white">5</span>
               Scoring
             </h3>
             <ul className="space-y-1.5 pl-7 list-disc text-gray-600 dark:text-gray-400">
@@ -127,7 +127,7 @@ export default function RulesModal({ test, onAgree, onClose, loading }: RulesMod
         </div>
 
         {/* Fixed footer */}
-        <div className="border-t border-gray-100 px-6 py-4 space-y-3 dark:border-gray-800 dark:bg-gray-900">
+        <div className="border-t border-surface-border px-6 py-4 space-y-3 dark:border-night-border dark:bg-night-card">
           {/* Checkbox */}
           <label className="flex items-start gap-3 cursor-pointer select-none group">
             <div className="relative mt-0.5 shrink-0">
@@ -136,11 +136,11 @@ export default function RulesModal({ test, onAgree, onClose, loading }: RulesMod
                 checked={agreed}
                 onChange={handleCheckbox}
                 disabled={loading}
-                className="peer h-4 w-4 cursor-pointer appearance-none rounded border-2 border-gray-300 bg-white transition-colors
-                  checked:border-[#F97316] checked:bg-[#F97316]
-                  focus:outline-none focus:ring-2 focus:ring-[#F97316]/30
+                className="peer h-4 w-4 cursor-pointer appearance-none rounded border-2 border-surface-border bg-white transition-colors
+                  checked:border-brand checked:bg-brand
+                  focus:outline-none focus:ring-2 focus:ring-brand/30
                   disabled:cursor-not-allowed disabled:opacity-60
-                  dark:border-gray-600 dark:bg-gray-800"
+                  dark:border-night-border dark:bg-night-card"
               />
               {/* Custom checkmark */}
               <svg
@@ -175,7 +175,7 @@ export default function RulesModal({ test, onAgree, onClose, loading }: RulesMod
               type="button"
               onClick={onClose}
               disabled={loading}
-              className="w-full rounded-lg border border-gray-200 py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-60 sm:w-auto sm:px-5 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
+              className="w-full rounded-[5px] border border-surface-border py-2.5 text-sm font-medium text-gray-700 transition hover:bg-gray-50 disabled:opacity-60 sm:w-auto sm:px-5 dark:border-night-border dark:text-gray-300 dark:hover:bg-gray-800"
             >
               Cancel
             </button>

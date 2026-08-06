@@ -207,7 +207,7 @@ export default function ActivityModule() {
             <button
               type="button"
               onClick={() => setDetail(row)}
-              className="text-[#F97316] hover:underline"
+              className="text-brand dark:text-brand-on-dark hover:underline"
             >
               Details
             </button>
@@ -326,7 +326,7 @@ export default function ActivityModule() {
                     before/after diffs, IPs, skip reasons — and inventing a
                     renderer per shape would go stale the moment a call site adds
                     a key. Passwords and tokens are stripped server-side. */}
-                <pre className="max-h-64 overflow-auto rounded-lg bg-gray-50 p-3 font-mono text-[11px] text-gray-700 dark:bg-gray-900 dark:text-gray-300">
+                <pre className="max-h-64 overflow-auto rounded-[5px] bg-gray-50 p-3 font-mono text-[11px] text-gray-700 dark:bg-night-card dark:text-gray-300">
                   {JSON.stringify(detail.properties, null, 2)}
                 </pre>
               </div>

@@ -74,37 +74,37 @@ function EditRow({ category, onSave, onCancel }: EditRowProps) {
   });
 
   return (
-    <tr className="bg-orange-50 dark:bg-orange-950/20">
+    <tr className="bg-brand/10 dark:bg-brand/20">
       <td className="px-4 py-3 text-sm font-mono text-gray-500 dark:text-gray-400">
         {category.id}
       </td>
       <td className="px-4 py-3">
         <input
           {...register("name")}
-          className={`w-full rounded border px-2 py-1 text-sm outline-none focus:border-[#F97316] focus:ring-1 focus:ring-[#F97316]/20 dark:bg-gray-800 dark:text-gray-100 ${
-            errors.name ? "border-red-400" : "border-gray-300 dark:border-gray-600"
+          className={`w-full rounded border px-2 py-1 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand/20 dark:bg-night-card dark:text-gray-100 ${
+            errors.name ? "border-tone-danger/40" : "border-surface-border dark:border-night-border"
           }`}
         />
         {errors.name && (
-          <p className="mt-0.5 text-xs text-red-500">{errors.name.message}</p>
+          <p className="mt-0.5 text-xs text-tone-danger">{errors.name.message}</p>
         )}
       </td>
       <td className="px-4 py-3">
         <textarea
           {...register("description")}
           rows={2}
-          className={`w-full resize-none rounded border px-2 py-1 text-sm outline-none focus:border-[#F97316] focus:ring-1 focus:ring-[#F97316]/20 dark:bg-gray-800 dark:text-gray-100 ${
-            errors.description ? "border-red-400" : "border-gray-300 dark:border-gray-600"
+          className={`w-full resize-none rounded border px-2 py-1 text-sm outline-none focus:border-brand focus:ring-1 focus:ring-brand/20 dark:bg-night-card dark:text-gray-100 ${
+            errors.description ? "border-tone-danger/40" : "border-surface-border dark:border-night-border"
           }`}
         />
         {errors.description && (
-          <p className="mt-0.5 text-xs text-red-500">{errors.description.message}</p>
+          <p className="mt-0.5 text-xs text-tone-danger">{errors.description.message}</p>
         )}
       </td>
       <td className="px-4 py-3">
         <select
           {...register("status")}
-          className="rounded border border-gray-300 px-2 py-1 text-sm outline-none focus:border-[#F97316] dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100"
+          className="rounded border border-surface-border px-2 py-1 text-sm outline-none focus:border-brand dark:border-night-border dark:bg-night-card dark:text-gray-100"
         >
           <option value="active">Active</option>
           <option value="inactive">Inactive</option>
@@ -116,14 +116,14 @@ function EditRow({ category, onSave, onCancel }: EditRowProps) {
             type="button"
             onClick={handleSubmit((data) => onSave(category.id, data))}
             disabled={isSubmitting}
-            className="rounded bg-[#F97316] px-3 py-1 text-xs font-medium text-white hover:bg-orange-600 disabled:opacity-50"
+            className="rounded bg-brand px-3 py-1 text-xs font-medium text-white hover:bg-brand-dark disabled:opacity-50"
           >
             {isSubmitting ? "Saving…" : "Save"}
           </button>
           <button
             type="button"
             onClick={onCancel}
-            className="rounded border border-gray-300 px-3 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100 dark:border-gray-600 dark:text-gray-400 dark:hover:bg-gray-700"
+            className="rounded border border-surface-border px-3 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100 dark:border-night-border dark:text-gray-400 dark:hover:bg-gray-700"
           >
             Cancel
           </button>
@@ -251,7 +251,7 @@ export default function AddCategoryForm({
         {saved && (
           <div
             role="status"
-            className="mb-5 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-700 dark:border-green-900 dark:bg-green-950/30 dark:text-green-400"
+            className="mb-5 rounded-[5px] border border-tone-success/40 bg-tone-success/10 px-4 py-3 text-sm font-medium text-tone-success dark:border-tone-success/50 dark:bg-tone-success/20 dark:text-brand-on-dark"
           >
             Category created successfully.
           </div>
@@ -260,7 +260,7 @@ export default function AddCategoryForm({
         {apiError && (
           <div
             role="alert"
-            className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-400"
+            className="mb-5 rounded-[5px] border border-tone-danger/40 bg-tone-danger/10 px-4 py-3 text-sm font-medium text-tone-danger dark:border-tone-danger/50 dark:bg-tone-danger/15 dark:text-tone-danger"
           >
             {apiError}
           </div>
@@ -294,15 +294,15 @@ export default function AddCategoryForm({
               id="category-description"
               rows={4}
               placeholder="Briefly describe this category..."
-              className={`w-full resize-none rounded-lg border px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 outline-none transition focus:border-[#F97316] focus:ring-2 focus:ring-[#F97316]/20 dark:text-gray-100 dark:placeholder-gray-500 ${
+              className={`w-full resize-none rounded-[5px] border px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20 dark:text-gray-100 dark:placeholder-gray-500 ${
                 errors.description
-                  ? "border-red-400 bg-red-50 dark:border-red-700 dark:bg-red-950/30"
-                  : "border-gray-300 bg-white dark:border-gray-700 dark:bg-gray-800"
+                  ? "border-tone-danger/40 bg-tone-danger/10 dark:border-tone-danger/50 dark:bg-tone-danger/15"
+                  : "border-surface-border bg-white dark:border-night-border dark:bg-night-card"
               }`}
               {...register("description")}
             />
             {errors.description && (
-              <p className="text-xs text-red-500">{errors.description.message}</p>
+              <p className="text-xs text-tone-danger">{errors.description.message}</p>
             )}
           </div>
 
@@ -315,10 +315,10 @@ export default function AddCategoryForm({
             </label>
             <select
               id="category-status"
-              className={`w-full rounded-lg border px-3.5 py-2.5 text-sm text-gray-900 outline-none transition focus:border-[#F97316] focus:ring-2 focus:ring-[#F97316]/20 dark:bg-gray-800 dark:text-gray-100 ${
+              className={`w-full rounded-[5px] border px-3.5 py-2.5 text-sm text-gray-900 outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20 dark:bg-night-card dark:text-gray-100 ${
                 errors.status
-                  ? "border-red-400 bg-red-50 dark:border-red-700 dark:bg-red-950/30"
-                  : "border-gray-300 bg-white dark:border-gray-700"
+                  ? "border-tone-danger/40 bg-tone-danger/10 dark:border-tone-danger/50 dark:bg-tone-danger/15"
+                  : "border-surface-border bg-white dark:border-night-border"
               }`}
               {...register("status")}
             >
@@ -326,7 +326,7 @@ export default function AddCategoryForm({
               <option value="inactive">Inactive</option>
             </select>
             {errors.status && (
-              <p className="text-xs text-red-500">{errors.status.message}</p>
+              <p className="text-xs text-tone-danger">{errors.status.message}</p>
             )}
           </div>
 
@@ -356,7 +356,7 @@ export default function AddCategoryForm({
           <button
             type="button"
             onClick={fetchCategories}
-            className="text-xs text-[#F97316] hover:underline"
+            className="text-xs text-brand dark:text-brand-on-dark hover:underline"
           >
             Refresh
           </button>
@@ -365,7 +365,7 @@ export default function AddCategoryForm({
         {actionError && (
           <div
             role="alert"
-            className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700 dark:border-red-900 dark:bg-red-950/30 dark:text-red-400"
+            className="mb-4 rounded-[5px] border border-tone-danger/40 bg-tone-danger/10 px-4 py-3 text-sm font-medium text-tone-danger dark:border-tone-danger/50 dark:bg-tone-danger/15 dark:text-tone-danger"
           >
             {actionError}
           </div>
@@ -374,15 +374,15 @@ export default function AddCategoryForm({
         {listLoading ? (
           <p className="text-sm text-gray-500 dark:text-gray-400">Loading…</p>
         ) : listError ? (
-          <p className="text-sm text-red-500">{listError}</p>
+          <p className="text-sm text-tone-danger">{listError}</p>
         ) : categories.length === 0 ? (
           <p className="text-sm text-gray-500 dark:text-gray-400">
             No categories yet. Create one above.
           </p>
         ) : (
-          <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
+          <div className="overflow-x-auto rounded-[5px] border border-surface-border dark:border-night-border">
             <table className="min-w-full divide-y divide-gray-200 text-sm dark:divide-gray-700">
-              <thead className="bg-gray-50 dark:bg-gray-800/60">
+              <thead className="bg-gray-50 dark:bg-night-card/60">
                 <tr>
                   {["ID", "Name", "Description", "Status", "Actions"].map(
                     (h) => (
@@ -396,7 +396,7 @@ export default function AddCategoryForm({
                   )}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100 bg-white dark:divide-gray-700 dark:bg-gray-900">
+              <tbody className="divide-y divide-gray-100 bg-white dark:divide-gray-700 dark:bg-night-card">
                 {categories.map((cat) =>
                   editingId === cat.id ? (
                     <EditRow
@@ -423,7 +423,7 @@ export default function AddCategoryForm({
                         <span
                           className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
                             cat.status === "active"
-                              ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                              ? "bg-tone-success/10 text-tone-success dark:bg-tone-success/15 dark:text-brand-on-dark"
                               : "bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400"
                           }`}
                         >
@@ -439,7 +439,7 @@ export default function AddCategoryForm({
                                 setActionError(null);
                                 setEditingId(cat.id);
                               }}
-                              className="text-xs font-medium text-[#F97316] hover:underline"
+                              className="text-xs font-medium text-brand dark:text-brand-on-dark hover:underline"
                             >
                               Edit
                             </button>
@@ -447,7 +447,7 @@ export default function AddCategoryForm({
                               type="button"
                               onClick={() => handleDelete(cat.id)}
                               disabled={deletingId === cat.id}
-                              className="text-xs font-medium text-red-500 hover:underline disabled:opacity-50"
+                              className="text-xs font-medium text-tone-danger hover:underline disabled:opacity-50"
                             >
                               {deletingId === cat.id ? "Deleting…" : "Delete"}
                             </button>

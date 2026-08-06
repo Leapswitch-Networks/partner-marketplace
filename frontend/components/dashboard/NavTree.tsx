@@ -66,7 +66,7 @@ function Section({
           type="button"
           onClick={() => setOpen((o) => !o)}
           aria-expanded={expanded}
-          className="flex w-full items-center justify-between px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400 transition-colors hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"
+          className="mb-1 flex w-full items-center justify-between border-b border-surface-border px-3 pb-2 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-brand transition-colors hover:text-brand-dark dark:border-night-border dark:text-night-muted dark:hover:text-brand-on-dark"
         >
           <span>{section.label}</span>
           <svg
@@ -77,7 +77,7 @@ function Section({
           </svg>
         </button>
       ) : (
-        <p className="px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-gray-400 dark:text-gray-500">
+        <p className="mb-1 border-b border-surface-border px-3 pb-2 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-brand dark:border-night-border dark:text-night-muted">
           {section.label}
         </p>
       )}
@@ -122,7 +122,7 @@ export default function NavTree({
           collapsible: nothing in the current tree uses them, and a speculative
           second collapse mechanism would be untested code. */}
       {item.items?.length ? (
-        <div className="ml-4 mt-1 space-y-1 border-l border-gray-100 pl-2 dark:border-gray-800">
+        <div className="ml-4 mt-1 space-y-1 border-l border-surface-border pl-2 dark:border-night-border">
           {item.items.map((child) => renderItem(child, isActive(child, pathname)))}
         </div>
       ) : null}

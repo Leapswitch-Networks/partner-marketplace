@@ -5,23 +5,38 @@
 
 ---
 
-## 🔴 The design system is being replaced — read this before trusting a colour below
+## ✅ The design system was replaced — Viho, completed 2026-08-05
 
 **On 2026-08-05 the owner adopted the Viho theme in full** — new brand hue, squared card surfaces,
 Montserrat, and an inverted dark-mode elevation model. See
 [`../design/VIHO_ADOPTION_PLAN.md`](../design/VIHO_ADOPTION_PLAN.md).
 
-**No frontend code has changed yet.** Everything in this file still describes what the code actually
-does today, and remains the rule you follow when writing code *now*. But five sections are scheduled
-to be rewritten, and you should not invest in matching them:
+**The migration is complete.** Every route is on the Viho token system.
 
-| Section | Changes in | To |
-|---------|-----------|-----|
-| § Colour System — Brand | Plan phase 4 | Teal `#24695c` + tan `#ba895d` |
-| § Colour System — Surfaces | Plan phase 5 | Viho surface tokens; **dark elevation inverts** |
-| § Typography | Plan phase 6 | Montserrat 14px |
-| § Layout Conventions — Radius | Plan phase 5 | Surfaces squared, controls stay rounded |
-| § Full-Page Index Layout | Plan phase 7 | `useAutoPerPage()`'s `433` constant must be re-measured |
+| Landed 2026-08-05 | Still pending |
+|---|---|
+| Token layer in `tailwind.config.ts` (`brand`/`accent`/`surface`/`ink`/`night`/`tone`) | 30px card padding, then re-measuring `useAutoPerPage()`'s `433` (phases 5, 7) |
+| `brand` retargeted to teal `#24695c` | Soft badge variant, upload drop zone, ghost bars, stepper, in-cell sparkline (phase 8) |
+| Montserrat replacing Inter, 14px body | Retiring the reference screenshots (phase 10) |
+| `Button` + `Input` rebuilt on tokens | |
+| **Every route migrated** — auth, dashboard, users, roles, activity, settings | |
+| **All palette colour eliminated**: 0 occurrences of `#F97316`/`orange-*`/`blue-*`/pastels app-wide | |
+| Squared surfaces, inverted dark elevation, `#f5f7fb` canvas | |
+
+**The app is no longer two-tone.** Measured against the reference on 2026-08-05: light canvas
+`#f5f7fb`, sidebar/header/card `#ffffff`, border `#e6edef`; dark canvas `#202938`, surfaces `#111727`,
+border `#142831` — i.e. the card is *darker* than the page, which is Viho's inverted elevation.
+
+Section-by-section status:
+
+| Section | Status |
+|---------|--------|
+| § Colour System — Brand | **Updated** — `brand` is teal, with the `brand-on-dark` rule |
+| § Typography | **Updated** — Montserrat |
+| § Component Primitives → `Button`, `Input` | **Updated** — new radius, variants, `addon`/`trailing` |
+| § Colour System — Surfaces | **Updated** — Viho surface tokens everywhere; dark elevation inverted |
+| § Layout Conventions — Radius | **Updated** — surfaces `rounded-none`, controls `rounded-[5px]`, nav `rounded-[9px]` |
+| § Full-Page Index Layout | ⏳ unchanged; `433` is still valid until card padding moves |
 
 **Rewrite the relevant section as each phase lands.** A phase that ships without updating this file
 puts the project back where it was on 2026-08-05 — two documents disagreeing about what the UI is.
@@ -38,8 +53,9 @@ puts the project back where it was on 2026-08-05 — two documents disagreeing a
 | Custom CSS utilities and keyframes | Backend anything (`FASTAPI_STANDARDS.md`) |
 | Typography and spacing conventions | |
 
-**Verified stack:** Tailwind CSS **3.4.19** (not v4) · `darkMode: "class"` · Inter via `next/font` ·
-`autoprefixer` 10.5 · no component library (no shadcn/ui, no Radix).
+**Verified stack:** Tailwind CSS **3.4.19** (not v4) · `darkMode: "class"` · **Montserrat** via
+`next/font` (was Inter until 2026-08-05) · `autoprefixer` 10.5 · no component library (no shadcn/ui,
+no Radix).
 
 ---
 
@@ -69,38 +85,54 @@ to activate without a full v3→v4 migration.
 
 ### Brand
 
-Defined in `tailwind.config.ts`:
+Defined in `tailwind.config.ts`. **Viho tokens as of 2026-08-05** — every value quoted from
+`../design/VIHO_THEME_REFERENCE.md`.
 
 | Token | Hex | Use |
 |-------|-----|-----|
-| `brand` / `brand-DEFAULT` | `#F97316` (orange-500) | Primary actions, focus rings, active states |
-| `brand-dark` | `#EA6C0A` | Hover on primary |
+| `brand` | `#24695c` | Primary actions, focus rings, active states, links |
+| `brand-dark` | `#17433b` | Hover on primary |
+| `brand-darker` | `#10302a` | Pressed |
+| `brand-on-dark` | `#5ec8b4` | **Brand text/icons on a dark surface — see the rule below** |
+| `accent` | `#ba895d` | Secondary / tan accent |
+| `surface-page` `-card` `-border` `-divider` `-wash` `-tile` | `#f5f7fb` `#ffffff` `#e6edef` `#efefef` `#eaf0ef` `#eff3f2` | Light surfaces. `wash` = brand@10% flattened, `tile` = brand@8% |
+| `ink` `-label` `-muted` | `#242934` `#59667a` `#6b7280` | Text. `muted` is **ours** — Viho's `#999` is 2.85:1 and fails AA |
+| `night-body` `-card` `-border` `-muted` | `#202938` `#111727` `#142831` `#98a6ad` | Dark surfaces. **`card` is darker than `body` on purpose** |
+| `tone-success` `-danger` `-warning` `-info` `-light` `-dark` | `#1b4c43` `#d22d3d` `#e2c636` `#717171` `#e6edef` `#2c323f` | The six semantic tones, which double as Viho's categorical palette |
+| `shadow-brand` | `0 5px 10px 2px rgba(36,105,92,.19)` | Viho tints shadows with the brand, not black |
 
 Usage: `bg-brand`, `text-brand`, `border-brand`, `hover:bg-brand-dark`, `focus:ring-brand`.
 
-⚠️ **This is far more widespread than "a couple of components", which is what this file used to say.**
-Measured 2026-08-05 against commit `b144c24`:
+### 🔴 The `brand-on-dark` rule (mandatory)
 
-| Pattern | Occurrences | Files |
-|---------|------------:|------:|
-| `#F97316` / `#EA6C0A` | 151 | 37 |
-| `orange-*` utilities | 91 | 18 |
-| **Union** | **242** | **37** |
+**`text-brand` on a dark surface fails contrast. Always pair it with `dark:text-brand-on-dark`.**
 
-**37 of the frontend's 85 `.tsx` files — 44% — paint the brand colour by hand. Only 6 files use the
-`brand` token at all.** The heaviest is `components/dashboard/Sidebar.tsx` at 46 occurrences.
+| Combination | Ratio | AA |
+|---|---:|:--:|
+| `#24695c` on `night-card` `#111727` | **2.83** | ❌ |
+| `#5ec8b4` on `night-card` `#111727` | **9.03** | ✅ |
 
-Two traps:
+`#5ec8b4` is Viho's own value — it uses it for the primary button's focus ring. This was a real bug
+introduced and then fixed on 2026-08-05: the first pass at the auth screens shipped `text-brand` links
+that were unreadable in dark mode. Write `text-brand dark:text-brand-on-dark` as a unit.
 
-1. **`orange-*` utilities are brand colour too**, and a hex grep will not find them. `bg-orange-50`,
-   `dark:bg-orange-950/40` and `hover:text-orange-400` are 91 of the 242.
-2. **Nine orange shades are in use** where the token defines two — so replacing them needs a tint
-   ladder, not a find-and-replace onto `brand`.
+Two further notes on Viho's palette, adopted as-is and worth knowing so they don't read as mistakes:
+**`tone-success` is a dark primary shade, not a green**, and **`tone-info` is grey, not blue.**
 
-**New code must use `brand`.** When you touch a file, migrate it; don't add more hardcoded hex. The
-sequenced migration is [`../design/VIHO_ADOPTION_PLAN.md`](../design/VIHO_ADOPTION_PLAN.md) phases 1–3,
-and it is now a **blocker for the rebrand** rather than the low-priority tidy-up
-[`../planning/TECH_DEBT.md`](../planning/TECH_DEBT.md) PM-20 originally recorded.
+> **Historical note — the cost of getting here.** Before the migration, **242 occurrences across 37
+> files** (151 × `#F97316`/`#EA6C0A` plus 91 × `orange-*` utilities) painted the brand colour by hand,
+> and only 6 files used the `brand` token. This file previously claimed it was just `Button.tsx` and
+> `Input.tsx` — an undercount of more than an order of magnitude. Two traps worth remembering if this
+> ever recurs: **`orange-*` utilities are brand colour and a hex grep never sees them**, and **nine
+> distinct shades were in use** where the token defined two.
+
+**New code must use the tokens — no hardcoded hex, no palette utilities.** The regression guard is:
+
+```bash
+grep -rn 'F97316\|EA6C0A\|orange-[0-9]\|blue-[0-9]\|purple-[0-9]\|amber-[0-9]' app components
+```
+
+It returns nothing today. If it ever returns something, that is the defect.
 
 ### Surfaces & text
 
@@ -138,12 +170,17 @@ themes. A light-only colour is a bug — see § Dark Mode Rules.
 
 | Concern | Value |
 |---------|-------|
-| Font | **Inter**, loaded via `next/font/google`, `subsets: ["latin"]` |
-| CSS variable | `--font-inter`, wired into `theme.fontFamily.sans` |
+| Font | **Montserrat**, loaded via `next/font/google`, `subsets: ["latin"]` — Viho's body font, adopted 2026-08-05 (was Inter) |
+| CSS variable | `--font-montserrat`, wired into `theme.fontFamily.sans` |
 | Fallbacks | `system-ui`, `sans-serif` |
-| Applied | `font-sans` on `<body>`, plus `antialiased` on `<html>` |
+| Applied | `font-sans` + `text-sm` on `<body>`, plus `antialiased` on `<html>` |
+| Body size | **14px** (`text-sm` on `<body>`) — Viho's baseline, vs Tailwind's 16px default |
 
-Never add a `<link>` to Google Fonts — `next/font` self-hosts and eliminates layout shift.
+Never add a `<link>` to Google Fonts — `next/font` self-hosts and eliminates layout shift. Montserrat is
+a **variable** font here, so the full 100–900 weight range costs one file.
+
+⚠️ Montserrat is wider than Inter at the same size. **Re-check dense tables** after touching type — they
+are the tightest thing we render, and `useAutoPerPage()` assumes a 38px row.
 
 ### Scale in use
 
@@ -223,7 +260,7 @@ All in `components/common/`. Hand-written, no library. Keep them dumb — no dat
 
 ```tsx
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: "primary" | "outline";
+  variant?: "primary" | "outline" | "light";
   loading?: boolean;
   fullWidth?: boolean;
 }
@@ -231,32 +268,39 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 | Prop | Default | Behaviour |
 |------|---------|-----------|
-| `variant` | `"primary"` | `primary` = filled brand; `outline` = brand border + transparent fill |
+| `variant` | `"primary"` | `primary` = filled brand + `shadow-brand`; `outline` = brand border, transparent fill; `light` = Viho's `.btn-primary-light`, brand@10% fill that inverts to solid brand on hover |
 | `loading` | `false` | Renders a spinner **and** sets `disabled` |
 | `fullWidth` | `false` | Adds `w-full` |
 
-Base classes (shared by both variants):
+Base classes (shared by all variants):
 
 ```
-inline-flex items-center justify-center gap-2 rounded-lg px-5 py-2.5
+inline-flex items-center justify-center gap-2 rounded-[5px] px-7 py-1.5
 text-sm font-semibold transition-colors
-focus:outline-none focus:ring-2 focus:ring-offset-2
+focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand
 disabled:cursor-not-allowed disabled:opacity-60
 ```
+
+**Radius is `rounded-[5px]`, not `rounded-lg`.** Viho's system is squared *surfaces* with rounded
+*controls*, so a control keeping its curve is the rule, not an exception. Padding `px-7 py-1.5`
+(`.375rem 1.75rem`) comes from Bootstrap's scale, which is why it's an arbitrary value.
 
 Rules:
 - **`loading` is the only busy indicator** — never add a second boolean
 - Wrap in `forwardRef` and set `displayName` (already done)
 - Spread `...props` last so callers can override
-- Only two variants exist. Need a destructive action? **Add a `danger` variant here**, don't write
-  one-off red classes at the call site.
+- Still **no `danger` variant**. Need a destructive action? **Add one here** using `tone-danger`, don't
+  write one-off red classes at the call site.
 
 ### Input — `components/common/Input.tsx`
 
 ```tsx
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
-  label: string;      // required
+  label: string;         // required
   error?: string;
+  hint?: string;
+  addon?: ReactNode;     // brand-tinted leading icon tile
+  trailing?: ReactNode;  // in-field trailing control, e.g. a "Show" toggle
 }
 ```
 
@@ -265,9 +309,21 @@ Behaviour worth knowing:
 - **`label` is mandatory** — accessibility is not optional here
 - **`id` is auto-derived** from the label (`"Email address"` → `email-address`) when not supplied, and
   wired to `htmlFor`
-- **`error` swaps the border and background to the red variant** and renders `text-xs text-red-500`
-  below the field
-- Wraps in `flex flex-col gap-1`
+- **`error` swaps the border to `tone-danger`** and renders `text-xs text-tone-danger` below the field
+- **Everything renders through one group wrapper** whether or not `addon` is passed, so a field with an
+  icon and one without cannot drift apart in height, radius or focus treatment
+- `addon` is Viho's `.input-group-text`: `bg-brand/10`, no outer border, icon in brand. Pass an SVG
+  sized `h-4 w-4`; the tile handles centring. It is `aria-hidden` — decorative
+- `trailing` sits on the input's own background. The sign-in password `Show` toggle is the reference use
+- Field radius is `rounded-[5px]`, border `surface-border` — not `rounded-lg`/`border-gray-300`
+
+⚠️ **`label=""` opts out of the visible label** (for filter bars, and for the two-up First/Last Name pair
+on sign-up). When you do that you **must** pass an explicit `id` *and* an `aria-label` — otherwise the
+auto-derived id is the empty string and the field has no accessible name.
+
+**The focus ring is deliberately ours.** Viho's login stylesheet sets `:focus { box-shadow: none }` and
+removes the indicator; that is exception E4 in `../design/VIHO_ADOPTION_PLAN.md` and we do not copy it.
+The ring is on the *group*, so the addon tile is enclosed by it.
 
 Usage with React Hook Form:
 
@@ -423,7 +479,9 @@ Rules:
 
 | Issue | Detail |
 |-------|--------|
-| Hardcoded brand colour | **242 occurrences across 37 files** (151 hex + 91 `orange-*`) bypass the `brand` token — not the two files this row used to claim. See § Colour System. Blocks the Viho rebrand |
+| ~~Hardcoded brand colour~~ | ✅ **Resolved 2026-08-05.** All 242 occurrences across 37 files migrated to tokens. Guard with `grep -rn 'F97316\|EA6C0A\|orange-[0-9]' app components` — it must stay empty |
+| ~~App is visibly two-tone~~ | ✅ **Resolved 2026-08-05** by completing the migration |
+| No privacy-policy route | Sign-up's required "Agree With Privacy Policy" renders "Privacy Policy" as **plain text, not a link**, because the page does not exist. Make it a `<Link>` when it does |
 | Mixed radii | § Layout Conventions mandates `rounded-lg` and says "don't mix radii"; the code uses five — `rounded-lg` ×92, `rounded-xl` ×49, `rounded-full` ×31, `rounded-2xl` ×23, `rounded-md` ×7 |
 | No semantic colour tokens | Grey scale used directly; a rebrand means touching every component |
 | No `cn()` helper | Class strings are template literals; conditional classes get unwieldy. A 3-line `cn()` would help |

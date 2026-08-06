@@ -49,7 +49,7 @@ export default function AuthInitializer({ children }: { children: React.ReactNod
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#F3F4F6]">
         <div className="flex flex-col items-center gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-[#F97316] text-lg font-bold text-white">
+          <span className="flex h-10 w-10 items-center justify-center rounded-[5px] bg-brand text-lg font-bold text-white">
             T
           </span>
           <p className="text-sm font-medium text-gray-500">Loading…</p>

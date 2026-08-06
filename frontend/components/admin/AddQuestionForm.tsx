@@ -80,7 +80,7 @@ export default function AddQuestionForm({ initialType = "mcq" }: AddQuestionForm
       </div>
 
       {isSubmitSuccessful && (
-        <div role="status" className="mb-5 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-700 dark:border-green-900 dark:bg-green-950/30 dark:text-green-400">
+        <div role="status" className="mb-5 rounded-[5px] border border-tone-success/40 bg-tone-success/10 px-4 py-3 text-sm font-medium text-tone-success dark:border-tone-success/50 dark:bg-tone-success/20 dark:text-brand-on-dark">
           Question added successfully.
         </div>
       )}
@@ -95,10 +95,10 @@ export default function AddQuestionForm({ initialType = "mcq" }: AddQuestionForm
                 key={t}
                 type="button"
                 onClick={() => setQType(t)}
-                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all
+                className={`rounded-[5px] border px-3 py-1.5 text-xs font-semibold transition-all
                   ${qType === t
-                    ? "border-[#F97316] bg-orange-50 text-[#F97316] dark:bg-orange-950/30 dark:text-orange-400"
-                    : "border-gray-200 text-gray-500 hover:border-gray-300 hover:text-gray-700 dark:border-gray-700 dark:text-gray-400 dark:hover:border-gray-600 dark:hover:text-gray-300"
+                    ? "border-brand bg-brand/10 text-brand dark:text-brand-on-dark dark:bg-brand/20 dark:text-brand-on-dark"
+                    : "border-surface-border text-gray-500 hover:border-surface-border hover:text-gray-700 dark:border-night-border dark:text-gray-400 dark:hover:border-gray-600 dark:hover:text-gray-300"
                   }`}
               >
                 {t === "mcq" ? "MCQ" : t === "true_false" ? "True / False" : "Descriptive"}
@@ -114,12 +114,12 @@ export default function AddQuestionForm({ initialType = "mcq" }: AddQuestionForm
           <textarea
             rows={3}
             placeholder="Write the question here..."
-            className={`w-full rounded-lg border px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 outline-none transition resize-none dark:text-gray-100 dark:placeholder-gray-500
-              focus:border-[#F97316] focus:ring-2 focus:ring-[#F97316]/20
-              ${errors.text ? "border-red-400 bg-red-50 dark:border-red-700 dark:bg-red-950/30" : "border-gray-300 bg-white dark:border-gray-700 dark:bg-gray-800"}`}
+            className={`w-full rounded-[5px] border px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 outline-none transition resize-none dark:text-gray-100 dark:placeholder-gray-500
+              focus:border-brand focus:ring-2 focus:ring-brand/20
+              ${errors.text ? "border-tone-danger/40 bg-tone-danger/10 dark:border-tone-danger/50 dark:bg-tone-danger/15" : "border-surface-border bg-white dark:border-night-border dark:bg-night-card"}`}
             {...register("text")}
           />
-          {errors.text && <p className="text-xs text-red-500">{errors.text.message}</p>}
+          {errors.text && <p className="text-xs text-tone-danger">{errors.text.message}</p>}
         </div>
 
         {/* MCQ options */}
@@ -128,13 +128,13 @@ export default function AddQuestionForm({ initialType = "mcq" }: AddQuestionForm
             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Answer Options</label>
             {fields.map((field, i) => (
               <div key={field.id} className="flex items-center gap-2">
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gray-100 text-xs font-bold text-gray-500 dark:bg-gray-700 dark:text-gray-400">
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[5px] bg-gray-100 text-xs font-bold text-gray-500 dark:bg-gray-700 dark:text-gray-400">
                   {field.label}
                 </span>
                 <input
                   type="text"
                   placeholder={`Option ${field.label}`}
-                  className="flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 outline-none transition focus:border-[#F97316] focus:ring-2 focus:ring-[#F97316]/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-500"
+                  className="flex-1 rounded-[5px] border border-surface-border bg-white px-3 py-2 text-sm text-gray-900 placeholder-gray-400 outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20 dark:border-night-border dark:bg-night-card dark:text-gray-100 dark:placeholder-gray-500"
                   {...register(`options.${i}.text`)}
                 />
               </div>
@@ -156,7 +156,7 @@ export default function AddQuestionForm({ initialType = "mcq" }: AddQuestionForm
             <div className="flex gap-4">
               {["True", "False"].map((val) => (
                 <label key={val} className="flex items-center gap-2 cursor-pointer">
-                  <input type="radio" value={val} className="accent-[#F97316]" {...register("correctAnswer")} />
+                  <input type="radio" value={val} className="accent-brand" {...register("correctAnswer")} />
                   <span className="text-sm text-gray-700 dark:text-gray-300">{val}</span>
                 </label>
               ))}
@@ -176,7 +176,7 @@ export default function AddQuestionForm({ initialType = "mcq" }: AddQuestionForm
           <div className="flex flex-col gap-1">
             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Difficulty</label>
             <select
-              className="w-full rounded-lg border border-gray-300 bg-white px-3.5 py-2.5 text-sm text-gray-900 outline-none transition focus:border-[#F97316] focus:ring-2 focus:ring-[#F97316]/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100"
+              className="w-full rounded-[5px] border border-surface-border bg-white px-3.5 py-2.5 text-sm text-gray-900 outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20 dark:border-night-border dark:bg-night-card dark:text-gray-100"
               {...register("difficulty")}
             >
               {DIFFICULTY_OPTIONS.map((o) => (
@@ -201,7 +201,7 @@ export default function AddQuestionForm({ initialType = "mcq" }: AddQuestionForm
           <textarea
             rows={2}
             placeholder="Explain the correct answer..."
-            className="w-full rounded-lg border border-gray-300 bg-white px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 outline-none transition resize-none focus:border-[#F97316] focus:ring-2 focus:ring-[#F97316]/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-500"
+            className="w-full rounded-[5px] border border-surface-border bg-white px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 outline-none transition resize-none focus:border-brand focus:ring-2 focus:ring-brand/20 dark:border-night-border dark:bg-night-card dark:text-gray-100 dark:placeholder-gray-500"
             {...register("explanation")}
           />
         </div>

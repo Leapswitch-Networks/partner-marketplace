@@ -55,10 +55,10 @@ export default function AppShell({
     <>
       <Sidebar activeSection={activeSection} onNavigate={handleNavigate} />
 
-      <div className="flex flex-1 flex-col min-w-0 bg-gray-100 dark:bg-gray-950">
+      <div className="flex flex-1 flex-col min-w-0 bg-gray-100 dark:bg-night-body">
         <TopNav />
 
-        <main className="flex-1 overflow-y-auto scrollbar-hide scroll-smooth bg-gray-100 px-4 py-6 pt-20 md:pt-4 sm:px-6 sm:py-6 lg:px-6 2xl:px-8 2xl:py-8 dark:bg-gray-950">
+        <main className="flex-1 overflow-y-auto scrollbar-hide scroll-smooth bg-gray-100 px-4 py-6 pt-20 md:pt-4 sm:px-6 sm:py-6 lg:px-6 2xl:px-8 2xl:py-8 dark:bg-night-body">
           {children}
         </main>
       </div>

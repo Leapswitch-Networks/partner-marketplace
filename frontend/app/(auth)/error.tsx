@@ -23,7 +23,7 @@ export default function AuthError({
   }, [error]);
 
   return (
-    <div className="w-full max-w-md rounded-2xl bg-white p-6 ring-1 ring-gray-100 dark:bg-gray-900 dark:ring-gray-800">
+    <div className="w-full max-w-md rounded-none bg-white p-6 ring-1 ring-surface-border dark:bg-night-card dark:ring-night-border">
       <ErrorState
         error={error}
         reset={reset}

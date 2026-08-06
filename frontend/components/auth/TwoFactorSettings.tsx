@@ -198,16 +198,16 @@ export default function TwoFactorSettings() {
           {status?.recovery_codes_remaining ?? 0} recovery code
           {status?.recovery_codes_remaining === 1 ? "" : "s"} remaining.
           {(status?.recovery_codes_remaining ?? 0) <= 2 && (
-            <span className="ml-1 font-semibold text-amber-600 dark:text-amber-500">
+            <span className="ml-1 font-semibold text-tone-warning dark:text-tone-warning">
               Generate a new set — running out means losing your phone locks you out.
             </span>
           )}
         </p>
       )}
 
-      {notice && <p className="text-xs text-emerald-600 dark:text-emerald-500">{notice}</p>}
+      {notice && <p className="text-xs text-tone-success dark:text-tone-success">{notice}</p>}
       {error && !passwordPrompt && !enrolment && (
-        <p role="alert" className="text-xs text-red-500">
+        <p role="alert" className="text-xs text-tone-danger">
           {error}
         </p>
       )}
@@ -258,7 +258,7 @@ export default function TwoFactorSettings() {
                 Open your authenticator app and add an account.{" "}
                 <a
                   href={enrolment.otpauth_uri}
-                  className="text-[#F97316] hover:underline"
+                  className="text-brand dark:text-brand-on-dark hover:underline"
                   rel="noreferrer"
                 >
                   Tap here on a phone
@@ -267,7 +267,7 @@ export default function TwoFactorSettings() {
               </li>
               <li>
                 Or enter this key manually:
-                <code className="mt-1 block break-all rounded-lg bg-gray-50 p-2 font-mono text-xs dark:bg-gray-900">
+                <code className="mt-1 block break-all rounded-lg bg-gray-50 p-2 font-mono text-xs dark:bg-night-card">
                   {/* Grouped in fours: these are retyped by hand more often than
                       anyone expects, and an unbroken 32-character string is where
                       mistakes happen. */}
@@ -277,14 +277,14 @@ export default function TwoFactorSettings() {
               <li>Enter the 6-digit code it shows, to confirm it works.</li>
             </ol>
 
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800 dark:bg-amber-950/30">
-              <p className="text-xs font-semibold text-amber-800 dark:text-amber-400">
+            <div className="rounded-lg border border-tone-warning/40 bg-tone-warning/10 p-3 dark:border-tone-warning/40 dark:bg-tone-warning/15">
+              <p className="text-xs font-semibold text-tone-warning dark:text-tone-warning">
                 Save these recovery codes now — they are not shown again.
               </p>
-              <p className="mt-0.5 text-[11px] text-amber-700 dark:text-amber-500">
+              <p className="mt-0.5 text-[11px] text-tone-warning dark:text-tone-warning">
                 Each works once. They are the only way in if you lose your phone.
               </p>
-              <div className="mt-2 grid grid-cols-2 gap-1 font-mono text-xs text-amber-900 dark:text-amber-300">
+              <div className="mt-2 grid grid-cols-2 gap-1 font-mono text-xs text-tone-warning dark:text-tone-warning">
                 {enrolment.recovery_codes.map((code) => (
                   <span key={code}>{code}</span>
                 ))}
@@ -324,7 +324,7 @@ export default function TwoFactorSettings() {
           <p className="text-sm text-gray-500 dark:text-gray-400">
             Your previous codes no longer work. Save these now — they are not shown again.
           </p>
-          <div className="grid grid-cols-2 gap-1 rounded-lg bg-gray-50 p-3 font-mono text-xs dark:bg-gray-900">
+          <div className="grid grid-cols-2 gap-1 rounded-lg bg-gray-50 p-3 font-mono text-xs dark:bg-night-card">
             {(freshCodes ?? []).map((code) => (
               <span key={code}>{code}</span>
             ))}

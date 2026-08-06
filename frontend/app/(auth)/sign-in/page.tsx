@@ -6,5 +6,5 @@ export const metadata: Metadata = {
 };
 
 export default function SignInPage() {
-  return <AuthHub initialTab="signin" />;
+  return <AuthHub mode="signin" />;
 }

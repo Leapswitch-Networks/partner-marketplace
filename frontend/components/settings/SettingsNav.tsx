@@ -54,9 +54,9 @@ export default function SettingsNav() {
             key={tab.href}
             href={tab.href}
             aria-current={active ? "page" : undefined}
-            className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
+            className={`flex items-center gap-2.5 rounded-[5px] px-3 py-2 text-sm font-medium transition-colors ${
               active
-                ? "bg-orange-50 text-[#F97316] dark:bg-orange-950/40 dark:text-orange-400"
+                ? "bg-brand/10 text-brand dark:text-brand-on-dark dark:bg-brand/20 dark:text-brand-on-dark"
                 : "text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
             }`}
           >

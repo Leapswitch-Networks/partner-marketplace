@@ -132,7 +132,7 @@ export default function ActiveSessions() {
       </div>
 
       {error && (
-        <p role="alert" className="text-xs text-red-500">
+        <p role="alert" className="text-xs text-tone-danger">
           {error}
         </p>
       )}

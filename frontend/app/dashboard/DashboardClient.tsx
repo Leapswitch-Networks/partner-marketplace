@@ -100,11 +100,11 @@ export default function DashboardClient() {
       <Sidebar activeSection={activeSection} onNavigate={handleNavigate} />
 
       {/* Page area: gray canvas so the rounded corner of the inner panel is visible */}
-      <div className="flex flex-1 flex-col min-w-0 bg-gray-100 dark:bg-gray-950">
+      <div className="flex flex-1 flex-col min-w-0 bg-surface-page dark:bg-night-body">
         <TopNav />
 
         {isFullHeight ? (
-          <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-gray-100 px-3 pb-3 pt-20 md:pt-3 sm:px-4 dark:bg-gray-950">
+          <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-surface-page px-3 pb-3 pt-20 md:pt-3 sm:px-4 dark:bg-night-body">
             {userInfoSections.includes(activeSection) && (
               <UsersModule initialModal={activeSection === "user-add" ? "create" : undefined} />
             )}
@@ -112,7 +112,7 @@ export default function DashboardClient() {
             {activeSection === "activity" && <ActivityModule />}
           </main>
         ) : (
-        <main className="flex-1 overflow-y-auto scrollbar-hide scroll-smooth h-screen bg-gray-100 px-4 py-6 pt-20 md:pt-4 sm:px-6 sm:py-6 lg:px-6 2xl:px-8 2xl:py-8 dark:bg-gray-950">
+        <main className="flex-1 overflow-y-auto scrollbar-hide scroll-smooth h-screen bg-surface-page px-4 py-6 pt-20 md:pt-4 sm:px-6 sm:py-6 lg:px-6 2xl:px-8 2xl:py-8 dark:bg-night-body">
           {!hideWelcomeBanner && (
             <div className="mb-8 animate-fade-in">
               <WelcomeBanner />
@@ -120,7 +120,7 @@ export default function DashboardClient() {
           )}
 
           <div className="mx-auto w-full">
-            <div className="rounded-2xl bg-white p-4 sm:p-6 lg:p-8 shadow-sm ring-1 ring-gray-100 animate-fade-in dark:bg-gray-900 dark:ring-gray-800">
+            <div className="animate-fade-in">
               {activeSection === "dashboard" && <DashboardOverview onNavigate={handleNavigate} />}
               {activeSection === "candidate" && <Candidate />}
               {activeSection === "add-category" && (

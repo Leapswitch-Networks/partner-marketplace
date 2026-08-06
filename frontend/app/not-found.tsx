@@ -15,9 +15,9 @@ import Link from "next/link";
 export default function NotFound() {
   return (
     <div className="flex min-h-[60vh] flex-col items-center justify-center px-6 py-20 text-center">
-      <span className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-orange-50 dark:bg-orange-950/30">
+      <span className="mb-4 flex h-14 w-14 items-center justify-center rounded-none bg-brand/10 dark:bg-brand/20">
         <svg
-          className="h-7 w-7 text-[#F97316]"
+          className="h-7 w-7 text-brand dark:text-brand-on-dark"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -32,7 +32,7 @@ export default function NotFound() {
         </svg>
       </span>
 
-      <p className="font-mono text-xs font-semibold uppercase tracking-widest text-[#F97316]">
+      <p className="font-mono text-xs font-semibold uppercase tracking-widest text-brand dark:text-brand-on-dark">
         404
       </p>
       <h1 className="mt-1 text-base font-bold text-gray-900 dark:text-gray-100">Page not found</h1>
@@ -44,13 +44,13 @@ export default function NotFound() {
       <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
         <Link
           href="/dashboard"
-          className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#F97316] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#EA6C0A] focus:outline-none focus:ring-2 focus:ring-[#F97316] focus:ring-offset-2"
+          className="inline-flex items-center justify-center gap-2 rounded-[5px] bg-brand px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-brand-dark focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2"
         >
           Go to dashboard
         </Link>
         <Link
           href="/sign-in"
-          className="inline-flex items-center justify-center gap-2 rounded-lg border border-[#F97316] px-5 py-2.5 text-sm font-semibold text-[#F97316] transition-colors hover:bg-orange-50 focus:outline-none focus:ring-2 focus:ring-[#F97316] focus:ring-offset-2 dark:hover:bg-orange-950/30"
+          className="inline-flex items-center justify-center gap-2 rounded-[5px] border border-brand px-5 py-2.5 text-sm font-semibold text-brand dark:text-brand-on-dark transition-colors hover:bg-brand/10 focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 dark:hover:bg-brand/20"
         >
           Sign in
         </Link>

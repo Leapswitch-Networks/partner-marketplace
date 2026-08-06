@@ -10,12 +10,12 @@ interface ActivityBadgeProps {
 
 const statusConfig = {
   active: {
-    bg: "bg-emerald-500",
+    bg: "bg-tone-success/100",
     animation: "animate-pulse-glow",
     label: "Active",
   },
   idle: {
-    bg: "bg-amber-500",
+    bg: "bg-tone-warning/150",
     animation: "animate-pulse",
     label: "Idle",
   },

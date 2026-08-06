@@ -247,7 +247,7 @@ export default function RolesModule() {
               type="button"
               onClick={() => setSearch("")}
               disabled={!search}
-              className="h-9 shrink-0 rounded-lg border border-gray-300 px-3 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800"
+              className="h-9 shrink-0 rounded-[5px] border border-surface-border px-3 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-night-border dark:text-gray-400 dark:hover:bg-gray-800"
             >
               Reset
             </button>
@@ -460,7 +460,7 @@ function RoleFormModal({
           </div>
 
           {groups.length === 0 && (
-            <p className="rounded-lg border border-gray-200 px-3 py-4 text-center text-xs text-gray-400 dark:border-gray-800 dark:text-gray-500">
+            <p className="rounded-[5px] border border-surface-border px-3 py-4 text-center text-xs text-gray-400 dark:border-night-border dark:text-gray-500">
               You do not have permission to view the permission catalog.
             </p>
           )}
@@ -473,14 +473,14 @@ function RoleFormModal({
               return (
                 <fieldset
                   key={group.id}
-                  className="rounded-xl border border-gray-200 px-3 py-2.5 dark:border-gray-800"
+                  className="rounded-[5px] border border-surface-border px-3 py-2.5 dark:border-night-border"
                 >
                   <legend className="flex items-center gap-2 px-1">
                     <button
                       type="button"
                       onClick={() => !readOnly && toggleGroup(group)}
                       disabled={readOnly}
-                      className="text-xs font-semibold text-gray-800 hover:text-[#F97316] disabled:cursor-not-allowed dark:text-gray-200"
+                      className="text-xs font-semibold text-gray-800 hover:text-brand disabled:cursor-not-allowed dark:text-gray-200"
                     >
                       {group.display_name}
                     </button>
@@ -491,7 +491,7 @@ function RoleFormModal({
                     {group.permissions.map((permission) => (
                       <label
                         key={permission.id}
-                        className={`flex items-start gap-2 rounded-lg px-1.5 py-1 text-xs ${
+                        className={`flex items-start gap-2 rounded-[5px] px-1.5 py-1 text-xs ${
                           readOnly ? "" : "cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
                         }`}
                       >
@@ -500,7 +500,7 @@ function RoleFormModal({
                           checked={checked.has(permission.id)}
                           onChange={() => toggle(permission.id)}
                           disabled={readOnly}
-                          className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-[#F97316]"
+                          className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-brand"
                         />
                         <span className="min-w-0">
                           <span className="block truncate text-gray-700 dark:text-gray-300">
@@ -522,7 +522,7 @@ function RoleFormModal({
         {error && (
           <p
             role="alert"
-            className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400"
+            className="rounded-[5px] border border-tone-danger/40 bg-tone-danger/10 px-3 py-2 text-sm text-tone-danger dark:border-tone-danger/50 dark:bg-tone-danger/15 dark:text-tone-danger"
           >
             {error}
           </p>
@@ -571,7 +571,7 @@ function DeleteRoleModal({
             type="button"
             onClick={confirm}
             disabled={deleting || role.user_count > 0}
-            className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-[5px] bg-tone-danger px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-tone-danger disabled:opacity-50"
           >
             {deleting ? "Deleting…" : "Delete role"}
           </button>
@@ -583,7 +583,7 @@ function DeleteRoleModal({
         <span className="font-semibold text-gray-900 dark:text-gray-100">{role.display_name}</span>?
       </p>
       {role.user_count > 0 && (
-        <p className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400">
+        <p className="mt-3 rounded-[5px] border border-tone-warning/40 bg-tone-warning/15 px-3 py-2 text-xs text-ink dark:border-tone-warning/40 dark:bg-tone-warning/15 dark:text-tone-warning">
           {role.user_count} user(s) still hold this role. Reassign them first — the API will refuse
           otherwise.
         </p>
@@ -591,7 +591,7 @@ function DeleteRoleModal({
       {error && (
         <p
           role="alert"
-          className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400"
+          className="mt-3 rounded-[5px] border border-tone-danger/40 bg-tone-danger/10 px-3 py-2 text-sm text-tone-danger dark:border-tone-danger/50 dark:bg-tone-danger/15 dark:text-tone-danger"
         >
           {error}
         </p>

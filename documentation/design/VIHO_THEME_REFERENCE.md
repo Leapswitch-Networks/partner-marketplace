@@ -363,6 +363,14 @@ their theme family and are **not** part of Viho's palette — don't carry them o
 
 ## 🔐 Login Screen Anatomy — the URL the owner shared
 
+> ⚠️ **There are two login variants, and the one below is not the one we build.**
+>
+> This section describes the **centred** variant (`auth-login-light.png`): one card on a full-viewport
+> brand wash. On **2026-08-05** the owner supplied `login.png` and `register.png`, which show Viho's
+> **split-screen** variant — artwork panel left, wash panel with the card right. **The split-screen
+> version is what the app implements.** See § Split-Screen Auth Anatomy below for the measured
+> geometry; the card internals in this section are identical between the two and still apply.
+
 `https://vue.pixelstrap.net/viho/auth/login`. Reconstructed from the `.login-*` rule set.
 
 ```
@@ -435,6 +443,93 @@ Details worth stealing:
   this is a small, self-contained win worth taking regardless of the rebrand decision.
 - **Fixed `width: 450px`** rather than `max-width` — technically not responsive below 474px; the
   `padding: 30px 12px` on the parent is what saves it. **Use `max-width: 450px` in ours.**
+
+---
+
+## 🪟 Split-Screen Auth Anatomy — what we actually build
+
+Added **2026-08-05** from the owner's `login.png` and `register.png` (both 1917×933). **Measured, not
+inferred** — pixel-sampled the same way as § Neutrals & Surfaces — Dark.
+
+```
+┌──────────────────────────────┬───────────────────────────┐
+│  artwork panel               │  form panel               │
+│  #ffffff                     │  #eaf0ef  (brand @ 10%)   │
+│  faint decoration, centred   │   ┌───────────────────┐   │
+│  illustration                │   │  card #ffffff     │   │
+│                              │   │  450px, NO border │   │
+│                              │   │  30px padding     │   │
+│                              │   └───────────────────┘   │
+└──────────────────────────────┴───────────────────────────┘
+```
+
+| Measurement | `login.png` | `register.png` |
+|---|---|---|
+| Artwork panel | `#ffffff`, 0 → 1120 (**58.4%**) | `#ffffff`, 0 → 800 (**41.7%**) |
+| Form panel | `#eaf0ef`, 1120 → 1917 (**41.6%**) | `#eaf0ef`, 800 → 1917 (**58.3%**) |
+| Card x-range | 1295 → 1744 → **450px wide** | 1135 → 1584 → **450px wide** |
+| Card height | 515px | 599px |
+| Card centred in form panel? | yes (175 / 173 gutters) | yes (335 / 333 gutters) |
+
+Three findings that changed the build:
+
+1. **The card has no border.** The pixel immediately outside it is the `#eaf0ef` wash and its own edge
+   is pure `#ffffff` — there is no 1px rule and no shadow. The wash alone makes it read as raised. An
+   earlier implementation added `border-surface-border` on the strength of `.card { border: 1px solid
+   #e6edef }`; that rule is for *content* cards, not this one.
+2. **The two screenshots disagree on the split** — 58/42 on login, 42/58 on register. Two different
+   demo templates. We standardise on the **login** proportions (form panel 42%) for both.
+3. **The card is exactly 450px**, confirming `.login-form { width: 450px }` renders literally.
+
+Card-content histogram (login.png, inside the card) — every value is one already in this document,
+which is a useful cross-check that nothing new is going on visually:
+
+| Share | Hex | Role |
+|------:|-----|------|
+| 90.0% | `#ffffff` | card |
+| 1.8% | `#eff3f2` | social tiles — brand @ 8% |
+| 1.6% | `#24695c` | button, icons, links |
+| 1.0% | `#eaf0ef` | input addon tiles — brand @ 10% |
+| 0.7% | `#e6edef` | input borders |
+| 0.2% | `#999999` | muted text + the divider rule |
+| 0.1% | `#242934` | headings and labels |
+
+### Register screen — differences from login
+
+| Aspect | Register |
+|---|---|
+| Heading / subtitle | "Create Your Account" / "Enter your personal details to create account" |
+| Name | **One "Your Name" label over a two-up First Name / Last Name pair**, each with a person-icon addon |
+| Fields | Your Name (×2) → Email Address → Password. **No confirm-password field** — the `Show` toggle is the safeguard |
+| Consent | **"Agree With Privacy Policy"** checkbox, "Privacy Policy" in brand colour |
+| Submit | `CREATE ACCOUNT`, uppercase, right-aligned |
+| Footer | "Already have an account? **Login**" |
+
+### Button label asymmetry — easy to miss
+
+The login card's heading reads **"Login"** but its button reads **"SIGN IN"**. Not a transcription
+slip; both are visible in `login.png`.
+
+### ⚠️ The illustrations are licensed and must not be copied
+
+Viho's artwork is a paid theme asset. `assets/screenshots/README.md` forbids committing the theme's own
+images — screenshots of rendered pages only. **Tracing the illustrations out of `login.png` /
+`register.png` would produce a derivative of a paid asset in a public repo**, so that is off the table
+too, not just copying the files.
+
+What fills the slot instead is `components/auth/AuthArt.tsx` — **original inline SVG**, hand-authored in
+the same *style* (flat vector, brand palette, floating "sticker" composition) and swapped per route.
+Style is not the licensed part; the specific artwork is.
+
+| Viho's art | Ours |
+|---|---|
+| Character illustration (person with phone / person thinking) | **No figures** — hand-coded humans read as amateurish, and the figure is the most distinctive part of Viho's art |
+| Login: phone, padlock, plants, picture frames | Login: phone mockup with a login screen, padlock, plant, picture frames, leaf line-art, wave arcs |
+| Register: floating notes, images, lightbulb, phone, mannequin | Register: browser-window card, lightbulb in a thought circle, phone checklist, sticky note, grid-paper note, image cards |
+
+Every surface carries a `dark:` counterpart, so the panel works in both themes. Inline SVG means no
+image requests — `/sign-in` First Load JS was unchanged at 174 kB after adding it. A commissioned or
+licensed illustration can replace `<AuthArt />` without touching the layout.
 
 ---
 
@@ -803,7 +898,7 @@ it has always been: the record of *what Viho looks like*, not of what we have bu
 
 ---
 
-## 📎 Screenshot Catalogue — 34 references
+## 📎 Screenshot Catalogue — 36 references
 
 All screenshots live in **[`assets/screenshots/`](./assets/screenshots/)**. Paths below are relative to
 **this file**, so they work when read from `documentation/design/`.
@@ -817,7 +912,8 @@ Tailwind. The measured values are already in the sections above — the screensh
 
 | You're building | Open | Also useful |
 |-----------------|------|-------------|
-| **Sign-in / auth page** | [`auth-login-light.png`](./assets/screenshots/auth-login-light.png) | § Login Screen Anatomy |
+| **Sign-in / auth page** | [`login.png`](./assets/screenshots/login.png) — **the split-screen variant we build** | § Split-Screen Auth Anatomy; [`auth-login-light.png`](./assets/screenshots/auth-login-light.png) for the centred variant |
+| **Register / sign-up page** | [`register.png`](./assets/screenshots/register.png) | § Split-Screen Auth Anatomy → Register screen |
 | **An index / list page with a table** | [`tables-datatable-light-pagination.png`](./assets/screenshots/tables-datatable-light-pagination.png) | [`tables-basic-light.png`](./assets/screenshots/tables-basic-light.png), [`support-ticket-light-2-table-pagination.png`](./assets/screenshots/support-ticket-light-2-table-pagination.png) |
 | **A table row with an actions menu** | [`tables-basic-light.png`](./assets/screenshots/tables-basic-light.png) — "Inverse Table" has the `⋮` column | § Index Pages & Data Tables |
 | **A create / edit form** | [`project-create-new-light-form.png`](./assets/screenshots/project-create-new-light-form.png) | [`users-edit-light-form.png`](./assets/screenshots/users-edit-light-form.png), [`form-validation-light.png`](./assets/screenshots/form-validation-light.png) |
@@ -839,11 +935,13 @@ Tailwind. The measured values are already in the sections above — the screensh
 
 ### Full index
 
-**Auth & dashboard (4)**
+**Auth & dashboard (6)**
 
 | File | Screen | What to notice |
 |------|--------|----------------|
-| [`auth-login-light.png`](./assets/screenshots/auth-login-light.png) | `/auth/login` | Page wash `#eaf0ef`, **square card, no shadow**, tinted icon addons, right-aligned uppercase button, `Show` password toggle, 4 social tiles |
+| [`login.png`](./assets/screenshots/login.png) | `/auth/login`, **split-screen** | **The variant the app implements.** Artwork panel `#ffffff` left, `#eaf0ef` wash right, card exactly **450px with no border**, centred in the wash panel. Heading "Login" but button **"SIGN IN"**. Tinted icon addons, `Show` toggle, 4 social tiles |
+| [`register.png`](./assets/screenshots/register.png) | `/auth/register`, **split-screen** | "Create Your Account"; **one "Your Name" label over a two-up First/Last pair** with person addons; **no confirm-password field**; **"Agree With Privacy Policy"** checkbox; `CREATE ACCOUNT` right-aligned |
+| [`auth-login-light.png`](./assets/screenshots/auth-login-light.png) | `/auth/login`, **centred** | The *other* variant — one card on a full-viewport wash. Page wash `#eaf0ef`, **square card, no shadow**, tinted icon addons, right-aligned uppercase button, `Show` password toggle, 4 social tiles |
 | [`dashboard-default-light-top.png`](./assets/screenshots/dashboard-default-light-top.png) | `/dashboard/default` upper | Sidebar profile block, filled+rounded active nav, brand welcome banner, stat cards, gradient area chart |
 | [`dashboard-default-light-bottom.png`](./assets/screenshots/dashboard-default-light-bottom.png) | `/dashboard/default` lower | Borderless widget table with in-cell sparklines, radial chart, tan area chart, footer |
 | [`dashboard-default-dark.png`](./assets/screenshots/dashboard-default-dark.png) | `/dashboard/default` dark | **Inverted elevation** — cards `#111727` darker than the `#202938` page; `#142831` brand-tinted borders; near-white ghost bars |

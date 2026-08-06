@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 
 export default function AppearanceSettingsPage() {
   return (
-    <div className="rounded-2xl bg-white p-6 ring-1 ring-gray-100 dark:bg-gray-900 dark:ring-gray-800">
+    <div className="rounded-none bg-white p-6 ring-1 ring-surface-border dark:bg-night-card dark:ring-night-border">
       <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">
         Appearance settings
       </h3>

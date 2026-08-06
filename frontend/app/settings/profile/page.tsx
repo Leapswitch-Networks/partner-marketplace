@@ -23,11 +23,11 @@ export default function ProfileSettingsPage() {
       <ProfileIdCard />
       <EditProfileForm />
 
-      <div className="rounded-2xl bg-white p-6 ring-1 ring-gray-100 dark:bg-gray-900 dark:ring-gray-800">
+      <div className="rounded-none bg-white p-6 ring-1 ring-surface-border dark:bg-night-card dark:ring-night-border">
         <TwoFactorSettings />
       </div>
 
-      <div className="rounded-2xl bg-white p-6 ring-1 ring-gray-100 dark:bg-gray-900 dark:ring-gray-800">
+      <div className="rounded-none bg-white p-6 ring-1 ring-surface-border dark:bg-night-card dark:ring-night-border">
         <ActiveSessions />
       </div>
     </>

@@ -60,13 +60,13 @@ export default function SelectQuestionType({ onSelect }: SelectQuestionTypeProps
             key={type.id}
             type="button"
             onClick={() => onSelect(type.id)}
-            className="group flex items-start gap-4 rounded-xl border-2 border-gray-200 bg-white p-5 text-left transition-all duration-150 hover:border-[#F97316] hover:shadow-md focus:outline-none focus:ring-2 focus:ring-[#F97316]/30 dark:border-gray-700 dark:bg-gray-800 dark:hover:border-orange-500"
+            className="group flex items-start gap-4 rounded-[5px] border-2 border-surface-border bg-white p-5 text-left transition-all duration-150 hover:border-brand hover:shadow-md focus:outline-none focus:ring-2 focus:ring-brand/30 dark:border-night-border dark:bg-night-card dark:hover:border-brand/40"
           >
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-orange-50 text-[#F97316] transition-colors group-hover:bg-[#F97316] group-hover:text-white dark:bg-orange-950/30 dark:text-orange-400">
+            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[5px] bg-brand/10 text-brand dark:text-brand-on-dark transition-colors group-hover:bg-brand group-hover:text-white dark:bg-brand/20 dark:text-brand-on-dark">
               {type.icon}
             </span>
             <div>
-              <p className="text-sm font-semibold text-gray-900 group-hover:text-[#F97316] transition-colors dark:text-gray-100 dark:group-hover:text-orange-400">
+              <p className="text-sm font-semibold text-gray-900 group-hover:text-brand transition-colors dark:text-gray-100 dark:group-hover:text-brand-on-dark">
                 {type.label}
               </p>
               <p className="mt-1 text-sm text-gray-500 leading-relaxed dark:text-gray-400">
@@ -74,7 +74,7 @@ export default function SelectQuestionType({ onSelect }: SelectQuestionTypeProps
               </p>
             </div>
             <svg
-              className="ml-auto mt-0.5 h-5 w-5 shrink-0 text-gray-300 transition-colors group-hover:text-[#F97316] dark:text-gray-600 dark:group-hover:text-orange-400"
+              className="ml-auto mt-0.5 h-5 w-5 shrink-0 text-gray-300 transition-colors group-hover:text-brand dark:text-gray-600 dark:group-hover:text-brand-on-dark"
               fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2} aria-hidden="true"
             >
               <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />

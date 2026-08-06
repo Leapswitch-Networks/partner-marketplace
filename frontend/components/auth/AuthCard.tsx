@@ -8,6 +8,11 @@ import type { ReactNode } from "react";
  * They are the first thing a new user sees, often before they have an account, so
  * four slightly different cards would be four slightly different first impressions.
  *
+ * Matched to `AuthHub`'s Viho card on 2026-08-05: square corners, **no border**,
+ * 30px padding, `max-w-[450px]`, no shadow — the `(auth)` layout's 10% brand wash
+ * is what lifts it off the page. The orange `P` monogram that used to sit above
+ * the title is gone; Viho's auth card is the card alone.
+ *
  * The `(auth)` layout already centres its children and paints the page, so this
  * only owns the card itself.
  */
@@ -23,21 +28,18 @@ export default function AuthCard({
   footer?: ReactNode;
 }) {
   return (
-    <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-sm ring-1 ring-gray-100 sm:p-8 dark:bg-gray-900 dark:ring-gray-800">
-      <div className="mb-6">
-        <span className="mb-4 flex h-10 w-10 items-center justify-center rounded-lg bg-[#F97316] text-base font-bold text-white">
-          P
-        </span>
-        <h1 className="text-lg font-bold text-gray-900 dark:text-gray-100">{title}</h1>
-        {subtitle && (
-          <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">{subtitle}</p>
-        )}
-      </div>
+    <div className="w-full max-w-[450px] bg-white p-[30px] dark:bg-night-card">
+      <h1 className="text-[22px] font-semibold capitalize text-ink dark:text-white">
+        {title}
+      </h1>
+      {subtitle && (
+        <p className="mt-[5px] text-sm text-ink-muted dark:text-night-muted">{subtitle}</p>
+      )}
 
-      {children}
+      <div className="mt-[25px]">{children}</div>
 
       {footer && (
-        <div className="mt-6 border-t border-gray-100 pt-4 text-center text-sm dark:border-gray-800">
+        <div className="mt-[30px] border-t border-surface-divider pt-4 text-center text-sm dark:border-night-border">
           {footer}
         </div>
       )}

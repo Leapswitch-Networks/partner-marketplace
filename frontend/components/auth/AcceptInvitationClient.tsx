@@ -100,7 +100,7 @@ export default function AcceptInvitationClient({ token }: { token: string | null
   };
 
   const signInLink = (
-    <Link href="/sign-in" className="font-medium text-[#F97316] hover:underline">
+    <Link href="/sign-in" className="font-medium text-brand dark:text-brand-on-dark hover:underline">
       Go to sign in
     </Link>
   );
@@ -123,8 +123,8 @@ export default function AcceptInvitationClient({ token }: { token: string | null
   if (loading) {
     return (
       <AuthCard title="Checking your invitation…">
-        <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
-          <div className="h-full w-1/3 animate-pulse rounded-full bg-[#F97316]" />
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-night-card">
+          <div className="h-full w-1/3 animate-pulse rounded-full bg-brand" />
         </div>
       </AuthCard>
     );
@@ -149,7 +149,7 @@ export default function AcceptInvitationClient({ token }: { token: string | null
     >
       <form onSubmit={submit} noValidate className="flex flex-col gap-4">
         {preview.role_name && (
-          <p className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500 dark:bg-gray-800 dark:text-gray-400">
+          <p className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500 dark:bg-night-card dark:text-gray-400">
             You&apos;ll join as <span className="font-semibold">{preview.role_name}</span>.
           </p>
         )}
@@ -157,7 +157,7 @@ export default function AcceptInvitationClient({ token }: { token: string | null
         {error && (
           <div
             role="alert"
-            className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400"
+            className="rounded-lg border border-tone-danger/40 bg-tone-danger/10 px-4 py-3 text-sm text-tone-danger dark:border-tone-danger/40 dark:bg-tone-danger/15 dark:text-tone-danger"
           >
             {error}
           </div>

@@ -4,8 +4,29 @@
 > in [`VIHO_THEME_REFERENCE.md`](./VIHO_THEME_REFERENCE.md) § Adoption Decision are adopted, not
 > partially adopted. This document is the sequenced plan to get there.
 >
-> **This is a plan, not a record of work done.** Nothing in `frontend/` has changed yet. Check the code
-> before assuming any phase below is complete; each phase carries its own Done-when test.
+> **This is a plan, not a record of work done.** Check the code before assuming any phase below is
+> complete; each phase carries its own Done-when test.
+>
+> **Progress as of 2026-08-05 — the auth screens went first, out of plan order.** At the owner's
+> request the sign-in and sign-up pages were built to full Viho fidelity ahead of the phase sequence.
+> That pulled parts of phases 1, 4, 5, 6 and 8 forward for the `(auth)` route group only:
+>
+> | Phase | State |
+> |---|---|
+> | 1 — token layer | ✅ **done** (`brand`/`accent`/`surface`/`ink`/`night`/`tone`, `shadow-brand`, plus `brand-on-dark`) |
+> | 2 — retire inherited screens | ⬜ not started — **still needs your approval** |
+> | 3 — migrate call sites | ✅ **done** — all 242 occurrences across 37 files. The palette grep is empty app-wide |
+> | 4 — flip the palette | ✅ **done** — `brand` is teal. Landed early because the token was, in practice, unused as a class |
+> | 5 — surfaces / radius / dark elevation | ✅ **done** app-wide — squared surfaces, `#f5f7fb` canvas, inverted dark elevation, radii normalised. **30px card padding deferred** — it is coupled to phase 7 |
+> | 6 — Montserrat | ✅ **done** app-wide, 14px body |
+> | 7 — re-measure `useAutoPerPage()` | ⬜ not needed yet — card padding has not moved |
+> | 8 — new components | 🟡 `Input` `addon`/`trailing`, `Button` `light` variant, password reveal, social tile. Soft badge / upload zone / ghost bars / stepper / sparkline outstanding |
+> | 9 — screen fidelity pass | 🟡 dashboard, users, roles, activity, settings and auth all migrated and visually verified. Viho's richer *content* (search header, profile block, charts) not yet built |
+> | 10 — retire screenshots | ⬜ not started |
+>
+> **The app is no longer two-tone** — phase 3 completed 2026-08-05 and every route is on the token
+> system. What remains is additive (phase 8 components, Viho's richer dashboard content) plus the
+> coupled padding/pagination change in phases 5 and 7.
 
 | | |
 |---|---|
@@ -198,13 +219,13 @@ screens stay orange until they go — a visibly two-tone app in the interim. **D
 cleaner; ask before doing either.**
 
 **Done when:** the 8 files and their routes are gone, `npm run build` passes, and the union grep is
-down to ~157 occurrences across 29 files.
+down to ~215 occurrences across 25 files.
 
 ---
 
 ### Phase 3 — Migrate call sites to tokens *(no visual change)*
 
-Mechanical sweep of the remaining ~157 occurrences in ~29 files: every `#F97316`, `#EA6C0A` and
+Mechanical sweep of the remaining 215 occurrences in 25 files: every `#F97316`, `#EA6C0A` and
 `orange-*` becomes a token from Phase 1. Still orange on screen.
 
 Highest-value first — `Sidebar.tsx` alone is 46 of them, and `Button`/`Input`/`Badge`/`DataTable`/
@@ -344,7 +365,7 @@ and keep the doc — the values are the lasting output.
 | 0 | Close the 4 reference gaps | — | — |
 | 1 | Token layer, still orange | **No** | — |
 | 2 | Delete inherited screens (−85 occurrences) | Routes removed | **Owner approval** |
-| 3 | Migrate ~157 call sites to tokens | **No** | 1, 2 |
+| 3 | Migrate 215 call sites to tokens | **No** | 1, 2 |
 | 4 | Flip palette to teal + tan | **Yes — the rebrand** | 3 |
 | 5 | Square cards, 30px, inverted dark | **Yes** | 4 |
 | 6 | Montserrat | **Yes** | — |

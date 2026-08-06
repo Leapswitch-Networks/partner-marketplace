@@ -4,16 +4,16 @@ export type BadgeTone = "neutral" | "success" | "warning" | "danger" | "brand" |
 
 const TONES: Record<BadgeTone, string> = {
   neutral:
-    "border-gray-300 bg-gray-50 text-gray-600 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-300",
+    "border-surface-border bg-gray-50 text-gray-600 dark:border-night-border dark:bg-night-card dark:text-gray-300",
   success:
-    "border-green-300 bg-green-50 text-green-700 dark:border-green-700 dark:bg-green-950 dark:text-green-400",
+    "border-tone-success/40 bg-tone-success/10 text-tone-success dark:border-tone-success/50 dark:bg-tone-success/15 dark:text-brand-on-dark",
   warning:
-    "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-400",
+    "border-tone-warning/40 bg-tone-warning/15 text-ink dark:border-tone-warning/40 dark:bg-tone-warning/15 dark:text-tone-warning",
   danger:
-    "border-red-300 bg-red-50 text-red-700 dark:border-red-700 dark:bg-red-950 dark:text-red-400",
+    "border-tone-danger/40 bg-tone-danger/10 text-tone-danger dark:border-tone-danger/50 dark:bg-tone-danger/15 dark:text-tone-danger",
   brand:
-    "border-[#F97316] bg-orange-50 text-[#F97316] dark:border-orange-700 dark:bg-orange-950/40 dark:text-orange-400",
-  info: "border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-700 dark:bg-blue-950 dark:text-blue-400",
+    "border-brand bg-brand/10 text-brand dark:text-brand-on-dark dark:border-brand/40 dark:bg-brand/20 dark:text-brand-on-dark",
+  info: "border-brand/30 bg-brand/10 text-brand dark:border-brand/40 dark:bg-brand/15 dark:text-brand-on-dark",
 };
 
 /**
@@ -59,7 +59,7 @@ export default function Badge({
       className={`${base} ${TONES[tone]} ${
         disabled
           ? "cursor-not-allowed opacity-60"
-          : "cursor-pointer transition-opacity hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#F97316]/40"
+          : "cursor-pointer transition-opacity hover:opacity-80 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand/40"
       } ${className}`}
     >
       {children}

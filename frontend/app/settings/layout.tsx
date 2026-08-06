@@ -17,7 +17,7 @@ import SettingsNav from "@/components/settings/SettingsNav";
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
   return (
     <AuthInitializer>
-      <div className="flex h-screen bg-gray-100 dark:bg-gray-950 texture-bg">
+      <div className="flex h-screen bg-gray-100 dark:bg-night-body texture-bg">
         <AppShell>
           <div className="mx-auto w-full max-w-5xl">
             <div className="mb-6">
@@ -31,7 +31,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
 
             <div className="flex flex-col gap-4 md:flex-row">
               <div className="w-full flex-shrink-0 md:w-56">
-                <div className="sticky top-2 rounded-2xl bg-white ring-1 ring-gray-100 dark:bg-gray-900 dark:ring-gray-800">
+                <div className="sticky top-2 rounded-none bg-white ring-1 ring-surface-border dark:bg-night-card dark:ring-night-border">
                   <SettingsNav />
                 </div>
               </div>

@@ -131,7 +131,7 @@ function Tooltip({ label, children }: { label: string; children: React.ReactNode
       {children}
       {visible && typeof document !== "undefined" && createPortal(
         <div
-          className="pointer-events-none fixed z-[9999] -translate-y-1/2 whitespace-nowrap rounded-lg bg-gray-900 px-2.5 py-1.5 text-xs font-medium text-white shadow-lg dark:bg-gray-700"
+          className="pointer-events-none fixed z-[9999] -translate-y-1/2 whitespace-nowrap rounded-[5px] bg-gray-900 px-2.5 py-1.5 text-xs font-medium text-white shadow-lg dark:bg-gray-700"
           style={{ top: coords.top, left: coords.left }}
         >
           {label}
@@ -161,31 +161,28 @@ function NavButton({
     <button
       type="button"
       onClick={onClick}
-      className={`group relative flex w-full items-center gap-3 rounded-xl px-3 font-semibold transition-all duration-200 overflow-hidden ${
+      className={`group relative flex w-full items-center gap-3 rounded-[9px] px-3 font-semibold transition-all duration-200 overflow-hidden ${
         large ? "py-3 text-base" : "py-2.5 text-sm"
       } ${
         active
-          ? "bg-orange-50 text-[#F97316] dark:bg-orange-950/40 dark:text-orange-400 shadow-sm"
-          : "text-gray-700 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+          ? "bg-brand text-white shadow-brand"
+          : "text-gray-700 hover:bg-brand/10 hover:text-brand dark:text-gray-300 dark:hover:bg-brand/20 dark:hover:text-brand-on-dark"
       }`}
     >
-      {active && (
-        <div className="absolute inset-0 bg-gradient-to-r from-orange-50 via-orange-50/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 dark:from-orange-950/40 dark:via-orange-950/20" />
-      )}
       <span
-        className={`flex shrink-0 items-center justify-center rounded-lg transition-all duration-200 ${
+        className={`flex shrink-0 items-center justify-center rounded-[5px] transition-all duration-200 ${
           large ? "h-10 w-10" : "h-8 w-8"
         } ${
           active
-            ? "bg-[#F97316] text-white shadow-md"
-            : "bg-gray-100 text-gray-500 group-hover:bg-orange-50 group-hover:text-[#F97316] dark:bg-gray-700 dark:text-gray-400 dark:group-hover:bg-orange-950/40 dark:group-hover:text-orange-400"
+            ? "bg-white/20 text-white"
+            : "bg-gray-100 text-gray-500 group-hover:bg-brand/10 group-hover:text-brand dark:bg-gray-700 dark:text-gray-400 dark:group-hover:bg-brand/20 dark:group-hover:text-brand-on-dark"
         }`}
       >
         {icon}
       </span>
       <span className="truncate relative z-10">{label}</span>
       {active && (
-        <span className="ml-auto h-2 w-2 rounded-full bg-[#F97316] animate-pulse dark:bg-orange-400" />
+        <span className="ml-auto h-2 w-2 rounded-full bg-white/70" />
       )}
     </button>
   );
@@ -208,15 +205,15 @@ function IconButton({
       <button
         type="button"
         onClick={onClick}
-        className={`flex h-10 w-10 items-center justify-center rounded-xl transition-all duration-200 relative ${
+        className={`flex h-10 w-10 items-center justify-center rounded-[5px] transition-all duration-200 relative ${
           active
-            ? "bg-[#F97316] text-white shadow-md"
-            : "bg-gray-100 text-gray-500 hover:bg-orange-50 hover:text-[#F97316] dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-orange-950/40 dark:hover:text-orange-400"
+            ? "bg-white/20 text-white"
+            : "bg-gray-100 text-gray-500 hover:bg-brand/10 hover:text-brand dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-brand/20 dark:hover:text-brand-on-dark"
         }`}
       >
         {icon}
         {active && (
-          <span className="absolute inset-0 rounded-xl animate-pulse-ring" style={{
+          <span className="absolute inset-0 rounded-[5px] animate-pulse-ring" style={{
             boxShadow: "inset 0 0 0 1px rgba(249, 115, 22, 0.2)",
           }} />
         )}
@@ -290,22 +287,22 @@ function NavItems({
           <button
             type="button"
             onClick={() => setCreateTestOpen((o: boolean) => !o)}
-            className={`group flex w-full items-center justify-between rounded-xl px-3 font-semibold transition-all duration-150 ${
+            className={`group flex w-full items-center justify-between rounded-[9px] px-3 font-semibold transition-all duration-150 ${
               large ? "py-3 text-base" : "py-2.5 text-sm"
             } ${
               isSubItemActive
-                ? "bg-orange-50 text-[#F97316] dark:bg-orange-950/40 dark:text-orange-400"
-                : "text-gray-700 hover:bg-gray-50 hover:text-gray-900 dark:text-gray-300 dark:hover:bg-gray-800 dark:hover:text-gray-100"
+                ? "bg-brand text-white"
+                : "text-gray-700 hover:bg-brand/10 hover:text-brand dark:text-gray-300 dark:hover:bg-brand/20 dark:hover:text-brand-on-dark"
             }`}
           >
             <span className="flex items-center gap-3">
               <span
-                className={`flex shrink-0 items-center justify-center rounded-lg transition-colors ${
+                className={`flex shrink-0 items-center justify-center rounded-[5px] transition-colors ${
                   large ? "h-10 w-10" : "h-8 w-8"
                 } ${
                   isSubItemActive
-                    ? "bg-[#F97316] text-white"
-                    : "bg-gray-100 text-gray-500 group-hover:bg-orange-50 group-hover:text-[#F97316] dark:bg-gray-700 dark:text-gray-400 dark:group-hover:bg-orange-950/40 dark:group-hover:text-orange-400"
+                    ? "bg-white/20 text-white"
+                    : "bg-gray-100 text-gray-500 group-hover:bg-brand/10 group-hover:text-brand dark:bg-gray-700 dark:text-gray-400 dark:group-hover:bg-brand/20 dark:group-hover:text-brand-on-dark"
                 }`}
               >
                 {navIcons.createTest}
@@ -313,7 +310,7 @@ function NavItems({
               Create
             </span>
             <svg
-              className={`h-4 w-4 shrink-0 transition-transform duration-200 ${createTestOpen ? "rotate-180" : ""} ${isSubItemActive ? "text-[#F97316] dark:text-orange-400" : "text-gray-400 dark:text-gray-500"}`}
+              className={`h-4 w-4 shrink-0 transition-transform duration-200 ${createTestOpen ? "rotate-180" : ""} ${isSubItemActive ? "text-white" : "text-gray-400 dark:text-gray-500"}`}
               fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
             >
               <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
@@ -325,7 +322,7 @@ function NavItems({
               createTestOpen ? "max-h-72 opacity-100 mt-1" : "max-h-0 opacity-0"
             }`}
           >
-            <div className="ml-6 border-l-2 border-gray-100 pl-3 space-y-0.5 py-1 dark:border-gray-700">
+            <div className="ml-6 border-l-2 border-surface-border pl-3 space-y-0.5 py-1 dark:border-night-border">
               {subItems.map((item) => {
                 const isActive = activeSection === item.id;
                 return (
@@ -333,23 +330,23 @@ function NavItems({
                     key={item.id}
                     type="button"
                     onClick={() => onNavigate(item.id)}
-                    className={`group flex w-full items-center gap-2.5 rounded-lg px-3 transition-all duration-100 ${
+                    className={`group flex w-full items-center gap-2.5 rounded-[9px] px-3 transition-all duration-100 ${
                       large ? "py-2.5 text-base" : "py-2 text-sm"
                     } ${
                       isActive
-                        ? "bg-orange-50 font-semibold text-[#F97316] dark:bg-orange-950/40 dark:text-orange-400"
-                        : "font-medium text-gray-500 hover:bg-gray-50 hover:text-gray-800 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-200"
+                        ? "bg-brand/10 font-semibold text-brand dark:bg-brand/20 dark:text-brand-on-dark"
+                        : "font-medium text-gray-500 hover:bg-brand/10 hover:text-brand dark:text-gray-400 dark:hover:bg-brand/20 dark:hover:text-brand-on-dark"
                     }`}
                   >
                     <span
                       className={`shrink-0 transition-colors ${
-                        isActive ? "text-[#F97316] dark:text-orange-400" : "text-gray-400 group-hover:text-gray-600 dark:text-gray-500 dark:group-hover:text-gray-300"
+                        isActive ? "text-brand dark:text-brand-on-dark" : "text-gray-400 group-hover:text-gray-600 dark:text-gray-500 dark:group-hover:text-gray-300"
                       }`}
                     >
                       {item.icon}
                     </span>
                     {item.label}
-                    {isActive && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-[#F97316] dark:bg-orange-400" />}
+                    {isActive && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-brand dark:bg-brand-on-dark" />}
                   </button>
                 );
               })}
@@ -392,7 +389,7 @@ const BottomExpanded = memo(function BottomExpanded({
       type="button"
       onClick={onLogout}
       disabled={loggingOut}
-      className={`flex w-full items-center gap-2 rounded-lg px-3 font-medium text-gray-500 transition-all duration-200 hover:bg-red-50 hover:text-red-500 disabled:opacity-50 dark:text-gray-400 dark:hover:bg-red-950/30 dark:hover:text-red-400 ${
+      className={`flex w-full items-center gap-2 rounded-[5px] px-3 font-medium text-gray-500 transition-all duration-200 hover:bg-tone-danger/10 hover:text-tone-danger disabled:opacity-50 dark:text-gray-400 dark:hover:bg-tone-danger/15 dark:hover:text-tone-danger ${
         large ? "py-2.5 text-base" : "py-2 text-sm"
       }`}
     >
@@ -416,7 +413,7 @@ const BottomCollapsed = memo(function BottomCollapsed({
           type="button"
           onClick={onLogout}
           disabled={loggingOut}
-          className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-400 transition-all duration-200 hover:bg-red-50 hover:text-red-500 disabled:opacity-50 dark:text-gray-500 dark:hover:bg-red-950/30 dark:hover:text-red-400"
+          className="flex h-9 w-9 items-center justify-center rounded-[5px] text-gray-400 transition-all duration-200 hover:bg-tone-danger/10 hover:text-tone-danger disabled:opacity-50 dark:text-gray-500 dark:hover:bg-tone-danger/15 dark:hover:text-tone-danger"
         >
           {logoutIcon}
         </button>
@@ -549,17 +546,17 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
   return (
     <>
       {/* ── Mobile top bar (visible below md) ── */}
-      <header className="fixed inset-x-0 top-0 z-40 flex h-14 items-center border-b border-gray-200 bg-white px-4 md:hidden dark:border-gray-800 dark:bg-gray-900">
+      <header className="fixed inset-x-0 top-0 z-40 flex h-14 items-center border-b border-surface-border bg-white px-4 md:hidden dark:border-night-border dark:bg-night-card">
         <button
           type="button"
           onClick={() => onNavigate("dashboard")}
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#F97316] text-sm font-bold text-white"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[5px] bg-brand text-sm font-bold text-white"
         >
           P
         </button>
         <div className="ml-2.5">
           <p className="text-sm font-bold text-gray-900 leading-tight dark:text-white">Partner Marketplace</p>
-          <p className="text-[10px] font-medium text-[#F97316] uppercase tracking-widest leading-tight">
+          <p className="text-[10px] font-medium text-brand dark:text-brand-on-dark uppercase tracking-widest leading-tight">
             Admin Panel
           </p>
         </div>
@@ -568,7 +565,7 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
           <button
             type="button"
             onClick={() => setMobileOpen(true)}
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
+            className="flex h-9 w-9 items-center justify-center rounded-[5px] text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
             aria-label="Open menu"
           >
             {navIcons.menu}
@@ -590,25 +587,25 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
           />
 
           {/* Drawer panel — slides in from left */}
-          <div className={`relative flex w-72 max-w-[85vw] flex-col bg-white shadow-2xl dark:bg-gray-900 transition-transform duration-300 ease-in-out ${mobileVisible ? "translate-x-0" : "-translate-x-full"}`}>
-            <div className="flex h-14 items-center border-b border-gray-100 px-4 dark:border-gray-800">
+          <div className={`relative flex w-72 max-w-[85vw] flex-col bg-white shadow-2xl dark:bg-night-card transition-transform duration-300 ease-in-out ${mobileVisible ? "translate-x-0" : "-translate-x-full"}`}>
+            <div className="flex h-14 items-center border-b border-surface-border px-4 dark:border-night-border">
               <button
                 type="button"
                 onClick={() => onNavigate("dashboard")}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#F97316] text-sm font-bold text-white"
+                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[5px] bg-brand text-sm font-bold text-white"
               >
                 P
               </button>
               <div className="ml-2.5">
                 <p className="text-sm font-bold text-gray-900 leading-tight dark:text-white">Partner Marketplace</p>
-                <p className="text-[10px] font-medium text-[#F97316] uppercase tracking-widest leading-tight">
+                <p className="text-[10px] font-medium text-brand dark:text-brand-on-dark uppercase tracking-widest leading-tight">
                   Admin Panel
                 </p>
               </div>
               <button
                 type="button"
                 onClick={closeMobile}
-                className="ml-auto flex h-8 w-8 items-center justify-center rounded-lg text-gray-400 hover:bg-gray-100 dark:text-gray-500 dark:hover:bg-gray-800"
+                className="ml-auto flex h-8 w-8 items-center justify-center rounded-[5px] text-gray-400 hover:bg-gray-100 dark:text-gray-500 dark:hover:bg-gray-800"
                 aria-label="Close menu"
               >
                 {navIcons.close}
@@ -616,13 +613,13 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
             </div>
 
             <nav className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-hide scroll-smooth px-3 py-4 space-y-1">
-              <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500">
+              <p className="mb-1 border-b border-surface-border px-3 pb-2 text-[10px] font-semibold uppercase tracking-widest text-brand dark:border-night-border dark:text-night-muted">
                 Administration
               </p>
               <NavItems {...navItemsProps} collapsed={false} />
             </nav>
 
-            <div className="border-t border-gray-100 px-3 py-3 dark:border-gray-800">
+            <div className="border-t border-surface-border px-3 py-3 dark:border-night-border">
               <BottomExpanded loggingOut={loggingOut} onLogout={handleLogout} />
             </div>
           </div>
@@ -631,17 +628,17 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
 
       {/* ── Desktop / tablet sidebar (hidden below md) ── */}
       <aside
-        className={`hidden md:flex flex-col shrink-0 bg-white border-r border-gray-200 h-screen transition-[width] duration-300 ease-in-out 2xl:transition-none shadow-sm dark:bg-gray-900 dark:border-gray-800 animate-slide-in-left ${
+        className={`hidden md:flex flex-col shrink-0 bg-white border-r border-surface-border h-screen transition-[width] duration-300 ease-in-out 2xl:transition-none shadow-sm dark:bg-night-card dark:border-night-border animate-slide-in-left ${
           collapsed
             ? "w-[68px]"
             : "w-64 2xl:w-72"
         }`}
       >
-        <div className="flex h-14 items-center border-b border-gray-100 px-3 transition-colors duration-200 flex-shrink-0 dark:border-gray-800">
+        <div className="flex h-14 items-center border-b border-surface-border px-3 transition-colors duration-200 flex-shrink-0 dark:border-night-border">
           <button
             type="button"
             onClick={() => onNavigate("dashboard")}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#F97316] text-sm font-bold text-white transition-all duration-200 hover:bg-orange-600 hover:shadow-md 2xl:h-10 2xl:w-10 2xl:text-base"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[5px] bg-brand text-sm font-bold text-white transition-all duration-200 hover:bg-brand-dark hover:shadow-md 2xl:h-10 2xl:w-10 2xl:text-base"
             title="Dashboard"
           >
             P
@@ -653,7 +650,7 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
             }`}
           >
             <p className="truncate text-sm font-bold text-gray-900 leading-tight 2xl:text-base dark:text-white">Partner Marketplace</p>
-            <p className="truncate text-[10px] font-medium text-[#F97316] uppercase tracking-widest leading-tight">
+            <p className="truncate text-[10px] font-medium text-brand dark:text-brand-on-dark uppercase tracking-widest leading-tight">
               Admin Panel
             </p>
           </div>
@@ -673,7 +670,7 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
         </div>
 
         {collapsed && (
-          <div className="flex justify-center py-2 border-b border-gray-100 transition-colors duration-200 flex-shrink-0 dark:border-gray-800">
+          <div className="flex justify-center py-2 border-b border-surface-border transition-colors duration-200 flex-shrink-0 dark:border-night-border">
             <button
               type="button"
               onClick={() => setCollapsed(false)}
@@ -689,14 +686,14 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
 
         <nav className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-hide scroll-smooth px-3 py-4 space-y-1 2xl:py-5 2xl:space-y-1.5">
           {!collapsed && (
-            <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500">
+            <p className="mb-1 border-b border-surface-border px-3 pb-2 text-[10px] font-semibold uppercase tracking-widest text-brand dark:border-night-border dark:text-night-muted">
               Administration
             </p>
           )}
           <NavItems {...navItemsProps} large={false} />
         </nav>
 
-        <div className={`border-t border-gray-100 flex-shrink-0 dark:border-gray-800 ${collapsed ? "px-2 py-3" : "px-3 py-3 2xl:px-4 2xl:py-4"}`}>
+        <div className={`border-t border-surface-border flex-shrink-0 dark:border-night-border ${collapsed ? "px-2 py-3" : "px-3 py-3 2xl:px-4 2xl:py-4"}`}>
           {collapsed ? (
             <BottomCollapsed loggingOut={loggingOut} onLogout={handleLogout} />
           ) : (

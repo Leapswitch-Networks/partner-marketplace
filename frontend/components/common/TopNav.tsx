@@ -71,7 +71,7 @@ export default function TopNav() {
   }, [router]);
 
   return (
-    <header className="hidden md:flex h-14 items-center justify-end gap-2 bg-white border-b border-gray-100 px-4 sm:px-6 lg:px-8 dark:bg-gray-900 dark:border-gray-800 flex-shrink-0">
+    <header className="hidden md:flex h-14 items-center justify-end gap-2 bg-white border-b border-surface-border px-4 sm:px-6 lg:px-8 dark:bg-night-card dark:border-night-border flex-shrink-0">
       <ThemeToggle />
 
       <div className="relative" ref={dropdownRef}>
@@ -80,13 +80,13 @@ export default function TopNav() {
           onClick={() => setDropdownOpen((o) => !o)}
           aria-haspopup="true"
           aria-expanded={dropdownOpen}
-          className={`flex items-center gap-2.5 rounded-xl px-2.5 py-1.5 transition-colors duration-200 min-h-[44px] md:min-h-0 ${
+          className={`flex items-center gap-2.5 rounded-[5px] px-2.5 py-1.5 transition-colors duration-200 min-h-[44px] md:min-h-0 ${
             inSettings
-              ? "bg-orange-50 dark:bg-orange-950/40"
+              ? "bg-brand/10 dark:bg-brand/20"
               : "hover:bg-gray-100 dark:hover:bg-gray-800"
           }`}
         >
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#F97316] text-xs font-bold text-white">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand text-xs font-bold text-white">
             {initials}
           </span>
           <div className="hidden lg:block text-left">
@@ -108,8 +108,8 @@ export default function TopNav() {
         </button>
 
         {dropdownOpen && (
-          <div className="absolute right-0 top-full z-50 mt-2 w-52 rounded-xl border border-gray-200 bg-white shadow-lg dark:border-gray-700 dark:bg-gray-900 overflow-hidden">
-            <div className="border-b border-gray-100 dark:border-gray-800 px-4 py-3">
+          <div className="absolute right-0 top-full z-50 mt-2 w-52 rounded-[5px] border border-surface-border bg-white shadow-lg dark:border-night-border dark:bg-night-card overflow-hidden">
+            <div className="border-b border-surface-border dark:border-night-border px-4 py-3">
               <p className="text-sm font-semibold text-gray-900 dark:text-white truncate">
                 {displayName || "—"}
               </p>
@@ -124,19 +124,19 @@ export default function TopNav() {
                 onClick={handleProfile}
                 className={`flex w-full items-center gap-2.5 px-4 py-2.5 text-sm transition-colors duration-150 min-h-[44px] md:min-h-0 ${
                   inSettings
-                    ? "bg-orange-50 text-[#F97316] dark:bg-orange-950/40 dark:text-orange-400 font-semibold"
+                    ? "bg-brand/10 text-brand dark:text-brand-on-dark dark:bg-brand/20 dark:text-brand-on-dark font-semibold"
                     : "text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800"
                 }`}
               >
                 <svg
-                  className={`h-4 w-4 ${inSettings ? "text-[#F97316] dark:text-orange-400" : "text-gray-400"}`}
+                  className={`h-4 w-4 ${inSettings ? "text-brand dark:text-brand-on-dark" : "text-gray-400"}`}
                   fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
                 >
                   <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                 </svg>
                 Profile
                 {inSettings && (
-                  <span className="ml-auto h-1.5 w-1.5 rounded-full bg-[#F97316] dark:bg-orange-400" />
+                  <span className="ml-auto h-1.5 w-1.5 rounded-full bg-brand dark:bg-brand-on-dark" />
                 )}
               </button>
 
@@ -144,7 +144,7 @@ export default function TopNav() {
                 type="button"
                 onClick={handleLogout}
                 disabled={loggingOut}
-                className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30 transition-colors duration-150 disabled:opacity-50 min-h-[44px] md:min-h-0"
+                className="flex w-full items-center gap-2.5 px-4 py-2.5 text-sm text-tone-danger hover:bg-tone-danger/10 dark:hover:bg-tone-danger/15 transition-colors duration-150 disabled:opacity-50 min-h-[44px] md:min-h-0"
               >
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h6a2 2 0 012 2v1" />

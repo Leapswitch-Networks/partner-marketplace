@@ -11,14 +11,14 @@ function TestCard({ test, onStart }: TestCardProps) {
   const handleStart = useCallback(() => onStart(test), [onStart, test]);
 
   return (
-    <article className="flex flex-col rounded-2xl border border-gray-200 bg-white p-5 shadow-sm transition hover:shadow-md sm:p-6">
+    <article className="flex flex-col rounded-none border border-surface-border bg-white p-5 shadow-sm transition hover:shadow-md sm:p-6">
       {/* Header row */}
       <div className="flex items-start justify-between gap-3">
         <div className="flex-1 min-w-0">
           <h3 className="truncate text-base font-semibold text-gray-900 sm:text-lg">
             {test.title}
           </h3>
-          <span className="mt-1 inline-block rounded-full bg-orange-50 px-2.5 py-0.5 text-xs font-medium text-[#F97316]">
+          <span className="mt-1 inline-block rounded-full bg-brand/10 px-2.5 py-0.5 text-xs font-medium text-brand dark:text-brand-on-dark">
             {test.category}
           </span>
         </div>
@@ -40,7 +40,7 @@ function TestCard({ test, onStart }: TestCardProps) {
       </div>
 
       {/* CTA */}
-      <div className="mt-5 pt-4 border-t border-gray-100">
+      <div className="mt-5 pt-4 border-t border-surface-border">
         <Button fullWidth onClick={handleStart}>
           View Test
         </Button>

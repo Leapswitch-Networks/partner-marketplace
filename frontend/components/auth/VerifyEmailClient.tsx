@@ -72,7 +72,7 @@ export default function VerifyEmailClient({ token }: { token: string | null }) {
   };
 
   const signInLink = (
-    <Link href="/sign-in" className="font-medium text-[#F97316] hover:underline">
+    <Link href="/sign-in" className="font-medium text-brand dark:text-brand-on-dark hover:underline">
       Go to sign in
     </Link>
   );
@@ -80,8 +80,8 @@ export default function VerifyEmailClient({ token }: { token: string | null }) {
   if (state === "verifying") {
     return (
       <AuthCard title="Confirming your email…" subtitle="This will only take a moment.">
-        <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
-          <div className="h-full w-1/3 animate-pulse rounded-full bg-[#F97316]" />
+        <div className="h-1.5 w-full overflow-hidden rounded-full bg-gray-100 dark:bg-night-card">
+          <div className="h-full w-1/3 animate-pulse rounded-full bg-brand" />
         </div>
       </AuthCard>
     );

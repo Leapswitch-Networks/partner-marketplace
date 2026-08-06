@@ -55,7 +55,7 @@ since 2026-07-31 — only the documentation was wrong, and wrong in a way that b
 | [PM-17](#pm-17--emails-are-not-normalised--resolved) | ✅ | ~~Emails are not normalised~~ | Data |
 | [PM-18](#pm-18--health-check-doesnt-check-the-database--resolved) | ✅ | ~~Health check doesn't check the database~~ | Infra |
 | [PM-19](#pm-19--no-error-boundaries-or-route-suspense--resolved) | ✅ | ~~No error boundaries or route suspense~~ | Frontend |
-| [PM-20](#pm-20--brand-colour-hardcoded-in-components--re-scoped) | 🟡 | Brand colour hardcoded in **242 places across 37 files** — blocks the Viho rebrand | UI |
+| [PM-20](#pm-20--brand-colour-hardcoded-in-components--re-scoped) | ✅ | ~~Brand colour hardcoded in 242 places across 37 files~~ — all migrated to tokens 2026-08-05 | UI |
 | [PM-21](#pm-21--stale-product-naming-throughout--mostly-resolved) | ✅ | ~~Stale product naming throughout~~ (2 items deferred) | Housekeeping |
 | [PM-22](#pm-22--unused-tailwind-v4-dependency) | ⚪ | Unused Tailwind v4 dependency | Frontend |
 | [PM-23](#pm-23--two-dead-virtualenvs-in-the-tree) | ⚪ | Two dead virtualenvs in the tree | Housekeeping |
@@ -593,7 +593,16 @@ not doing much work today.
 
 ---
 
-### PM-20 — Brand colour hardcoded in components ⬆️ RE-SCOPED
+### PM-20 — Brand colour hardcoded in components ✅ RESOLVED
+
+**Resolved 2026-08-05.** All 242 occurrences across 37 files migrated to the Viho token layer in
+three sweeps. `grep -rn 'F97316\|EA6C0A\|orange-[0-9]' app components` returns nothing, and the same
+sweep also eliminated every `blue-*`/`purple-*`/`amber-*`/`emerald-*` pastel. Keep that grep as the
+regression guard.
+
+The original entry, and the undercount that made it interesting, are kept below.
+
+#### Original entry (re-scoped 2026-08-05)
 
 **Raised from ⚪ Low to 🟡 Medium on 2026-08-05.** Two things changed: the original entry undercounted
 the problem by an order of magnitude, and the owner's adoption of the Viho theme turned it from a

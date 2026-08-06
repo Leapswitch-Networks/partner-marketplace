@@ -8,6 +8,138 @@
 
 ---
 
+## August 6, 2026 — The whole app is Viho now, and the dashboard stopped being three colours at once
+
+- **The owner opened `/dashboard` and found "orange and white and blue".** That was accurate: an
+  orange sidebar, a **blue→cyan gradient** welcome banner, and stat/action cards in a rainbow of
+  blue/purple/amber/emerald/rose pastels — three visual languages on one screen. The target was
+  `dashboard-default-light-top.png`.
+- **All 242 brand-colour occurrences across 37 files are gone**, along with every pastel. Done as three
+  scripted sweeps rather than by hand, because a 37-file manual edit is where mistakes live:
+  1. brand hex + `orange-*` → tokens, and the legacy dark greys → `night-*`,
+  2. semantic families (`red`/`green`/`amber`/`blue`…) → `tone-*`,
+  3. a catch-all regex for every remaining palette utility including `hover:`/`group-hover:`/`from-`
+     variants, which the first two passes missed.
+  The regression guard is a grep, and it now returns nothing app-wide.
+- **Three things the sweep could not do, done by hand:**
+  - **The sidebar's active nav** is now Viho's *filled* treatment — solid brand, white text,
+    `rounded-[9px]`, translucent-white icon tile — not a tint. Section labels are brand-coloured with a
+    1px rule beneath, matching the reference.
+  - **StatCard and QuickActionsCard were rebuilt.** Their six-colour `color` prop is kept so call sites
+    still work, but it now selects between exactly **two** tones, teal and tan, the way Viho alternates
+    them. Each card is a white squared surface with a circular tinted icon badge and a faint oversized
+    watermark glyph.
+  - **The welcome banner** is a flat `bg-brand` fill with a new CSS-only `.texture-brand` utility.
+    `.texture-bg` could not be reused: its dots are dark-on-light and vanish against `#24695c`.
+- **One refinement came from measuring rather than looking.** The cards initially sat on an opaque
+  white panel that hid the page canvas entirely. Viho's cards sit directly on the `#f5f7fb` canvas, so
+  the wrapper is now transparent. Verified by sampling a gutter band, not by eye.
+
+**Verification.** `tsc --noEmit` clean. `npm run lint` reports **20 errors, unchanged** — the PM-30
+baseline, none in any touched file. `next build` compiles, 22/22 routes. `/dashboard`, `/all-users`,
+`/roles`, `/activity` and `/settings/profile` were each rendered **behind real authentication** and
+checked; sampled surface colours match the reference exactly:
+
+| | Light | Dark |
+|---|---|---|
+| Page canvas | `#f5f7fb` | `#202938` |
+| Sidebar / header / card | `#ffffff` | `#111727` |
+| Border | `#e6edef` | `#142831` |
+
+Dark mode therefore has Viho's **inverted elevation** — the card is *darker* than the page.
+
+To screenshot authenticated pages, a minimal Chrome DevTools Protocol client was written on the Python
+stdlib (no `websocket-client` or `websockets` installed). It logs in, injects the session cookies via
+`Network.setCookie` — they are host-only on `localhost` and ignore the port, so the API's cookies reach
+the frontend — and pins the theme through `localStorage` so light/dark renders are deterministic rather
+than inherited from the OS. Worth keeping: `--blink-settings=preferredColorScheme` did **not** work.
+
+**Docs updated:** `UI_PATTERNS.md` (migration marked complete, the pre-migration cost kept as a
+historical note, regression grep recorded), `VIHO_ADOPTION_PLAN.md` (phase table), and `TECH_DEBT.md`
+**PM-20 closed**.
+
+## August 5, 2026 — The sign-in and sign-up screens are Viho, and the app is deliberately two-tone
+
+- **The auth pages were built first, out of the plan's order, at the owner's request.** That pulled
+  parts of five phases forward for the `(auth)` route group: the token layer, the palette flip,
+  Montserrat, squared/borderless surfaces with inverted dark elevation, and four of the new components.
+  **The dashboard is still orange.** That is the expected mid-migration state, it is recorded in
+  `UI_PATTERNS.md` § Known Issues, and phase 3 is what ends it — not hand-painting teal at call sites.
+- **Two screenshots the owner added mid-task changed the layout entirely.** `login.png` and
+  `register.png` show Viho's **split-screen** auth — artwork panel left, wash panel with the card
+  right. The existing `auth-login-light.png` is a **different, centred variant**, and the reference
+  doc's § Login Screen Anatomy had been written against that one. The first implementation followed the
+  centred layout and had to be reworked. Both variants are now labelled in the doc so the next person
+  doesn't repeat it.
+- **Measuring the new screenshots contradicted the reference doc on one point.** The card has **no
+  border**: the pixel immediately outside it is the `#eaf0ef` wash and its own edge is pure white. The
+  first pass had added `border-surface-border` on the strength of `.card { border: 1px solid #e6edef }`
+  — but that rule is for *content* cards, not this one. Removed. The wash alone is what makes the card
+  read as raised, which is the same trick the doc already credits for the login background.
+  - Confirmed by pixel measurement: card **exactly 450px** wide and centred in the wash panel in both
+    shots; wash exactly `#eaf0ef`; the in-card colour histogram is 90% `#ffffff`, then `#eff3f2`,
+    `#24695c`, `#eaf0ef`, `#e6edef`, `#999999`, `#242934` — every one a value already documented.
+  - The two shots **disagree on the split ratio** (58/42 on login, 42/58 on register). Standardised on
+    the login proportions since that is the screen originally shared.
+- **A real accessibility bug was introduced and then fixed.** The first version used `text-brand` for
+  links on the dark card: `#24695c` on `#111727` is **2.83:1** and fails AA outright, so
+  "Create Account", "Forgot password?" and the `Show` toggle were unreadable in dark mode. Fixed with a
+  new `brand-on-dark` token — `#5ec8b4`, **Viho's own** value for the primary button's focus ring —
+  which scores **9.03:1**. `text-brand dark:text-brand-on-dark` is now a mandatory pair, written into
+  `UI_PATTERNS.md`.
+- **The register screen changed behaviour, not just styling**, and two of the three are improvements:
+  - **First and last name are now separate fields.** The old form took one "Full name" and split it on
+    the first space to satisfy the API — which mangled every two-word surname. The API always wanted
+    the two parts.
+  - **The confirm-password field is gone**, matching the screenshot, which relies on the `Show` toggle
+    instead. The endpoint still requires `confirm_password`, so the password is sent twice. **This is
+    the one change worth a second opinion** — it removes a typo guard.
+  - **An "Agree With Privacy Policy" checkbox now gates submission.** "Privacy Policy" is styled as a
+    link but rendered as **plain text**, because no privacy-policy route exists and a checkbox gating
+    signup must not point at a 404.
+- **The tab toggle is gone and `/sign-up` is a real destination.** Viho navigates between Login and
+  Create Account as separate screens with a footer link, so the segmented toggle and its four slide
+  keyframes were removed. Registration success now navigates to `/sign-in?registered=1` rather than a
+  parent callback flipping a tab.
+- **Dropping the logo block removed the last inherited test-platform branding** — the `T` monogram,
+  "Admin Portal", and the subtitle "Sign in to manage tests, questions, and job roles", which were
+  TECH_DEBT PM-21's two deferred items. Viho's auth card is the card alone.
+- **`authApi.googleAuthorizeUrl` got its first caller.** The endpoint has existed with no button
+  anywhere in the app. Viho's "Sign in with" row now reaches it.
+  - **One tile, not Viho's four.** The theme shows LinkedIn, Twitter, Facebook and Instagram; we have
+    exactly one federated provider. Four buttons that cannot sign anyone in would be fidelity to the
+    picture at the cost of fidelity to the product.
+- **The artwork panel is filled with original SVG, not Viho's illustrations.** Viho's are licensed theme
+  assets, and the constraint is stronger than "don't copy the files" — **tracing them out of the
+  screenshots would produce a derivative of a paid asset in a public repo.** So
+  `components/auth/AuthArt.tsx` is hand-authored inline SVG in the same *style*: flat vector, brand
+  palette, floating "sticker" composition, swapped per route. Style is not the licensed part.
+  - Login gets a phone mockup showing a login screen, a padlock, a plant, picture frames and faint leaf
+    line-art. Register gets a browser-window card, a lightbulb in a thought circle, a phone checklist, a
+    sticky note and a grid-paper note.
+  - **Deliberately no human figures.** Hand-coded characters read as amateurish, and the figure is the
+    most distinctive — so most derivative — part of Viho's art.
+  - Every surface has a `dark:` counterpart, so it works in both themes. Inline SVG means no image
+    requests: `/sign-in` First Load JS was **unchanged at 174 kB** after adding it.
+  - A commissioned or licensed illustration can replace `<AuthArt />` without touching the layout.
+
+**Verification.** `tsc --noEmit` clean. `npm run lint` reports **20 errors, unchanged** — the PM-30
+baseline, none in any file touched here. `next build` compiles, 22/22 routes. Both pages rendered
+headlessly in **both themes** and measured against the references: wash `#eaf0ef` light / `#202938`
+dark, card `#ffffff` / `#111727`, card width 450px. Dark mode confirms the **inverted elevation** —
+card `#111727` is darker than the page `#202938`, which is the whole point of adoption item 4.
+
+One measurement worth recording so it isn't re-investigated: headless Chrome's viewport is **87px
+shorter than `--window-size`** at every height tested, so a bottom band in a screenshot is a capture
+artifact, not a layout bug. Render at `window height + 87` to compare against a reference.
+
+**Docs updated alongside:** `VIHO_THEME_REFERENCE.md` (new § Split-Screen Auth Anatomy with the
+measurements, both login variants labelled, catalogue 34 → 36), the screenshots `README.md`,
+`VIHO_ADOPTION_PLAN.md` (per-phase progress table), and `UI_PATTERNS.md` (tokens, Montserrat, the
+`Button`/`Input` contracts, the `brand-on-dark` rule, and the two-tone state as a known issue).
+
+---
+
 ## August 5, 2026 — Viho is adopted in full, and the rebrand costs 20× what we thought
 
 - **The design direction is no longer an open question.** `VIHO_THEME_REFERENCE.md` had sat since

@@ -40,9 +40,9 @@ export default function ErrorState({
       }`}
       role="alert"
     >
-      <span className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-orange-50 dark:bg-orange-950/30">
+      <span className="mb-4 flex h-14 w-14 items-center justify-center rounded-none bg-brand/10 dark:bg-brand/20">
         <svg
-          className="h-7 w-7 text-[#F97316]"
+          className="h-7 w-7 text-brand dark:text-brand-on-dark"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -67,7 +67,7 @@ export default function ErrorState({
       )}
 
       {isDev && error.message && (
-        <pre className="mt-4 max-w-xl overflow-x-auto rounded-lg bg-gray-50 p-3 text-left font-mono text-[11px] text-red-600 dark:bg-gray-900 dark:text-red-400">
+        <pre className="mt-4 max-w-xl overflow-x-auto rounded-[5px] bg-gray-50 p-3 text-left font-mono text-[11px] text-tone-danger dark:bg-night-card dark:text-tone-danger">
           {error.message}
         </pre>
       )}

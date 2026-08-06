@@ -43,14 +43,31 @@ const iconMap = {
   ),
 };
 
-const colorConfig = {
-  blue:    { bg: "bg-blue-50 dark:bg-blue-950/30",    border: "border-blue-200 dark:border-blue-800",    text: "text-blue-600 dark:text-blue-400",    hover: "hover:border-blue-300 hover:shadow-blue-100 dark:hover:border-blue-700",    rgb: "59, 130, 246" },
-  purple:  { bg: "bg-purple-50 dark:bg-purple-950/30", border: "border-purple-200 dark:border-purple-800", text: "text-purple-600 dark:text-purple-400", hover: "hover:border-purple-300 hover:shadow-purple-100 dark:hover:border-purple-700", rgb: "147, 51, 234" },
-  amber:   { bg: "bg-amber-50 dark:bg-amber-950/30",   border: "border-amber-200 dark:border-amber-800",   text: "text-amber-600 dark:text-amber-400",   hover: "hover:border-amber-300 hover:shadow-amber-100 dark:hover:border-amber-700",   rgb: "217, 119, 6" },
-  emerald: { bg: "bg-emerald-50 dark:bg-emerald-950/30", border: "border-emerald-200 dark:border-emerald-800", text: "text-emerald-600 dark:text-emerald-400", hover: "hover:border-emerald-300 hover:shadow-emerald-100 dark:hover:border-emerald-700", rgb: "16, 185, 129" },
-  rose:    { bg: "bg-rose-50 dark:bg-rose-950/30",    border: "border-rose-200 dark:border-rose-800",    text: "text-rose-600 dark:text-rose-400",    hover: "hover:border-rose-300 hover:shadow-rose-100 dark:hover:border-rose-700",    rgb: "244, 63, 94" },
-  slate:   { bg: "bg-slate-50 dark:bg-slate-800/40",  border: "border-slate-200 dark:border-slate-700",  text: "text-slate-600 dark:text-slate-400",  hover: "hover:border-slate-300 hover:shadow-slate-100 dark:hover:border-slate-600",  rgb: "71, 85, 105" },
+/**
+ * Six legacy colour names collapse onto Viho's two categorical tones. The prop is
+ * kept so call sites keep working, but the rainbow scheme it used to drive
+ * (blue/purple/amber/emerald/rose/slate tinted cards with matching borders,
+ * dot-grid textures and shimmer sweeps) is gone. Viho's action cards are plain
+ * white surfaces whose only colour is a tinted icon badge.
+ */
+const TONE: Record<NonNullable<QuickActionsCardProps["color"]>, "brand" | "accent"> = {
+  blue: "brand",
+  emerald: "brand",
+  slate: "brand",
+  purple: "accent",
+  amber: "accent",
+  rose: "accent",
 };
+
+const BADGE = {
+  brand: "bg-brand/10 text-brand dark:bg-brand/20 dark:text-brand-on-dark",
+  accent: "bg-accent/20 text-accent-dark dark:bg-accent/25 dark:text-accent-light",
+} as const;
+
+const LINK = {
+  brand: "text-brand dark:text-brand-on-dark",
+  accent: "text-accent-dark dark:text-accent-light",
+} as const;
 
 export default function QuickActionsCard({
   title,
@@ -59,59 +76,34 @@ export default function QuickActionsCard({
   action,
   color = "blue",
 }: QuickActionsCardProps) {
-  const config = colorConfig[color];
+  const tone = TONE[color];
 
   return (
     <button
       onClick={action}
-      className={`group relative flex h-full w-full flex-col overflow-hidden rounded-xl border p-6 text-left transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 cursor-pointer ${config.bg} ${config.border} ${config.hover}`}
+      className="group relative flex h-full w-full flex-col overflow-hidden rounded-none border border-surface-border bg-white p-6 text-left transition-colors hover:border-brand/40 focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 dark:border-night-border dark:bg-night-card"
     >
-      {/* Dot-grid texture — light mode */}
-      <div
-        className="absolute inset-0 opacity-[0.35] dark:opacity-0 pointer-events-none"
-        style={{
-          backgroundImage: `radial-gradient(circle, rgba(${config.rgb}, 0.45) 1px, transparent 1px)`,
-          backgroundSize: "18px 18px",
-        }}
-      />
-      {/* Dot-grid texture — dark mode */}
-      <div
-        className="absolute inset-0 opacity-0 dark:opacity-[0.18] pointer-events-none"
-        style={{
-          backgroundImage: `radial-gradient(circle, rgba(${config.rgb}, 0.7) 1px, transparent 1px)`,
-          backgroundSize: "18px 18px",
-        }}
-      />
-      <div
-        className="absolute inset-0 transition-all duration-300 opacity-0 group-hover:opacity-10"
-        style={{ backgroundImage: `linear-gradient(135deg, rgba(${config.rgb}, 0.3), rgba(${config.rgb}, 0.05))` }}
-      />
-      <div
-        className="absolute inset-0 opacity-0 group-hover:opacity-100 transition-opacity duration-500"
-        style={{ background: "linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent)", animation: "shimmer 2s infinite" }}
-      />
-
       <div className="relative z-10 flex flex-1 flex-col">
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1">
-            <h4 className="font-bold text-gray-900 group-hover:text-gray-800 transition-colors duration-300 dark:text-gray-100 dark:group-hover:text-white">
-              {title}
-            </h4>
-            <p className="mt-1 text-sm text-gray-600 leading-relaxed group-hover:text-gray-700 transition-colors duration-300 dark:text-gray-400 dark:group-hover:text-gray-300">
+            <h4 className="font-bold text-ink dark:text-white">{title}</h4>
+            <p className="mt-1 text-sm leading-relaxed text-ink-muted dark:text-night-muted">
               {description}
             </p>
           </div>
-          <div
-            className={`flex-shrink-0 rounded-lg p-2.5 transition-all duration-300 group-hover:opacity-90 ${config.text}`}
-            style={{ backgroundColor: `rgba(${config.rgb}, 0.1)` }}
-          >
+          <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${BADGE[tone]}`}>
             {iconMap[icon]}
-          </div>
+          </span>
         </div>
 
-        <div className={`mt-auto pt-4 inline-flex items-center gap-2 text-sm font-medium ${config.text} group-hover:text-gray-900 transition-all duration-300 dark:group-hover:text-gray-100`}>
+        <div className={`mt-auto inline-flex items-center gap-2 pt-4 text-sm font-medium ${LINK[tone]}`}>
           <span>Get Started</span>
-          <svg className="h-4 w-4 transition-all duration-300 group-hover:translate-x-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg
+            className="h-4 w-4 transition-transform duration-200 group-hover:translate-x-1"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
           </svg>
         </div>

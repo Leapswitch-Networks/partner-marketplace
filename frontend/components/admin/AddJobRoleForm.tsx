@@ -42,7 +42,7 @@ export default function AddJobRoleForm({ categoryId }: AddJobRoleFormProps) {
       </div>
 
       {categoryId && (
-        <div className="mb-5 flex items-center gap-2 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3 text-sm text-orange-700 dark:border-orange-900 dark:bg-orange-950/30 dark:text-orange-400">
+        <div className="mb-5 flex items-center gap-2 rounded-[5px] border border-brand/30 bg-brand/10 px-4 py-3 text-sm text-brand dark:border-brand/40 dark:bg-brand/20 dark:text-brand-on-dark">
           <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A2 2 0 013 12V7a4 4 0 014-4z" />
           </svg>
@@ -53,7 +53,7 @@ export default function AddJobRoleForm({ categoryId }: AddJobRoleFormProps) {
       )}
 
       {isSubmitSuccessful && (
-        <div role="status" className="mb-5 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-700 dark:border-green-900 dark:bg-green-950/30 dark:text-green-400">
+        <div role="status" className="mb-5 rounded-[5px] border border-tone-success/40 bg-tone-success/10 px-4 py-3 text-sm font-medium text-tone-success dark:border-tone-success/50 dark:bg-tone-success/20 dark:text-brand-on-dark">
           Job role added successfully.
         </div>
       )}
@@ -80,14 +80,14 @@ export default function AddJobRoleForm({ categoryId }: AddJobRoleFormProps) {
           <textarea
             rows={4}
             placeholder="Briefly describe this job role and its responsibilities..."
-            className={`w-full rounded-lg border px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 outline-none transition resize-none
-              focus:border-[#F97316] focus:ring-2 focus:ring-[#F97316]/20
+            className={`w-full rounded-[5px] border px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 outline-none transition resize-none
+              focus:border-brand focus:ring-2 focus:ring-brand/20
               dark:text-gray-100 dark:placeholder-gray-500
-              ${errors.description ? "border-red-400 bg-red-50 dark:border-red-700 dark:bg-red-950/30" : "border-gray-300 bg-white dark:border-gray-700 dark:bg-gray-800"}`}
+              ${errors.description ? "border-tone-danger/40 bg-tone-danger/10 dark:border-tone-danger/50 dark:bg-tone-danger/15" : "border-surface-border bg-white dark:border-night-border dark:bg-night-card"}`}
             {...register("description")}
           />
           {errors.description && (
-            <p className="text-xs text-red-500">{errors.description.message}</p>
+            <p className="text-xs text-tone-danger">{errors.description.message}</p>
           )}
         </div>
 

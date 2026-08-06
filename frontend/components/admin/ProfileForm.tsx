@@ -77,7 +77,7 @@ export default function ProfileForm() {
 
       {/* Avatar + meta */}
       <div className="mt-6 flex items-center gap-4">
-        <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-[#F97316] text-lg font-bold text-white">
+        <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-brand text-lg font-bold text-white">
           {initials}
         </span>
         <div>
@@ -102,7 +102,7 @@ export default function ProfileForm() {
             required
             minLength={2}
             maxLength={100}
-            className="block w-full rounded-xl border-2 border-gray-300 bg-white px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 shadow-sm outline-none transition focus:border-[#F97316] focus:ring-2 focus:ring-[#F97316]/20 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-500"
+            className="block w-full rounded-[5px] border-2 border-surface-border bg-white px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 shadow-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20 dark:border-night-border dark:bg-night-card dark:text-gray-100 dark:placeholder-gray-500"
           />
         </div>
 
@@ -116,7 +116,7 @@ export default function ProfileForm() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
-            className="block w-full rounded-xl border-2 border-gray-300 bg-white px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 shadow-sm outline-none transition focus:border-[#F97316] focus:ring-2 focus:ring-[#F97316]/20 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 dark:placeholder-gray-500"
+            className="block w-full rounded-[5px] border-2 border-surface-border bg-white px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 shadow-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20 dark:border-night-border dark:bg-night-card dark:text-gray-100 dark:placeholder-gray-500"
           />
         </div>
 
@@ -124,7 +124,7 @@ export default function ProfileForm() {
         <div>
           <label className="block text-xs font-semibold text-gray-700 mb-1.5 dark:text-gray-300">Role</label>
           <div className="flex items-center gap-2">
-            <span className="inline-flex items-center rounded-md bg-orange-100 px-2.5 py-1 text-xs font-semibold text-[#F97316] dark:bg-orange-950/40 dark:text-orange-400">
+            <span className="inline-flex items-center rounded-md bg-brand/10 px-2.5 py-1 text-xs font-semibold text-brand dark:text-brand-on-dark dark:bg-brand/20 dark:text-brand-on-dark">
               {getRoleLabel(user) || "—"}
             </span>
             <span className="text-[11px] text-gray-400 dark:text-gray-500">Assigned by the system · cannot be changed</span>
@@ -132,11 +132,11 @@ export default function ProfileForm() {
         </div>
 
         {error && (
-          <p className="rounded-lg bg-red-50 px-3.5 py-2.5 text-sm text-red-600 dark:bg-red-950/30 dark:text-red-400">{error}</p>
+          <p className="rounded-[5px] bg-tone-danger/10 px-3.5 py-2.5 text-sm text-tone-danger dark:bg-tone-danger/15 dark:text-tone-danger">{error}</p>
         )}
 
         {success && (
-          <p className="rounded-lg bg-green-50 px-3.5 py-2.5 text-sm text-green-600 flex items-center gap-2 dark:bg-green-950/30 dark:text-green-400">
+          <p className="rounded-[5px] bg-tone-success/10 px-3.5 py-2.5 text-sm text-tone-success flex items-center gap-2 dark:bg-tone-success/20 dark:text-brand-on-dark">
             <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>
@@ -148,7 +148,7 @@ export default function ProfileForm() {
           <button
             type="submit"
             disabled={saving || !isDirty}
-            className="inline-flex items-center gap-2 rounded-xl bg-[#F97316] px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-[#F97316]/40 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="inline-flex items-center gap-2 rounded-[5px] bg-brand px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-dark focus:outline-none focus:ring-2 focus:ring-brand/40 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {saving && (
               <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">

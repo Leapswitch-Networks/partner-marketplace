@@ -39,17 +39,17 @@ export default function ProfileIdCard() {
   ];
 
   return (
-    <div className="overflow-hidden rounded-2xl bg-white ring-1 ring-gray-100 dark:bg-gray-900 dark:ring-gray-800">
-      <div className="border-b border-gray-100 px-6 py-6 dark:border-gray-800">
+    <div className="overflow-hidden rounded-none bg-white ring-1 ring-surface-border dark:bg-night-card dark:ring-night-border">
+      <div className="border-b border-surface-border px-6 py-6 dark:border-night-border">
         <div className="flex items-center gap-4">
           <div className="relative shrink-0">
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gray-100 ring-2 ring-gray-200 dark:bg-gray-800 dark:ring-gray-700">
+            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gray-100 ring-2 ring-surface-border dark:bg-night-card dark:ring-night-border">
               <span className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
                 {user.initials}
               </span>
             </div>
             {isActive && (
-              <div className="absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-emerald-500 dark:border-gray-900">
+              <div className="absolute -bottom-0.5 -right-0.5 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-tone-success/100 dark:border-gray-900">
                 <svg className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
                 </svg>
@@ -69,7 +69,7 @@ export default function ProfileIdCard() {
                 {user.roles.map((role) => (
                   <span
                     key={role.id}
-                    className="inline-flex items-center rounded-md bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700 ring-1 ring-gray-200 dark:bg-gray-800 dark:text-gray-300 dark:ring-gray-700"
+                    className="inline-flex items-center rounded-md bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700 ring-1 ring-surface-border dark:bg-night-card dark:text-gray-300 dark:ring-night-border"
                   >
                     {role.display_name || role.name}
                   </span>
@@ -82,11 +82,11 @@ export default function ProfileIdCard() {
             <span
               className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ${
                 isActive
-                  ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400"
-                  : "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-400"
+                  ? "bg-tone-success/10 text-tone-success dark:bg-tone-success/15 dark:text-brand-on-dark"
+                  : "bg-tone-danger/10 text-tone-danger dark:bg-tone-danger/15 dark:text-tone-danger"
               }`}
             >
-              <span className={`h-1.5 w-1.5 rounded-full ${isActive ? "bg-emerald-500" : "bg-red-500"}`} />
+              <span className={`h-1.5 w-1.5 rounded-full ${isActive ? "bg-tone-success/100" : "bg-tone-danger/100"}`} />
               {user.status}
             </span>
           </div>

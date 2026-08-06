@@ -66,7 +66,7 @@ export default function ResetPasswordClient({ token }: { token: string | null })
         title="Nothing to reset"
         subtitle="This page needs a reset link from your email."
         footer={
-          <Link href="/forgot-password" className="font-medium text-[#F97316] hover:underline">
+          <Link href="/forgot-password" className="font-medium text-brand dark:text-brand-on-dark hover:underline">
             Request a new link
           </Link>
         }
@@ -96,7 +96,7 @@ export default function ResetPasswordClient({ token }: { token: string | null })
     <AuthCard
       title="Choose a new password"
       footer={
-        <Link href="/sign-in" className="font-medium text-[#F97316] hover:underline">
+        <Link href="/sign-in" className="font-medium text-brand dark:text-brand-on-dark hover:underline">
           Back to sign in
         </Link>
       }
@@ -105,7 +105,7 @@ export default function ResetPasswordClient({ token }: { token: string | null })
         {error && (
           <div
             role="alert"
-            className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400"
+            className="rounded-lg border border-tone-danger/40 bg-tone-danger/10 px-4 py-3 text-sm text-tone-danger dark:border-tone-danger/40 dark:bg-tone-danger/15 dark:text-tone-danger"
           >
             {error}
           </div>

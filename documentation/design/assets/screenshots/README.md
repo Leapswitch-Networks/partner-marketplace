@@ -4,7 +4,7 @@ Reference screenshots of the **Viho** theme (Pixelstrap) — the visual directio
 2026-08-03. Design notes and all extracted colour values live in
 [`../../VIHO_THEME_REFERENCE.md`](../../VIHO_THEME_REFERENCE.md).
 
-## Current contents — 34 screenshots
+## Current contents — 36 screenshots
 
 **Don't browse this folder to find something.** The reference doc has a
 **[*"When you're building… → open this"* lookup table](../../VIHO_THEME_REFERENCE.md#-screenshot-catalogue--34-references)**
@@ -15,7 +15,8 @@ Groups, by filename prefix:
 
 | Prefix | Count | Covers |
 |--------|------:|--------|
-| `auth-login-*` | 1 | Sign-in screen |
+| `login.png`, `register.png` | 2 | **The split-screen auth pages the app implements** — owner-supplied 2026-08-05. Do not confuse with `auth-login-*`, which is Viho's *centred* variant |
+| `auth-login-*` | 1 | Sign-in screen, centred variant |
 | `dashboard-default-*` | 3 | Default dashboard — light top/bottom + dark |
 | `widgets-general-dark-*` | 4 | Widget vocabulary, top→bottom, dark |
 | `widgets-chart-dark-*` | 3 | Every chart type, dark |
@@ -27,11 +28,14 @@ Groups, by filename prefix:
 | `email-app-*`, `file-manager-*`, `bookmark-app-*`, `calendar-*`, `search-website-*` | 6 | App layouts |
 | `pricing-*` | 2 | Plan/tier cards |
 
-**All 34 have been mined** — every value in the reference doc is cross-checked against them, including
+**All 36 have been mined** — every value in the reference doc is cross-checked against them, including
 pixel-sampled surfaces, corner-radius measurements and badge/progress fills. New screenshots are only
 useful for the four gaps listed under *Still needed* in the reference doc.
 
-All were renamed from their original `Screenshot From <timestamp>.png` names to the convention below.
+The first 34 were renamed from their original `Screenshot From <timestamp>.png` names to the convention
+below. **`login.png` and `register.png` do not follow it** — they were added by the owner on 2026-08-05
+and kept under the names supplied, because both are referenced from the reference doc and the auth
+components by those names. Rename them only together with those references.
 
 ---
 

@@ -57,9 +57,9 @@ export default function Modal({
         onClick={onClose}
       />
       <div
-        className={`relative flex max-h-[90vh] w-full ${widths[size]} flex-col overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-gray-100 dark:bg-gray-900 dark:ring-gray-800`}
+        className={`relative flex max-h-[90vh] w-full ${widths[size]} flex-col overflow-hidden rounded-none bg-white shadow-2xl ring-1 ring-surface-border dark:bg-night-card dark:ring-night-border`}
       >
-        <div className="flex shrink-0 items-start justify-between border-b border-gray-100 px-5 py-4 dark:border-gray-800">
+        <div className="flex shrink-0 items-start justify-between border-b border-surface-border px-5 py-4 dark:border-night-border">
           <div className="min-w-0">
             <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">{title}</h3>
             {subtitle && (
@@ -72,7 +72,7 @@ export default function Modal({
             type="button"
             onClick={onClose}
             aria-label="Close dialog"
-            className="ml-3 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-gray-400 transition-colors hover:bg-gray-100 dark:text-gray-500 dark:hover:bg-gray-800"
+            className="ml-3 flex h-7 w-7 shrink-0 items-center justify-center rounded-[5px] text-gray-400 transition-colors hover:bg-gray-100 dark:text-gray-500 dark:hover:bg-gray-800"
           >
             <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -83,7 +83,7 @@ export default function Modal({
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 scrollbar-thin">{children}</div>
 
         {footer && (
-          <div className="flex shrink-0 justify-end gap-2 border-t border-gray-100 px-5 py-3 dark:border-gray-800">
+          <div className="flex shrink-0 justify-end gap-2 border-t border-surface-border px-5 py-3 dark:border-night-border">
             {footer}
           </div>
         )}

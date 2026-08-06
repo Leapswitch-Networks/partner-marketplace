@@ -7,7 +7,7 @@ export default function Skeleton({ className = "" }: SkeletonProps) {
   // tolerable on a small inline placeholder and glaring as a full-page one.
   return (
     <div
-      className={`rounded-lg bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 dark:from-gray-800 dark:via-gray-700 dark:to-gray-800 ${className}`}
+      className={`rounded-[5px] bg-gradient-to-r from-gray-200 via-gray-100 to-gray-200 dark:from-gray-800 dark:via-gray-700 dark:to-gray-800 ${className}`}
       aria-hidden="true"
       style={{
         animation: "shimmer 2s infinite",

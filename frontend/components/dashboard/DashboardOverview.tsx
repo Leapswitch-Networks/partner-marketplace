@@ -180,14 +180,14 @@ export default function DashboardOverview({ onNavigate }: { onNavigate: (section
           transitionDelay: isLoaded ? "600ms" : "0ms",
         }}
       >
-        <div className="w-full rounded-2xl border border-blue-200 bg-gradient-to-br from-blue-50 to-blue-100/50 p-6 sm:p-8 hover:shadow-md transition-shadow duration-300 group dark:border-blue-900 dark:from-blue-950/40 dark:to-blue-900/20">
+        <div className="group w-full rounded-none border border-surface-border bg-white p-6 transition-colors hover:border-brand/40 sm:p-8 dark:border-night-border dark:bg-night-card">
           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
             <div className="flex-1">
-              <h3 className="text-lg font-bold text-blue-900 dark:text-blue-300">Getting Started</h3>
-              <p className="mt-2 text-sm text-blue-800 dark:text-blue-400">
+              <h3 className="text-lg font-bold text-ink dark:text-white">Getting Started</h3>
+              <p className="mt-2 text-sm text-ink-muted dark:text-night-muted">
                 Follow these steps to set up your first test:
               </p>
-              <ol className="mt-4 space-y-3 text-sm text-blue-800 dark:text-blue-400">
+              <ol className="mt-4 space-y-3 text-sm text-ink dark:text-gray-200">
                 {[
                   "Create a Job Role to define the position being tested",
                   "Add Test Sections to organize your questions",
@@ -201,7 +201,7 @@ export default function DashboardOverview({ onNavigate }: { onNavigate: (section
                       transitionDelay: `${idx * 50}ms`,
                     }}
                   >
-                    <span className="inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-blue-600 text-xs font-bold text-white ring-2 ring-blue-200 dark:ring-blue-800">
+                    <span className="inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full bg-brand text-xs font-bold text-white ring-2 ring-brand/20">
                       {idx + 1}
                     </span>
                     <span className="leading-relaxed">{step}</span>

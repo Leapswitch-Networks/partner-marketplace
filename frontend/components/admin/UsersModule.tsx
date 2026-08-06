@@ -314,7 +314,7 @@ export default function UsersModule({ initialModal }: { initialModal?: ModalMode
         sortKey: "first_name",
         cell: (row) => (
           <div className="flex items-center gap-2">
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#F97316] text-[10px] font-bold text-white">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-brand text-[10px] font-bold text-white">
               {row.initials}
             </span>
             <div className="min-w-0">
@@ -479,7 +479,7 @@ export default function UsersModule({ initialModal }: { initialModal?: ModalMode
               type="button"
               onClick={resetFilters}
               disabled={!filtersActive}
-              className="h-9 shrink-0 rounded-lg border border-gray-300 px-3 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800"
+              className="h-9 shrink-0 rounded-[5px] border border-surface-border px-3 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-night-border dark:text-gray-400 dark:hover:bg-gray-800"
             >
               Reset
             </button>
@@ -610,10 +610,10 @@ function BulkButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`h-7 rounded-lg border px-2 text-[11px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+      className={`h-7 rounded-[5px] border px-2 text-[11px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
         destructive
-          ? "border-red-300 text-red-600 hover:bg-red-50 dark:border-red-800 dark:text-red-400 dark:hover:bg-red-950/30"
-          : "border-gray-300 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-400 dark:hover:bg-gray-800"
+          ? "border-tone-danger/40 text-tone-danger hover:bg-tone-danger/10 dark:border-tone-danger/50 dark:text-tone-danger dark:hover:bg-tone-danger/15"
+          : "border-surface-border text-gray-600 hover:bg-gray-50 dark:border-night-border dark:text-gray-400 dark:hover:bg-gray-800"
       }`}
     >
       {children}
@@ -797,7 +797,7 @@ function UserFormModal({
         />
 
         {isSelf && (
-          <p className="-mt-2 text-[11px] text-amber-600 dark:text-amber-400">
+          <p className="-mt-2 text-[11px] text-ink dark:text-tone-warning">
             Status and role are locked on your own account — you cannot change your own access.
           </p>
         )}
@@ -821,7 +821,7 @@ function UserFormModal({
         {error && (
           <p
             role="alert"
-            className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400"
+            className="rounded-[5px] border border-tone-danger/40 bg-tone-danger/10 px-3 py-2 text-sm text-tone-danger dark:border-tone-danger/50 dark:bg-tone-danger/15 dark:text-tone-danger"
           >
             {error}
           </p>
@@ -870,7 +870,7 @@ function DeleteUserModal({
             type="button"
             onClick={confirm}
             disabled={deleting}
-            className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-[5px] bg-tone-danger px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-tone-danger disabled:opacity-50"
           >
             {deleting ? "Deleting…" : "Delete user"}
           </button>
@@ -885,7 +885,7 @@ function DeleteUserModal({
       {error && (
         <p
           role="alert"
-          className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-600 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400"
+          className="mt-3 rounded-[5px] border border-tone-danger/40 bg-tone-danger/10 px-3 py-2 text-sm text-tone-danger dark:border-tone-danger/50 dark:bg-tone-danger/15 dark:text-tone-danger"
         >
           {error}
         </p>
