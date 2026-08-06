@@ -80,20 +80,41 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     """A 422 is the caller's mistake, so it is logged at INFO, not ERROR.
 
     `exc.errors()` can echo submitted values, which on `/api/auth/login` means
-    the password. Only the field locations and messages are logged; the input is
-    dropped.
+    the password. Only the field locations and messages are logged, and only those
+    are returned; the input is dropped from both.
+
+    ⚠️ **`exc.errors()` must not be handed to `JSONResponse` directly.** When a
+    custom `field_validator` raises `ValueError`, Pydantic v2 puts the exception
+    *object* in the entry's `ctx`, and `json.dumps` cannot serialise it:
+
+        TypeError: Object of type ValueError is not JSON serializable
+
+    The handler then blows up inside the error path, so the caller gets a **500
+    with a generic message instead of the 422 explaining what they got wrong** —
+    and the actual validation message never reaches them. Every schema with a
+    custom validator was affected, which is most of them; it surfaced on
+    `PUT /api/settings/branding`, whose `theme_preset` validator rejects unknown
+    presets by design. Rebuilding each entry from the three primitive fields keeps
+    the response serialisable whatever a validator raises.
     """
+    fields = [
+        {
+            "loc": list(err.get("loc", ())),
+            "msg": str(err.get("msg", "")),
+            "type": str(err.get("type", "")),
+        }
+        for err in exc.errors()
+    ]
     logger.info(
         "request validation failed",
         extra={
             "path": request.url.path,
             "fields": [
-                {"loc": ".".join(str(part) for part in err.get("loc", ())), "msg": err.get("msg")}
-                for err in exc.errors()
+                {"loc": ".".join(str(part) for part in f["loc"]), "msg": f["msg"]} for f in fields
             ],
         },
     )
-    return JSONResponse(status_code=422, content={"detail": exc.errors()})
+    return JSONResponse(status_code=422, content={"detail": fields})
 
 
 @app.exception_handler(SQLAlchemyError)

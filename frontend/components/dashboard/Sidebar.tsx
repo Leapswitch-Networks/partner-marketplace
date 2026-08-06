@@ -127,7 +127,7 @@ function NavButton({
       type="button"
       onClick={onClick}
       className={`group flex w-full items-center gap-3 rounded-[10px] px-4 font-semibold transition-colors ${
-        large ? "py-3 text-base" : "py-2.5 text-sm"
+        large ? "py-3 text-sm" : "py-2.5 text-xs"
       } ${
         active
           ? "bg-brand text-white"
@@ -445,7 +445,7 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
               </button>
             </div>
             <nav className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-hide scroll-smooth px-3 py-4 space-y-1">
-              <p className="mb-2 mt-6 border-b border-surface-border px-4 pb-2 text-[17px] font-semibold text-brand first:mt-2 dark:border-night-border dark:text-brand-on-dark">
+              <p className="mb-2 mt-6 border-b border-surface-border px-4 pb-2 text-[15px] font-semibold text-brand first:mt-2 dark:border-night-border dark:text-brand-on-dark">
                 Administration
               </p>
               <NavItems {...navItemsProps} collapsed={false} />
@@ -520,7 +520,7 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
         )}
         <nav className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-hide scroll-smooth px-3 py-4 space-y-1 2xl:py-5 2xl:space-y-1.5">
           {!collapsed && (
-            <p className="mb-2 mt-6 border-b border-surface-border px-4 pb-2 text-[17px] font-semibold text-brand first:mt-2 dark:border-night-border dark:text-brand-on-dark">
+            <p className="mb-2 mt-6 border-b border-surface-border px-4 pb-2 text-[15px] font-semibold text-brand first:mt-2 dark:border-night-border dark:text-brand-on-dark">
               Administration
             </p>
           )}

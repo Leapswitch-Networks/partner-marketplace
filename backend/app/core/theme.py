@@ -124,6 +124,20 @@ def resolve(preset_key: str | None) -> ThemePreset:
     return THEME_PRESETS[DEFAULT_PRESET]
 
 
+def key_for(preset: ThemePreset) -> str:
+    """The catalog key a preset is stored under.
+
+    Needed because `resolve` returns the preset object, and the API has to report
+    *which* theme is in effect — including when a NULL or unknown stored value fell
+    back to the default. Reporting the stored value instead would answer `null` for a
+    page that is visibly teal.
+    """
+    for key, candidate in THEME_PRESETS.items():
+        if candidate is preset:
+            return key
+    return DEFAULT_PRESET
+
+
 def css_variables(preset_key: str | None) -> dict[str, str]:
     """The preset as `{"--brand": "36 105 92", …}`, ready to inline in a `<style>`.
 

@@ -26,6 +26,28 @@ export type UpdateBrandingPayload = {
   monogram?: string | null;
   chrome_subtitle?: string | null;
   tagline?: string | null;
+  /**
+   * A preset **key**, never a colour. The backend rejects an unknown key with a 422
+   * rather than falling back, so a typo surfaces instead of silently applying the
+   * default — see `schemas/settings.py`.
+   */
+  theme_preset?: string | null;
+};
+
+/** One theme, as the catalog endpoint describes it. */
+export type ThemePresetOption = {
+  key: string;
+  label: string;
+  brand: string;
+  brand_on_dark: string;
+  /** Measured WCAG ratios, shown next to the choice rather than hidden in a test. */
+  contrast_white_on_brand: number;
+  contrast_on_dark_on_card: number;
+};
+
+export type ThemePresetsResponse = {
+  presets: ThemePresetOption[];
+  default_key: string;
 };
 
 const settingsApi = {
@@ -33,6 +55,10 @@ const settingsApi = {
 
   updateBranding: (data: UpdateBrandingPayload) =>
     axiosInstance.put<Branding>("/api/settings/branding", data),
+
+  /** The theme catalog. Public, and it needs no database. */
+  getThemes: () =>
+    axiosInstance.get<ThemePresetsResponse>("/api/settings/branding/themes"),
 };
 
 export default settingsApi;

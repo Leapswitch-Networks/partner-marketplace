@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import Input from "@/components/common/Input";
 import Button from "@/components/common/Button";
 import { authApi } from "@/lib/api/authApi";
+import { extractApiError } from "@/lib/utils/apiError";
 
 const schema = z.object({
   first_name: z
@@ -98,9 +99,7 @@ export default function SignUpForm() {
       reset();
       router.push("/sign-in?registered=1");
     } catch (err: unknown) {
-      const detail =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      setServerError(detail ?? "Something went wrong. Please try again.");
+      setServerError(extractApiError(err, "Something went wrong. Please try again."));
     }
   };
 

@@ -129,7 +129,7 @@ export default function TopNav() {
           href="/settings/profile"
           aria-label={`${displayName || "Account"} — profile settings`}
           title={displayName || "Profile settings"}
-          className={`ml-4 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white transition-colors focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 ${
+          className={`ml-4 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white transition-colors focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 ${
             inSettings ? "bg-brand-dark ring-2 ring-brand/30" : "bg-brand hover:bg-brand-dark"
           }`}
         >
@@ -143,7 +143,7 @@ export default function TopNav() {
           type="button"
           onClick={handleLogout}
           disabled={loggingOut}
-          className="ml-4 inline-flex items-center gap-2 rounded-[8px] bg-brand/10 px-4 py-2.5 text-sm font-semibold text-brand transition-colors hover:bg-brand hover:text-white focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-brand/20 dark:text-brand-on-dark dark:hover:bg-brand dark:hover:text-white"
+          className="ml-4 inline-flex items-center gap-2 rounded-[8px] bg-brand/10 px-4 py-2.5 text-xs font-semibold text-brand transition-colors hover:bg-brand hover:text-white focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-brand/20 dark:text-brand-on-dark dark:hover:bg-brand dark:hover:text-white"
         >
           <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h6a2 2 0 012 2v1" />

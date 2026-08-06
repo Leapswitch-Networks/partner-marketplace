@@ -9,15 +9,22 @@ core can be branded entirely from `.env` and never write a row — the service f
 back to `settings.APP_*` for every NULL. The table exists so an administrator can
 change the identity **at runtime without a redeploy**, which env vars cannot do.
 
-Phase 1 stores text only. The `logo_*` / `favicon_*` columns are deliberately
-absent rather than nullable-and-unused: adding a column that nothing writes is
-what PM-6 was about, and the storage decision they depend on is still open
-(DYNAMIC_BRANDING_PLAN § 3.4).
+Text, theme and brand assets (phases 1, 3 and 4). Every column is nullable and
+NULL always means *"fall back"* — to an environment variable for text, to the
+default preset for the theme, and to the monogram for the logo. There is no state
+in which this table being empty degrades the application.
 """
 
 from datetime import datetime, timezone
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, SmallInteger, String
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    LargeBinary,
+    SmallInteger,
+    String,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
@@ -65,6 +72,36 @@ class AppSettings(Base):
     tagline: Mapped[str | None] = mapped_column(
         String(200), nullable=True,
         comment="Sign-in screen copy. Product description, not branding",
+    )
+    # A preset KEY, never a hex colour. The colour space is closed on purpose —
+    # see core/theme.py for why a picker would break the brand-on-dark rule.
+    # NULL falls back to theme.DEFAULT_PRESET.
+    theme_preset: Mapped[str | None] = mapped_column(
+        String(40), nullable=True,
+        comment="Key into core.theme.THEME_PRESETS; NULL means the default",
+    )
+
+    # --- Brand assets (phase 4) ---------------------------------------------
+    # Bytes in the database. See the migration for why that is the right call for
+    # two rows of ~50 KB that change once a project, and not a general licence to
+    # store uploads here.
+    #
+    # `*_mime` is written from the file's MAGIC BYTES, never from the request's
+    # Content-Type or filename — both are client-supplied. See core/images.py.
+    #
+    # `*_updated_at` is the cache key, not decoration: asset URLs carry
+    # `?v=<epoch>` and the serve route derives its ETag from it, so replacing a
+    # logo invalidates it everywhere instead of leaving the old one cached.
+    logo_mime: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    logo_bytes: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    logo_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    favicon_mime: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    favicon_bytes: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    favicon_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
 
     # --- Audit --------------------------------------------------------------

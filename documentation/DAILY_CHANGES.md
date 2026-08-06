@@ -319,6 +319,53 @@ first thing written on top of an unversioned API with no generated contract.
 
 ---
 
+## August 6, 2026 — A 500 was hiding every validation message in the API
+
+- **Reported as "the branding form didn't even work."** It didn't, and the cause was not in the
+  branding feature. Three things were happening at once and only one was a bug:
+  1. `PUT /api/settings/branding` → **403**. Correct — the endpoint is behind a password-confirmation
+     gate and answers 403 with `X-Password-Confirmation-Required`, which the form handles by prompting.
+  2. `POST /api/auth/me/confirm-password` → **422** twice. Also correct: that endpoint returns 422 for
+     an *incorrect* password. Verified against the API — the right password returns 200.
+  3. And then, once confirmed, the save returned **500**. That was the bug.
+- **`main.py`'s validation handler could not serialise its own error.** It returned
+  `JSONResponse(content={"detail": exc.errors()})`, and in Pydantic v2 any error raised by a custom
+  `field_validator` carries the original exception *object* in its `ctx`:
+
+  ```
+  TypeError: Object of type ValueError is not JSON serializable
+  ```
+
+  So the handler crashed inside the error path and the caller got a generic 500 instead of the 422
+  explaining what was wrong.
+- **This was not a branding bug — it affected every schema with a custom validator, which is most of
+  them.** The worst case was on a core path: **signing up with a weak password returned a 500**, not
+  "Password must be at least 8 characters". Branding merely happened to be the screen someone
+  exercised, because its `theme_preset` validator rejects unknown presets by design.
+- **Fixed by rebuilding each entry from its three primitive fields** (`loc`, `msg`, `type`), which is
+  serialisable whatever a validator raises. It also stops echoing `input` back to the caller — the
+  handler's own docstring already worried about that for logs, where `/api/auth/login` means the
+  password, but the response was still returning it.
+
+**A second bug the fix exposed, and it was already known.** A 422 `detail` is a *list*, and eight
+components were doing `setError(response.data.detail)` then rendering `{error}` — React throws
+"Objects are not valid as a React child" on an array of objects. `lib/utils/apiError.ts` exists to
+solve exactly this and cites TECH_DEBT PM-36, but **nothing imported it**. All eight now do:
+`SignInForm`, `SignUpForm`, `BrandingForm`, `TwoFactorSettings`, `AcceptInvitationClient` and
+`ResetPasswordClient` migrated; `RolesModule` and `UsersModule` already had their own array-safe
+`apiMessage`. The helper also now strips Pydantic's `"Value error, "` prefix, which is noise to a user.
+
+**Verification.** The branding save was driven end to end in a real browser: save → password prompt →
+confirm → no error, prompt dismissed, and `GET /api/settings/branding` returns the stored
+`theme_preset: "teal"`. `POST /api/auth/register` with a weak password now returns a clean 422 with
+`"Password must be at least 8 characters"` instead of a 500. `tsc` clean, lint 18 errors 0 warnings
+unchanged, build compiles.
+
+> Valid theme presets, for reference: `azure, bronze, crimson, forest, graphite, indigo, plum, teal`.
+> **`viho` is not one of them** — the Viho palette ships as `teal`.
+
+---
+
 ## August 6, 2026 — The header gets Viho's action row, and the sidebar loses what it should not have had
 
 - **The sidebar profile block is gone.** It was added earlier the same day to match Viho, and the owner

@@ -10,6 +10,7 @@ import { authApi } from "@/lib/api/authApi";
 import { invitationApi } from "@/lib/api/rbacApi";
 import { setUser } from "@/lib/store/authSlice";
 import useAppDispatch from "@/lib/hooks/useAppDispatch";
+import { extractApiError } from "@/lib/utils/apiError";
 
 interface Preview {
   email: string;
@@ -85,15 +86,7 @@ export default function AcceptInvitationClient({ token }: { token: string | null
       dispatch(setUser(res.data.user));
       router.push("/dashboard");
     } catch (err: unknown) {
-      const data = (err as { response?: { data?: { detail?: unknown } } }).response?.data;
-      const detail = data?.detail;
-      setError(
-        typeof detail === "string"
-          ? detail
-          : Array.isArray(detail) && detail.length > 0
-            ? String((detail[0] as { msg?: string })?.msg ?? "That was rejected.")
-            : "Could not accept the invitation."
-      );
+      setError(extractApiError(err, "Could not accept the invitation."));
     } finally {
       setBusy(false);
     }

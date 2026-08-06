@@ -7,6 +7,7 @@ import AuthCard from "@/components/auth/AuthCard";
 import Button from "@/components/common/Button";
 import Input from "@/components/common/Input";
 import { authApi } from "@/lib/api/authApi";
+import { extractApiError } from "@/lib/utils/apiError";
 
 /**
  * Landing page for the link in a password-reset email.
@@ -44,17 +45,7 @@ export default function ResetPasswordClient({ token }: { token: string | null })
       });
       setDone(true);
     } catch (err: unknown) {
-      const data = (err as { response?: { data?: { detail?: unknown } } }).response?.data;
-      // A 422 from Pydantic carries a list of field errors, not a string. Rendering
-      // the object would print "[object Object]" at the user.
-      const detail = data?.detail;
-      setError(
-        typeof detail === "string"
-          ? detail
-          : Array.isArray(detail) && detail.length > 0
-            ? String((detail[0] as { msg?: string })?.msg ?? "That password was rejected.")
-            : "This reset link is invalid or has expired."
-      );
+      setError(extractApiError(err, "This reset link is invalid or has expired."));
     } finally {
       setBusy(false);
     }

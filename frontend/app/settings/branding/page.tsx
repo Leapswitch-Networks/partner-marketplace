@@ -1,6 +1,6 @@
 import { Metadata } from "next";
 import BrandingForm from "@/components/settings/BrandingForm";
-import { getBranding } from "@/lib/branding";
+import { getBranding, getThemePresets } from "@/lib/branding";
 import { APP_NAME, pageTitle } from "@/lib/utils/constants";
 
 export const metadata: Metadata = {
@@ -21,7 +21,9 @@ export const metadata: Metadata = {
  * URL does not.
  */
 export default async function BrandingSettingsPage() {
-  const branding = await getBranding();
+  // Both resolved server-side and passed as props, so the form needs no
+  // fetch-on-mount and renders populated on first paint.
+  const [branding, themes] = await Promise.all([getBranding(), getThemePresets()]);
 
   return (
     <div className="rounded-none bg-white p-6 ring-1 ring-surface-border dark:bg-night-card dark:ring-night-border">
@@ -33,7 +35,7 @@ export default async function BrandingSettingsPage() {
         <strong className="font-semibold">every user</strong> sees, not just you.
       </p>
       <div className="mt-5">
-        <BrandingForm initial={branding} />
+        <BrandingForm initial={branding} themes={themes} />
       </div>
     </div>
   );

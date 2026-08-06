@@ -5,6 +5,7 @@ import Badge from "@/components/common/Badge";
 import Button from "@/components/common/Button";
 import Input from "@/components/common/Input";
 import Modal from "@/components/common/Modal";
+import { extractApiError } from "@/lib/utils/apiError";
 import {
   authApi,
   type TwoFactorEnrolment,
@@ -92,7 +93,7 @@ export default function TwoFactorSettings() {
         setPasswordPrompt(() => action);
         return;
       }
-      setError(response?.data?.detail ?? "Something went wrong.");
+      setError(extractApiError(err, "Something went wrong."));
     }
   };
 

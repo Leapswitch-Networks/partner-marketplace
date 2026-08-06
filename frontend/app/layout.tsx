@@ -3,7 +3,7 @@ import { Montserrat } from "next/font/google";
 import Providers from "@/components/common/Providers";
 import BrandingProvider from "@/components/common/BrandingProvider";
 import "./globals.css";
-import { getBranding } from "@/lib/branding";
+import { getBranding, themeStyleRule } from "@/lib/branding";
 import { APP_NAME, APP_TAGLINE } from "@/lib/utils/constants";
 
 // Viho's body font, adopted 2026-08-05. Loaded through `next/font` exactly as
@@ -34,11 +34,16 @@ export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   const branding = await getBranding();
+  const themeRule = themeStyleRule(branding);
 
   return (
     <html lang="en" className={`${montserrat.variable} h-full antialiased`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        {/* Brand theme, server-resolved. Rendered in <head> so it applies before
+            first paint — no flash of the default colour. Overrides the complete
+            default theme in globals.css; null when the default is in force. */}
+        {themeRule && <style dangerouslySetInnerHTML={{ __html: themeRule }} />}
       </head>
       {/* `text-sm` is Viho's 14px body baseline. Our components already set
           text-sm explicitly almost everywhere, so this mainly catches unstyled

@@ -14,16 +14,24 @@ exists; that instinct is how an unauthenticated endpoint starts leaking configur
 Anything non-public belongs behind a second, gated endpoint.
 """
 
-from fastapi import APIRouter, Depends
+from typing import Literal
+
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
+from app.core import images
 from app.core.dependencies import (
     get_db,
     require_password_confirmation,
     require_super_admin,
 )
+from app.core.images import MAX_UPLOAD_BYTES
 from app.models.user import User
-from app.schemas.settings import BrandingResponse, UpdateBrandingRequest
+from app.schemas.settings import (
+    BrandingResponse,
+    ThemePresetsResponse,
+    UpdateBrandingRequest,
+)
 from app.services import settings_service
 
 router = APIRouter(prefix="/settings", tags=["settings"])
@@ -36,6 +44,131 @@ def read_branding(db: Session = Depends(get_db)) -> BrandingResponse:
     Always returns a complete object: the service falls back to the environment for
     anything unset, so a fresh install with an empty table answers correctly.
     """
+    return settings_service.get_branding(db)
+
+
+@router.get("/branding/themes", response_model=ThemePresetsResponse)
+def list_themes() -> ThemePresetsResponse:
+    """The theme catalog. Public, and it needs no database.
+
+    Public for the same reason as `/branding`: it describes colours already painted
+    on the login screen. Served from here rather than hardcoded in the UI so the
+    palette has one home, and carrying the measured contrast ratios so they can be
+    shown next to the choice rather than living only in a test.
+    """
+    return settings_service.list_theme_presets()
+
+
+# ⚠️ ROUTE ORDER MATTERS BELOW THIS LINE.
+#
+# `/branding/themes` is declared ABOVE `/branding/{asset}` deliberately. FastAPI
+# matches in declaration order, so with the wildcard first, `GET /branding/themes`
+# would bind `asset="themes"`, fail the Literal, and answer **422 instead of serving
+# the catalog** — a broken endpoint that looks like a validation problem.
+#
+#: The two assets, as a path parameter constraint. A literal union rather than a free
+#: string so an unknown name is a 422 from FastAPI, before any handler runs — the
+#: alternative is `getattr(row, f"{asset}_bytes")` with an attacker-chosen `asset`.
+AssetName = Literal["logo", "favicon"]
+
+
+@router.get("/branding/{asset}", responses={404: {"description": "No such asset stored"}})
+def read_asset(asset: AssetName, db: Session = Depends(get_db)) -> Response:
+    """Serve a stored brand image. Public, like the branding it belongs to.
+
+    **Cached hard, and safe to be.** The URL carries `?v=<epoch of last write>`, so a
+    replacement is a different URL and a long `max-age` cannot serve a stale logo.
+    `immutable` tells the browser not to revalidate at all for that version.
+
+    The `ETag` covers the case the query string does not: a client that requests the
+    bare path without `?v=` still gets a 304 rather than the bytes.
+
+    `Content-Type` is the **detected** MIME stored at upload, never anything the
+    client said, and `X-Content-Type-Options: nosniff` (set globally by
+    `SecurityHeadersMiddleware`) stops a browser second-guessing it — which together
+    are what keep a stored image from ever being interpreted as something executable.
+    """
+    stored = settings_service.get_asset(db, asset)
+    if stored is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No {asset} is set.")
+
+    data, mime, version = stored
+    etag = f'"{asset}-{version}"'
+    return Response(
+        content=data,
+        media_type=mime,
+        headers={
+            "Cache-Control": "public, max-age=31536000, immutable",
+            "ETag": etag,
+            # Belt and braces with nosniff: even if a browser were coaxed into
+            # treating this as a document, it would download rather than render.
+            "Content-Disposition": f'inline; filename="{asset}"',
+        },
+    )
+
+
+@router.post(
+    "/branding/{asset}",
+    response_model=BrandingResponse,
+    dependencies=[Depends(require_password_confirmation)],
+)
+async def upload_asset(
+    asset: AssetName,
+    file: UploadFile = File(...),
+    actor: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+) -> BrandingResponse:
+    """Replace a brand image. Super-admin, password-confirmed, audited.
+
+    **The body is read with a cap, not read then checked.** `MAX_UPLOAD_BYTES + 1` is
+    the most this will ever hold in memory: if the extra byte arrives, the upload is
+    over the limit and is refused without allocating the rest. Reading first and
+    measuring afterwards lets the caller decide how much memory the process uses.
+
+    The file's type is decided by `images.validate` from its magic bytes. The
+    `Content-Type` header and the filename are both written by the client and are
+    used for nothing here.
+    """
+    data = await file.read(MAX_UPLOAD_BYTES + 1)
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"That file is larger than {MAX_UPLOAD_BYTES // 1024} KB.",
+        )
+
+    try:
+        image = images.validate(data, asset=asset)
+    except images.ImageValidationError as exc:
+        # 422, not 400: the request is well-formed and the *content* is unacceptable.
+        # The message is written to be shown to a user — it names the limit or the
+        # allowed formats rather than saying "invalid".
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+
+    settings_service.set_asset(db, asset, image, actor)
+    return settings_service.get_branding(db)
+
+
+@router.delete(
+    "/branding/{asset}",
+    response_model=BrandingResponse,
+    dependencies=[Depends(require_password_confirmation)],
+)
+def delete_asset(
+    asset: AssetName,
+    actor: User = Depends(require_super_admin),
+    db: Session = Depends(get_db),
+) -> BrandingResponse:
+    """Remove a brand image, reverting to the monogram or the bundled favicon.
+
+    `404` when there was nothing to remove rather than a silent success, so a UI that
+    thinks an asset exists finds out it does not.
+    """
+    if not settings_service.clear_asset(db, asset, actor):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail=f"No {asset} is set."
+        )
     return settings_service.get_branding(db)
 
 

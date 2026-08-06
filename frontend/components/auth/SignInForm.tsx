@@ -12,6 +12,7 @@ import { authApi, isTwoFactorRequired } from "@/lib/api/authApi";
 import TwoFactorChallenge from "@/components/auth/TwoFactorChallenge";
 import { setUser } from "@/lib/store/authSlice";
 import useAppDispatch from "@/lib/hooks/useAppDispatch";
+import { extractApiError } from "@/lib/utils/apiError";
 
 const schema = z.object({
   email: z.email({ message: "Enter a valid email address" }),
@@ -77,9 +78,7 @@ export default function SignInForm({ hideForgotPassword = false }: SignInFormPro
       dispatch(setUser(res.data.user));
       router.push("/dashboard");
     } catch (err: unknown) {
-      const detail =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      setServerError(detail ?? "Invalid email or password.");
+      setServerError(extractApiError(err, "Invalid email or password."));
     }
   };
 

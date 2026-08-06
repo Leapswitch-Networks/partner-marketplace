@@ -61,7 +61,7 @@ function Section({
    */
   return (
     <div className="mt-3 first:mt-0">
-      <p className="mb-2 mt-6 border-b border-surface-border px-4 pb-2 text-[17px] font-semibold text-brand first:mt-2 dark:border-night-border dark:text-brand-on-dark">
+      <p className="mb-2 mt-6 border-b border-surface-border px-4 pb-2 text-[15px] font-semibold text-brand first:mt-2 dark:border-night-border dark:text-brand-on-dark">
         {section.label}
       </p>
 

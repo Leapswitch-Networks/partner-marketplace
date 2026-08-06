@@ -6,8 +6,9 @@ import Button from "@/components/common/Button";
 import Input from "@/components/common/Input";
 import { authApi } from "@/lib/api/authApi";
 import settingsApi, { type UpdateBrandingPayload } from "@/lib/api/settingsApi";
-import type { Branding } from "@/lib/branding";
+import type { Branding, ThemePreset } from "@/lib/branding";
 import usePermissions from "@/lib/hooks/usePermissions";
+import { extractApiError } from "@/lib/utils/apiError";
 
 /**
  * Edit the installation's identity.
@@ -22,8 +23,18 @@ import usePermissions from "@/lib/hooks/usePermissions";
  * clear the box.
  */
 
+/**
+ * The free-text keys only.
+ *
+ * Explicitly narrowed rather than `keyof Branding`, which also covers
+ * `theme_preset` and `theme_css_variables` — the first is chosen from a list, the
+ * second is computed by the backend and must never be editable. Widening this back
+ * to `keyof Branding` puts a text box over the palette.
+ */
+type TextField = "app_name" | "app_short_name" | "monogram" | "chrome_subtitle" | "tagline";
+
 const FIELDS: {
-  key: keyof Branding;
+  key: TextField;
   label: string;
   hint: string;
   maxLength: number;
@@ -60,7 +71,13 @@ const FIELDS: {
   },
 ];
 
-export default function BrandingForm({ initial }: { initial: Branding }) {
+export default function BrandingForm({
+  initial,
+  themes,
+}: {
+  initial: Branding;
+  themes: ThemePreset[];
+}) {
   const router = useRouter();
   const { isSuperAdmin } = usePermissions();
 
@@ -75,7 +92,7 @@ export default function BrandingForm({ initial }: { initial: Branding }) {
   const [pendingAction, setPendingAction] = useState<(() => Promise<void>) | null>(null);
   const [password, setPassword] = useState("");
 
-  const setField = (key: keyof Branding, value: string) => {
+  const setField = (key: TextField, value: string) => {
     setValues((current) => ({ ...current, [key]: value }));
     setSaved(false);
   };
@@ -83,7 +100,7 @@ export default function BrandingForm({ initial }: { initial: Branding }) {
   const save = async () => {
     // Trimmed-empty is sent as null, which clears the override rather than blanking
     // the application's name. See the component docstring.
-    const payload: UpdateBrandingPayload = {};
+    const payload: UpdateBrandingPayload = { theme_preset: values.theme_preset };
     for (const { key } of FIELDS) {
       payload[key] = values[key].trim() || null;
     }
@@ -92,9 +109,23 @@ export default function BrandingForm({ initial }: { initial: Branding }) {
     setValues(res.data);
     setResolved(res.data);
     setSaved(true);
-    // The chrome is rendered from a server-side cached fetch, so a client-side
-    // state update alone would leave the sidebar showing the old name until the
-    // cache expired. This re-renders the server components with the new value.
+
+    // Two steps, and both are required — this was got wrong once.
+    //
+    // The chrome and the injected theme come from a server-side fetch cached for
+    // 300s. `router.refresh()` alone re-renders the server components but reuses
+    // that cached fetch, so the sidebar and brand colour would keep their old
+    // values for up to five minutes: observed as a save that landed in the database
+    // and the audit log while the page visibly did not change.
+    //
+    // So bust the cache tag first, then re-render. Failing to revalidate must not
+    // fail the save — the write already succeeded, and the worst case is the old
+    // stale-for-5-minutes behaviour.
+    try {
+      await fetch("/api/revalidate-branding", { method: "POST" });
+    } catch {
+      // Non-fatal by design; see above.
+    }
     router.refresh();
   };
 
@@ -116,7 +147,7 @@ export default function BrandingForm({ initial }: { initial: Branding }) {
       if (response?.status === 403) {
         setPendingAction(() => action);
       } else {
-        setError(response?.data?.detail ?? "Something went wrong.");
+        setError(extractApiError(err, "Something went wrong."));
       }
     } finally {
       setBusy(false);
@@ -171,6 +202,51 @@ export default function BrandingForm({ initial }: { initial: Branding }) {
         Clearing a field restores this deployment&rsquo;s configured default rather than
         leaving it blank.
       </p>
+
+      <div>
+        <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Brand colour</p>
+        <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+          A fixed set rather than a colour picker. Each one ships a light counterpart
+          for dark mode, and both halves are contrast-checked — a freely chosen colour
+          would be unreadable in one theme or the other.
+        </p>
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {themes.map((preset) => {
+            const active = values.theme_preset === preset.key;
+            return (
+              <button
+                key={preset.key}
+                type="button"
+                aria-pressed={active}
+                onClick={() => {
+                  setValues((current) => ({ ...current, theme_preset: preset.key }));
+                  setSaved(false);
+                }}
+                className={`flex items-center gap-2 rounded-[5px] border px-2.5 py-2 text-left text-xs font-medium transition-colors ${
+                  active
+                    ? "border-brand bg-brand/10 text-gray-900 dark:border-brand-on-dark dark:bg-brand/20 dark:text-gray-100"
+                    : "border-surface-border text-gray-600 hover:bg-gray-50 dark:border-night-border dark:text-gray-400 dark:hover:bg-night-body"
+                }`}
+              >
+                {/* Swatches use the preset's own hexes as inline styles, not brand
+                    utilities: these must show the colour they *would* apply, and a
+                    `bg-brand` swatch would render whatever theme is already live. */}
+                <span className="flex shrink-0 overflow-hidden rounded-[3px]">
+                  <span className="h-5 w-3" style={{ backgroundColor: preset.brand }} />
+                  <span
+                    className="h-5 w-3"
+                    style={{ backgroundColor: preset.brand_on_dark }}
+                  />
+                </span>
+                <span className="truncate">{preset.label}</span>
+              </button>
+            );
+          })}
+        </div>
+        <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
+          Saving a new colour reloads the page — the theme is applied server-side.
+        </p>
+      </div>
 
       {error && (
         <p className="text-sm text-tone-danger" role="alert">

@@ -24,7 +24,11 @@ export function extractApiError(error: unknown, fallback: string): string {
     const messages = detail
       .map((entry) => {
         const item = entry as { loc?: unknown[]; msg?: unknown };
-        const msg = typeof item.msg === "string" ? item.msg : null;
+        // Pydantic prefixes every custom-validator message with "Value error, ".
+        // It is noise to a user: the message underneath already reads as a
+        // sentence ("Unknown theme preset 'viho'. Available: …").
+        const raw = typeof item.msg === "string" ? item.msg : null;
+        const msg = raw ? raw.replace(/^Value error,\s*/i, "") : null;
         if (!msg) return null;
         // `loc` is like ["body", "personal_email"] — the last segment is the field.
         const field = Array.isArray(item.loc)
