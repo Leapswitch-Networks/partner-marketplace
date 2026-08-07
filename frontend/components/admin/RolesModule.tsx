@@ -1,16 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import Badge from "@/components/common/Badge";
 import Button from "@/components/common/Button";
-import { Card, CardContent, CardHeader, FilterRow } from "@/components/common/Card";
-import DataTable, { type Column } from "@/components/common/DataTable";
-import Input from "@/components/common/Input";
+import ResourceIndex from "@/components/common/ResourceIndex";
+import { type Column } from "@/components/common/DataTable";
 import Modal from "@/components/common/Modal";
 import RowActions from "@/components/common/RowActions";
 import Toast, { useToast } from "@/components/common/Toast";
 import { permissionApi, roleApi } from "@/lib/api/rbacApi";
 import usePermissions from "@/lib/hooks/usePermissions";
+import useResourceQuery from "@/lib/hooks/useResourceQuery";
 import type { PermissionGroup, Role } from "@/types";
 
 function apiMessage(err: unknown, fallback: string): string {
@@ -25,9 +26,11 @@ function apiMessage(err: unknown, fallback: string): string {
   return `${fallback} (${response.status ?? "unknown"})`;
 }
 
-type ModalMode = "create" | "edit" | "delete" | null;
+/** Only `delete` remains — create and edit are pages now. */
+type ModalMode = "delete" | null;
 
 export default function RolesModule() {
+  const router = useRouter();
   const { can, isSuperAdmin } = usePermissions();
   const { toast, show, dismiss } = useToast();
 
@@ -35,9 +38,16 @@ export default function RolesModule() {
   const [groups, setGroups] = useState<PermissionGroup[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState("");
-  const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(25);
+  // Same hook as Users, even though filtering is client-side here: it owns the
+  // filter/page/selection coordination either way, and the module decides
+  // whether `applied` goes to the API or to `Array.filter`.
+  const q = useResourceQuery({
+    filters: { search: "" },
+    debounced: ["search"],
+    defaultSortBy: "name",
+    defaultSortOrder: "asc",
+    defaultPerPage: 25,
+  });
 
   const [modal, setModal] = useState<ModalMode>(null);
   const [target, setTarget] = useState<Role | null>(null);
@@ -76,7 +86,7 @@ export default function RolesModule() {
   // there is no server-side search on /api/roles and adding one for six rows
   // would be pointless.
   const filtered = useMemo(() => {
-    const term = search.trim().toLowerCase();
+    const term = q.applied.search.trim().toLowerCase();
     if (!term) return roles;
     return roles.filter(
       (r) =>
@@ -84,10 +94,12 @@ export default function RolesModule() {
         r.display_name.toLowerCase().includes(term) ||
         (r.description ?? "").toLowerCase().includes(term)
     );
-  }, [roles, search]);
+  }, [roles, q.applied.search]);
 
-  const pages = Math.max(1, Math.ceil(filtered.length / perPage));
-  const pageRows = filtered.slice((page - 1) * perPage, page * perPage);
+  // 0 when empty, not 1 — matches every list endpoint and what `DataTable`
+  // renders (`pages === 0 ? 0 : page`). This computed the other value.
+  const pages = filtered.length === 0 ? 0 : Math.ceil(filtered.length / q.perPage);
+  const pageRows = filtered.slice((q.page - 1) * q.perPage, q.page * q.perPage);
 
   const columns = useMemo<Column<Role>[]>(
     () => [
@@ -118,10 +130,7 @@ export default function RolesModule() {
                       can("role-update") && can("role-permissions")
                         ? "Edit permissions"
                         : "View permissions",
-                    onSelect: () => {
-                      setTarget(row);
-                      setModal("edit");
-                    },
+                    onSelect: () => router.push(`/dashboard/roles/${row.id}/edit`),
                   },
                   {
                     label: "Delete",
@@ -212,92 +221,32 @@ export default function RolesModule() {
         headerClassName: "text-center w-[80px]",
       },
     ],
-    [can, isSuperAdmin, totalPermissions]
+    [can, isSuperAdmin, totalPermissions, router]
   );
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <Card>
-        <CardHeader
-          title="Roles & Permissions"
-          description={`${roles.length} roles · ${totalPermissions} permissions. A role is a bundle of permissions; users hold roles.`}
-          actions={
-            can("role-create") ? (
-              <Button onClick={() => setModal("create")}>Add role</Button>
-            ) : undefined
-          }
-        />
-
-        <CardContent>
-          <FilterRow>
-            <div className="min-w-[200px] flex-1">
-              <Input
-                label=""
-                id="role-search"
-                placeholder="Search roles…"
-                value={search}
-                onChange={(e) => {
-                  setSearch(e.target.value);
-                  setPage(1);
-                }}
-                className="!h-9 !py-0 !text-xs"
-              />
-            </div>
-            <button
-              type="button"
-              onClick={() => setSearch("")}
-              disabled={!search}
-              className="h-9 shrink-0 rounded-[5px] border border-brand/20 px-3 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-night-border dark:text-gray-400 dark:hover:bg-gray-800"
-            >
-              Reset
-            </button>
-          </FilterRow>
-
-          <DataTable
-            className="min-h-0 flex-1"
-            columns={columns}
-            rows={pageRows}
-            rowKey={(r) => String(r.id)}
-            loading={loading}
-            error={error}
-            onRetry={fetchRoles}
-            page={page}
-            perPage={perPage}
-            total={filtered.length}
-            pages={pages}
-            onPageChange={setPage}
-            onPerPageChange={(n) => {
-              setPerPage(n);
-              setPage(1);
-            }}
-            filtersActive={Boolean(search)}
-            onResetFilters={() => setSearch("")}
-            emptyTitle="No roles"
-          />
-        </CardContent>
-      </Card>
-
-      {(modal === "create" || modal === "edit") && (
-        <RoleFormModal
-          role={modal === "edit" ? (target ?? undefined) : undefined}
-          groups={groups}
-          readOnly={
-            !can(modal === "edit" ? "role-update" : "role-create") ||
-            !can("role-permissions") ||
-            (modal === "edit" && Boolean(target?.is_protected) && !isSuperAdmin)
-          }
-          onClose={() => {
-            setModal(null);
-            setTarget(null);
-          }}
-          onSaved={(role, created) => {
-            setModal(null);
-            setTarget(null);
-            show(`${role.display_name} ${created ? "created" : "updated"}.`);
-            fetchRoles();
-          }}
-        />
-      )}
+    <ResourceIndex<Role, typeof q.filters>
+      title="Roles & Permissions"
+      description={`${roles.length} roles · ${totalPermissions} permissions. A role is a bundle of permissions; users hold roles.`}
+      actions={
+        can("role-create") ? (
+          <Button onClick={() => router.push("/dashboard/roles/new")}>Add role</Button>
+        ) : undefined
+      }
+      query={q}
+      filters={[
+        { type: "text", key: "search", placeholder: "Search roles…", label: "Search roles" },
+      ]}
+      columns={columns}
+      rows={pageRows}
+      rowKey={(r) => String(r.id)}
+      loading={loading}
+      error={error}
+      onRetry={fetchRoles}
+      total={filtered.length}
+      pages={pages}
+      emptyTitle="No roles"
+    >
 
       {modal === "delete" && target && (
         <DeleteRoleModal
@@ -316,7 +265,7 @@ export default function RolesModule() {
       )}
 
       <Toast toast={toast} onDismiss={dismiss} />
-    </div>
+    </ResourceIndex>
   );
 }
 
@@ -327,211 +276,6 @@ export default function RolesModule() {
  * ordered), with a select-all per group — that is what makes 23 checkboxes
  * manageable, and it will matter more as the catalog grows.
  */
-function RoleFormModal({
-  role,
-  groups,
-  readOnly,
-  onClose,
-  onSaved,
-}: {
-  role?: Role;
-  groups: PermissionGroup[];
-  readOnly: boolean;
-  onClose: () => void;
-  onSaved: (role: Role, created: boolean) => void;
-}) {
-  const editing = Boolean(role);
-
-  const [name, setName] = useState(role?.name ?? "");
-  const [displayName, setDisplayName] = useState(role?.display_name ?? "");
-  const [description, setDescription] = useState(role?.description ?? "");
-  const [checked, setChecked] = useState<Set<number>>(
-    new Set(role?.permissions.map((p) => p.id) ?? [])
-  );
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const toggle = (id: number) =>
-    setChecked((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-
-  const toggleGroup = (group: PermissionGroup) => {
-    const ids = group.permissions.map((p) => p.id);
-    const allOn = ids.every((id) => checked.has(id));
-    setChecked((prev) => {
-      const next = new Set(prev);
-      ids.forEach((id) => (allOn ? next.delete(id) : next.add(id)));
-      return next;
-    });
-  };
-
-  const submit = async (e: React.SyntheticEvent) => {
-    e.preventDefault();
-    setSaving(true);
-    setError(null);
-    try {
-      if (editing && role) {
-        const res = await roleApi.update(role.id, {
-          display_name: displayName.trim(),
-          description: description.trim() || null,
-          permission_ids: Array.from(checked),
-        });
-        onSaved(res.data, false);
-      } else {
-        const res = await roleApi.create({
-          name: name.trim(),
-          display_name: displayName.trim() || name.trim(),
-          description: description.trim() || null,
-          permission_ids: Array.from(checked),
-        });
-        onSaved(res.data, true);
-      }
-    } catch (err) {
-      setError(apiMessage(err, editing ? "Could not update role." : "Could not create role."));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <Modal
-      onClose={onClose}
-      title={editing ? (readOnly ? "Role permissions" : "Edit role") : "Add role"}
-      subtitle={
-        editing
-          ? readOnly
-            ? "Read-only — this role is protected"
-            : role?.name
-          : "Name is referenced by code, so pick it carefully"
-      }
-      size="xl"
-      footer={
-        <>
-          <Button variant="outline" onClick={onClose} type="button">
-            {readOnly ? "Close" : "Cancel"}
-          </Button>
-          {!readOnly && (
-            <Button type="submit" form="role-form" loading={saving}>
-              {editing ? "Save changes" : "Create role"}
-            </Button>
-          )}
-        </>
-      }
-    >
-      <form id="role-form" onSubmit={submit} noValidate className="flex flex-col gap-4">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Input
-            label="Name (code identifier)"
-            id="r-name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            disabled={readOnly || editing}
-            placeholder="e.g. RegionalManager"
-            hint={editing ? "Cannot be changed — code references it" : "Letters, digits, - and _"}
-            required
-          />
-          <Input
-            label="Display name"
-            id="r-display"
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-            disabled={readOnly}
-            placeholder="e.g. Regional Manager"
-          />
-        </div>
-
-        <Input
-          label="Description"
-          id="r-description"
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
-          disabled={readOnly}
-          placeholder="What is this role for?"
-        />
-
-        <div>
-          <div className="mb-2 flex items-center justify-between">
-            <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">Permissions</p>
-            <Badge tone="brand">{checked.size} selected</Badge>
-          </div>
-
-          {groups.length === 0 && (
-            <p className="rounded-[5px] border border-brand/20 px-3 py-4 text-center text-xs text-gray-400 dark:border-night-border dark:text-gray-500">
-              You do not have permission to view the permission catalog.
-            </p>
-          )}
-
-          <div className="flex flex-col gap-3">
-            {groups.map((group) => {
-              const ids = group.permissions.map((p) => p.id);
-              const allOn = ids.every((id) => checked.has(id));
-              const someOn = !allOn && ids.some((id) => checked.has(id));
-              return (
-                <fieldset
-                  key={group.id}
-                  className="rounded-[5px] border border-brand/20 px-3 py-2.5 dark:border-night-border"
-                >
-                  <legend className="flex items-center gap-2 px-1">
-                    <button
-                      type="button"
-                      onClick={() => !readOnly && toggleGroup(group)}
-                      disabled={readOnly}
-                      className="text-xs font-semibold text-gray-800 hover:text-brand disabled:cursor-not-allowed dark:text-gray-200"
-                    >
-                      {group.display_name}
-                    </button>
-                    {someOn && <Badge tone="warning">partial</Badge>}
-                    {allOn && <Badge tone="success">all</Badge>}
-                  </legend>
-                  <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
-                    {group.permissions.map((permission) => (
-                      <label
-                        key={permission.id}
-                        className={`flex items-start gap-2 rounded-[5px] px-1.5 py-1 text-xs ${
-                          readOnly ? "" : "cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800"
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={checked.has(permission.id)}
-                          onChange={() => toggle(permission.id)}
-                          disabled={readOnly}
-                          className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-brand"
-                        />
-                        <span className="min-w-0">
-                          <span className="block truncate text-gray-700 dark:text-gray-300">
-                            {permission.display_name}
-                          </span>
-                          <span className="block truncate font-mono text-[10px] text-gray-400 dark:text-gray-500">
-                            {permission.name}
-                          </span>
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                </fieldset>
-              );
-            })}
-          </div>
-        </div>
-
-        {error && (
-          <p
-            role="alert"
-            className="rounded-[5px] border border-tone-danger/40 bg-tone-danger/10 px-3 py-2 text-sm text-tone-danger dark:border-tone-danger/50 dark:bg-tone-danger/15 dark:text-tone-danger"
-          >
-            {error}
-          </p>
-        )}
-      </form>
-    </Modal>
-  );
-}
-
 function DeleteRoleModal({
   role,
   onClose,
