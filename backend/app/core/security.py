@@ -114,7 +114,9 @@ def create_access_token(subject: Any, session_id: str) -> str:
     )
 
 
-def create_refresh_token(subject: Any, session_id: str, jti: str) -> str:
+def create_refresh_token(
+    subject: Any, session_id: str, jti: str, expires_in: timedelta | None = None
+) -> str:
     """A refresh token, identified by `jti` (PM-31).
 
     The `jti` is what makes rotation real: the session stores the one currently
@@ -122,9 +124,12 @@ def create_refresh_token(subject: Any, session_id: str, jti: str) -> str:
     merely old. Without it, "rotation" only means issuing a new token while the
     previous one keeps working.
     """
+    # `expires_in` comes from the session's remaining life, so a 30-day
+    # "keep me signed in" session does not hand out a token that expires on day 7 —
+    # which would strand an idle user with a valid session and a dead token.
     token = _create_token(
         subject,
-        timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+        expires_in or timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
         "refresh",
         session_id,
     )

@@ -73,6 +73,10 @@ class RegisterRequest(_PasswordPair):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+    #: Ticking "keep me signed in" extends the session from `REFRESH_TOKEN_EXPIRE_DAYS`
+    #: to `REMEMBER_ME_DAYS`. Defaults to False so an omitted field means the shorter
+    #: session — the safe direction, and it keeps older clients working.
+    remember_me: bool = False
 
 
 class AcceptInvitationRequest(_PasswordPair):
@@ -183,6 +187,15 @@ class CurrentUserResponse(BaseModel):
     permissions: list[str]
     is_super_admin: bool
     has_admin_access: bool
+    #: 2FA enrolled **and confirmed**. A boolean only — never the secret.
+    #:
+    #: Added 2026-08-06. It was missing here while `UserListItem` had it, so the
+    #: frontend's `CurrentUser` type declared a field `/auth/me` never sent —
+    #: anything trusting it would read `undefined`. Found by PM-42's generated-type
+    #: contract on its first run, which is precisely the drift it exists to catch.
+    #: The model property's own docstring says it is named for direct serialisation
+    #: by schemas, so the omission was accidental rather than deliberate.
+    two_factor_enabled: bool = False
     #: Email ownership recently proved via OTP — the password page may omit the
     #: current-password field. Server-enforced regardless of what the client sends.
     password_otp_grace: bool = False
@@ -211,6 +224,11 @@ class TwoFactorRequiredResponse(BaseModel):
 
 class TwoFactorChallengeRequest(BaseModel):
     challenge_token: str
+    #: Carried through from the sign-in form, because the session is created **here**
+    #: rather than at /login for a 2FA user — two requests after the box was ticked.
+    #: Without this the choice is silently lost for exactly the users most likely to
+    #: care about staying signed in.
+    remember_me: bool = False
     #: Exactly one of these. A six-digit TOTP, or a recovery code if the
     #: authenticator is gone.
     code: str | None = Field(default=None, max_length=10)

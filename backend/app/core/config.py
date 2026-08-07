@@ -73,6 +73,21 @@ class Settings(BaseSettings):
     # and the validator below refuses to boot on any unsafe default.
     APP_ENV: str = "development"
 
+    # --- API versioning (CORE_HARDENING_PLAN PM-40) --------------------------
+    # Every router mounts under this. It was `/api` for 60 routes, which cost nothing
+    # while there was one client in one repo deployed together — and would have become
+    # a migration the moment a partner integrated, because a breaking change needs a
+    # version to live in and adding one retroactively means either breaking every
+    # existing caller or running an unversioned alias forever.
+    #
+    # Not a `Settings` field a deployment can change: the version is a property of the
+    # contract, not of the environment. Two deployments of the same code answering on
+    # different prefixes is a support problem, not a feature.
+    #
+    # A v2 goes alongside v1 rather than replacing it — mount a second router set and
+    # keep both until callers have moved.
+    API_PREFIX: str = "/api/v1"
+
     # --- Project identity (DYNAMIC_BRANDING_PLAN phase 1) --------------------
     # These are the BUILD-TIME defaults and the fallback whenever `app_settings`
     # is empty or a column is NULL. That fallback is load-bearing rather than
@@ -100,7 +115,20 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    #: Default session lifetime, when "keep me signed in" is NOT ticked.
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    #: Session lifetime when it IS ticked.
+    #:
+    #: The checkbox existed on the sign-in form from the start and **did nothing** —
+    #: it was in the Zod schema and rendered, and no backend ever heard of it. A user
+    #: reported ticking it every time and still being signed out, which turned out to
+    #: have a different cause (the edge middleware; see `frontend/middleware.ts`), but
+    #: the checkbox was lying regardless.
+    #:
+    #: This is the whole difference the tick makes: how long the session and its
+    #: cookies live. It is not "remember my password" — nothing stores a password —
+    #: which is why the label was corrected too.
+    REMEMBER_ME_DAYS: int = 30
 
     # --- Cookies ------------------------------------------------------------
     # COOKIE_SECURE must be True anywhere the app is served over HTTPS. It is

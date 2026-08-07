@@ -393,6 +393,35 @@ def iter_for_export(
     yield from db.scalars(stmt.execution_options(yield_per=batch_size))
 
 
+def _purge_cutoff(days: int):
+    """Shared by the count and the delete so a dry run cannot disagree with reality.
+
+    Returns `None` for a retention longer than `datetime` can express — semantically
+    "nothing is that old" — rather than raising. Found by passing 999999 while testing
+    the positive-value guard, which raised OverflowError from timedelta.
+    """
+    if days <= 0:
+        raise ValueError("Retention must be a positive number of days.")
+    try:
+        return datetime.now(timezone.utc) - timedelta(days=days)
+    except (OverflowError, OSError):
+        return None
+
+
+def count_purgeable(db: Session, days: int) -> int:
+    """How many rows `purge_older_than` would delete. For `--dry-run`.
+
+    Reading before deleting matters more here than for sessions: this is an audit
+    trail, and the delete is not reversible.
+    """
+    cutoff = _purge_cutoff(days)
+    if cutoff is None:
+        return 0
+    return db.scalar(
+        select(func.count()).select_from(ActivityLog).where(ActivityLog.created_at < cutoff)
+    ) or 0
+
+
 def purge_older_than(db: Session, days: int) -> int:
     """Delete audit rows older than `days`. Returns how many were removed.
 
@@ -405,15 +434,8 @@ def purge_older_than(db: Session, days: int) -> int:
     Refuses a non-positive value rather than treating it as "everything": a stray
     `0` from a config file should not silently destroy the entire trail.
     """
-    if days <= 0:
-        raise ValueError("Retention must be a positive number of days.")
-
-    try:
-        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
-    except (OverflowError, OSError):
-        # A retention longer than `datetime` can express. The semantically correct
-        # answer is "nothing is that old", not a crash — found by passing 999999
-        # while testing the guard above, which raised OverflowError from timedelta.
+    cutoff = _purge_cutoff(days)
+    if cutoff is None:
         return 0
     result = db.execute(
         ActivityLog.__table__.delete().where(ActivityLog.created_at < cutoff)

@@ -123,6 +123,25 @@ def read_asset(
         "Content-Disposition": f'inline; filename="{asset}"',
     }
 
+    if mime == images.SVG_MIME:
+        # **The second of the two controls that make SVG upload safe.** `images.validate_svg`
+        # refuses script, event handlers, external references and DOCTYPEs at upload; this
+        # makes a file that somehow got past it inert anyway.
+        #
+        # It matters because of one asymmetry: an SVG rendered through `<img src>` — how
+        # every consumer here uses it — cannot run script, but an SVG *navigated to
+        # directly* is a top-level document on our own origin and can. This response is
+        # what someone opening the asset URL receives.
+        #
+        # `default-src 'none'` forbids every fetch and every script. `style-src
+        # 'unsafe-inline'` is the one allowance, because presentational CSS inside the
+        # document is how SVGs are legitimately styled and cannot itself execute.
+        # `sandbox` drops the response into an opaque origin, so even successful script
+        # would have no access to ours.
+        headers["Content-Security-Policy"] = (
+            "default-src 'none'; style-src 'unsafe-inline'; sandbox"
+        )
+
     # `If-None-Match` is a comma-separated list and may carry a `W/` weak prefix, so a
     # bare `== etag` misses legitimate matches. `*` means "any current representation",
     # which one exists, so it matches too.

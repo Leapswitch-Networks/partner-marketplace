@@ -156,15 +156,18 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     )
 
 
-app.include_router(auth.router, prefix="/api")
-app.include_router(google.router, prefix="/api")
-app.include_router(users.router, prefix="/api")
-app.include_router(roles.router, prefix="/api")
-app.include_router(navigation.router, prefix="/api")
-app.include_router(permissions.router, prefix="/api")
-app.include_router(invitations.router, prefix="/api")
-app.include_router(activity.router, prefix="/api")
-app.include_router(settings_api.router, prefix="/api")
+# All routers mount under settings.API_PREFIX — `/api/v1` (PM-40). The health
+# endpoints below deliberately do NOT: an orchestrator's liveness probe should not
+# have to know the API's contract version, and /health is not part of that contract.
+app.include_router(auth.router, prefix=settings.API_PREFIX)
+app.include_router(google.router, prefix=settings.API_PREFIX)
+app.include_router(users.router, prefix=settings.API_PREFIX)
+app.include_router(roles.router, prefix=settings.API_PREFIX)
+app.include_router(navigation.router, prefix=settings.API_PREFIX)
+app.include_router(permissions.router, prefix=settings.API_PREFIX)
+app.include_router(invitations.router, prefix=settings.API_PREFIX)
+app.include_router(activity.router, prefix=settings.API_PREFIX)
+app.include_router(settings_api.router, prefix=settings.API_PREFIX)
 
 
 @app.get("/health", tags=["health"])

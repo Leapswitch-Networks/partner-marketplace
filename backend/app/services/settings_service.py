@@ -83,9 +83,9 @@ def get_branding(db: Session) -> BrandingResponse:
         **resolved,
         theme_preset=theme.key_for(preset),
         theme_css_variables=theme.css_variables(stored_preset),
-        logo_url=f"/api/settings/branding/logo?v={logo_version}" if logo_version is not None else None,
+        logo_url=f"{settings.API_PREFIX}/settings/branding/logo?v={logo_version}" if logo_version is not None else None,
         favicon_url=(
-            f"/api/settings/branding/favicon?v={favicon_version}"
+            f"{settings.API_PREFIX}/settings/branding/favicon?v={favicon_version}"
             if favicon_version is not None
             else None
         ),

@@ -10,7 +10,7 @@ lockout cannot cover.
 Three tiers, because one number cannot serve both a login form and a dashboard:
 
   * ``sensitive``  — credential and token endpoints. Tightest.
-  * ``auth``       — the rest of ``/api/auth/*``: session reads, refresh, logout.
+  * ``auth``       — the rest of ``{API_PREFIX}/auth/*``: session reads, refresh, logout.
                      The frontend calls ``/me`` on navigation, so this cannot be
                      as tight as ``sensitive`` without breaking normal use.
   * ``default``    — everything else.
@@ -47,34 +47,34 @@ from app.core.dependencies import get_client_ip
 #: sensitive endpoint must be added here on purpose.
 SENSITIVE_PATHS: frozenset[str] = frozenset(
     {
-        "/api/auth/login",
-        "/api/auth/register",
-        "/api/auth/forgot-password",
-        "/api/auth/reset-password",
-        "/api/auth/accept-invitation",
-        "/api/auth/me/change-password",
-        "/api/invitations/preview",
+        f"{settings.API_PREFIX}/auth/login",
+        f"{settings.API_PREFIX}/auth/register",
+        f"{settings.API_PREFIX}/auth/forgot-password",
+        f"{settings.API_PREFIX}/auth/reset-password",
+        f"{settings.API_PREFIX}/auth/accept-invitation",
+        f"{settings.API_PREFIX}/auth/me/change-password",
+        f"{settings.API_PREFIX}/invitations/preview",
         # 2FA (PM-34). These MUST stay in this tier. A six-digit code is one in a
         # million per guess, which is only strong while guesses are limited — and
         # `/two-factor-challenge` is unauthenticated by necessity, so this limit
         # plus the shared lockout counter is the entire brute-force defence.
-        "/api/auth/two-factor-challenge",
+        f"{settings.API_PREFIX}/auth/two-factor-challenge",
         # Re-proving a password is a password check, and belongs under the same
         # limit as one.
-        "/api/auth/me/confirm-password",
+        f"{settings.API_PREFIX}/auth/me/confirm-password",
         # Email verification (PM-35). `resend-verification` sends mail to an
         # address the caller names, so without a tight limit it is a free relay for
         # mailbombing someone else. `verify-email` is limited because the token,
         # while signed, is worth guessing at scale.
-        "/api/auth/verify-email",
-        "/api/auth/resend-verification",
+        f"{settings.API_PREFIX}/auth/verify-email",
+        f"{settings.API_PREFIX}/auth/resend-verification",
         # Password OTP recovery. `send` mails a code and must not become a way to
         # bombard the account owner's inbox — the 60-second per-account cooldown
         # bounds one caller, this bounds a distributed one. `verify` is a six-digit
         # guess, so it belongs under the same limit as the 2FA challenge above for
         # exactly the same reason.
-        "/api/auth/me/password-otp/send",
-        "/api/auth/me/password-otp/verify",
+        f"{settings.API_PREFIX}/auth/me/password-otp/send",
+        f"{settings.API_PREFIX}/auth/me/password-otp/verify",
     }
 )
 
@@ -160,7 +160,7 @@ def _tier_for(path: str) -> tuple[str, int, int] | None:
             settings.RATE_LIMIT_SENSITIVE_MAX_REQUESTS,
             settings.RATE_LIMIT_SENSITIVE_WINDOW_SECONDS,
         )
-    if path.startswith("/api/auth"):
+    if path.startswith(f"{settings.API_PREFIX}/auth"):
         return (
             "auth",
             settings.RATE_LIMIT_AUTH_MAX_REQUESTS,

@@ -95,7 +95,6 @@ def test_detects_each_allowed_format(data, expected):
     [
         b"",
         b"not an image at all",
-        b"<svg xmlns='http://www.w3.org/2000/svg'></svg>",
         b"GIF89a" + b"\x00" * 32,
         b"%PDF-1.7\n" + b"\x00" * 32,
         b"MZ\x90\x00" + b"\x00" * 32,  # a Windows executable
@@ -129,18 +128,162 @@ def test_a_file_claiming_to_be_png_but_is_not_is_refused():
         validate(b"<?php echo shell_exec($_GET['c']); ?>", asset="logo")
 
 
-def test_svg_is_refused_even_though_it_is_a_real_image_format():
-    """Deliberate, and the most likely rule to be "helpfully" relaxed later.
+# --- SVG -------------------------------------------------------------------
+#
+# SVG is the one accepted format that is a *document* rather than a bitmap, so it is
+# the only one where the bytes passing a signature check proves nothing. These tests
+# are the first of the two controls that make accepting it safe; the second is the
+# `Content-Security-Policy` on the serve route, which makes even a file that slipped
+# past here inert.
 
-    An SVG is a document: it can carry `<script>` and event handlers, and served from
-    our own origin it executes with our origin's privileges — a stored XSS in the one
-    asset shown on every page including the login screen.
+#: The project's actual logo, verbatim from `logo/logo-master.svg`. Using the real
+#: asset rather than a synthetic one means a rule tightened later cannot start
+#: rejecting the logo this application ships with.
+REAL_LOGO = b"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <rect x="0" y="0" width="1024" height="1024" rx="232.0" fill="#2f8a78"/>
+  <g transform="translate(207.00,207.00) scale(1.17308)"><g fill="#ffffff">
+      <rect x="0" y="0" width="152" height="520" rx="76"/>
+      <rect x="212" y="0" width="308" height="232" rx="80"/>
+      <rect x="212" y="288" width="308" height="232" rx="80"/>
+    </g></g>
+</svg>"""
+
+
+def test_the_projects_own_logo_is_accepted_as_both_assets():
+    """A guard against tightening the SVG rules until they reject our own artwork."""
+    for asset in ("logo", "favicon"):
+        image = validate(REAL_LOGO, asset=asset)
+        assert image.mime == "image/svg+xml"
+        assert (image.width, image.height) == (1024, 1024)
+        assert image.data == REAL_LOGO, "bytes must be stored unmodified, never rewritten"
+
+
+def test_svg_is_detected_without_magic_bytes():
+    """SVG is XML, so detection is structural. It must be tried LAST.
+
+    A PNG happens to be binary and could never match, but checking SVG first would mean
+    re-reading every raster upload as text for nothing.
     """
-    svg = b'<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'
+    assert detect_mime(REAL_LOGO) == "image/svg+xml"
+    assert detect_mime(b'<?xml version="1.0"?>\n<svg xmlns="http://www.w3.org/2000/svg"/>') == "image/svg+xml"
+    assert detect_mime(b'\xef\xbb\xbf<svg xmlns="http://www.w3.org/2000/svg"/>') == "image/svg+xml"
+    assert detect_mime(b'<!-- exported --><svg xmlns="http://www.w3.org/2000/svg"/>') == "image/svg+xml"
+
+
+def test_an_html_page_containing_an_svg_is_not_an_svg():
+    """`<svg` must be the ROOT element.
+
+    Accepting it anywhere in the document would admit an HTML page that happens to
+    contain an inline SVG — which is a navigable document, and the whole thing this
+    guards against.
+    """
+    assert detect_mime(b"<html><body><svg xmlns='http://www.w3.org/2000/svg'></svg></body></html>") is None
+
+
+#: Every payload here was run against the implementation; all eleven are refused.
+#: Named so a failure says which attack got through.
+SVG_ATTACKS = [
+    pytest.param(
+        b'<svg xmlns="http://www.w3.org/2000/svg"><script>alert(document.cookie)</script></svg>',
+        "scripts", id="inline-script",
+    ),
+    pytest.param(
+        b'<svg xmlns="http://www.w3.org/2000/svg" onload="alert(1)"><rect width="1" height="1"/></svg>',
+        "event-handler", id="onload-on-root",
+    ),
+    pytest.param(
+        b'<svg xmlns="http://www.w3.org/2000/svg"><rect onmouseover="alert(1)" width="1" height="1"/></svg>',
+        "event-handler", id="onmouseover-on-child",
+    ),
+    pytest.param(
+        b'<svg xmlns="http://www.w3.org/2000/svg"><foreignObject><body onload="alert(1)"/></foreignObject></svg>',
+        "embedded HTML", id="foreignobject",
+    ),
+    pytest.param(
+        b'<svg xmlns="http://www.w3.org/2000/svg"><a href="javascript:alert(1)"><rect/></a></svg>',
+        "javascript:", id="javascript-url",
+    ),
+    pytest.param(
+        b'<svg xmlns="http://www.w3.org/2000/svg"><use href="https://evil.test/x.svg#a"/></svg>',
+        "external file", id="external-use",
+    ),
+    pytest.param(
+        b'<svg xmlns="http://www.w3.org/2000/svg"><image href="http://evil.test/track.png"/></svg>',
+        "external file", id="external-image-beacon",
+    ),
+    pytest.param(
+        b'<svg xmlns="http://www.w3.org/2000/svg"><animate attributeName="href" values="javascript:alert(1)"/></svg>',
+        "SMIL", id="smil-animate",
+    ),
+    pytest.param(
+        b'<svg xmlns="http://www.w3.org/2000/svg"><style>@import url(//evil.test/x.css);</style></svg>',
+        "CSS imports", id="css-import",
+    ),
+]
+
+
+@pytest.mark.parametrize(("payload", "expected_reason"), SVG_ATTACKS)
+def test_malicious_svg_is_refused(payload, expected_reason):
+    with pytest.raises(ImageValidationError) as excinfo:
+        validate(payload, asset="logo")
+    assert expected_reason in str(excinfo.value)
+
+
+@pytest.mark.parametrize(("payload", "_reason"), SVG_ATTACKS)
+def test_malicious_svg_is_refused_for_favicons_too(payload, _reason):
+    """The favicon path must not be the weaker one. It is a different allowlist, so it
+    is a different code path, so it gets its own assertion."""
     with pytest.raises(ImageValidationError):
-        validate(svg, asset="logo")
+        validate(payload, asset="favicon")
+
+
+def test_an_entity_expansion_attack_is_refused():
+    """Billion laughs / XXE. Refused before the SVG rules even run.
+
+    A leading `<!DOCTYPE` means `<svg` is not the root element, so `detect_mime` returns
+    None and the file is rejected as unrecognised. The `<!doctype` entry in the
+    forbidden list is therefore belt-and-braces for a DOCTYPE appearing later — which is
+    not valid XML anyway. Asserted here so the *outcome* is pinned even if the layer
+    that produces it changes.
+    """
+    payload = (
+        b'<?xml version="1.0"?><!DOCTYPE s [<!ENTITY a "aaaa">]>'
+        b'<svg xmlns="http://www.w3.org/2000/svg"><text>&a;</text></svg>'
+    )
     with pytest.raises(ImageValidationError):
-        validate(svg, asset="favicon")
+        validate(payload, asset="logo")
+
+
+def test_svg_refusals_do_not_silently_strip():
+    """Refusing beats sanitising, and that is a product decision as much as a security one.
+
+    A stripped SVG is a file the uploader did not choose, and it breaks in ways nobody
+    can debug from the rendered result. So `validate` raises rather than returning
+    altered bytes — asserted by there being no success path to return them through.
+    """
+    payload = b'<svg xmlns="http://www.w3.org/2000/svg"><script>x</script><rect/></svg>'
+    with pytest.raises(ImageValidationError):
+        validate(payload, asset="logo")
+
+
+def test_undecodable_bytes_behind_an_svg_prefix_are_refused():
+    """An SVG must be valid text. Invalid UTF-8 is not a document worth storing."""
+    with pytest.raises(ImageValidationError, match="UTF-8"):
+        validate(b'<svg xmlns="http://www.w3.org/2000/svg">\xff\xfe\x00</svg>', asset="logo")
+
+
+def test_svg_dimensions_fall_back_to_the_viewbox():
+    """A responsive SVG has no width/height, only a viewBox. It must still be measured."""
+    responsive = b'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 240"/>'
+    image = validate(responsive, asset="logo")
+    assert (image.width, image.height) == (320, 240)
+
+
+def test_svg_with_no_intrinsic_size_is_accepted_unmeasured():
+    """`width="100%"` has no pixel size. Inventing one to satisfy the cap would reject a
+    perfectly good logo, so it resolves to None and only the byte cap applies."""
+    image = validate(b'<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%"/>', asset="logo")
+    assert image.width is None and image.height is None
 
 
 def test_error_message_does_not_echo_the_rejected_content():
@@ -191,7 +334,7 @@ def test_every_allowlisted_type_is_actually_detectable():
     A MIME string listed as allowed but never produced by `detect_mime` is a format
     the code believes it accepts and always rejects.
     """
-    detectable = {detect_mime(d) for d in (png(), jpeg(), webp(), ico())}
+    detectable = {detect_mime(d) for d in (png(), jpeg(), webp(), ico(), REAL_LOGO)}
     for asset, allowed in ALLOWED_TYPES.items():
         assert allowed <= detectable, f"{asset} allows a type nothing can detect"
 

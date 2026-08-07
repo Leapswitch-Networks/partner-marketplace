@@ -96,7 +96,9 @@ def callback(
         )
 
         response = _frontend_redirect("/dashboard")
-        set_auth_cookies(response, user.id, session.id, session.refresh_token_jti)
+        set_auth_cookies(
+        response, user.id, session.id, session.refresh_token_jti, session.expires_at
+    )
         return response
 
     except HTTPException as exc:

@@ -6,6 +6,8 @@ decided, so `COOKIE_SECURE` cannot be honoured in one place and forgotten in
 another.
 """
 
+from datetime import datetime, timedelta, timezone
+
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
@@ -66,11 +68,44 @@ _REFRESH_MAX_AGE = settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60
 #: The refresh cookie is scoped to this exact path, so it is never transmitted
 #: on ordinary requests. Anything that reads or clears it must use the same path
 #: or the browser will not match the cookie.
-_REFRESH_PATH = "/api/auth/refresh"
+#:
+#: ⚠️ **Derived from API_PREFIX, never written out.** When the routes moved to
+#: `/api/v1` (PM-40) a literal here would have kept scoping the cookie to
+#: `/api/auth/refresh` while the endpoint answered at `/api/v1/auth/refresh`. The
+#: browser would then never send it, `/refresh` would 401 for everyone, and the
+#: symptom — every session dying after one hour when the access token expires —
+#: points nowhere near a path constant.
+_REFRESH_PATH = f"{settings.API_PREFIX}/auth/refresh"
+
+#: A marker saying "this browser has a refreshable session", readable on any path.
+#:
+#: **This is not a credential and must never become one.** It carries no user id, no
+#: signature and no secret — only its own existence. The API is still the sole
+#: authority: every guard resolves the access token and re-checks the session row.
+#: Forging this cookie gains an attacker nothing but a page shell that immediately
+#: bounces them, which is what an unauthenticated visitor sees anyway.
+#:
+#: **Why it has to exist.** `frontend/middleware.ts` runs at the edge on every page
+#: request and decides whether to show the app or the sign-in screen. It could only
+#: see `access_token`, which the browser deletes after an hour — while the refresh
+#: cookie lives for seven days but is **path-scoped to the refresh endpoint**, so a
+#: page request never carries it and the middleware cannot know a session is still
+#: refreshable.
+#:
+#: The result was that an hour after signing in, navigating anywhere bounced the user
+#: to /sign-in **before any JavaScript ran** — so the axios interceptor that would
+#: have refreshed transparently never got the chance. Measured on 2026-08-06: 77
+#: un-revoked sessions in the database, every one still valid, and only 4 ever
+#: refreshed. The mechanism was perfect and unreachable.
+_SESSION_HINT = "session_active"
 
 
 def set_auth_cookies(
-    response: Response, user_id: str, session_id: str, refresh_jti: str
+    response: Response,
+    user_id: str,
+    session_id: str,
+    refresh_jti: str,
+    session_expires_at: datetime | None = None,
 ) -> None:
     """Issue both cookies for a session.
 
@@ -92,15 +127,60 @@ def set_auth_cookies(
         max_age=_ACCESS_MAX_AGE,
         path="/",
     )
+    # Derived from the session row rather than from config, so a "keep me signed in"
+    # session's cookies live as long as the session does — and, on refresh, so the
+    # cookies track the session's *remaining* life without anyone having to record
+    # which kind of session it was. `expires_at` is the single authority.
+    remaining = _remaining_seconds(session_expires_at)
+
     response.set_cookie(
         key="refresh_token",
-        value=create_refresh_token(user_id, session_id, refresh_jti),
+        value=create_refresh_token(
+            user_id, session_id, refresh_jti, expires_in=timedelta(seconds=remaining)
+        ),
         httponly=True,
         samesite=settings.COOKIE_SAMESITE,
         secure=settings.COOKIE_SECURE,
-        max_age=_REFRESH_MAX_AGE,
+        max_age=remaining,
         path=_REFRESH_PATH,
     )
+    # Same lifetime, on `/` so the edge middleware can see it.
+    # Not httponly=False: nothing in the browser needs to read it either.
+    response.set_cookie(
+        key=_SESSION_HINT,
+        value="1",
+        httponly=True,
+        samesite=settings.COOKIE_SAMESITE,
+        secure=settings.COOKIE_SECURE,
+        max_age=remaining,
+        path="/",
+    )
+
+
+def _session_lifetime_days(remember_me: bool) -> int:
+    """How many days this session should live.
+
+    One function so the password path and the 2FA path cannot disagree — the 2FA path
+    is easy to forget, since the choice is made on a form that is two requests away
+    from the session actually being created.
+    """
+    return settings.REMEMBER_ME_DAYS if remember_me else settings.REFRESH_TOKEN_EXPIRE_DAYS
+
+
+def _remaining_seconds(session_expires_at: datetime | None) -> int:
+    """How long the session has left, in whole seconds.
+
+    Falls back to the configured default when the caller does not pass an expiry, so
+    an older call site keeps working rather than issuing a zero-length cookie.
+
+    Floored at one minute. A session in its last seconds would otherwise mint a cookie
+    with `Max-Age=0` — which browsers treat as *delete immediately*, silently signing
+    the user out at the exact moment the code was trying to keep them in.
+    """
+    if session_expires_at is None:
+        return _REFRESH_MAX_AGE
+    remaining = int((session_expires_at - datetime.now(timezone.utc)).total_seconds())
+    return max(remaining, 60)
 
 
 def clear_auth_cookies(response: Response) -> None:
@@ -125,6 +205,17 @@ def clear_auth_cookies(response: Response) -> None:
     response.delete_cookie(
         "refresh_token",
         path=_REFRESH_PATH,
+        httponly=True,
+        samesite=settings.COOKIE_SAMESITE,
+        secure=settings.COOKIE_SECURE,
+    )
+    # Must be cleared with the others. Left behind, the middleware would keep letting
+    # a logged-out visitor through to a protected page, which then flashes its shell
+    # before the client bounces them — the exact ugliness the middleware exists to
+    # prevent.
+    response.delete_cookie(
+        _SESSION_HINT,
+        path="/",
         httponly=True,
         samesite=settings.COOKIE_SAMESITE,
         secure=settings.COOKIE_SECURE,
@@ -244,7 +335,9 @@ def accept_invitation(
     # 2FA, not by a test, which is PM-11 earning its severity.
     session = session_service.create(db, user, ip=ip, user_agent=user_agent)
     activity_service.record_login(db, user, ip, user_agent)
-    set_auth_cookies(response, user.id, session.id, session.refresh_token_jti)
+    set_auth_cookies(
+        response, user.id, session.id, session.refresh_token_jti, session.expires_at
+    )
     return LoginResponse(
         message="Welcome aboard",
         user=CurrentUserResponse(**rbac_service.current_user_payload(db, user)),
@@ -286,11 +379,19 @@ def login(
             recovery_codes_remaining=two_factor_service.remaining_recovery_codes(user),
         )
 
-    session = session_service.create(db, user, ip=ip, user_agent=user_agent)
+    session = session_service.create(
+        db,
+        user,
+        ip=ip,
+        user_agent=user_agent,
+        lifetime_days=_session_lifetime_days(data.remember_me),
+    )
     # Recorded here rather than in `authenticate`, because the audit entry should
     # mean "a session now exists", and only this point knows that it does.
     activity_service.record_login(db, user, ip, user_agent)
-    set_auth_cookies(response, user.id, session.id, session.refresh_token_jti)
+    set_auth_cookies(
+        response, user.id, session.id, session.refresh_token_jti, session.expires_at
+    )
     return LoginResponse(
         message="Login successful",
         user=CurrentUserResponse(**rbac_service.current_user_payload(db, user)),
@@ -437,7 +538,7 @@ def refresh(
     else:
         new_jti = session_service.rotate_refresh_jti(db, session)
 
-    set_auth_cookies(response, user.id, session.id, new_jti)
+    set_auth_cookies(response, user.id, session.id, new_jti, session.expires_at)
     return MessageResponse(message="Token refreshed")
 
 
@@ -717,7 +818,13 @@ def two_factor_challenge(
         raise invalid
 
     user_agent = request.headers.get("User-Agent")
-    session = session_service.create(db, user, ip=ip, user_agent=user_agent)
+    session = session_service.create(
+        db,
+        user,
+        ip=ip,
+        user_agent=user_agent,
+        lifetime_days=_session_lifetime_days(data.remember_me),
+    )
     auth_service.record_login(db, user, ip)
     activity_service.record_login(db, user, ip, user_agent)
 
@@ -734,7 +841,9 @@ def two_factor_challenge(
             properties={"ip": ip, "remaining": remaining},
         )
 
-    set_auth_cookies(response, user.id, session.id, session.refresh_token_jti)
+    set_auth_cookies(
+        response, user.id, session.id, session.refresh_token_jti, session.expires_at
+    )
     return LoginResponse(
         message="Login successful",
         user=CurrentUserResponse(**rbac_service.current_user_payload(db, user)),

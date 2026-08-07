@@ -29,7 +29,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -47,14 +47,27 @@ SESSION_TOUCH_INTERVAL = timedelta(minutes=5)
 _MAX_USER_AGENT = 512
 
 
-def create(db: Session, user: User, ip: str | None, user_agent: str | None) -> UserSession:
+def create(
+    db: Session,
+    user: User,
+    ip: str | None,
+    user_agent: str | None,
+    lifetime_days: int | None = None,
+) -> UserSession:
     """Open a session. Its id becomes the `sid` claim in both tokens.
 
     The first `refresh_token_jti` is seeded here so a brand-new session already has
     one — the caller reads it to mint the initial refresh token, and a session that
     started life without one would be refused at its first refresh.
+
+    `lifetime_days` defaults to `REFRESH_TOKEN_EXPIRE_DAYS`; the sign-in form's
+    "keep me signed in" passes `REMEMBER_ME_DAYS` instead. **`expires_at` is the one
+    authority on how long this session lives** — the cookie Max-Age and the refresh
+    token's own `exp` are both derived from it, so there is no way for the three to
+    disagree and no need to record the choice separately.
     """
     now = datetime.now(timezone.utc)
+    days = lifetime_days or settings.REFRESH_TOKEN_EXPIRE_DAYS
     session = UserSession(
         refresh_token_jti=str(uuid.uuid4()),
         refresh_rotated_at=now,
@@ -63,9 +76,10 @@ def create(db: Session, user: User, ip: str | None, user_agent: str | None) -> U
         user_agent=(user_agent or "")[:_MAX_USER_AGENT] or None,
         created_at=now,
         last_seen_at=now,
-        # Matched to the refresh token, which is the longest-lived credential the
-        # session backs. An access token outliving its session would be a hole.
-        expires_at=now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+        # The refresh token's `exp` and both cookies' Max-Age are derived FROM this,
+        # rather than each computed from config independently. An access token or a
+        # cookie outliving its session row would be a hole.
+        expires_at=now + timedelta(days=days),
     )
     db.add(session)
     db.commit()
@@ -231,6 +245,23 @@ def list_active(db: Session, user_id: str) -> list[UserSession]:
     )
 
 
+def count_purgeable(db: Session, older_than_days: int = 30) -> int:
+    """How many rows `purge_expired` would delete. For `--dry-run`.
+
+    Shares the cutoff expression with `purge_expired` via `_purge_cutoff`, so the two
+    cannot disagree — a dry run that reports a different number from the real delete is
+    worse than no dry run.
+    """
+    cutoff = _purge_cutoff(older_than_days)
+    return db.scalar(
+        select(func.count()).select_from(UserSession).where(UserSession.expires_at < cutoff)
+    ) or 0
+
+
+def _purge_cutoff(older_than_days: int):
+    return datetime.now(timezone.utc) - timedelta(days=older_than_days)
+
+
 def purge_expired(db: Session, older_than_days: int = 30) -> int:
     """Delete session rows long past use. Returns how many were removed.
 
@@ -238,7 +269,7 @@ def purge_expired(db: Session, older_than_days: int = 30) -> int:
     hand or from a cron later. Without it the table grows forever: one row per
     sign-in, kept indefinitely.
     """
-    cutoff = datetime.now(timezone.utc) - timedelta(days=older_than_days)
+    cutoff = _purge_cutoff(older_than_days)
     result = db.execute(
         UserSession.__table__.delete().where(UserSession.expires_at < cutoff)
     )
