@@ -11,7 +11,17 @@ from app.schemas.navigation import (
     NavPreferencesResponse,
     UpdateNavPreferencesRequest,
 )
-from app.schemas.rbac import CreateRoleRequest, RoleResponse, UpdateRoleRequest
+from app.schemas.rbac import (
+    CloneRoleRequest,
+    CreateRoleRequest,
+    MatrixCellRequest,
+    MatrixRow,
+    PermissionGroupResponse,
+    RoleMatrixResponse,
+    RoleResponse,
+    RoleUserItem,
+    UpdateRoleRequest,
+)
 from app.services import navigation_service, rbac_service
 
 router = APIRouter(prefix="/roles", tags=["roles"])
@@ -38,6 +48,65 @@ def list_roles(
 ) -> list[RoleResponse]:
     counts = rbac_service.role_user_counts(db)
     return [_to_response(role, counts) for role in rbac_service.list_roles(db)]
+
+
+@router.get("/matrix", response_model=RoleMatrixResponse)
+def role_matrix(
+    db: Session = Depends(get_db),
+    _actor: User = Depends(require_permission(ROLE_VIEW)),
+) -> RoleMatrixResponse:
+    """Roles down, permission groups across, granted/total per cell.
+
+    Declared BEFORE `/{role_id}` — FastAPI matches in declaration order, and
+    `/matrix` would otherwise be captured by the wildcard and 422 on int parsing.
+    The reference has the same hazard and solves it the same way, by declaring
+    `roles-matrix` as a separate path entirely.
+    """
+    groups, rows = rbac_service.permission_matrix(db)
+    return RoleMatrixResponse(
+        groups=[PermissionGroupResponse.model_validate(g) for g in groups],
+        rows=[MatrixRow(**row) for row in rows],
+    )
+
+
+@router.post("/matrix/cell", response_model=RoleResponse)
+def update_matrix_cell(
+    data: MatrixCellRequest,
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_permission(ROLE_UPDATE)),
+) -> RoleResponse:
+    """Grant or revoke a whole permission group for one role."""
+    role = rbac_service.set_matrix_cell(
+        db, data.role_id, data.group_id, data.granted, actor
+    )
+    return _to_response(role, rbac_service.role_user_counts(db))
+
+
+@router.get("/{role_id}/users", response_model=list[RoleUserItem])
+def role_users(
+    role_id: int,
+    db: Session = Depends(get_db),
+    _actor: User = Depends(require_permission(ROLE_VIEW)),
+) -> list[RoleUserItem]:
+    """Users holding this role."""
+    return [RoleUserItem.model_validate(u) for u in rbac_service.role_users(db, role_id)]
+
+
+@router.post("/{role_id}/clone", response_model=RoleResponse, status_code=status.HTTP_201_CREATED)
+def clone_role(
+    role_id: int,
+    data: CloneRoleRequest,
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_permission(ROLE_CREATE)),
+) -> RoleResponse:
+    """Copy a role's permissions onto a new role.
+
+    Requires `role-create`, not `role-update`: the result is a new role. The
+    privilege ceiling in the service means you cannot obtain a permission you do
+    not hold by cloning a role that has it.
+    """
+    role = rbac_service.clone_role(db, role_id, data, actor)
+    return _to_response(role, rbac_service.role_user_counts(db))
 
 
 @router.get("/{role_id}", response_model=RoleResponse)

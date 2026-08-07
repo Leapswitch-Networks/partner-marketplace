@@ -17,7 +17,7 @@ from app.models.permission import Permission
 from app.models.permission_group import PermissionGroup
 from app.models.role import Role
 from app.models.user import User
-from app.schemas.rbac import CreateRoleRequest, UpdateRoleRequest
+from app.schemas.rbac import CloneRoleRequest, CreateRoleRequest, UpdateRoleRequest
 
 # --- Reads ------------------------------------------------------------------
 
@@ -177,7 +177,144 @@ def current_user_payload(db: Session, user: User) -> dict:
     }
 
 
+def role_users(db: Session, role_id: int) -> list[User]:
+    """Users holding a role. Ported from the reference's `roles/{role}/users`.
+
+    No pagination: a role's membership is bounded by the user table, and the
+    screen it feeds is a list on the role's detail page rather than an index.
+    Revisit if a role ever holds thousands.
+    """
+    get_role_or_404(db, role_id)
+    stmt = (
+        select(User)
+        .join(user_roles, user_roles.c.user_id == User.id)
+        .where(user_roles.c.role_id == role_id)
+        .order_by(User.first_name, User.last_name, User.id)
+    )
+    return list(db.scalars(stmt).unique())
+
+
+def permission_matrix(db: Session) -> tuple[list[PermissionGroup], list[dict]]:
+    """Roles down, permission groups across, with a granted/total count per cell.
+
+    Counts rather than a full permission-by-role grid on purpose: the catalog is
+    34 permissions across 11 groups and growing, and a 6x34 grid of checkboxes is
+    not readable. The reference makes the same choice — its `matrix()` returns
+    `granted` and `total` per group.
+
+    Two queries regardless of role count: one for the groups, one for every
+    role-permission pair. Building it per role would be N+1.
+    """
+    groups = list_permission_groups(db)
+    roles = list_roles(db)
+
+    group_ids: dict[int, set[int]] = {
+        group.id: {p.id for p in group.permissions} for group in groups
+    }
+
+    rows: list[dict] = []
+    for role in roles:
+        held = {p.id for p in role.permissions}
+        rows.append(
+            {
+                "role_id": role.id,
+                "role_name": role.name,
+                "display_name": role.display_name,
+                "is_system": role.is_system,
+                "cells": [
+                    {
+                        "group_id": gid,
+                        "granted": len(held & pids),
+                        "total": len(pids),
+                    }
+                    for gid, pids in group_ids.items()
+                ],
+            }
+        )
+    return groups, rows
+
+
 # --- Writes -----------------------------------------------------------------
+
+
+def clone_role(db: Session, role_id: int, data: CloneRoleRequest, actor: User) -> Role:
+    """Copy a role's permissions onto a new role.
+
+    The clone goes through `_resolve_grantable_permissions`, so the privilege
+    ceiling applies: you cannot obtain a permission you do not hold by copying a
+    role that has it. Cloning is otherwise the exact escalation path the ceiling
+    exists to close — copy Admin, get Admin.
+
+    The clone is never a system role, whatever the source was. `is_system` marks
+    roles the guards read by name; a copy has a new name and no guard reads it.
+    """
+    source = get_role_or_404(db, role_id)
+    name = data.name.strip()
+
+    if db.scalar(select(Role).where(func.lower(Role.name) == name.lower())):
+        raise HTTPException(status.HTTP_409_CONFLICT, "A role with this name already exists")
+    if name in SUPER_ADMIN_ROLES or name in PROTECTED_ROLES:
+        raise HTTPException(status.HTTP_409_CONFLICT, "That name is reserved for a system role")
+
+    permissions = _resolve_grantable_permissions(
+        db, [p.id for p in source.permissions], actor
+    )
+
+    clone = Role(
+        name=name,
+        display_name=(data.display_name or "").strip() or name,
+        description=(data.description or "").strip() or source.description,
+        is_system=False,
+        permissions=permissions,
+    )
+    db.add(clone)
+    db.commit()
+    db.refresh(clone)
+    return clone
+
+
+def set_matrix_cell(
+    db: Session, role_id: int, group_id: int, granted: bool, actor: User
+) -> Role:
+    """Grant or revoke every permission in one group for one role.
+
+    The matrix's only write. It is deliberately all-or-nothing per group: the
+    grid shows a granted/total count per cell, so a partial state has no cell to
+    represent it and a half-applied change would render identically to no change.
+
+    Runs through the same protection rules as an ordinary edit — a protected
+    role still refuses a non-super-admin, and the privilege ceiling still applies
+    to what is being granted.
+    """
+    role = get_role_or_404(db, role_id)
+
+    # The same two checks `update_role` applies when `permission_ids` changes.
+    # Inlined rather than shared, because they are four lines and hoisting them
+    # into a helper used by exactly two callers hides which rule fires where.
+    if role.name in SUPER_ADMIN_ROLES and not actor.is_super_admin:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Only a super admin may modify a super-admin role",
+        )
+    if not actor.has_permission(ROLE_PERMISSIONS):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Changing what a role grants requires the 'role-permissions' permission.",
+        )
+
+    group = db.get(PermissionGroup, group_id)
+    if group is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Permission group not found")
+
+    group_ids = {p.id for p in group.permissions}
+    current = {p.id for p in role.permissions}
+    wanted = (current | group_ids) if granted else (current - group_ids)
+
+    role.permissions = _resolve_grantable_permissions(db, sorted(wanted), actor)
+    role.updated_by = actor.id
+    db.commit()
+    db.refresh(role)
+    return role
 
 
 def create_role(db: Session, data: CreateRoleRequest, actor: User) -> Role:

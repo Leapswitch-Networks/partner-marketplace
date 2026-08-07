@@ -817,6 +817,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/roles/matrix": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Role Matrix
+         * @description Roles down, permission groups across, granted/total per cell.
+         *
+         *     Declared BEFORE `/{role_id}` — FastAPI matches in declaration order, and
+         *     `/matrix` would otherwise be captured by the wildcard and 422 on int parsing.
+         *     The reference has the same hazard and solves it the same way, by declaring
+         *     `roles-matrix` as a separate path entirely.
+         */
+        get: operations["role_matrix_api_v1_roles_matrix_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/roles/matrix/cell": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Update Matrix Cell
+         * @description Grant or revoke a whole permission group for one role.
+         */
+        post: operations["update_matrix_cell_api_v1_roles_matrix_cell_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/roles/{role_id}": {
         parameters: {
             query?: never;
@@ -834,6 +879,30 @@ export interface paths {
         head?: never;
         /** Update Role */
         patch: operations["update_role_api_v1_roles__role_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/roles/{role_id}/clone": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Clone Role
+         * @description Copy a role's permissions onto a new role.
+         *
+         *     Requires `role-create`, not `role-update`: the result is a new role. The
+         *     privilege ceiling in the service means you cannot obtain a permission you do
+         *     not hold by cloning a role that has it.
+         */
+        post: operations["clone_role_api_v1_roles__role_id__clone_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/roles/{role_id}/nav-preferences": {
@@ -857,6 +926,26 @@ export interface paths {
          * @description Replace this role's preferences. Unknown sections are rejected.
          */
         post: operations["update_role_nav_preferences_api_v1_roles__role_id__nav_preferences_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/roles/{role_id}/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Role Users
+         * @description Users holding this role.
+         */
+        get: operations["role_users_api_v1_roles__role_id__users_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1371,6 +1460,22 @@ export interface components {
             /** Password */
             password: string;
         };
+        /**
+         * CloneRoleRequest
+         * @description Copy a role's permissions onto a new one.
+         *
+         *     `name` is required and must be new. The reference pre-fills it with
+         *     "<original> Copy" in the form; the server does not invent one, because a
+         *     silently generated role name is a thing nobody chose.
+         */
+        CloneRoleRequest: {
+            /** Description */
+            description?: string | null;
+            /** Display Name */
+            display_name?: string | null;
+            /** Name */
+            name: string;
+        };
         /** ConfirmPasswordRequest */
         ConfirmPasswordRequest: {
             /** Password */
@@ -1677,6 +1782,43 @@ export interface components {
             message: string;
             user: components["schemas"]["CurrentUserResponse"];
         };
+        /**
+         * MatrixCellRequest
+         * @description Grant or revoke a whole group for one role, from the matrix.
+         */
+        MatrixCellRequest: {
+            /** Granted */
+            granted: boolean;
+            /** Group Id */
+            group_id: number;
+            /** Role Id */
+            role_id: number;
+        };
+        /**
+         * MatrixGroupCell
+         * @description One role-by-group cell: how many of the group's permissions it grants.
+         */
+        MatrixGroupCell: {
+            /** Granted */
+            granted: number;
+            /** Group Id */
+            group_id: number;
+            /** Total */
+            total: number;
+        };
+        /** MatrixRow */
+        MatrixRow: {
+            /** Cells */
+            cells: components["schemas"]["MatrixGroupCell"][];
+            /** Display Name */
+            display_name: string;
+            /** Is System */
+            is_system: boolean;
+            /** Role Id */
+            role_id: number;
+            /** Role Name */
+            role_name: string;
+        };
         /** MessageResponse */
         MessageResponse: {
             /** Message */
@@ -1855,6 +1997,16 @@ export interface components {
             /** Token */
             token: string;
         };
+        /**
+         * RoleMatrixResponse
+         * @description Roles down, permission groups across.
+         */
+        RoleMatrixResponse: {
+            /** Groups */
+            groups: components["schemas"]["PermissionGroupResponse"][];
+            /** Rows */
+            rows: components["schemas"]["MatrixRow"][];
+        };
         /** RoleResponse */
         RoleResponse: {
             /**
@@ -1890,6 +2042,22 @@ export interface components {
             id: number;
             /** Name */
             name: string;
+        };
+        /**
+         * RoleUserItem
+         * @description A user holding a role, for `GET /roles/{id}/users`.
+         */
+        RoleUserItem: {
+            /** Account Type */
+            account_type: string;
+            /** Email */
+            email: string;
+            /** Full Name */
+            full_name: string;
+            /** Id */
+            id: string;
+            /** Status */
+            status: string;
         };
         /**
          * SendUserEmailRequest
@@ -3667,6 +3835,72 @@ export interface operations {
             };
         };
     };
+    role_matrix_api_v1_roles_matrix_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleMatrixResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_matrix_cell_api_v1_roles_matrix_cell_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MatrixCellRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_role_api_v1_roles__role_id__get: {
         parameters: {
             query?: never;
@@ -3770,6 +4004,43 @@ export interface operations {
             };
         };
     };
+    clone_role_api_v1_roles__role_id__clone_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                role_id: number;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CloneRoleRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_role_nav_preferences_api_v1_roles__role_id__nav_preferences_get: {
         parameters: {
             query?: never;
@@ -3827,6 +4098,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["NavPreferencesResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    role_users_api_v1_roles__role_id__users_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                role_id: number;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleUserItem"][];
                 };
             };
             /** @description Validation Error */

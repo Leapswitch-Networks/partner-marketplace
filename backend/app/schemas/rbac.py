@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, EmailStr, Field, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.schemas.auth import RoleSummary, validate_password_strength
 
@@ -196,6 +196,62 @@ class BulkUserIdsRequest(BaseModel):
 
 class BulkStatusRequest(BulkUserIdsRequest):
     status: UserStatus
+
+
+class RoleUserItem(BaseModel):
+    """A user holding a role, for `GET /roles/{id}/users`."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    full_name: str
+    email: str
+    status: str
+    account_type: str
+
+
+class CloneRoleRequest(BaseModel):
+    """Copy a role's permissions onto a new one.
+
+    `name` is required and must be new. The reference pre-fills it with
+    "<original> Copy" in the form; the server does not invent one, because a
+    silently generated role name is a thing nobody chose.
+    """
+
+    name: str = Field(min_length=1, max_length=64)
+    display_name: str | None = Field(default=None, max_length=120)
+    description: str | None = Field(default=None, max_length=255)
+
+
+class MatrixGroupCell(BaseModel):
+    """One role-by-group cell: how many of the group's permissions it grants."""
+
+    group_id: int
+    granted: int
+    total: int
+
+
+class MatrixRow(BaseModel):
+    role_id: int
+    role_name: str
+    display_name: str
+    is_system: bool
+    cells: list[MatrixGroupCell]
+
+
+class RoleMatrixResponse(BaseModel):
+    """Roles down, permission groups across."""
+
+    groups: list[PermissionGroupResponse]
+    rows: list[MatrixRow]
+
+
+class MatrixCellRequest(BaseModel):
+    """Grant or revoke a whole group for one role, from the matrix."""
+
+    role_id: int
+    group_id: int
+    granted: bool
 
 
 class SendUserEmailRequest(BaseModel):

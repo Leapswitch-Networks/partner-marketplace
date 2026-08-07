@@ -374,6 +374,46 @@
         "title": "ChangePasswordRequest",
         "type": "object"
       },
+      "CloneRoleRequest": {
+        "description": "Copy a role's permissions onto a new one.\n\n`name` is required and must be new. The reference pre-fills it with\n\"<original> Copy\" in the form; the server does not invent one, because a\nsilently generated role name is a thing nobody chose.",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "display_name": {
+            "anyOf": [
+              {
+                "maxLength": 120,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "CloneRoleRequest",
+        "type": "object"
+      },
       "ConfirmPasswordRequest": {
         "properties": {
           "password": {
@@ -1168,6 +1208,90 @@
         "title": "LoginResponse",
         "type": "object"
       },
+      "MatrixCellRequest": {
+        "description": "Grant or revoke a whole group for one role, from the matrix.",
+        "properties": {
+          "granted": {
+            "title": "Granted",
+            "type": "boolean"
+          },
+          "group_id": {
+            "title": "Group Id",
+            "type": "integer"
+          },
+          "role_id": {
+            "title": "Role Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "role_id",
+          "group_id",
+          "granted"
+        ],
+        "title": "MatrixCellRequest",
+        "type": "object"
+      },
+      "MatrixGroupCell": {
+        "description": "One role-by-group cell: how many of the group's permissions it grants.",
+        "properties": {
+          "granted": {
+            "title": "Granted",
+            "type": "integer"
+          },
+          "group_id": {
+            "title": "Group Id",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "group_id",
+          "granted",
+          "total"
+        ],
+        "title": "MatrixGroupCell",
+        "type": "object"
+      },
+      "MatrixRow": {
+        "properties": {
+          "cells": {
+            "items": {
+              "$ref": "#/components/schemas/MatrixGroupCell"
+            },
+            "title": "Cells",
+            "type": "array"
+          },
+          "display_name": {
+            "title": "Display Name",
+            "type": "string"
+          },
+          "is_system": {
+            "title": "Is System",
+            "type": "boolean"
+          },
+          "role_id": {
+            "title": "Role Id",
+            "type": "integer"
+          },
+          "role_name": {
+            "title": "Role Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "role_id",
+          "role_name",
+          "display_name",
+          "is_system",
+          "cells"
+        ],
+        "title": "MatrixRow",
+        "type": "object"
+      },
       "MessageResponse": {
         "properties": {
           "message": {
@@ -1616,6 +1740,31 @@
         "title": "ResetPasswordRequest",
         "type": "object"
       },
+      "RoleMatrixResponse": {
+        "description": "Roles down, permission groups across.",
+        "properties": {
+          "groups": {
+            "items": {
+              "$ref": "#/components/schemas/PermissionGroupResponse"
+            },
+            "title": "Groups",
+            "type": "array"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/MatrixRow"
+            },
+            "title": "Rows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "groups",
+          "rows"
+        ],
+        "title": "RoleMatrixResponse",
+        "type": "object"
+      },
       "RoleResponse": {
         "properties": {
           "created_at": {
@@ -1701,6 +1850,40 @@
           "display_name"
         ],
         "title": "RoleSummary",
+        "type": "object"
+      },
+      "RoleUserItem": {
+        "description": "A user holding a role, for `GET /roles/{id}/users`.",
+        "properties": {
+          "account_type": {
+            "title": "Account Type",
+            "type": "string"
+          },
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "full_name": {
+            "title": "Full Name",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "full_name",
+          "email",
+          "status",
+          "account_type"
+        ],
+        "title": "RoleUserItem",
         "type": "object"
       },
       "SendUserEmailRequest": {
@@ -5215,6 +5398,116 @@
         ]
       }
     },
+    "/api/v1/roles/matrix": {
+      "get": {
+        "description": "Roles down, permission groups across, granted/total per cell.\n\nDeclared BEFORE `/{role_id}` — FastAPI matches in declaration order, and\n`/matrix` would otherwise be captured by the wildcard and 422 on int parsing.\nThe reference has the same hazard and solves it the same way, by declaring\n`roles-matrix` as a separate path entirely.",
+        "operationId": "role_matrix_api_v1_roles_matrix_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoleMatrixResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Role Matrix",
+        "tags": [
+          "roles"
+        ]
+      }
+    },
+    "/api/v1/roles/matrix/cell": {
+      "post": {
+        "description": "Grant or revoke a whole permission group for one role.",
+        "operationId": "update_matrix_cell_api_v1_roles_matrix_cell_post",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MatrixCellRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoleResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Matrix Cell",
+        "tags": [
+          "roles"
+        ]
+      }
+    },
     "/api/v1/roles/{role_id}": {
       "delete": {
         "operationId": "delete_role_api_v1_roles__role_id__delete",
@@ -5395,6 +5688,75 @@
         ]
       }
     },
+    "/api/v1/roles/{role_id}/clone": {
+      "post": {
+        "description": "Copy a role's permissions onto a new role.\n\nRequires `role-create`, not `role-update`: the result is a new role. The\nprivilege ceiling in the service means you cannot obtain a permission you do\nnot hold by cloning a role that has it.",
+        "operationId": "clone_role_api_v1_roles__role_id__clone_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "role_id",
+            "required": true,
+            "schema": {
+              "title": "Role Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CloneRoleRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoleResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Clone Role",
+        "tags": [
+          "roles"
+        ]
+      }
+    },
     "/api/v1/roles/{role_id}/nav-preferences": {
       "get": {
         "description": "Every catalog section with this role's effective value.\n\nReturns the full catalog, not just stored overrides, so the UI can render a\ncomplete toggle list without duplicating the defaults.",
@@ -5516,6 +5878,69 @@
           }
         },
         "summary": "Update Role Nav Preferences",
+        "tags": [
+          "roles"
+        ]
+      }
+    },
+    "/api/v1/roles/{role_id}/users": {
+      "get": {
+        "description": "Users holding this role.",
+        "operationId": "role_users_api_v1_roles__role_id__users_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "role_id",
+            "required": true,
+            "schema": {
+              "title": "Role Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RoleUserItem"
+                  },
+                  "title": "Response Role Users Api V1 Roles  Role Id  Users Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Role Users",
         "tags": [
           "roles"
         ]
