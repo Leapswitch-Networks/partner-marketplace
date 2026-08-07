@@ -668,7 +668,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List Invitations */
+        /**
+         * List Invitations
+         * @description Invitations visible to the caller, newest first.
+         *
+         *     Returns the shared `Page[T]` envelope like every other index endpoint. It
+         *     previously returned a bare list; nothing consumed it, so the shape change
+         *     was free to take now and would not have been later.
+         */
         get: operations["list_invitations_api_v1_invitations_get"];
         put?: never;
         /** Create Invitation */
@@ -1895,6 +1902,19 @@ export interface components {
             key?: string | null;
             /** Label */
             label?: string | null;
+        };
+        /** Page[InvitationResponse] */
+        Page_InvitationResponse_: {
+            /** Items */
+            items: components["schemas"]["InvitationResponse"][];
+            /** Page */
+            page: number;
+            /** Pages */
+            pages: number;
+            /** Per Page */
+            per_page: number;
+            /** Total */
+            total: number;
         };
         /** PaginatedActivity */
         PaginatedActivity: {
@@ -3513,6 +3533,13 @@ export interface operations {
         parameters: {
             query?: {
                 status?: string | null;
+                account_type?: string | null;
+                /** @description Matches email or note */
+                search?: string | null;
+                sort_by?: string;
+                sort_order?: string;
+                page?: number;
+                per_page?: number;
             };
             header?: never;
             path?: never;
@@ -3528,7 +3555,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["InvitationResponse"][];
+                    "application/json": components["schemas"]["Page_InvitationResponse_"];
                 };
             };
             /** @description Validation Error */

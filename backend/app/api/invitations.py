@@ -16,9 +16,11 @@ from app.core.permissions import (
     INVITATION_RESEND,
     INVITATION_VIEW,
 )
+from app.core.query import page_count
 from app.models.user import User
 from app.models.user_invitation import UserInvitation
 from app.schemas.auth import MessageResponse
+from app.schemas.common import Page
 from app.schemas.rbac import (
     BulkCreateInvitationRequest,
     CreateInvitationRequest,
@@ -89,14 +91,42 @@ class InvitationCreatedResponse(InvitationResponse):
     email_sent: bool = False
 
 
-@router.get("", response_model=list[InvitationResponse])
+@router.get("", response_model=Page[InvitationResponse])
 def list_invitations(
     status_filter: str | None = Query(default=None, alias="status"),
+    account_type: str | None = Query(default=None),
+    search: str | None = Query(default=None, description="Matches email or note"),
+    sort_by: str = Query(default="created_at"),
+    sort_order: str = Query(default="desc", pattern="^(asc|desc)$"),
+    page: int = Query(default=1, ge=1),
+    per_page: int = Query(default=25, ge=1, le=100),
     db: Session = Depends(get_db),
     actor: User = Depends(require_permission(INVITATION_VIEW)),
-) -> list[InvitationResponse]:
-    invitations = invitation_service.list_invitations(db, actor, status_filter=status_filter)
-    return [InvitationResponse(**_to_response(i)) for i in invitations]
+) -> Page[InvitationResponse]:
+    """Invitations visible to the caller, newest first.
+
+    Returns the shared `Page[T]` envelope like every other index endpoint. It
+    previously returned a bare list; nothing consumed it, so the shape change
+    was free to take now and would not have been later.
+    """
+    invitations, total = invitation_service.list_invitations(
+        db,
+        actor,
+        status_filter=status_filter,
+        account_type=account_type,
+        search=search,
+        sort_by=sort_by,
+        sort_order=sort_order,
+        page=page,
+        per_page=per_page,
+    )
+    return Page[InvitationResponse](
+        items=[InvitationResponse(**_to_response(i)) for i in invitations],
+        total=total,
+        page=page,
+        per_page=per_page,
+        pages=page_count(total, per_page),
+    )
 
 
 @router.get("/preview", response_model=InvitationPreviewResponse)

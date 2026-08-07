@@ -17,10 +17,11 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
 from sqlalchemy import Select, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import settings
 from app.core.crud import get_or_404
+from app.core.query import ListParams, ListSpec, run_list
 from app.core.security import generate_token, hash_password
 from app.models.user import User
 from app.models.user_invitation import UserInvitation
@@ -39,23 +40,66 @@ def _accept_url(token: str) -> str:
 # --- Reads ------------------------------------------------------------------
 
 
+_LIST_SPEC = ListSpec(
+    sortable={
+        "created_at": UserInvitation.created_at,
+        "email": UserInvitation.email,
+        "status": UserInvitation.status,
+        "expires_at": UserInvitation.expires_at,
+        "last_sent_at": UserInvitation.last_sent_at,
+    },
+    default_sort="created_at",
+    # `created_at` is not unique — a bulk create writes a whole batch inside one
+    # transaction, which is precisely when a partial sort drops or repeats rows.
+    tiebreak=UserInvitation.id,
+    searchable=(UserInvitation.email, UserInvitation.note),
+)
+
+
 def list_invitations(
-    db: Session, actor: User, *, status_filter: str | None = None
-) -> list[UserInvitation]:
-    """Invitations visible to the actor.
+    db: Session,
+    actor: User,
+    *,
+    status_filter: str | None = None,
+    account_type: str | None = None,
+    search: str | None = None,
+    sort_by: str = "created_at",
+    sort_order: str = "desc",
+    page: int = 1,
+    per_page: int = 25,
+) -> tuple[list[UserInvitation], int]:
+    """Invitations visible to the actor, paginated.
 
     Data visibility: an actor without admin access sees only invitations they
     sent themselves.
+
+    Paginated as of 2026-08-07. It previously returned a plain list, which was
+    fine while nothing consumed it — the response shape changing is a break, and
+    the moment to take it is before the first UI exists rather than after.
     """
-    stmt: Select = select(UserInvitation)
+    stmt: Select = select(UserInvitation).options(
+        selectinload(UserInvitation.role), selectinload(UserInvitation.inviter)
+    )
 
     if not actor.has_admin_access:
         stmt = stmt.where(UserInvitation.invited_by == actor.id)
     if status_filter:
         stmt = stmt.where(UserInvitation.status == status_filter)
+    if account_type:
+        stmt = stmt.where(UserInvitation.account_type == account_type)
 
-    stmt = stmt.order_by(UserInvitation.created_at.desc())
-    invitations = list(db.scalars(stmt).unique())
+    invitations, total = run_list(
+        db,
+        stmt,
+        _LIST_SPEC,
+        ListParams(
+            page=page,
+            per_page=per_page,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            search=search,
+        ),
+    )
 
     # Reflect elapsed expiry into the stored status so the list is honest without
     # needing a scheduled job (there is no scheduler in this project).
@@ -67,7 +111,7 @@ def list_invitations(
     if changed:
         db.commit()
 
-    return invitations
+    return invitations, total
 
 
 def get_by_token(db: Session, token: str) -> UserInvitation:

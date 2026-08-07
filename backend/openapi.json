@@ -1473,6 +1473,42 @@
         "title": "NavigationSection",
         "type": "object"
       },
+      "Page_InvitationResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/InvitationResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "pages": {
+            "title": "Pages",
+            "type": "integer"
+          },
+          "per_page": {
+            "title": "Per Page",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "per_page",
+          "pages"
+        ],
+        "title": "Page[InvitationResponse]",
+        "type": "object"
+      },
       "PaginatedActivity": {
         "properties": {
           "items": {
@@ -4846,6 +4882,7 @@
     },
     "/api/v1/invitations": {
       "get": {
+        "description": "Invitations visible to the caller, newest first.\n\nReturns the shared `Page[T]` envelope like every other index endpoint. It\npreviously returned a bare list; nothing consumed it, so the shape change\nwas free to take now and would not have been later.",
         "operationId": "list_invitations_api_v1_invitations_get",
         "parameters": [
           {
@@ -4862,6 +4899,84 @@
                 }
               ],
               "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "account_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Account Type"
+            }
+          },
+          {
+            "description": "Matches email or note",
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Matches email or note",
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort_by",
+            "required": false,
+            "schema": {
+              "default": "created_at",
+              "title": "Sort By",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort_order",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "pattern": "^(asc|desc)$",
+              "title": "Sort Order",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "per_page",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Per Page",
+              "type": "integer"
             }
           },
           {
@@ -4886,11 +5001,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/InvitationResponse"
-                  },
-                  "title": "Response List Invitations Api V1 Invitations Get",
-                  "type": "array"
+                  "$ref": "#/components/schemas/Page_InvitationResponse_"
                 }
               }
             },
