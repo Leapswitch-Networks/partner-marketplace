@@ -1,27 +1,28 @@
 from logging.config import fileConfig
 
+from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from alembic import context
+import app.models.activity_log  # noqa: F401
 
-from app.core.config import settings
-from app.db.base import Base
+# Installation settings — see DYNAMIC_BRANDING_PLAN.md
+import app.models.app_settings  # noqa: F401
+
 # EVERY model must be imported here or --autogenerate cannot see it, and may
 # emit a migration that drops its table. Add the import in the same commit as
 # the model.
 #
 # Core identity + RBAC
 import app.models.associations  # noqa: F401
-import app.models.user  # noqa: F401
-import app.models.role  # noqa: F401
+import app.models.data_access_grant  # noqa: F401
 import app.models.permission  # noqa: F401
 import app.models.permission_group  # noqa: F401
+import app.models.role  # noqa: F401
+import app.models.user  # noqa: F401
 import app.models.user_invitation  # noqa: F401
 import app.models.user_session  # noqa: F401
-import app.models.activity_log  # noqa: F401
-
-# Installation settings — see DYNAMIC_BRANDING_PLAN.md
-import app.models.app_settings  # noqa: F401
+from app.core.config import settings
+from app.db.base import Base
 
 config = context.config
 
