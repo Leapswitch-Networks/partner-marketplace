@@ -479,7 +479,7 @@ export default function UsersModule({ initialModal }: { initialModal?: ModalMode
               type="button"
               onClick={resetFilters}
               disabled={!filtersActive}
-              className="h-9 shrink-0 rounded-[5px] border border-surface-border px-3 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-night-border dark:text-gray-400 dark:hover:bg-gray-800"
+              className="h-9 shrink-0 rounded-[5px] border border-brand/20 px-3 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-night-border dark:text-gray-400 dark:hover:bg-gray-800"
             >
               Reset
             </button>
@@ -613,7 +613,7 @@ function BulkButton({
       className={`h-7 rounded-[5px] border px-2 text-[11px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
         destructive
           ? "border-tone-danger/40 text-tone-danger hover:bg-tone-danger/10 dark:border-tone-danger/50 dark:text-tone-danger dark:hover:bg-tone-danger/15"
-          : "border-surface-border text-gray-600 hover:bg-gray-50 dark:border-night-border dark:text-gray-400 dark:hover:bg-gray-800"
+          : "border-brand/20 text-gray-600 hover:bg-gray-50 dark:border-night-border dark:text-gray-400 dark:hover:bg-gray-800"
       }`}
     >
       {children}

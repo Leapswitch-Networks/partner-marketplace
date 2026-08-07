@@ -18,6 +18,15 @@ import type { ReactNode } from "react";
  * against a `night-body` (#202938) page: the card is *darker* than the page, which
  * is inverted from the usual convention and is deliberate.
  *
+ * **Light surface is `surface-wash` (#eaf0ef), not white, since 2026-08-07.** That
+ * is the brand teal at 10% over white — the same token the auth page and the
+ * branding form already use, so this is the existing green rather than a new one.
+ * Only the three admin modules mount this component, so nothing else moved.
+ *
+ * Popovers that sit *on* the card (`RowActions`, the column menu) stay `bg-white`
+ * on purpose: white-on-green is what now reads as raised, and it is the only
+ * elevation cue this design allows itself.
+ *
  * Padding stays at the existing compact scale rather than Viho's 30px. Viho's
  * airier spacing is adoption item 4b, and it cannot land here alone: it changes
  * how many table rows fit, so `useAutoPerPage()`'s hardcoded `433` must be
@@ -33,7 +42,7 @@ export function Card({
 }) {
   return (
     <div
-      className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-none border border-surface-border bg-white dark:border-night-border dark:bg-night-card ${className}`}
+      className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-none border border-brand/20 bg-surface-wash dark:border-night-border dark:bg-night-card ${className}`}
     >
       {children}
     </div>
@@ -52,15 +61,21 @@ export function CardHeader({
   actions?: ReactNode;
 }) {
   return (
-    <div className="shrink-0 border-b border-surface-border px-4 py-3 dark:border-night-border sm:px-5">
+    <div className="shrink-0 border-b border-brand/20 px-4 py-3 dark:border-night-border sm:px-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <h2 className="flex items-center gap-2 text-sm font-bold text-ink dark:text-white">
             {icon}
             {title}
           </h2>
+          {/*
+            `ink-label` (#59667a), not `ink-muted` (#6b7280). At 11px this needs
+            4.5:1, and muted measures 4.83 on white but drops to 4.19 on the
+            `surface-wash` card — a fail. Label scores 5.05 on the same surface.
+            If the card ever goes back to white, muted is fine again.
+          */}
           {description && (
-            <p className="mt-0.5 text-[11px] text-ink-muted dark:text-night-muted">{description}</p>
+            <p className="mt-0.5 text-[11px] text-ink-label dark:text-night-muted">{description}</p>
           )}
         </div>
         {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}

@@ -177,16 +177,35 @@ function IconButton({
       <button
         type="button"
         onClick={onClick}
+        /*
+          `bg-brand text-white` when active, matching the expanded nav item
+          exactly. It used to be `bg-white/20 text-white`, which only ever made
+          sense on a dark sidebar: over the old white surface it rendered white
+          text on white, so the active icon in the collapsed rail was invisible.
+          The green surface would not have fixed that — 20% white over
+          `surface-wash` is still near-white.
+
+          Inactive carries no tile at all, per UI_PATTERNS § Sidebar Anatomy:
+          "bare outline icon (never in a tinted tile)". The `bg-gray-100` it used
+          to have was both off-convention and a grey chip on a green rail.
+        */
         className={`flex h-10 w-10 items-center justify-center rounded-[5px] transition-all duration-200 relative ${
           active
-            ? "bg-white/20 text-white"
-            : "bg-gray-100 text-gray-500 hover:bg-brand/10 hover:text-brand dark:bg-gray-700 dark:text-gray-400 dark:hover:bg-brand/20 dark:hover:text-brand-on-dark"
+            ? "bg-brand text-white"
+            : "text-ink hover:bg-brand/10 hover:text-brand dark:text-gray-300 dark:hover:bg-brand/20 dark:hover:text-brand-on-dark"
         }`}
       >
         {icon}
         {active && (
+          /* Brand teal. This carried the pre-Viho orange until 2026-08-07 — as an
+             rgba() triple in an inline style, which is why the guard grep in
+             UI_PATTERNS § Colour System never caught it: that grep looks for the
+             hex and the `orange-*` utilities, and an inline rgba() is neither.
+             `pulse-ring` in tailwind.config.ts had already been retinted; this
+             was the last holdout. Keep literals out of this comment so the guard
+             stays clean. */
           <span className="absolute inset-0 rounded-[5px] animate-pulse-ring" style={{
-            boxShadow: "inset 0 0 0 1px rgba(249, 115, 22, 0.2)",
+            boxShadow: "inset 0 0 0 1px rgba(36, 105, 92, 0.2)",
           }} />
         )}
       </button>
@@ -380,7 +399,7 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
   return (
     <>
       {/* ── Mobile top bar (visible below md) ── */}
-      <header className="fixed inset-x-0 top-0 z-40 flex h-14 items-center border-b border-surface-border bg-white px-4 md:hidden dark:border-night-border dark:bg-night-card">
+      <header className="fixed inset-x-0 top-0 z-40 flex h-14 items-center border-b border-brand/20 bg-surface-wash px-4 md:hidden dark:border-night-border dark:bg-night-card">
         <button
           type="button"
           onClick={() => onNavigate("dashboard")}
@@ -399,7 +418,7 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
           <button
             type="button"
             onClick={() => setMobileOpen(true)}
-            className="flex h-9 w-9 items-center justify-center rounded-[5px] text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
+            className="flex h-9 w-9 items-center justify-center rounded-[5px] text-ink-muted hover:bg-brand/10 hover:text-brand dark:text-gray-400 dark:hover:bg-brand/20 dark:hover:text-brand-on-dark"
             aria-label="Open menu"
           >
             {navIcons.menu}
@@ -421,8 +440,8 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
           />
 
           {/* Drawer panel — slides in from left */}
-          <div className={`relative flex w-72 max-w-[85vw] flex-col bg-white shadow-2xl dark:bg-night-card transition-transform duration-300 ease-in-out ${mobileVisible ? "translate-x-0" : "-translate-x-full"}`}>
-            <div className="flex h-14 items-center border-b border-surface-border px-4 dark:border-night-border">
+          <div className={`relative flex w-72 max-w-[85vw] flex-col bg-surface-wash shadow-2xl dark:bg-night-card transition-transform duration-300 ease-in-out ${mobileVisible ? "translate-x-0" : "-translate-x-full"}`}>
+            <div className="flex h-14 items-center border-b border-brand/20 px-4 dark:border-night-border">
               <button
                 type="button"
                 onClick={() => onNavigate("dashboard")}
@@ -439,7 +458,7 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
               <button
                 type="button"
                 onClick={closeMobile}
-                className="ml-auto flex h-8 w-8 items-center justify-center rounded-[5px] text-gray-400 hover:bg-gray-100 dark:text-gray-500 dark:hover:bg-gray-800"
+                className="ml-auto flex h-8 w-8 items-center justify-center rounded-[5px] text-ink-muted hover:bg-brand/10 hover:text-brand dark:text-gray-500 dark:hover:bg-brand/20 dark:hover:text-brand-on-dark"
                 aria-label="Close menu"
               >
                 {navIcons.close}
@@ -452,7 +471,7 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
             {/* Mobile only. The desktop sidebar's sign-out moved to the header
                 on 2026-08-06 to match the theme, but `TopNav` is `hidden md:flex`
                 — dropping this too would leave phone users unable to log out. */}
-            <div className="border-t border-surface-border px-3 py-3 dark:border-night-border">
+            <div className="border-t border-brand/20 px-3 py-3 dark:border-night-border">
               <BottomExpanded loggingOut={loggingOut} onLogout={handleLogout} />
             </div>
           </div>
@@ -461,13 +480,13 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
 
       {/* ── Desktop / tablet sidebar (hidden below md) ── */}
       <aside
-        className={`hidden md:flex flex-col shrink-0 bg-white border-r border-surface-border h-screen transition-[width] duration-300 ease-in-out 2xl:transition-none dark:bg-night-card dark:border-night-border animate-slide-in-left ${
+        className={`hidden md:flex flex-col shrink-0 bg-surface-wash border-r border-brand/20 h-screen transition-[width] duration-300 ease-in-out 2xl:transition-none dark:bg-night-card dark:border-night-border animate-slide-in-left ${
           collapsed
             ? "w-[68px]"
             : "w-64 2xl:w-72"
         }`}
       >
-        <div className="flex h-14 items-center border-b border-surface-border px-3 transition-colors duration-200 flex-shrink-0 dark:border-night-border">
+        <div className="flex h-14 items-center border-b border-brand/20 px-3 transition-colors duration-200 flex-shrink-0 dark:border-night-border">
           <button
             type="button"
             onClick={() => onNavigate("dashboard")}
@@ -493,7 +512,7 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
               type="button"
               onClick={() => setCollapsed(true)}
               title="Collapse sidebar"
-              className="ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-gray-400 transition-all duration-200 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+              className="ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-ink-muted transition-all duration-200 hover:bg-brand/10 hover:text-brand dark:text-gray-500 dark:hover:bg-brand/20 dark:hover:text-brand-on-dark"
             >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M11 19l-7-7 7-7M19 19l-7-7 7-7" />
@@ -503,12 +522,12 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
         </div>
 
         {collapsed && (
-          <div className="flex justify-center py-2 border-b border-surface-border transition-colors duration-200 flex-shrink-0 dark:border-night-border">
+          <div className="flex justify-center py-2 border-b border-brand/20 transition-colors duration-200 flex-shrink-0 dark:border-night-border">
             <button
               type="button"
               onClick={() => setCollapsed(false)}
               title="Expand sidebar"
-              className="flex h-7 w-7 items-center justify-center rounded-md text-gray-400 transition-all duration-200 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-500 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+              className="flex h-7 w-7 items-center justify-center rounded-md text-ink-muted transition-all duration-200 hover:bg-brand/10 hover:text-brand dark:text-gray-500 dark:hover:bg-brand/20 dark:hover:text-brand-on-dark"
             >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M13 5l7 7-7 7M5 5l7 7-7 7" />

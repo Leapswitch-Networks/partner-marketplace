@@ -212,7 +212,7 @@ export default function DataTable<T>({
             type="button"
             onClick={() => setColsOpen((o) => !o)}
             aria-expanded={colsOpen}
-            className="flex h-7 items-center gap-1 rounded-[5px] border border-surface-border px-2 text-[11px] font-medium text-gray-600 transition-colors hover:bg-gray-50 dark:border-night-border dark:text-gray-400 dark:hover:bg-gray-800"
+            className="flex h-7 items-center gap-1 rounded-[5px] border border-brand/20 px-2 text-[11px] font-medium text-gray-600 transition-colors hover:bg-gray-50 dark:border-night-border dark:text-gray-400 dark:hover:bg-gray-800"
           >
             Cols
             <span className={`transition-transform ${colsOpen ? "rotate-180" : ""}`}>▾</span>
@@ -225,6 +225,10 @@ export default function DataTable<T>({
                 className="fixed inset-0 z-10 cursor-default"
                 onClick={() => setColsOpen(false)}
               />
+              {/* Keeps `surface-border`: this popover is one of the few surfaces
+                  still white, and #e6edef reads correctly there. The green
+                  surfaces moved to `border-brand/20` because #e6edef on
+                  `surface-wash` is 1.02:1 — invisible. */}
               <div className="absolute right-0 top-full z-20 mt-1 w-48 overflow-hidden rounded-[5px] border border-surface-border bg-white py-1 shadow-lg dark:border-night-border dark:bg-night-card">
                 {columns
                   .filter((c) => c.hideable !== false)
@@ -255,7 +259,7 @@ export default function DataTable<T>({
       <div
         ref={scrollRef}
         style={{ maxHeight }}
-        className="min-h-0 flex-1 overflow-auto rounded-[5px] border border-surface-border scrollbar-thin dark:border-night-border"
+        className="min-h-0 flex-1 overflow-auto rounded-[5px] border border-brand/20 scrollbar-thin dark:border-night-border"
       >
         <table className="w-full border-collapse text-left text-xs 2xl:text-sm">
           <thead className="sticky top-0 z-10 bg-brand/10 dark:bg-night-card">
@@ -303,7 +307,7 @@ export default function DataTable<T>({
           <tbody>
             {loading &&
               Array.from({ length: Math.min(perPage, 8) }).map((_, i) => (
-                <tr key={`sk-${i}`} className="border-t border-surface-border dark:border-night-border">
+                <tr key={`sk-${i}`} className="border-t border-brand/20 dark:border-night-border">
                   {selectable && <td className="px-2 py-2" />}
                   {visible.map((c) => (
                     <td key={c.id} className="px-2 py-2">
@@ -319,7 +323,7 @@ export default function DataTable<T>({
                 return (
                   <tr
                     key={key}
-                    className={`border-t border-surface-border transition-colors hover:bg-brand/10/40 dark:border-night-border dark:hover:bg-brand/20 ${
+                    className={`border-t border-brand/20 transition-colors hover:bg-brand/10/40 dark:border-night-border dark:hover:bg-brand/20 ${
                       index % 2 === 0 ? "" : "bg-gray-50/50 dark:bg-night-card/20"
                     }`}
                   >
@@ -417,7 +421,7 @@ function PagerButton({
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
-      className="flex h-7 w-7 items-center justify-center rounded-[5px] border border-surface-border text-xs text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-night-border dark:text-gray-400 dark:hover:bg-gray-800"
+      className="flex h-7 w-7 items-center justify-center rounded-[5px] border border-brand/20 text-xs text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-night-border dark:text-gray-400 dark:hover:bg-gray-800"
     >
       {children}
     </button>

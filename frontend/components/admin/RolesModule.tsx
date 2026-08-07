@@ -247,7 +247,7 @@ export default function RolesModule() {
               type="button"
               onClick={() => setSearch("")}
               disabled={!search}
-              className="h-9 shrink-0 rounded-[5px] border border-surface-border px-3 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-night-border dark:text-gray-400 dark:hover:bg-gray-800"
+              className="h-9 shrink-0 rounded-[5px] border border-brand/20 px-3 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-night-border dark:text-gray-400 dark:hover:bg-gray-800"
             >
               Reset
             </button>
@@ -460,7 +460,7 @@ function RoleFormModal({
           </div>
 
           {groups.length === 0 && (
-            <p className="rounded-[5px] border border-surface-border px-3 py-4 text-center text-xs text-gray-400 dark:border-night-border dark:text-gray-500">
+            <p className="rounded-[5px] border border-brand/20 px-3 py-4 text-center text-xs text-gray-400 dark:border-night-border dark:text-gray-500">
               You do not have permission to view the permission catalog.
             </p>
           )}
@@ -473,7 +473,7 @@ function RoleFormModal({
               return (
                 <fieldset
                   key={group.id}
-                  className="rounded-[5px] border border-surface-border px-3 py-2.5 dark:border-night-border"
+                  className="rounded-[5px] border border-brand/20 px-3 py-2.5 dark:border-night-border"
                 >
                   <legend className="flex items-center gap-2 px-1">
                     <button
