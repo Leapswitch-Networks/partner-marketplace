@@ -5,9 +5,11 @@ but no account yet. It returns the bare minimum needed to render the acceptance
 page and nothing about the inviter or the wider system.
 """
 
+import logging
 from typing import Literal
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -29,8 +31,11 @@ from app.schemas.rbac import (
     InvitationPreviewResponse,
     InvitationResponse,
     InvitationStats,
+    SkippedInvitation,
 )
 from app.services import invitation_service, mail_service
+
+logger = logging.getLogger("app.invitations")
 
 router = APIRouter(prefix="/invitations", tags=["invitations"])
 
@@ -48,6 +53,10 @@ def _deliver(invitation: UserInvitation, accept_url: str) -> dict:
         accept_url=accept_url,
         inviter_name=invitation.inviter.full_name if invitation.inviter else None,
         expires_days=invitation_service.INVITATION_TTL_DAYS,
+        # The role is what the invitee is being asked to accept, and the note is
+        # what the column comment has always promised. Both were being dropped.
+        role_name=invitation.role.display_name if invitation.role else None,
+        note=invitation.note,
     )
     delivered = sent and settings.MAIL_BACKEND.lower() != "console"
     payload = _to_response(invitation, None if delivered else accept_url)
@@ -92,6 +101,22 @@ class InvitationCreatedResponse(InvitationResponse):
 
     accept_url: str | None = None
     email_sent: bool = False
+
+
+class BulkInvitationResult(BaseModel):
+    """What a batch actually did.
+
+    Mirrors `BulkActionResult` in the users module, for the same reason: a
+    partial success that reports only its successes reads as a total one.
+
+    Declared here rather than in `schemas/rbac.py` because it embeds
+    `InvitationCreatedResponse`, which is defined in this module — the accept-url
+    withholding logic belongs next to the endpoint that decides it.
+    """
+
+    requested: int
+    created: list[InvitationCreatedResponse] = Field(default_factory=list)
+    skipped: list[SkippedInvitation] = Field(default_factory=list)
 
 
 @router.get("", response_model=Page[InvitationResponse])
@@ -180,28 +205,56 @@ def create_invitation(
 
 @router.post(
     "/bulk",
-    response_model=list[InvitationCreatedResponse],
+    response_model=BulkInvitationResult,
     status_code=status.HTTP_201_CREATED,
 )
 def create_invitations(
     data: BulkCreateInvitationRequest,
     db: Session = Depends(get_db),
     actor: User = Depends(require_permission(INVITATION_CREATE)),
-) -> list[InvitationCreatedResponse]:
+) -> BulkInvitationResult:
     """Invite several addresses at once.
 
-    Each is created independently: one duplicate or bad address does not lose
-    the rest. The response contains only those that succeeded.
+    Each is created independently: one duplicate or bad address does not lose the
+    rest. **The response says what was skipped and why** — the same contract the
+    users module's bulk actions use, and for the same reason: a partial success
+    that reports only its successes reads as a total one.
     """
     created: list[InvitationCreatedResponse] = []
+    skipped: list[SkippedInvitation] = []
+
     for entry in data.invitations:
         try:
             invitation, accept_url = invitation_service.create_invitation(db, entry, actor)
-        except Exception:  # noqa: BLE001 - a rejected address must not abort the batch
+        except HTTPException as exc:
+            # The service raises 409 for a duplicate, 403 for a role the actor
+            # may not grant, and 400 for a staff address on the wrong domain.
+            # Those are three different things an administrator should act on
+            # differently, and a bare `except Exception: continue` reported them
+            # identically — as silence.
             db.rollback()
-            continue
-        created.append(InvitationCreatedResponse(**_deliver(invitation, accept_url)))
-    return created
+            skipped.append(
+                SkippedInvitation(email=entry.email, reason=str(exc.detail))
+            )
+        except Exception as exc:  # noqa: BLE001 - one address must not abort the batch
+            db.rollback()
+            logger.exception("bulk invitation failed for %s", entry.email)
+            skipped.append(
+                SkippedInvitation(
+                    email=entry.email,
+                    # Deliberately not `str(exc)`: an unexpected exception's text
+                    # can carry internals, and this goes to a browser.
+                    reason=f"Unexpected error ({type(exc).__name__}).",
+                )
+            )
+        else:
+            created.append(InvitationCreatedResponse(**_deliver(invitation, accept_url)))
+
+    return BulkInvitationResult(
+        requested=len(data.invitations),
+        created=created,
+        skipped=skipped,
+    )
 
 
 @router.post("/{invitation_id}/resend", response_model=InvitationCreatedResponse)

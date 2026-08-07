@@ -699,8 +699,10 @@ export interface paths {
          * Create Invitations
          * @description Invite several addresses at once.
          *
-         *     Each is created independently: one duplicate or bad address does not lose
-         *     the rest. The response contains only those that succeeded.
+         *     Each is created independently: one duplicate or bad address does not lose the
+         *     rest. **The response says what was skipped and why** — the same contract the
+         *     users module's bulk actions use, and for the same reason: a partial success
+         *     that reports only its successes reads as a total one.
          */
         post: operations["create_invitations_api_v1_invitations_bulk_post"];
         delete?: never;
@@ -1454,6 +1456,25 @@ export interface components {
             /** Invitations */
             invitations: components["schemas"]["CreateInvitationRequest"][];
         };
+        /**
+         * BulkInvitationResult
+         * @description What a batch actually did.
+         *
+         *     Mirrors `BulkActionResult` in the users module, for the same reason: a
+         *     partial success that reports only its successes reads as a total one.
+         *
+         *     Declared here rather than in `schemas/rbac.py` because it embeds
+         *     `InvitationCreatedResponse`, which is defined in this module — the accept-url
+         *     withholding logic belongs next to the endpoint that decides it.
+         */
+        BulkInvitationResult: {
+            /** Created */
+            created?: components["schemas"]["InvitationCreatedResponse"][];
+            /** Requested */
+            requested: number;
+            /** Skipped */
+            skipped?: components["schemas"]["SkippedInvitation"][];
+        };
         /** BulkStatusRequest */
         BulkStatusRequest: {
             /**
@@ -2174,6 +2195,16 @@ export interface components {
             last_seen_at: string;
             /** User Agent */
             user_agent: string | null;
+        };
+        /**
+         * SkippedInvitation
+         * @description One address the batch could not invite, and why.
+         */
+        SkippedInvitation: {
+            /** Email */
+            email: string;
+            /** Reason */
+            reason: string;
         };
         /**
          * ThemePresetOption
@@ -3666,7 +3697,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["InvitationCreatedResponse"][];
+                    "application/json": components["schemas"]["BulkInvitationResult"];
                 };
             };
             /** @description Validation Error */

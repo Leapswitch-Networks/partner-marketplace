@@ -17,6 +17,7 @@ export type AdminSection =
   | "user-info"
   | "user-add"
   | "roles"
+  | "invitations"
   | "activity"
   | "profile"
   /**
@@ -35,6 +36,7 @@ export const SECTION_URLS = {
   "/dashboard/all-users": "user-info",
   "/dashboard/add-user": "user-info",
   "/dashboard/roles": "roles",
+  "/dashboard/invitations": "invitations",
   "/dashboard/activity": "activity",
 } as const satisfies Partial<Record<string, AdminSection>>;
 

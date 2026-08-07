@@ -117,15 +117,48 @@ def send(to: str, subject: str, body: str) -> bool:
 # a product decision, not a technical gap.
 
 
-def send_invitation(to: str, accept_url: str, inviter_name: str | None, expires_days: int) -> bool:
-    body = (
+def send_invitation(
+    to: str,
+    accept_url: str,
+    inviter_name: str | None,
+    expires_days: int,
+    *,
+    role_name: str | None = None,
+    note: str | None = None,
+) -> bool:
+    """The invitation email.
+
+    **The role is named.** It is the single most load-bearing fact in the
+    message — it is what the invitee is being asked to accept — and it was
+    missing. The reference names it too.
+
+    **The note is included.** `user_invitation.note`'s column comment has always
+    read "Optional message included in the email", and nothing ever passed it
+    here, so an admin could type a message that the invitee never saw. Either the
+    field delivers or the comment is a lie; this makes it deliver.
+
+    Expiry is interpolated rather than hardcoded. The reference's template says
+    "expires in 7 days" as a literal, which becomes wrong the moment the window
+    changes.
+    """
+    lines = [
         f"You have been invited to {settings.APP_NAME}"
-        f"{f' by {inviter_name}' if inviter_name else ''}.\n\n"
-        f"Accept the invitation:\n{accept_url}\n\n"
-        f"The link expires in {expires_days} day{'s' if expires_days != 1 else ''}. "
-        f"If you were not expecting this, you can ignore this message.\n"
+        f"{f' by {inviter_name}' if inviter_name else ''}.",
+    ]
+    if role_name:
+        lines.append(f"\nYou are being invited as: {role_name}")
+    if note:
+        # Quoted and attributed, so it reads as a human message rather than as
+        # something the system is asserting.
+        attribution = f"{inviter_name} says" if inviter_name else "Message"
+        lines.append(f"\n{attribution}:\n{note.strip()}")
+
+    lines.append(f"\nAccept the invitation:\n{accept_url}")
+    lines.append(
+        f"\nThe link expires in {expires_days} day{'s' if expires_days != 1 else ''}. "
+        "If you were not expecting this, you can ignore this message."
     )
-    return send(to, f"You have been invited to {settings.APP_NAME}", body)
+    return send(to, f"You have been invited to {settings.APP_NAME}", "\n".join(lines) + "\n")
 
 
 def send_email_verification(to: str, verify_url: str, expires_hours: int) -> bool:

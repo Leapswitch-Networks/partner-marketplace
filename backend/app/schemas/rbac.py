@@ -307,6 +307,13 @@ class InvitationResponse(BaseModel):
     invited_by_name: str | None = None
 
 
+class SkippedInvitation(BaseModel):
+    """One address the batch could not invite, and why."""
+
+    email: str
+    reason: str
+
+
 class InvitationStats(BaseModel):
     """Counts by status, for the index's summary cards.
 

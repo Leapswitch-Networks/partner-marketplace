@@ -299,6 +299,34 @@
         "title": "BulkCreateInvitationRequest",
         "type": "object"
       },
+      "BulkInvitationResult": {
+        "description": "What a batch actually did.\n\nMirrors `BulkActionResult` in the users module, for the same reason: a\npartial success that reports only its successes reads as a total one.\n\nDeclared here rather than in `schemas/rbac.py` because it embeds\n`InvitationCreatedResponse`, which is defined in this module — the accept-url\nwithholding logic belongs next to the endpoint that decides it.",
+        "properties": {
+          "created": {
+            "items": {
+              "$ref": "#/components/schemas/InvitationCreatedResponse"
+            },
+            "title": "Created",
+            "type": "array"
+          },
+          "requested": {
+            "title": "Requested",
+            "type": "integer"
+          },
+          "skipped": {
+            "items": {
+              "$ref": "#/components/schemas/SkippedInvitation"
+            },
+            "title": "Skipped",
+            "type": "array"
+          }
+        },
+        "required": [
+          "requested"
+        ],
+        "title": "BulkInvitationResult",
+        "type": "object"
+      },
       "BulkStatusRequest": {
         "properties": {
           "status": {
@@ -2050,6 +2078,25 @@
           "is_current"
         ],
         "title": "SessionResponse",
+        "type": "object"
+      },
+      "SkippedInvitation": {
+        "description": "One address the batch could not invite, and why.",
+        "properties": {
+          "email": {
+            "title": "Email",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "reason"
+        ],
+        "title": "SkippedInvitation",
         "type": "object"
       },
       "ThemePresetOption": {
@@ -5122,7 +5169,7 @@
     },
     "/api/v1/invitations/bulk": {
       "post": {
-        "description": "Invite several addresses at once.\n\nEach is created independently: one duplicate or bad address does not lose\nthe rest. The response contains only those that succeeded.",
+        "description": "Invite several addresses at once.\n\nEach is created independently: one duplicate or bad address does not lose the\nrest. **The response says what was skipped and why** — the same contract the\nusers module's bulk actions use, and for the same reason: a partial success\nthat reports only its successes reads as a total one.",
         "operationId": "create_invitations_api_v1_invitations_bulk_post",
         "parameters": [
           {
@@ -5157,11 +5204,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/InvitationCreatedResponse"
-                  },
-                  "title": "Response Create Invitations Api V1 Invitations Bulk Post",
-                  "type": "array"
+                  "$ref": "#/components/schemas/BulkInvitationResult"
                 }
               }
             },
