@@ -1,5 +1,11 @@
 import axiosInstance from "./axiosInstance";
-import type { AccountType, ManagedUser, Paginated, UserStatus } from "@/types";
+import type {
+  AccountType,
+  ManagedUser,
+  ManagedUserDetail,
+  Paginated,
+  UserStatus,
+} from "@/types";
 
 /**
  * User administration.
@@ -53,7 +59,8 @@ export const adminApi = {
   listUsers: (params: ListUsersParams = {}) =>
     axiosInstance.get<Paginated<ManagedUser>>("/users", { params }),
 
-  getUser: (id: string) => axiosInstance.get<ManagedUser>(`/users/${id}`),
+  // UserDetailResponse, not UserListItem — see the note on ManagedUserDetail.
+  getUser: (id: string) => axiosInstance.get<ManagedUserDetail>(`/users/${id}`),
 
   createUser: (data: CreateUserPayload) =>
     axiosInstance.post<ManagedUser>("/users", data),

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import Badge from "@/components/common/Badge";
 import Button from "@/components/common/Button";
 import { type Column } from "@/components/common/DataTable";
@@ -51,6 +52,7 @@ const ACCOUNT_TYPE_OPTIONS = [
 type ModalMode = "create" | "edit" | "delete" | null;
 
 export default function UsersModule({ initialModal }: { initialModal?: ModalMode }) {
+  const router = useRouter();
   const { can } = usePermissions();
   const me = useAppSelector((s) => s.auth.user);
   const { toast, show, dismiss } = useToast();
@@ -212,6 +214,13 @@ export default function UsersModule({ initialModal }: { initialModal?: ModalMode
           <div className="flex justify-center">
             <RowActions
               actions={[
+                {
+                  // First, because reading is the commonest reason to open this
+                  // menu and it is the only entry with no permission of its own —
+                  // if you can see the row you can open it.
+                  label: "View",
+                  onSelect: () => router.push(`/dashboard/users/${row.id}`),
+                },
                 {
                   label: "Edit",
                   visible: row.can_edit,

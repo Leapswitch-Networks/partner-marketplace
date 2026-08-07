@@ -73,6 +73,29 @@ export interface ManagedUser {
   can_approve: boolean;
 }
 
+/**
+ * What `GET /users/{id}` actually returns — `UserListItem` plus eleven fields.
+ *
+ * `adminApi.getUser` was typed as `ManagedUser` (i.e. `UserListItem`), so every
+ * one of those extra fields was invisible to TypeScript and the detail page had
+ * nothing to render. Exactly the failure `api-contract.ts` describes: types that
+ * agree by convention look like an enforced contract while under-describing the
+ * API. The contract assertion below now covers it.
+ */
+export interface ManagedUserDetail extends ManagedUser {
+  first_name: string;
+  last_name: string;
+  employee_id: string | null;
+  personal_mobile_number: string | null;
+  personal_email: string | null;
+  timezone_preference: string;
+  email_verified_at: string | null;
+  failed_login_attempts: number;
+  locked_until: string | null;
+  last_login_ip: string | null;
+  updated_at: string;
+}
+
 export interface Permission {
   id: number;
   name: string;

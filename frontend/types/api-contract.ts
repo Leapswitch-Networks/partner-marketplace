@@ -45,7 +45,7 @@
  */
 
 import type { components } from "./api";
-import type { CurrentUser, ManagedUser, RoleSummary } from "./index";
+import type { CurrentUser, ManagedUser, ManagedUserDetail, RoleSummary } from "./index";
 import type { Branding } from "@/lib/branding";
 
 type Schemas = components["schemas"];
@@ -97,6 +97,9 @@ type KeysMatch<Ui, Api> = Equals<ExtraInUi<Ui, Api>, never> extends true
 
 export type CurrentUserContract = Assert<KeysMatch<CurrentUser, Schemas["CurrentUserResponse"]>>;
 export type ManagedUserContract = Assert<KeysMatch<ManagedUser, Schemas["UserListItem"]>>;
+export type ManagedUserDetailContract = Assert<
+  KeysMatch<ManagedUserDetail, Schemas["UserDetailResponse"]>
+>;
 export type RoleSummaryContract = Assert<KeysMatch<RoleSummary, Schemas["RoleSummary"]>>;
 export type BrandingContract = Assert<KeysMatch<Branding, Schemas["BrandingResponse"]>>;
 
