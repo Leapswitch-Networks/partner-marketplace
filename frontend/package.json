@@ -9,8 +9,8 @@
     "lint": "eslint app components lib types",
     "lint:fix": "eslint app components lib types --fix",
     "typecheck": "tsc --noEmit",
-    "codegen:api": "openapi-typescript ../backend/openapi.json -o types/api.d.ts",
-    "codegen:check": "npm run codegen:api && git ls-files --error-unmatch types/api.d.ts > /dev/null 2>&1 || { echo 'types/api.d.ts is not committed \u2014 run `npm run codegen:api` and commit it'; exit 1; } && git diff --exit-code -- types/api.d.ts || { echo 'types/api.d.ts is stale \u2014 the API changed. Commit the regenerated file.'; exit 1; }"
+    "codegen:api": "openapi-typescript ${OPENAPI_SCHEMA:-../backend/openapi.json} -o types/api.d.ts",
+    "codegen:check": "npm run codegen:api || { echo 'codegen failed: could not read the OpenAPI document. Inside the frontend container ../backend does not exist \u2014 copy it in first: docker compose cp backend/openapi.json frontend:/tmp/openapi.json && OPENAPI_SCHEMA=/tmp/openapi.json npm run codegen:check'; exit 1; }; git rev-parse --git-dir > /dev/null 2>&1 || { echo 'types regenerated. Skipping the committed/stale checks: no git repo is visible from here, which is expected inside the container. CI runs them.'; exit 0; }; git ls-files --error-unmatch types/api.d.ts > /dev/null 2>&1 || { echo 'types/api.d.ts is not committed \u2014 commit it'; exit 1; }; git diff --exit-code -- types/api.d.ts || { echo 'types/api.d.ts is stale \u2014 the API changed. Commit the regenerated file.'; exit 1; }"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
