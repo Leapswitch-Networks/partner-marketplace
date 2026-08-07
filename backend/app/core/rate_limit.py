@@ -149,20 +149,35 @@ class SlidingWindowCounter:
 #: Kept as explicit (prefix, suffix) pairs rather than a general regex so the
 #: same property holds: a new endpoint does not silently inherit this tier, it
 #: has to be added here on purpose.
-SENSITIVE_PATH_SHAPES: tuple[tuple[str, str], ...] = (
+#: Each entry is ``(prefix, suffix, bucket)``.
+#:
+#: ⚠️ The third element is load-bearing. Buckets are keyed ``f"{tier}:{ip}"``, so
+#: everything sharing a tier name shares ONE counter per client. Putting these
+#: outbound-mail routes on the plain ``sensitive`` tier would make ten resends
+#: consume the same 10-per-minute budget as ``/auth/login`` — and the admin doing
+#: the resending would then be unable to sign in for a minute. They get their own
+#: bucket at the same limit instead, which is what "throttle this route" means
+#: everywhere else; Laravel's ``throttle:10,1`` is per-route by default, so the
+#: shared-bucket version was not parity either.
+SENSITIVE_PATH_SHAPES: tuple[tuple[str, str, str], ...] = (
     # POST /users/{id}/email — sends mail to an address we hold, from the
     # platform's own sender. Unthrottled, one admin account is a spam relay.
-    # The reference implementation throttles the same route at 5/min
-    # (`routes/web.php`: `->middleware('throttle:5,1')`).
-    (f"{settings.API_PREFIX}/users/", "/email"),
+    # The reference throttles the same route at 5/min.
+    (f"{settings.API_PREFIX}/users/", "/email", "mail-user"),
+    # POST /invitations/{id}/resend — the reference throttles this at 10/min.
+    # Complements the per-invitation 60s cooldown in invitation_service: that
+    # stops one invitee being mailed repeatedly, this stops one caller working
+    # through the whole list.
+    (f"{settings.API_PREFIX}/invitations/", "/resend", "mail-invite"),
 )
 
 
-def _is_sensitive_shape(path: str) -> bool:
-    return any(
-        path.startswith(prefix) and path.endswith(suffix)
-        for prefix, suffix in SENSITIVE_PATH_SHAPES
-    )
+def _sensitive_shape_bucket(path: str) -> str | None:
+    """The dedicated bucket name for a shape-matched path, or None."""
+    for prefix, suffix, bucket in SENSITIVE_PATH_SHAPES:
+        if path.startswith(prefix) and path.endswith(suffix):
+            return bucket
+    return None
 
 
 #: How many checks pass between memory sweeps. Sweeping on every request would
@@ -176,7 +191,15 @@ def _tier_for(path: str) -> tuple[str, int, int] | None:
     """Return ``(tier, limit, window)`` for a path, or ``None`` if exempt."""
     if path.startswith(EXEMPT_PREFIXES):
         return None
-    if path in SENSITIVE_PATHS or _is_sensitive_shape(path):
+    shape_bucket = _sensitive_shape_bucket(path)
+    if shape_bucket is not None:
+        # Sensitive LIMITS, its own counter — see SENSITIVE_PATH_SHAPES.
+        return (
+            shape_bucket,
+            settings.RATE_LIMIT_SENSITIVE_MAX_REQUESTS,
+            settings.RATE_LIMIT_SENSITIVE_WINDOW_SECONDS,
+        )
+    if path in SENSITIVE_PATHS:
         return (
             "sensitive",
             settings.RATE_LIMIT_SENSITIVE_MAX_REQUESTS,

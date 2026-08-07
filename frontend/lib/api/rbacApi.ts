@@ -1,5 +1,5 @@
 import axiosInstance from "./axiosInstance";
-import type { AccountType, Paginated, Invitation, PermissionGroup, Role } from "@/types";
+import type { AccountType, Paginated, Invitation, InvitationCreated, PermissionGroup, Role } from "@/types";
 
 /** Roles, the permission catalog, and invitations. */
 
@@ -174,16 +174,31 @@ export const invitationApi = {
       requires_google: boolean;
     }>("/invitations/preview", { params: { token } }),
 
-  /** Response carries `accept_url` — no mail transport is configured, so send it manually. */
+  /**
+   * `accept_url` comes back only when no email was delivered — check
+   * `email_sent` to tell "we sent it" from "send this yourself". The older
+   * comment here said no mail transport was configured; that stopped being true
+   * with PM-27.
+   */
   create: (data: CreateInvitationPayload) =>
-    axiosInstance.post<Invitation>("/invitations", data),
+    axiosInstance.post<InvitationCreated>("/invitations", data),
 
   createMany: (invitations: CreateInvitationPayload[]) =>
-    axiosInstance.post<Invitation[]>("/invitations/bulk", { invitations }),
+    axiosInstance.post<InvitationCreated[]>("/invitations/bulk", { invitations }),
 
   /** Rotates the token, so the previous link stops working. */
+  /** Counts by status. Own endpoint — the list is paginated, so page rows would undercount. */
+  stats: () =>
+    axiosInstance.get<{ pending: number; accepted: number; expired: number; cancelled: number }>(
+      "/invitations/stats"
+    ),
+
+  /**
+   * Rotates the token and extends the expiry. 429 if resent within 60 seconds,
+   * which is a per-invitation cooldown distinct from the per-IP rate limit.
+   */
   resend: (id: string) =>
-    axiosInstance.post<Invitation>(`/invitations/${id}/resend`),
+    axiosInstance.post<InvitationCreated>(`/invitations/${id}/resend`),
 
   cancel: (id: string) =>
     axiosInstance.delete<{ message: string }>(`/invitations/${id}`),

@@ -28,6 +28,7 @@ from sqlalchemy.orm import Session
 from app.core.permissions import (
     ACTIVITY_VIEW,
     DASHBOARD_VIEW,
+    INVITATION_VIEW,
     ROLE_VIEW,
     SETTINGS_MANAGE,
     USER_VIEW,
@@ -179,6 +180,13 @@ def build_sections(user: User) -> list[dict[str, Any]]:
                     ],
                 ),
                 _item("Roles & Permissions", "/dashboard/roles", "roles", ROLE_VIEW),
+                _item(
+                    "Invitations",
+                    "/dashboard/invitations",
+                    "invitations",
+                    INVITATION_VIEW,
+                    active_prefixes=["/dashboard/invitations"],
+                ),
                 _item("Activity Log", "/dashboard/activity", "activity", ACTIVITY_VIEW),
             ],
         },

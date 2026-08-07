@@ -59,7 +59,11 @@ const FULL_HEIGHT_ROUTES = new Set<string>([
  * Getting this wrong is not subtle: the page ends up inside the padded scrolling
  * panel as well, and two nested scroll containers means neither behaves.
  */
-const FULL_HEIGHT_PREFIXES = ["/dashboard/users", "/dashboard/roles"];
+const FULL_HEIGHT_PREFIXES = [
+  "/dashboard/users",
+  "/dashboard/roles",
+  "/dashboard/invitations",
+];
 
 function ownsViewportHeight(pathname: string): boolean {
   if (FULL_HEIGHT_ROUTES.has(pathname)) return true;

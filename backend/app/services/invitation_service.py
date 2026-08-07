@@ -16,7 +16,7 @@ manually. That is deliberate and visible rather than a silently dropped email.
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
-from sqlalchemy import Select, case, func, select
+from sqlalchemy import Select, case, func, select, update
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import settings
@@ -32,6 +32,15 @@ from app.services.auth_service import email_exists, normalise_email
 from app.services.rbac_service import get_role_or_404
 
 INVITATION_TTL_DAYS = 7
+
+#: Minimum gap between resends of the same invitation. Ported verbatim from the
+#: reference, which checks `last_sent_at->diffInSeconds(now()) < 60`.
+#:
+#: Distinct from the HTTP rate limit, and both are needed: the rate limit is
+#: per-IP and stops one caller hammering the endpoint, this is per-invitation and
+#: stops one invitee being mailed repeatedly by several admins who each see a
+#: stale list.
+RESEND_COOLDOWN_SECONDS = 60
 
 
 def _accept_url(token: str) -> str:
@@ -57,6 +66,29 @@ _LIST_SPEC = ListSpec(
 )
 
 
+def _expire_elapsed(db: Session, actor: User | None = None) -> None:
+    """Flip lapsed `pending` rows to `expired`, in one statement.
+
+    There is no scheduler in this project, so expiry is reflected on read. Doing
+    it as a bulk UPDATE rather than by walking a fetched page means it is applied
+    to rows the caller's filter would have excluded — which is the whole point,
+    because a filter on `status` reads the stored value.
+
+    Not scoped by actor even when one is given: a lapsed invitation is lapsed for
+    everybody, and scoping would leave the same row `pending` for one reader and
+    `expired` for another.
+    """
+    now = datetime.now(timezone.utc)
+    result = db.execute(
+        update(UserInvitation)
+        .where(UserInvitation.status == "pending")
+        .where(UserInvitation.expires_at <= now)
+        .values(status="expired")
+    )
+    if result.rowcount:
+        db.commit()
+
+
 def list_invitations(
     db: Session,
     actor: User,
@@ -78,6 +110,16 @@ def list_invitations(
     fine while nothing consumed it — the response shape changing is a break, and
     the moment to take it is before the first UI exists rather than after.
     """
+    # Reflect elapsed expiry BEFORE filtering, not after.
+    #
+    # It used to run over the fetched page, which meant `?status=pending`
+    # selected on the stored value and then rewrote some of those rows to
+    # `expired` on the way out — so a caller asking for pending invitations got
+    # rows whose `status` field said `expired`, and the count included them.
+    # There is no scheduler in this project, so a lazy flip is the mechanism;
+    # doing it first is what makes it honest.
+    _expire_elapsed(db, actor)
+
     stmt: Select = select(UserInvitation).options(
         selectinload(UserInvitation.role), selectinload(UserInvitation.inviter)
     )
@@ -101,16 +143,6 @@ def list_invitations(
             search=search,
         ),
     )
-
-    # Reflect elapsed expiry into the stored status so the list is honest without
-    # needing a scheduled job (there is no scheduler in this project).
-    changed = False
-    for invitation in invitations:
-        if invitation.is_pending and invitation.is_expired:
-            invitation.status = "expired"
-            changed = True
-    if changed:
-        db.commit()
 
     return invitations, total
 
@@ -191,6 +223,12 @@ def create_invitation(
         raise HTTPException(
             status.HTTP_409_CONFLICT, "An account with this email already exists"
         )
+
+    # Flip lapsed rows first. Without this, the guard below saw a stale
+    # `pending` row, decided it was expired, allowed the create — and left the
+    # stale row still stored as `pending`. Re-inviting a lapsed address produced
+    # TWO rows both reading `pending`, and `stats` counted both.
+    _expire_elapsed(db)
 
     existing = db.scalar(
         select(UserInvitation)
@@ -280,6 +318,20 @@ def resend_invitation(
         )
 
     now = datetime.now(timezone.utc)
+
+    if invitation.last_sent_at is not None:
+        # `last_sent_at` may be naive depending on how the driver returned it;
+        # compare in UTC rather than assuming.
+        last = invitation.last_sent_at
+        if last.tzinfo is None:
+            last = last.replace(tzinfo=timezone.utc)
+        waited = (now - last).total_seconds()
+        if waited < RESEND_COOLDOWN_SECONDS:
+            remaining = int(RESEND_COOLDOWN_SECONDS - waited) + 1
+            raise HTTPException(
+                status.HTTP_429_TOO_MANY_REQUESTS,
+                f"This invitation was just sent. Try again in {remaining} seconds.",
+            )
     invitation.token = generate_token(64)
     invitation.status = "pending"
     invitation.expires_at = now + timedelta(days=INVITATION_TTL_DAYS)

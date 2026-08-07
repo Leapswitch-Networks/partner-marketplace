@@ -137,8 +137,25 @@ export interface Invitation {
   is_expired: boolean;
   role: RoleSummary | null;
   invited_by_name: string | null;
-  /** Only present on create/resend responses. */
-  accept_url?: string;
+  /** Only on create/resend responses, and only when no email was delivered. */
+  accept_url?: string | null;
+}
+
+/**
+ * What create, bulk-create and resend actually return.
+ *
+ * `email_sent` is the field that lets the UI say "we emailed them" rather than
+ * "copy this link and send it yourself". It exists on the API
+ * (`InvitationCreatedResponse`) and was missing here, so the distinction was
+ * unreachable from the client — which would have made the create flow guess.
+ *
+ * `accept_url` is populated ONLY when no email was delivered. When one was, the
+ * link is withheld deliberately: it is a live credential and does not belong in
+ * a response body, a devtools tab and a log for something already sent privately.
+ */
+export interface InvitationCreated extends Invitation {
+  accept_url: string | null;
+  email_sent: boolean;
 }
 
 export interface Paginated<T> {
