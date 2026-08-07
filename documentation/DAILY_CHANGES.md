@@ -6,6 +6,43 @@
 > Update this file as part of the same change as the code. A task that isn't here is invisible to the
 > next person.
 
+## August 7, 2026 — A second product was described, and it contradicts the one already planned
+
+**The owner asked for "a Justdial, but only for our partners" — a directory where each partner lists
+their own services and buyers find them.** That is not what `MARKETPLACE_DOMAIN_PLAN.md` models. That
+document, scoped on 2026-07-31, has partners **reselling Leapswitch's** services at a discount tier
+and building quotes for their own end customers. The new brief points trade in the opposite direction:
+partners are suppliers of their own services, and Leapswitch convenes the market rather than stocking
+it. Different core object, different revenue, different catalog owner.
+
+**Written up as `planning/PARTNER_DIRECTORY_PLAN.md`** — research on what Justdial actually monetises
+(the lead, not the listing, fanned out to four to seven competing providers), four comparable curated
+partner directories, a listing-and-enquiry domain model, and the ten decisions the owner has to make.
+Registered in `INDEX.md`, and `MARKETPLACE_DOMAIN_PLAN.md` now carries a banner pointing at the
+conflict so nobody builds from it unaware.
+
+**No decision was taken and no code was written.** The reconciliation § 0 recommends keeping
+`partners`, `users.partner_id`, `partner_tiers` and the whole scoping design from the existing plan —
+they are correct under either product — and shelving the quoting half.
+
+**Two findings that outlive the brief.** First, a public directory breaks an assumption in the
+existing scoping spec: every function there takes `actor: User`, but anonymous requests have no actor,
+and the obvious fix (`if actor is None: return stmt`) would serve unfiltered rows to the internet.
+`apply_scope` needs `Optional[User]` with the anonymous branch as the *most* restrictive, designed in
+from the first line. Second, PM-27 (email) stops being a nice-to-have — an enquiry that never reaches
+the partner is the entire value loop failing.
+
+**Verified against the running system, not read from a register:** 11 tables, none of them marketplace
+domain; 34 seeded permissions, none partner-related; zero matches for `partner_id` in `backend/app/`.
+The domain is genuinely greenfield.
+
+> **Side finding, unrelated to the brief:** `PLANNING.md` § 5.1 says the 14 LeapDesk parity permissions
+> are "0 of 14" seeded. The database has **34** permissions today including `data-access-*`,
+> `api-credential-*`, `api-provider-*`, `ai-assistant-*`, `search-entity-manage`, `user-email` and
+> `settings-*`. That register is stale and the prerequisite it names is already met.
+
+---
+
 ## August 7, 2026 — One list pipeline for every index, and a pagination bug it made visible
 
 **Every index endpoint now has one place to get search, sorting and pagination right.** `app/core/query.py`
