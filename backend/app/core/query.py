@@ -142,15 +142,21 @@ def apply_sort(
     sort_by: str | None,
     sort_order: str | None,
 ) -> Select:
-    """Order by an allowlisted column, then always by the tiebreak."""
+    """Order by an allowlisted column, then by the tiebreak."""
     column = spec.column_for(sort_by)
     descending = (sort_order or spec.default_order) == "desc"
 
     primary = column.desc() if descending else column.asc()
+
+    # A resource whose natural sort is already unique — the activity log sorts by
+    # `id` — would otherwise emit `ORDER BY id DESC, id DESC`. Harmless, but it
+    # shows up in query logs and invites someone to "fix" it later.
+    if column is spec.tiebreak:
+        return stmt.order_by(primary)
+
     # The tiebreak follows the primary direction so the ordering reads naturally
     # ("newest first" stays newest-first within a tie).
     secondary = spec.tiebreak.desc() if descending else spec.tiebreak.asc()
-
     return stmt.order_by(primary, secondary)
 
 

@@ -34,6 +34,7 @@ from typing import Any
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.query import ListParams, ListSpec, run_list
 from app.models.activity_log import (
     EVENT_CREATED,
     EVENT_DELETED,
@@ -285,6 +286,20 @@ def record_logout(db: Session, user_id: str, ip: str | None) -> None:
     )
 
 
+_LIST_SPEC = ListSpec(
+    # `id`, not `created_at`. Rows written inside one transaction share a
+    # timestamp, so ordering on it is not a total order and a tying row can
+    # appear on two consecutive pages or on neither. This module got that right
+    # by hand before the shared pipeline existed; declaring it here keeps it
+    # right, because `tiebreak` is required and cannot be dropped by an edit.
+    sortable={"id": ActivityLog.id},
+    default_sort="id",
+    tiebreak=ActivityLog.id,
+    searchable=(ActivityLog.description,),
+    default_per_page=25,
+)
+
+
 def list_entries(
     db: Session,
     *,
@@ -328,28 +343,25 @@ def list_entries(
         stmt = stmt.where(ActivityLog.subject_id == str(subject_id))
     if causer_id:
         stmt = stmt.where(ActivityLog.causer_id == str(causer_id))
-    if search:
-        stmt = stmt.where(func.lower(ActivityLog.description).like(f"%{search.strip().lower()}%"))
     if date_from:
         stmt = stmt.where(ActivityLog.created_at >= date_from)
     if date_to:
         stmt = stmt.where(ActivityLog.created_at <= date_to)
 
-    total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
-
-    per_page = max(1, min(per_page, 100))
-    page = max(1, page)
-    rows = list(
-        db.scalars(
-            stmt.order_by(ActivityLog.id.desc())
-            .offset((page - 1) * per_page)
-            .limit(per_page)
-        )
+    # Search, count, ordering and paging come from the shared pipeline. The
+    # ordering this module documented — by `id`, because rows written in one
+    # transaction share a timestamp — is now declared once in `_LIST_SPEC` rather
+    # than being a loose `order_by` a later edit could drop.
+    #
+    # No `sort_by` is passed: the trail is newest-first and the endpoint exposes
+    # no sort parameter. `_LIST_SPEC.default_sort` is the only ordering reachable.
+    rows, total = run_list(
+        db,
+        stmt,
+        _LIST_SPEC,
+        ListParams(page=page, per_page=per_page, search=search),
     )
 
-    # Ordered by `id` rather than `created_at`: two rows written in the same
-    # transaction can share a timestamp, and an unstable sort would let a row
-    # appear on two consecutive pages or on neither.
     causer_ids = {row.causer_id for row in rows if row.causer_id}
     names: dict[str, str] = {}
     if causer_ids:

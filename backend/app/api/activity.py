@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db, require_permission
 from app.core.permissions import ACTIVITY_VIEW
+from app.core.query import page_count
 from app.models.user import User
 from app.services import activity_service
 
@@ -111,7 +112,11 @@ def list_activity(
         total=total,
         page=page,
         per_page=per_page,
-        pages=max(1, -(-total // per_page)),
+        # Was `max(1, ...)`, which reported one page for an empty trail and made
+        # the pager render "1 / 1" above no rows. `/users` already returned 0 in
+        # that case and `DataTable.tsx` branches on `pages === 0`, so 0 is the
+        # contract the frontend is written against; this endpoint was the odd one.
+        pages=page_count(total, per_page),
     )
 
 
