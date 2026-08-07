@@ -48,6 +48,28 @@ const FULL_HEIGHT_ROUTES = new Set<string>([
 ]);
 
 /**
+ * Route trees whose every page owns the viewport height.
+ *
+ * Exact matching stopped being enough once a module became four routes rather
+ * than one. `/dashboard/users/{id}` and `/dashboard/users/{id}/edit` carry ids,
+ * so they cannot be listed literally — and all four pages are viewport-locked:
+ * the index is a `Card` with an internally scrolling table, `ResourceForm` has a
+ * fixed header and footer around a scrolling field area, and the show page
+ * scrolls its own grid.
+ *
+ * Getting this wrong is not subtle: the page ends up inside the padded scrolling
+ * panel as well, and two nested scroll containers means neither behaves.
+ */
+const FULL_HEIGHT_PREFIXES = ["/dashboard/users"];
+
+function ownsViewportHeight(pathname: string): boolean {
+  if (FULL_HEIGHT_ROUTES.has(pathname)) return true;
+  return FULL_HEIGHT_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
+  );
+}
+
+/**
  * Which sidebar item to light up for a given URL.
  *
  * Derived rather than passed in, because **one layout now serves both `/dashboard/*`
@@ -92,7 +114,7 @@ export default function AppShell({
 
   const section: AdminSection = activeSection ?? sectionFor(pathname);
 
-  const isFullHeight = FULL_HEIGHT_ROUTES.has(pathname);
+  const isFullHeight = ownsViewportHeight(pathname);
 
   /**
    * Sidebar clicks. Everything routes — there are no URL-less sections left now

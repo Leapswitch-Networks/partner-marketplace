@@ -29,8 +29,11 @@ export type AdminSection =
 /** Pathname → AdminSection mapping for URL-routed sections */
 export const SECTION_URLS = {
   "/dashboard": "dashboard",
+  "/dashboard/users": "user-info",
+  // The two retired paths still map, so a bookmark keeps the sidebar correct
+  // while the 307 resolves. See navigation_service.py.
   "/dashboard/all-users": "user-info",
-  "/dashboard/add-user": "user-add",
+  "/dashboard/add-user": "user-info",
   "/dashboard/roles": "roles",
   "/dashboard/activity": "activity",
 } as const satisfies Partial<Record<string, AdminSection>>;

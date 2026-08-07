@@ -6,14 +6,11 @@ import Badge from "@/components/common/Badge";
 import Button from "@/components/common/Button";
 import { type Column } from "@/components/common/DataTable";
 import ResourceIndex from "@/components/common/ResourceIndex";
-import Input from "@/components/common/Input";
 import Modal from "@/components/common/Modal";
 import RowActions from "@/components/common/RowActions";
-import Select from "@/components/common/Select";
 import Toast, { useToast } from "@/components/common/Toast";
-import { adminApi, type CreateUserPayload, type UpdateUserPayload } from "@/lib/api/adminApi";
+import { adminApi } from "@/lib/api/adminApi";
 import { roleApi } from "@/lib/api/rbacApi";
-import useAppSelector from "@/lib/hooks/useAppSelector";
 import useAutoPerPage from "@/lib/hooks/useAutoPerPage";
 import usePermissions from "@/lib/hooks/usePermissions";
 import useResourceQuery from "@/lib/hooks/useResourceQuery";
@@ -49,12 +46,12 @@ const ACCOUNT_TYPE_OPTIONS = [
   { value: "partner", label: "Partner" },
 ];
 
-type ModalMode = "create" | "edit" | "delete" | null;
+/** Only `delete` remains — create and edit are pages now. */
+type ModalMode = "delete" | null;
 
 export default function UsersModule({ initialModal }: { initialModal?: ModalMode }) {
   const router = useRouter();
   const { can } = usePermissions();
-  const me = useAppSelector((s) => s.auth.user);
   const { toast, show, dismiss } = useToast();
 
   const autoPerPage = useAutoPerPage();
@@ -224,10 +221,7 @@ export default function UsersModule({ initialModal }: { initialModal?: ModalMode
                 {
                   label: "Edit",
                   visible: row.can_edit,
-                  onSelect: () => {
-                    setTarget(row);
-                    setModal("edit");
-                  },
+                  onSelect: () => router.push(`/dashboard/users/${row.id}/edit`),
                 },
                 {
                   label: "Approve",
@@ -421,7 +415,11 @@ export default function UsersModule({ initialModal }: { initialModal?: ModalMode
     <ResourceIndex<ManagedUser, typeof q.filters>
       title="Users"
       description={`${total} account${total === 1 ? "" : "s"} · roles decide what each one can do`}
-      actions={can("user-create") ? <Button onClick={() => setModal("create")}>Add user</Button> : undefined}
+      actions={
+        can("user-create") ? (
+          <Button onClick={() => router.push("/dashboard/users/new")}>Add user</Button>
+        ) : undefined
+      }
       query={q}
       filters={[
         { type: "text", key: "search", placeholder: "Search name, email or company…", label: "Search users" },
@@ -474,35 +472,7 @@ export default function UsersModule({ initialModal }: { initialModal?: ModalMode
       emptyHint={can("user-create") ? "Use “Add user” to create the first one." : undefined}
     >
 
-      {modal === "create" && (
-        <UserFormModal
-          roles={roles}
-          onClose={() => setModal(null)}
-          onSaved={(user) => {
-            setModal(null);
-            show(`${user.full_name} created.`);
-            fetchUsers();
-          }}
-        />
-      )}
 
-      {modal === "edit" && target && (
-        <UserFormModal
-          user={target}
-          roles={roles}
-          currentUserId={me?.id}
-          onClose={() => {
-            setModal(null);
-            setTarget(null);
-          }}
-          onSaved={(user) => {
-            setModal(null);
-            setTarget(null);
-            setRows((prev) => prev.map((r) => (r.id === user.id ? user : r)));
-            show(`${user.full_name} updated.`);
-          }}
-        />
-      )}
 
       {modal === "delete" && target && (
         <DeleteUserModal
@@ -553,215 +523,6 @@ function BulkButton({
 }
 
 /** Create/edit form. One component, because the fields are the same. */
-function UserFormModal({
-  user,
-  roles,
-  currentUserId,
-  onClose,
-  onSaved,
-}: {
-  user?: ManagedUser;
-  roles: Role[];
-  currentUserId?: string;
-  onClose: () => void;
-  onSaved: (user: ManagedUser) => void;
-}) {
-  const editing = Boolean(user);
-  const isSelf = Boolean(user && currentUserId && user.id === currentUserId);
-
-  const [form, setForm] = useState({
-    first_name: "",
-    last_name: "",
-    email: user?.email ?? "",
-    password: "",
-    account_type: (user?.account_type ?? "partner") as "staff" | "partner",
-    status: (user?.status ?? "INACTIVE") as UserStatus,
-    designation: user?.designation ?? "",
-    company_name: user?.company_name ?? "",
-    role_id: user?.roles[0]?.id ?? 0,
-  });
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  // Split the server's `full_name` back into two fields for editing.
-  useEffect(() => {
-    if (!user) return;
-    const parts = user.full_name.trim().split(" ");
-    setForm((f) => ({
-      ...f,
-      first_name: parts[0] ?? "",
-      last_name: parts.slice(1).join(" "),
-    }));
-  }, [user]);
-
-  const set = (key: keyof typeof form) => (value: string | number) =>
-    setForm((f) => ({ ...f, [key]: value }));
-
-  const submit = async (e: React.SyntheticEvent) => {
-    e.preventDefault();
-    setSaving(true);
-    setError(null);
-    try {
-      if (editing && user) {
-        const payload: UpdateUserPayload = {
-          first_name: form.first_name.trim(),
-          last_name: form.last_name.trim(),
-          email: form.email.trim(),
-          account_type: form.account_type,
-          designation: form.designation.trim() || null,
-          company_name: form.company_name.trim() || null,
-        };
-        if (form.password) payload.password = form.password;
-        // The API refuses these on your own account; don't even send them.
-        if (!isSelf) {
-          payload.status = form.status;
-          payload.role_ids = form.role_id ? [form.role_id] : [];
-        }
-        const res = await adminApi.updateUser(user.id, payload);
-        onSaved(res.data);
-      } else {
-        const payload: CreateUserPayload = {
-          first_name: form.first_name.trim(),
-          last_name: form.last_name.trim(),
-          email: form.email.trim(),
-          account_type: form.account_type,
-          status: form.status,
-          role_ids: form.role_id ? [form.role_id] : [],
-          designation: form.designation.trim() || null,
-          company_name: form.company_name.trim() || null,
-        };
-        if (form.password) payload.password = form.password;
-        const res = await adminApi.createUser(payload);
-        onSaved(res.data);
-      }
-    } catch (err) {
-      setError(apiMessage(err, editing ? "Could not update user." : "Could not create user."));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <Modal
-      onClose={onClose}
-      title={editing ? "Edit user" : "Add user"}
-      subtitle={editing ? user?.email : "Created accounts are vouched for, so they can be active immediately"}
-      size="lg"
-      footer={
-        <>
-          <Button variant="outline" onClick={onClose} type="button">
-            Cancel
-          </Button>
-          <Button type="submit" form="user-form" loading={saving}>
-            {editing ? "Save changes" : "Create user"}
-          </Button>
-        </>
-      }
-    >
-      <form id="user-form" onSubmit={submit} noValidate className="flex flex-col gap-4">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Input
-            label="First name"
-            id="u-first"
-            value={form.first_name}
-            onChange={(e) => set("first_name")(e.target.value)}
-            required
-          />
-          <Input
-            label="Last name"
-            id="u-last"
-            value={form.last_name}
-            onChange={(e) => set("last_name")(e.target.value)}
-          />
-        </div>
-
-        <Input
-          label="Email address"
-          id="u-email"
-          type="email"
-          value={form.email}
-          onChange={(e) => set("email")(e.target.value)}
-          required
-        />
-
-        <Input
-          label={editing ? "New password (leave blank to keep)" : "Password"}
-          id="u-password"
-          type="password"
-          value={form.password}
-          onChange={(e) => set("password")(e.target.value)}
-          placeholder={editing ? "Unchanged" : "Min 8 chars, one uppercase, one number"}
-        />
-        {!editing && (
-          <p className="-mt-2 text-[11px] text-gray-400 dark:text-gray-500">
-            Leave blank for a Google-only staff account — it will have no password and must sign in
-            with Google.
-          </p>
-        )}
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Select
-            label="Account type"
-            id="u-type"
-            options={ACCOUNT_TYPE_OPTIONS}
-            value={form.account_type}
-            onChange={(e) => set("account_type")(e.target.value)}
-          />
-          <Select
-            label="Status"
-            id="u-status"
-            options={STATUS_OPTIONS}
-            value={form.status}
-            onChange={(e) => set("status")(e.target.value)}
-            disabled={isSelf}
-          />
-        </div>
-
-        <Select
-          label="Role"
-          id="u-role"
-          placeholder="No role"
-          options={roles.map((r) => ({ value: String(r.id), label: r.display_name }))}
-          value={form.role_id ? String(form.role_id) : ""}
-          onChange={(e) => set("role_id")(Number(e.target.value))}
-          disabled={isSelf}
-        />
-
-        {isSelf && (
-          <p className="-mt-2 text-[11px] text-ink dark:text-tone-warning">
-            Status and role are locked on your own account — you cannot change your own access.
-          </p>
-        )}
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Input
-            label="Designation"
-            id="u-designation"
-            value={form.designation}
-            onChange={(e) => set("designation")(e.target.value)}
-          />
-          <Input
-            label="Company"
-            id="u-company"
-            value={form.company_name}
-            onChange={(e) => set("company_name")(e.target.value)}
-            placeholder="Partner organisation"
-          />
-        </div>
-
-        {error && (
-          <p
-            role="alert"
-            className="rounded-[5px] border border-tone-danger/40 bg-tone-danger/10 px-3 py-2 text-sm text-tone-danger dark:border-tone-danger/50 dark:bg-tone-danger/15 dark:text-tone-danger"
-          >
-            {error}
-          </p>
-        )}
-      </form>
-    </Modal>
-  );
-}
-
 function DeleteUserModal({
   user,
   onClose,

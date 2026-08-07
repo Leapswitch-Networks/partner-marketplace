@@ -155,23 +155,28 @@ def build_sections(user: User) -> list[dict[str, Any]]:
             "key": "user-management",
             "collapsible": True,
             "items": [
-                # One conceptual item over two routes, which is exactly what
-                # `_item`'s docstring describes `active_prefixes` for — the code
-                # just wasn't doing it. "Add User" was a second entry pointing at
-                # `/dashboard/add-user`, which renders the same Users module with
-                # its create modal already open. The Users page carries an
-                # "Add user" button directly above the table, so the nav entry
-                # duplicated a control that is on screen the moment you arrive.
+                # One conceptual item over the module's four routes — index,
+                # create, show and edit — which is what `_item`'s
+                # `active_prefixes` is for. "Add User" used to be a second nav
+                # entry, duplicating a button that sits directly above the table
+                # the moment you arrive.
                 #
-                # The route stays: the dashboard's Add User quick action uses it,
-                # and it is a legitimate deep link. It simply keeps Users
-                # highlighted rather than owning a nav row of its own.
+                # Moved to `/dashboard/users` on 2026-08-07 with the
+                # Index/Form/Show migration (CORE_COMPLETION_PLAN.md § 2.3). The
+                # two old paths still resolve — they are 307 redirects, kept
+                # because they are in bookmarks and in the dashboard's Add User
+                # quick action — and stay listed here so a user who follows one
+                # sees Users highlighted rather than nothing.
                 _item(
                     "Users",
-                    "/dashboard/all-users",
+                    "/dashboard/users",
                     "users",
                     USER_VIEW,
-                    active_prefixes=["/dashboard/all-users", "/dashboard/add-user"],
+                    active_prefixes=[
+                        "/dashboard/users",
+                        "/dashboard/all-users",
+                        "/dashboard/add-user",
+                    ],
                 ),
                 _item("Roles & Permissions", "/dashboard/roles", "roles", ROLE_VIEW),
                 _item("Activity Log", "/dashboard/activity", "activity", ACTIVITY_VIEW),
