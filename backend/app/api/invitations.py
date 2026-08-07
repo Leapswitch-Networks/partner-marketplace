@@ -5,6 +5,8 @@ but no account yet. It returns the bare minimum needed to render the acceptance
 page and nothing about the inviter or the wider system.
 """
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
@@ -26,6 +28,7 @@ from app.schemas.rbac import (
     CreateInvitationRequest,
     InvitationPreviewResponse,
     InvitationResponse,
+    InvitationStats,
 )
 from app.services import invitation_service, mail_service
 
@@ -93,8 +96,14 @@ class InvitationCreatedResponse(InvitationResponse):
 
 @router.get("", response_model=Page[InvitationResponse])
 def list_invitations(
-    status_filter: str | None = Query(default=None, alias="status"),
-    account_type: str | None = Query(default=None),
+    # Literal, not `str`. It goes straight into a WHERE against an enum column,
+    # so an unrecognised value used to return an empty page that looked like
+    # "no invitations" rather than "you asked for a status that does not exist".
+    status_filter: Literal["pending", "accepted", "expired", "cancelled"] | None = Query(
+        default=None, alias="status"
+    ),
+    
+    account_type: Literal["staff", "partner"] | None = Query(default=None),
     search: str | None = Query(default=None, description="Matches email or note"),
     sort_by: str = Query(default="created_at"),
     sort_order: str = Query(default="desc", pattern="^(asc|desc)$"),
@@ -127,6 +136,19 @@ def list_invitations(
         per_page=per_page,
         pages=page_count(total, per_page),
     )
+
+
+@router.get("/stats", response_model=InvitationStats)
+def invitation_stats(
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_permission(INVITATION_VIEW)),
+) -> InvitationStats:
+    """Counts by status, scoped like the list.
+
+    Declared before `/{invitation_id}` would be if one existed, for the same
+    reason `/preview` is: FastAPI matches in declaration order.
+    """
+    return InvitationStats(**invitation_service.stats(db, actor))
 
 
 @router.get("/preview", response_model=InvitationPreviewResponse)

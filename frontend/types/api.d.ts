@@ -729,6 +729,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/invitations/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Invitation Stats
+         * @description Counts by status, scoped like the list.
+         *
+         *     Declared before `/{invitation_id}` would be if one existed, for the same
+         *     reason `/preview` is: FastAPI matches in declaration order.
+         */
+        get: operations["invitation_stats_api_v1_invitations_stats_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/invitations/{invitation_id}": {
         parameters: {
             query?: never;
@@ -1767,6 +1790,24 @@ export interface components {
             role: components["schemas"]["RoleSummary"] | null;
             /** Status */
             status: string;
+        };
+        /**
+         * InvitationStats
+         * @description Counts by status, for the index's summary cards.
+         *
+         *     Its own endpoint rather than derived from the page: the list is paginated, so
+         *     counting the rows on screen would report the page size. The reference gets
+         *     away with deriving them only because its list is unpaginated.
+         */
+        InvitationStats: {
+            /** Accepted */
+            accepted: number;
+            /** Cancelled */
+            cancelled: number;
+            /** Expired */
+            expired: number;
+            /** Pending */
+            pending: number;
         };
         /** LoginRequest */
         LoginRequest: {
@@ -3532,8 +3573,8 @@ export interface operations {
     list_invitations_api_v1_invitations_get: {
         parameters: {
             query?: {
-                status?: string | null;
-                account_type?: string | null;
+                status?: ("pending" | "accepted" | "expired" | "cancelled") | null;
+                account_type?: ("staff" | "partner") | null;
                 /** @description Matches email or note */
                 search?: string | null;
                 sort_by?: string;
@@ -3657,6 +3698,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["InvitationPreviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    invitation_stats_api_v1_invitations_stats_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationStats"];
                 };
             };
             /** @description Validation Error */

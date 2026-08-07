@@ -1167,6 +1167,35 @@
         "title": "InvitationResponse",
         "type": "object"
       },
+      "InvitationStats": {
+        "description": "Counts by status, for the index's summary cards.\n\nIts own endpoint rather than derived from the page: the list is paginated, so\ncounting the rows on screen would report the page size. The reference gets\naway with deriving them only because its list is unpaginated.",
+        "properties": {
+          "accepted": {
+            "title": "Accepted",
+            "type": "integer"
+          },
+          "cancelled": {
+            "title": "Cancelled",
+            "type": "integer"
+          },
+          "expired": {
+            "title": "Expired",
+            "type": "integer"
+          },
+          "pending": {
+            "title": "Pending",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "pending",
+          "accepted",
+          "expired",
+          "cancelled"
+        ],
+        "title": "InvitationStats",
+        "type": "object"
+      },
       "LoginRequest": {
         "properties": {
           "email": {
@@ -4892,6 +4921,12 @@
             "schema": {
               "anyOf": [
                 {
+                  "enum": [
+                    "pending",
+                    "accepted",
+                    "expired",
+                    "cancelled"
+                  ],
                   "type": "string"
                 },
                 {
@@ -4908,6 +4943,10 @@
             "schema": {
               "anyOf": [
                 {
+                  "enum": [
+                    "staff",
+                    "partner"
+                  ],
                   "type": "string"
                 },
                 {
@@ -5185,6 +5224,56 @@
           }
         },
         "summary": "Preview Invitation",
+        "tags": [
+          "invitations"
+        ]
+      }
+    },
+    "/api/v1/invitations/stats": {
+      "get": {
+        "description": "Counts by status, scoped like the list.\n\nDeclared before `/{invitation_id}` would be if one existed, for the same\nreason `/preview` is: FastAPI matches in declaration order.",
+        "operationId": "invitation_stats_api_v1_invitations_stats_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationStats"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Invitation Stats",
         "tags": [
           "invitations"
         ]

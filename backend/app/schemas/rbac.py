@@ -307,6 +307,20 @@ class InvitationResponse(BaseModel):
     invited_by_name: str | None = None
 
 
+class InvitationStats(BaseModel):
+    """Counts by status, for the index's summary cards.
+
+    Its own endpoint rather than derived from the page: the list is paginated, so
+    counting the rows on screen would report the page size. The reference gets
+    away with deriving them only because its list is unpaginated.
+    """
+
+    pending: int
+    accepted: int
+    expired: int
+    cancelled: int
+
+
 class CreateInvitationRequest(BaseModel):
     email: EmailStr
     role_id: int | None = None

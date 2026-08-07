@@ -16,7 +16,7 @@ manually. That is deliberate and visible rather than a silently dropped email.
 from datetime import datetime, timedelta, timezone
 
 from fastapi import HTTPException, status
-from sqlalchemy import Select, select
+from sqlalchemy import Select, case, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import settings
@@ -27,6 +27,7 @@ from app.models.user import User
 from app.models.user_invitation import UserInvitation
 from app.schemas.auth import AcceptInvitationRequest
 from app.schemas.rbac import CreateInvitationRequest
+from app.services import activity_service
 from app.services.auth_service import email_exists, normalise_email
 from app.services.rbac_service import get_role_or_404
 
@@ -112,6 +113,36 @@ def list_invitations(
         db.commit()
 
     return invitations, total
+
+
+def stats(db: Session, actor: User) -> dict[str, int]:
+    """Counts by status, scoped the same way the list is.
+
+    One grouped query, not four counts. Scoped identically to `list_invitations`
+    — a non-admin's cards must agree with their table, or the numbers look like a
+    bug in whichever they read second.
+
+    Expiry is reflected lazily on read (there is no scheduler), so a row whose
+    `expires_at` has passed but whose stored status is still `pending` would be
+    counted as pending here. The CASE below classifies on the same rule the model
+    uses, so the cards and the rows agree.
+    """
+    now = datetime.now(timezone.utc)
+    expired_case = case(
+        (UserInvitation.status == "accepted", "accepted"),
+        (UserInvitation.status == "cancelled", "cancelled"),
+        (UserInvitation.expires_at <= now, "expired"),
+        else_="pending",
+    ).label("bucket")
+
+    stmt = select(expired_case, func.count()).group_by(expired_case)
+    if not actor.has_admin_access:
+        stmt = stmt.where(UserInvitation.invited_by == actor.id)
+
+    counts = {"pending": 0, "accepted": 0, "expired": 0, "cancelled": 0}
+    for bucket, total in db.execute(stmt).all():
+        counts[bucket] = total
+    return counts
 
 
 def get_by_token(db: Session, token: str) -> UserInvitation:
@@ -205,6 +236,26 @@ def create_invitation(
     db.add(invitation)
     db.commit()
     db.refresh(invitation)
+
+    # Audited because an invitation is a role grant with a delay on it: whoever
+    # accepts arrives holding whatever `role_id` says. AUTHORIZATION.md lists the
+    # security-relevant paths, and this one was missing from both the list and
+    # the code. The token is never recorded — it is a live credential, and an
+    # audit trail is read by more people than a mailbox is.
+    activity_service.record(
+        db,
+        description=f"Invited {invitation.email}"
+        + (f" as {role.display_name}" if role else ""),
+        event="invited",
+        subject_type="UserInvitation",
+        subject_id=invitation.id,
+        actor=actor,
+        properties={
+            "email": invitation.email,
+            "account_type": invitation.account_type,
+            "role": role.name if role else None,
+        },
+    )
     return invitation, _accept_url(invitation.token)
 
 
@@ -236,6 +287,18 @@ def resend_invitation(
     invitation.last_sent_at = now
     db.commit()
     db.refresh(invitation)
+
+    activity_service.record(
+        db,
+        description=f"Resent the invitation to {invitation.email}",
+        event="invitation_resent",
+        subject_type="UserInvitation",
+        subject_id=invitation.id,
+        actor=actor,
+        # The count is the useful part: a repeatedly resent invitation is either
+        # a delivery problem or someone being chased, and both are worth seeing.
+        properties={"email": invitation.email, "resent_count": invitation.resent_count},
+    )
     return invitation, _accept_url(invitation.token)
 
 
@@ -250,6 +313,16 @@ def cancel_invitation(db: Session, invitation_id: str, actor: User) -> None:
 
     invitation.status = "cancelled"
     db.commit()
+
+    activity_service.record(
+        db,
+        description=f"Cancelled the invitation to {invitation.email}",
+        event="invitation_cancelled",
+        subject_type="UserInvitation",
+        subject_id=invitation.id,
+        actor=actor,
+        properties={"email": invitation.email},
+    )
 
 
 def accept_with_credentials(
