@@ -60,6 +60,18 @@ and offers bulk delete and status change.
 
 Everything else is parity. **If in doubt, match LeapDesk.**
 
+#### Registered divergences
+
+Every entry here was found by a § 8.1 audit and is a deliberate, recorded
+decision — not drift.
+
+| Module | Divergence | Why |
+|---|---|---|
+| Users | **No `team_lead_id`, `level` or `department` filters** | Those columns do not exist here. They model LeapDesk's internal staff org; this product's equivalent axis is `account_type` (staff/partner), which LeapDesk has no concept of. Also the standing recommendation in `LEAPDESK_PARITY_PLAN.md` § Open decisions #6 |
+| Users | **Email has no attachments** | The reference accepts 25MB of pdf/doc/xls/image. Needs upload plumbing the endpoint does not have. **Genuine gap, not a decision** — build it when attachments are asked for |
+| Users | **Per-page offers 15 as well as 10/25/50/100** | Ours is a superset; 15 is the reference's default but not one of its options, which means its own default is unselectable. Keeping it selectable is strictly better |
+| Users | **Extra row actions: Clear lockout, Reset 2FA** | Ours has account lockout and 2FA; the reference does not. Additive, so no behaviour of theirs is lost |
+
 ### 1.2 What we deliberately do NOT copy
 
 This matters as much as what we do copy. Each of these was measured today:

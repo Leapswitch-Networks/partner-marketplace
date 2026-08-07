@@ -28,8 +28,17 @@ from app.core.security import hash_password
 from app.models.activity_log import EVENT_STATUS_CHANGED
 from app.models.role import Role
 from app.models.user import User
-from app.schemas.rbac import CreateUserRequest, UpdateUserRequest
-from app.services import activity_service, session_service, two_factor_service
+from app.schemas.rbac import (
+    CreateUserRequest,
+    SendUserEmailRequest,
+    UpdateUserRequest,
+)
+from app.services import (
+    activity_service,
+    mail_service,
+    session_service,
+    two_factor_service,
+)
 from app.services.auth_service import email_exists, normalise_email
 from app.services.rbac_service import resolve_roles
 
@@ -149,6 +158,58 @@ def list_users(
             search=search,
         ),
     )
+
+
+def send_user_email(
+    db: Session, user_id: str, data: SendUserEmailRequest, actor: User
+) -> tuple[bool, str]:
+    """Send an ad-hoc message from `actor` to a user. Returns `(sent, message)`.
+
+    Ported from the reference's `sendEmail`. Two deliberate differences:
+
+    * **No attachments.** The reference accepts up to 25MB of pdf/doc/xls/image
+      files. That needs upload plumbing this endpoint does not have, and it is
+      registered as a parity gap rather than silently dropped.
+    * **Plain text, no template.** Matching the rest of `mail_service`, whose
+      module comment explains why: every client renders it and there is no layout
+      to break.
+
+    A send failure returns `(False, reason)` rather than raising. The mail backend
+    can be down for reasons that are nothing to do with this request, and a 500
+    here would read as "the user does not exist" to anyone debugging from the UI.
+    """
+    target = get_user_or_404(db, user_id)
+
+    body = (
+        f"{data.message}\n\n"
+        f"---\n"
+        f"Sent by {actor.full_name} via {settings.APP_NAME}.\n"
+        f"Reply to this address to reach them: {actor.email}"
+    )
+
+    sent = mail_service.send(target.email, data.subject, body)
+    if sent and data.bcc_sender and actor.email != target.email:
+        # Best effort: the sender's copy failing must not report the whole send as
+        # failed, because the message the user cares about has already gone.
+        mail_service.send(
+            actor.email, f"[copy] {data.subject}", f"Sent to {target.email}:\n\n{body}"
+        )
+
+    if not sent:
+        return False, "The message could not be sent. Check the mail configuration."
+
+    # The subject line is recorded; the body is NOT. An audit trail is read by
+    # more people than the mailbox is, and the message may be about the user
+    # rather than for general circulation.
+    activity_service.record(
+        db,
+        actor=actor,
+        subject_type="User",
+        subject_id=target.id,
+        event="emailed",
+        description=f"Emailed {target.full_name}: {data.subject}",
+    )
+    return True, f"Message sent to {target.email}."
 
 
 # --- Writes -----------------------------------------------------------------

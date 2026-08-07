@@ -13,6 +13,7 @@ from app.core.permissions import (
     USER_APPROVE,
     USER_CREATE,
     USER_DELETE,
+    USER_EMAIL,
     USER_UPDATE,
     USER_VIEW,
 )
@@ -24,6 +25,8 @@ from app.schemas.rbac import (
     BulkUserIdsRequest,
     CreateUserRequest,
     PaginatedUsers,
+    SendUserEmailRequest,
+    SendUserEmailResult,
     UpdateUserRequest,
     UserDetailResponse,
     UserListItem,
@@ -65,6 +68,27 @@ def list_users(
     return PaginatedUsers(
         items=items, total=total, page=page, per_page=per_page, pages=pages
     )
+
+
+@router.post("/{user_id}/email", response_model=SendUserEmailResult)
+def send_user_email(
+    user_id: str,
+    data: SendUserEmailRequest,
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_permission(USER_EMAIL)),
+) -> SendUserEmailResult:
+    """Send an ad-hoc message to a user.
+
+    Gated on `user-email`, which no role but Admin and above holds by default —
+    the ability to send mail *as the platform* is worth separating from the
+    ability to edit an account.
+
+    Returns 200 with `sent: false` when the mail backend refuses, rather than a
+    5xx. The request was valid and the record exists; only delivery failed, and
+    conflating the two sends whoever is debugging to the wrong place.
+    """
+    sent, message = user_service.send_user_email(db, user_id, data, actor)
+    return SendUserEmailResult(sent=sent, message=message)
 
 
 @router.get("/{user_id}", response_model=UserDetailResponse)

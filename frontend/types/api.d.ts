@@ -1084,6 +1084,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/users/{user_id}/email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send User Email
+         * @description Send an ad-hoc message to a user.
+         *
+         *     Gated on `user-email`, which no role but Admin and above holds by default —
+         *     the ability to send mail *as the platform* is worth separating from the
+         *     ability to edit an account.
+         *
+         *     Returns 200 with `sent: false` when the mail backend refuses, rather than a
+         *     5xx. The request was valid and the record exists; only delivery failed, and
+         *     conflating the two sends whoever is debugging to the wrong place.
+         */
+        post: operations["send_user_email_api_v1_users__user_id__email_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/users/{user_id}/reset-two-factor": {
         parameters: {
             query?: never;
@@ -1862,6 +1890,33 @@ export interface components {
             id: number;
             /** Name */
             name: string;
+        };
+        /**
+         * SendUserEmailRequest
+         * @description An ad-hoc message from an administrator to one user.
+         *
+         *     Ported from the reference's `sendEmail`. **Attachments are not implemented**
+         *     — it accepts up to 25MB of pdf/doc/xls/image files, which needs upload
+         *     plumbing this endpoint does not have. Registered as a parity gap in
+         *     CORE_COMPLETION_PLAN.md § 1.1 rather than silently dropped.
+         */
+        SendUserEmailRequest: {
+            /**
+             * Bcc Sender
+             * @default false
+             */
+            bcc_sender: boolean;
+            /** Message */
+            message: string;
+            /** Subject */
+            subject: string;
+        };
+        /** SendUserEmailResult */
+        SendUserEmailResult: {
+            /** Message */
+            message: string;
+            /** Sent */
+            sent: boolean;
         };
         /**
          * SessionResponse
@@ -4246,6 +4301,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    send_user_email_api_v1_users__user_id__email_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SendUserEmailRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SendUserEmailResult"];
                 };
             };
             /** @description Validation Error */

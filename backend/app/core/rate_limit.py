@@ -143,6 +143,28 @@ class SlidingWindowCounter:
             self._checks_since_sweep = 0
 
 
+#: Sensitive endpoints whose path carries a record id, so they cannot appear in
+#: `SENSITIVE_PATHS` above — an exact set cannot match `/users/{id}/email`.
+#:
+#: Kept as explicit (prefix, suffix) pairs rather than a general regex so the
+#: same property holds: a new endpoint does not silently inherit this tier, it
+#: has to be added here on purpose.
+SENSITIVE_PATH_SHAPES: tuple[tuple[str, str], ...] = (
+    # POST /users/{id}/email — sends mail to an address we hold, from the
+    # platform's own sender. Unthrottled, one admin account is a spam relay.
+    # The reference implementation throttles the same route at 5/min
+    # (`routes/web.php`: `->middleware('throttle:5,1')`).
+    (f"{settings.API_PREFIX}/users/", "/email"),
+)
+
+
+def _is_sensitive_shape(path: str) -> bool:
+    return any(
+        path.startswith(prefix) and path.endswith(suffix)
+        for prefix, suffix in SENSITIVE_PATH_SHAPES
+    )
+
+
 #: How many checks pass between memory sweeps. Sweeping on every request would
 #: walk the whole key set each time; 1000 keeps it amortised to nothing.
 _SWEEP_EVERY = 1000
@@ -154,7 +176,7 @@ def _tier_for(path: str) -> tuple[str, int, int] | None:
     """Return ``(tier, limit, window)`` for a path, or ``None`` if exempt."""
     if path.startswith(EXEMPT_PREFIXES):
         return None
-    if path in SENSITIVE_PATHS:
+    if path in SENSITIVE_PATHS or _is_sensitive_shape(path):
         return (
             "sensitive",
             settings.RATE_LIMIT_SENSITIVE_MAX_REQUESTS,

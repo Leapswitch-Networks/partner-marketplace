@@ -6,6 +6,7 @@ import Badge from "@/components/common/Badge";
 import Button from "@/components/common/Button";
 import { type Column } from "@/components/common/DataTable";
 import ResourceIndex from "@/components/common/ResourceIndex";
+import SendEmailModal from "@/components/admin/SendEmailModal";
 import Modal from "@/components/common/Modal";
 import RowActions from "@/components/common/RowActions";
 import Toast, { useToast } from "@/components/common/Toast";
@@ -47,7 +48,7 @@ const ACCOUNT_TYPE_OPTIONS = [
 ];
 
 /** Only `delete` remains — create and edit are pages now. */
-type ModalMode = "delete" | null;
+type ModalMode = "delete" | "email" | null;
 
 export default function UsersModule({ initialModal }: { initialModal?: ModalMode }) {
   const router = useRouter();
@@ -217,6 +218,16 @@ export default function UsersModule({ initialModal }: { initialModal?: ModalMode
                   // if you can see the row you can open it.
                   label: "View",
                   onSelect: () => router.push(`/dashboard/users/${row.id}`),
+                },
+                {
+                  label: "Send email",
+                  // `user-email` is separate from `user-update`: sending mail as
+                  // the platform is a different capability from editing a record.
+                  visible: can("user-email"),
+                  onSelect: () => {
+                    setTarget(row);
+                    setModal("email");
+                  },
                 },
                 {
                   label: "Edit",
@@ -473,6 +484,21 @@ export default function UsersModule({ initialModal }: { initialModal?: ModalMode
     >
 
 
+
+      {modal === "email" && target && (
+        <SendEmailModal
+          user={target}
+          onClose={() => {
+            setModal(null);
+            setTarget(null);
+          }}
+          onSent={(message) => {
+            setModal(null);
+            setTarget(null);
+            show(message);
+          }}
+        />
+      )}
 
       {modal === "delete" && target && (
         <DeleteUserModal

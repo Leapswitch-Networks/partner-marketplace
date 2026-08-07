@@ -198,6 +198,26 @@ class BulkStatusRequest(BulkUserIdsRequest):
     status: UserStatus
 
 
+class SendUserEmailRequest(BaseModel):
+    """An ad-hoc message from an administrator to one user.
+
+    Ported from the reference's `sendEmail`. **Attachments are not implemented**
+    — it accepts up to 25MB of pdf/doc/xls/image files, which needs upload
+    plumbing this endpoint does not have. Registered as a parity gap in
+    CORE_COMPLETION_PLAN.md § 1.1 rather than silently dropped.
+    """
+
+    subject: str = Field(min_length=1, max_length=255)
+    message: str = Field(min_length=1, max_length=10000)
+    #: Copy the sender, so they hold a record of what was sent.
+    bcc_sender: bool = False
+
+
+class SendUserEmailResult(BaseModel):
+    sent: bool
+    message: str
+
+
 class BulkActionResult(BaseModel):
     """Bulk operations report what they skipped and why, rather than failing
     silently — protected targets are filtered out, not rejected wholesale.

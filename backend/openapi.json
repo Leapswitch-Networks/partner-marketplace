@@ -1703,6 +1703,52 @@
         "title": "RoleSummary",
         "type": "object"
       },
+      "SendUserEmailRequest": {
+        "description": "An ad-hoc message from an administrator to one user.\n\nPorted from the reference's `sendEmail`. **Attachments are not implemented**\n— it accepts up to 25MB of pdf/doc/xls/image files, which needs upload\nplumbing this endpoint does not have. Registered as a parity gap in\nCORE_COMPLETION_PLAN.md § 1.1 rather than silently dropped.",
+        "properties": {
+          "bcc_sender": {
+            "default": false,
+            "title": "Bcc Sender",
+            "type": "boolean"
+          },
+          "message": {
+            "maxLength": 10000,
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          },
+          "subject": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject",
+          "message"
+        ],
+        "title": "SendUserEmailRequest",
+        "type": "object"
+      },
+      "SendUserEmailResult": {
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "sent": {
+            "title": "Sent",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "sent",
+          "message"
+        ],
+        "title": "SendUserEmailResult",
+        "type": "object"
+      },
       "SessionResponse": {
         "description": "One live sign-in, for the caller's own \"where am I signed in\" list.\n\n`user_agent` is untrusted, self-reported text of unbounded length — truncated\non write and rendered as text, never interpreted. It is shown so a person can\nrecognise their own devices, and must never drive a decision.",
         "properties": {
@@ -6338,6 +6384,75 @@
           }
         },
         "summary": "Approve User",
+        "tags": [
+          "users"
+        ]
+      }
+    },
+    "/api/v1/users/{user_id}/email": {
+      "post": {
+        "description": "Send an ad-hoc message to a user.\n\nGated on `user-email`, which no role but Admin and above holds by default —\nthe ability to send mail *as the platform* is worth separating from the\nability to edit an account.\n\nReturns 200 with `sent: false` when the mail backend refuses, rather than a\n5xx. The request was valid and the record exists; only delivery failed, and\nconflating the two sends whoever is debugging to the wrong place.",
+        "operationId": "send_user_email_api_v1_users__user_id__email_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "user_id",
+            "required": true,
+            "schema": {
+              "title": "User Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SendUserEmailRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendUserEmailResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Send User Email",
         "tags": [
           "users"
         ]

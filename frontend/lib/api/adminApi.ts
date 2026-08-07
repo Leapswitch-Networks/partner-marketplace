@@ -55,6 +55,17 @@ export interface BulkActionResult {
   message: string;
 }
 
+export interface SendUserEmailPayload {
+  subject: string;
+  message: string;
+  bcc_sender?: boolean;
+}
+
+export interface SendUserEmailResult {
+  sent: boolean;
+  message: string;
+}
+
 export const adminApi = {
   listUsers: (params: ListUsersParams = {}) =>
     axiosInstance.get<Paginated<ManagedUser>>("/users", { params }),
@@ -90,6 +101,10 @@ export const adminApi = {
    * than lost, clearing only the secret would strip the second factor and leave
    * the attacker signed in.
    */
+  /** Ad-hoc message to a user. 200 with `sent: false` means delivery failed. */
+  sendEmail: (id: string, data: SendUserEmailPayload) =>
+    axiosInstance.post<SendUserEmailResult>(`/users/${id}/email`, data),
+
   resetTwoFactor: (id: string) =>
     axiosInstance.post<ManagedUser>(`/users/${id}/reset-two-factor`),
 
