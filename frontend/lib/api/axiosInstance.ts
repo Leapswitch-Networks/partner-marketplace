@@ -1,5 +1,5 @@
 import axios from "axios";
-import { API_BASE_URL } from "@/lib/utils/constants";
+import { API_BASE_URL, API_PREFIX } from "@/lib/utils/constants";
 
 /**
  * Default request timeout. Deliberately short: an unreachable backend should
@@ -10,9 +10,9 @@ const DEFAULT_TIMEOUT_MS = 5000;
 /**
  * For endpoints that are legitimately slow, passed per request:
  *
- *   axiosInstance.get("/api/activity/export", { timeout: LONG_TIMEOUT_MS })
+ *   axiosInstance.get("/activity/export", { timeout: LONG_TIMEOUT_MS })
  *
- * `GET /api/activity/export` is the case this exists for. It is the one read with
+ * `GET {API_PREFIX}/activity/export` is the case this exists for. It is the one read with
  * no upper bound — "everything, for the audit" is the point of it — and it is
  * streamed rather than assembled in memory precisely because it can be large. At
  * the 5s default the client kills a working export of any real size, and the
@@ -21,8 +21,11 @@ const DEFAULT_TIMEOUT_MS = 5000;
  */
 export const LONG_TIMEOUT_MS = 120000;
 
+// The version lives in the baseURL, so every path in `lib/api/*` is written relative
+// to it — `"/auth/login"`, not `"/api/v1/auth/login"`. A v2 is then one constant rather
+// than 57 string edits (PM-40).
 const axiosInstance = axios.create({
-  baseURL: API_BASE_URL,
+  baseURL: `${API_BASE_URL}${API_PREFIX}`,
   timeout: DEFAULT_TIMEOUT_MS,
   withCredentials: true, // send httpOnly cookies on every request
 });
@@ -31,7 +34,7 @@ const axiosInstance = axios.create({
  * The in-flight refresh, shared by every request that gets a 401 while it runs.
  *
  * Without this, a screen firing four requests in parallel that all 401 sends four
- * `POST /api/auth/refresh` calls. That currently *works*, but only by accident:
+ * `POST /auth/refresh` calls. That currently *works*, but only by accident:
  * the backend rotates refresh tokens with reuse detection, so the first call
  * rotates and the other three present a superseded token — and are honoured only
  * because they land inside `REFRESH_ROTATION_GRACE_SECONDS` (30s).
@@ -53,7 +56,7 @@ function refreshSession(): Promise<void> {
   // Bare `axios`, not `axiosInstance` — going through the instance would run this
   // interceptor on the refresh call itself and recurse.
   refreshInFlight = axios
-    .post(`${API_BASE_URL}/api/auth/refresh`, {}, { withCredentials: true, timeout: 3000 })
+    .post(`${API_BASE_URL}${API_PREFIX}/auth/refresh`, {}, { withCredentials: true, timeout: 3000 })
     .then(() => undefined)
     .finally(() => {
       // Cleared whether it resolved or rejected, so the next 401 after a failed
@@ -72,8 +75,13 @@ axiosInstance.interceptors.response.use(
 
     // Don't intercept refresh or logout calls themselves. Logout must never be
     // retried behind a refresh — it has to succeed even with dead credentials.
+    //
+    // ⚠️ Matched WITHOUT the `/api/v1` prefix. `original.url` is the path as the caller
+    // wrote it, and callers write it relative to `baseURL` — so a check for
+    // `/api/auth/refresh` here would never match, the interceptor would try to refresh
+    // the refresh call, and a dead session would loop instead of failing.
     const url: string = original?.url ?? "";
-    if (url.includes("/api/auth/refresh") || url.includes("/api/auth/logout")) {
+    if (url.includes("/auth/refresh") || url.includes("/auth/logout")) {
       return Promise.reject(error);
     }
 

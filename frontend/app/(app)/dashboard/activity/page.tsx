@@ -1,5 +1,5 @@
 import { Metadata } from "next";
-import DashboardClient from "../DashboardClient";
+import ActivityModule from "@/components/admin/ActivityModule";
 import { pageTitle } from "@/lib/utils/constants";
 
 export const metadata: Metadata = {
@@ -8,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function ActivityPage() {
-  return <DashboardClient />;
+  return <ActivityModule />;
 }

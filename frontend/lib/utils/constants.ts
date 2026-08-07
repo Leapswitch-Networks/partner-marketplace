@@ -27,9 +27,26 @@ export const API_BASE_URL =
 export const SERVER_API_BASE_URL = process.env.INTERNAL_API_URL ?? API_BASE_URL;
 
 /**
+ * The API's contract version. Must match the backend's `settings.API_PREFIX`.
+ *
+ * Carried in `axiosInstance`'s `baseURL`, so the 60-odd paths in `lib/api/*` are
+ * written **relative to the version** — `"/auth/login"`, not `"/api/v1/auth/login"`.
+ * One constant to change for a v2 instead of 60 string edits, which is the whole point
+ * of PM-40.
+ *
+ * ⚠️ **This does not apply to the Next app's own route handlers.** `/api/revalidate-branding`
+ * is served by this application, not by the backend, and is called with a bare `fetch`
+ * on a relative path. Prefixing it would break it.
+ */
+export const API_PREFIX = "/api/v1";
+
+/** Absolute versioned API root, for server-side `fetch` where axios is not involved. */
+export const SERVER_API_URL = `${SERVER_API_BASE_URL}${API_PREFIX}`;
+
+/**
  * The project's name, read at BUILD time.
  *
- * This is deliberately not fetched from `/api/settings/branding`, and the reason is
+ * This is deliberately not fetched from the branding endpoint, and the reason is
  * measured rather than stylistic. Page titles come from `export const metadata`,
  * which is a static export and cannot read an API. Converting the 16 metadata
  * blocks to `generateMetadata()` so they could would turn **15 prerendered routes
@@ -69,3 +86,18 @@ export const APP_CHROME_SUBTITLE =
 
 /** Shown where space is tight — the collapsed sidebar. */
 export const APP_SHORT_NAME = process.env.NEXT_PUBLIC_APP_SHORT_NAME ?? "Partner MP";
+
+/**
+ * Bundled default logo, served from `public/`. Build-time, like the other identity
+ * constants.
+ *
+ * Gives a three-step fallback in `BrandMark`: an uploaded logo, else this file, else
+ * the monogram. The monogram stays the last resort rather than the only one, so a
+ * fresh install looks like a product instead of a placeholder — but a project reusing
+ * this core can set `NEXT_PUBLIC_APP_LOGO=""` and get the letter back.
+ *
+ * `public/logo.svg` is the master artwork from `logo/logo-master.svg`. It is served as
+ * a static file by Next, NOT through the API's asset route, so it needs none of the
+ * SVG upload validation — nobody can replace it without a deploy.
+ */
+export const APP_LOGO = process.env.NEXT_PUBLIC_APP_LOGO ?? "/logo.svg";

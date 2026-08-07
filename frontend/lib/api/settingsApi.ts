@@ -51,14 +51,14 @@ export type ThemePresetsResponse = {
 };
 
 const settingsApi = {
-  getBranding: () => axiosInstance.get<Branding>("/api/settings/branding"),
+  getBranding: () => axiosInstance.get<Branding>("/settings/branding"),
 
   updateBranding: (data: UpdateBrandingPayload) =>
-    axiosInstance.put<Branding>("/api/settings/branding", data),
+    axiosInstance.put<Branding>("/settings/branding", data),
 
   /** The theme catalog. Public, and it needs no database. */
   getThemes: () =>
-    axiosInstance.get<ThemePresetsResponse>("/api/settings/branding/themes"),
+    axiosInstance.get<ThemePresetsResponse>("/settings/branding/themes"),
 
   /**
    * Replace a brand image. Returns the whole updated branding, so a caller never has
@@ -69,7 +69,7 @@ const settingsApi = {
    * cannot parse the body.
    */
   uploadAsset: (asset: "logo" | "favicon", form: FormData) =>
-    axiosInstance.post<Branding>(`/api/settings/branding/${asset}`, form, {
+    axiosInstance.post<Branding>(`/settings/branding/${asset}`, form, {
       // The 5s default is a fail-fast for an unreachable backend, not a budget for
       // sending half a megabyte. On a slow uplink it would abort a working upload and
       // report it as a server problem.
@@ -77,7 +77,7 @@ const settingsApi = {
     }),
 
   deleteAsset: (asset: "logo" | "favicon") =>
-    axiosInstance.delete<Branding>(`/api/settings/branding/${asset}`),
+    axiosInstance.delete<Branding>(`/settings/branding/${asset}`),
 };
 
 export default settingsApi;

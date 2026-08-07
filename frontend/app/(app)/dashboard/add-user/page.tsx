@@ -1,5 +1,5 @@
 import { Metadata } from "next";
-import DashboardClient from "../DashboardClient";
+import UsersModule from "@/components/admin/UsersModule";
 import { APP_NAME, pageTitle } from "@/lib/utils/constants";
 
 export const metadata: Metadata = {
@@ -8,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function AddUserPage() {
-  return <DashboardClient />;
+  return <UsersModule initialModal="create" />;
 }

@@ -6,7 +6,7 @@ import Link from "next/link";
 import useAppSelector from "@/lib/hooks/useAppSelector";
 import useAppDispatch from "@/lib/hooks/useAppDispatch";
 import { logoutUser } from "@/lib/store/authSlice";
-import { getUserDisplayName } from "@/lib/utils/user";
+import { getRoleLabel, getUserDisplayName } from "@/lib/utils/user";
 import { useBranding } from "@/components/common/BrandingProvider";
 import BrandMark from "@/components/common/BrandMark";
 
@@ -43,8 +43,14 @@ export default function Navbar() {
           </span>
           <div className="hidden sm:block">
             <p className="text-sm font-bold text-gray-900 leading-tight dark:text-gray-100">{branding.app_name}</p>
+            {/* `chrome_subtitle`, matching the sidebar's brand block. This was a
+                hardcoded "Super Admin" — a ROLE label rendered to every user
+                regardless of their actual role, so a Partner saw it too. It sits in
+                the brand block beside the monogram and name, which is the branding
+                subtitle's place; the role, if it belongs anywhere, belongs on the
+                account menu. */}
             <p className="text-[10px] font-medium text-brand dark:text-brand-on-dark uppercase tracking-widest leading-tight">
-              Super Admin
+              {branding.chrome_subtitle}
             </p>
           </div>
         </Link>
@@ -56,7 +62,7 @@ export default function Navbar() {
               {initials}
             </span>
             <div className="text-left">
-              <p className="text-xs font-semibold text-gray-900 leading-tight dark:text-gray-100">{displayName || "Super Admin"}</p>
+              <p className="text-xs font-semibold text-gray-900 leading-tight dark:text-gray-100">{displayName}</p>
               <p className="text-[10px] text-gray-400 leading-tight dark:text-gray-500">{user?.email ?? ""}</p>
             </div>
           </div>
@@ -88,7 +94,15 @@ export default function Navbar() {
       {/* Mobile dropdown */}
       {menuOpen && (
         <div className="border-t border-surface-border bg-white px-4 py-3 md:hidden dark:border-night-border dark:bg-night-card">
-          <p className="mb-1 text-xs font-semibold text-gray-400 uppercase tracking-wide dark:text-gray-500">Super Admin</p>
+          {/* The user's real roles. Was a hardcoded "Super Admin", shown to every
+              user — a Partner opening this menu was told they were a super admin.
+              Rendered only when there is something to say, rather than as an empty
+              heading. */}
+          {getRoleLabel(user) && (
+            <p className="mb-1 text-xs font-semibold text-gray-400 uppercase tracking-wide dark:text-gray-500">
+              {getRoleLabel(user)}
+            </p>
+          )}
           <p className="mb-3 text-sm text-gray-700 font-medium dark:text-gray-200">{displayName}</p>
           <p className="mb-3 text-xs text-gray-500 dark:text-gray-400">{user?.email}</p>
           <button

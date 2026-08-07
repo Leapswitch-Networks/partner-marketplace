@@ -4,7 +4,7 @@ import type { AccountType, ManagedUser, Paginated, UserStatus } from "@/types";
 /**
  * User administration.
  *
- * Repointed from the removed `/api/admin/*` routes to `/api/users`, which are
+ * Repointed from the removed `/admin/*` routes to `/users`, which are
  * permission-gated (`user-view` / `user-create` / `user-update` / `user-delete`
  * / `user-approve`) rather than merely authenticated.
  */
@@ -51,29 +51,29 @@ export interface BulkActionResult {
 
 export const adminApi = {
   listUsers: (params: ListUsersParams = {}) =>
-    axiosInstance.get<Paginated<ManagedUser>>("/api/users", { params }),
+    axiosInstance.get<Paginated<ManagedUser>>("/users", { params }),
 
-  getUser: (id: string) => axiosInstance.get<ManagedUser>(`/api/users/${id}`),
+  getUser: (id: string) => axiosInstance.get<ManagedUser>(`/users/${id}`),
 
   createUser: (data: CreateUserPayload) =>
-    axiosInstance.post<ManagedUser>("/api/users", data),
+    axiosInstance.post<ManagedUser>("/users", data),
 
   updateUser: (id: string, data: UpdateUserPayload) =>
-    axiosInstance.patch<ManagedUser>(`/api/users/${id}`, data),
+    axiosInstance.patch<ManagedUser>(`/users/${id}`, data),
 
   deleteUser: (id: string) =>
-    axiosInstance.delete<{ message: string }>(`/api/users/${id}`),
+    axiosInstance.delete<{ message: string }>(`/users/${id}`),
 
   /** Activate a pending account — the gate Google SSO does not open. */
   approveUser: (id: string) =>
-    axiosInstance.post<ManagedUser>(`/api/users/${id}/approve`),
+    axiosInstance.post<ManagedUser>(`/users/${id}/approve`),
 
   toggleStatus: (id: string) =>
-    axiosInstance.post<ManagedUser>(`/api/users/${id}/toggle-status`),
+    axiosInstance.post<ManagedUser>(`/users/${id}/toggle-status`),
 
   /** Clear a failed-login lockout without waiting for it to lapse. */
   unlockUser: (id: string) =>
-    axiosInstance.post<ManagedUser>(`/api/users/${id}/unlock`),
+    axiosInstance.post<ManagedUser>(`/users/${id}/unlock`),
 
   /**
    * Clear a user's 2FA enrolment so they can sign in and set it up again.
@@ -84,11 +84,11 @@ export const adminApi = {
    * the attacker signed in.
    */
   resetTwoFactor: (id: string) =>
-    axiosInstance.post<ManagedUser>(`/api/users/${id}/reset-two-factor`),
+    axiosInstance.post<ManagedUser>(`/users/${id}/reset-two-factor`),
 
   bulkDelete: (user_ids: string[]) =>
-    axiosInstance.post<BulkActionResult>("/api/users/bulk-delete", { user_ids }),
+    axiosInstance.post<BulkActionResult>("/users/bulk-delete", { user_ids }),
 
   bulkStatus: (user_ids: string[], status: UserStatus) =>
-    axiosInstance.post<BulkActionResult>("/api/users/bulk-status", { user_ids, status }),
+    axiosInstance.post<BulkActionResult>("/users/bulk-status", { user_ids, status }),
 };

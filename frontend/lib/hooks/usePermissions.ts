@@ -6,7 +6,7 @@ import useAppSelector from "./useAppSelector";
 /**
  * Permission checks for the UI.
  *
- * The permission list arrives already resolved from `GET /api/auth/me`, with the
+ * The permission list arrives already resolved from `GET {API_PREFIX}/auth/me`, with the
  * super-admin bypass expanded server-side into the full catalog. So there is no
  * special case here — membership is the whole rule.
  *

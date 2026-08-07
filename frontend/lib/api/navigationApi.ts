@@ -10,5 +10,5 @@ export const navigationApi = {
    * rather than refusing.
    */
   get: () =>
-    axiosInstance.get<{ sections: NavigationSection[] }>("/api/navigation"),
+    axiosInstance.get<{ sections: NavigationSection[] }>("/navigation"),
 };

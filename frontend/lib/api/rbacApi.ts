@@ -18,18 +18,18 @@ export interface UpdateRolePayload {
 }
 
 export const roleApi = {
-  list: () => axiosInstance.get<Role[]>("/api/roles"),
-  get: (id: number) => axiosInstance.get<Role>(`/api/roles/${id}`),
-  create: (data: CreateRolePayload) => axiosInstance.post<Role>("/api/roles", data),
+  list: () => axiosInstance.get<Role[]>("/roles"),
+  get: (id: number) => axiosInstance.get<Role>(`/roles/${id}`),
+  create: (data: CreateRolePayload) => axiosInstance.post<Role>("/roles", data),
   update: (id: number, data: UpdateRolePayload) =>
-    axiosInstance.patch<Role>(`/api/roles/${id}`, data),
+    axiosInstance.patch<Role>(`/roles/${id}`, data),
   remove: (id: number) =>
-    axiosInstance.delete<{ message: string }>(`/api/roles/${id}`),
+    axiosInstance.delete<{ message: string }>(`/roles/${id}`),
 };
 
 export const permissionApi = {
   /** Grouped and ordered, ready to render as checkbox sections. */
-  list: () => axiosInstance.get<PermissionGroup[]>("/api/permissions"),
+  list: () => axiosInstance.get<PermissionGroup[]>("/permissions"),
 };
 
 export interface CreateInvitationPayload {
@@ -77,15 +77,15 @@ export const activityApi = {
       page: number;
       per_page: number;
       pages: number;
-    }>("/api/activity", { params }),
+    }>("/activity", { params }),
 
   /** Event names present in the data, for the filter dropdown. */
-  events: () => axiosInstance.get<string[]>("/api/activity/events"),
+  events: () => axiosInstance.get<string[]>("/activity/events"),
 };
 
 export const invitationApi = {
   list: (status?: Invitation["status"]) =>
-    axiosInstance.get<Invitation[]>("/api/invitations", {
+    axiosInstance.get<Invitation[]>("/invitations", {
       params: status ? { status } : undefined,
     }),
 
@@ -100,19 +100,19 @@ export const invitationApi = {
       account_type: AccountType;
       expires_at: string;
       requires_google: boolean;
-    }>("/api/invitations/preview", { params: { token } }),
+    }>("/invitations/preview", { params: { token } }),
 
   /** Response carries `accept_url` — no mail transport is configured, so send it manually. */
   create: (data: CreateInvitationPayload) =>
-    axiosInstance.post<Invitation>("/api/invitations", data),
+    axiosInstance.post<Invitation>("/invitations", data),
 
   createMany: (invitations: CreateInvitationPayload[]) =>
-    axiosInstance.post<Invitation[]>("/api/invitations/bulk", { invitations }),
+    axiosInstance.post<Invitation[]>("/invitations/bulk", { invitations }),
 
   /** Rotates the token, so the previous link stops working. */
   resend: (id: string) =>
-    axiosInstance.post<Invitation>(`/api/invitations/${id}/resend`),
+    axiosInstance.post<Invitation>(`/invitations/${id}/resend`),
 
   cancel: (id: string) =>
-    axiosInstance.delete<{ message: string }>(`/api/invitations/${id}`),
+    axiosInstance.delete<{ message: string }>(`/invitations/${id}`),
 };

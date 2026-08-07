@@ -1,5 +1,5 @@
 import { Metadata } from "next";
-import DashboardClient from "../DashboardClient";
+import RolesModule from "@/components/admin/RolesModule";
 import { pageTitle } from "@/lib/utils/constants";
 
 export const metadata: Metadata = {
@@ -8,5 +8,5 @@ export const metadata: Metadata = {
 };
 
 export default function RolesPage() {
-  return <DashboardClient />;
+  return <RolesModule />;
 }

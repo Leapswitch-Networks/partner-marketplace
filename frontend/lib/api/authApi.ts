@@ -70,7 +70,7 @@ export const authApi = {
     company_name?: string;
     personal_mobile_number?: string;
     personal_email?: string;
-  }) => axiosInstance.post<{ message: string }>("/api/auth/register", data),
+  }) => axiosInstance.post<{ message: string }>("/auth/register", data),
 
   /**
    * Sign in. **Two possible shapes**, and the caller must branch on
@@ -80,58 +80,60 @@ export const authApi = {
    * created and no cookie is set — the response carries a short-lived
    * `challenge_token` to exchange at `twoFactorChallenge`.
    */
-  login: (data: { email: string; password: string }) =>
-    axiosInstance.post<LoginResult>("/api/auth/login", data),
+  login: (data: { email: string; password: string; remember_me?: boolean }) =>
+    axiosInstance.post<LoginResult>("/auth/login", data),
 
   /** Exchange a challenge token plus a TOTP **or** a recovery code for a session. */
   twoFactorChallenge: (data: {
     challenge_token: string;
     code?: string;
     recovery_code?: string;
+    /** Carried from the sign-in form — the session is created here, not at /login. */
+    remember_me?: boolean;
   }) =>
     axiosInstance.post<{ message: string; user: CurrentUser }>(
-      "/api/auth/two-factor-challenge",
+      "/auth/two-factor-challenge",
       data
     ),
 
   /** Re-prove the password. Required before enabling or disabling 2FA. */
   confirmPassword: (data: { password: string }) =>
-    axiosInstance.post<{ message: string }>("/api/auth/me/confirm-password", data),
+    axiosInstance.post<{ message: string }>("/auth/me/confirm-password", data),
 
   /** The caller's own live sessions, newest activity first. */
-  listSessions: () => axiosInstance.get<SessionInfo[]>("/api/auth/me/sessions"),
+  listSessions: () => axiosInstance.get<SessionInfo[]>("/auth/me/sessions"),
 
   /** End one of your own sessions. 404 if the id is not yours. */
   revokeSession: (id: string) =>
-    axiosInstance.delete<{ message: string }>(`/api/auth/me/sessions/${id}`),
+    axiosInstance.delete<{ message: string }>(`/auth/me/sessions/${id}`),
 
   /** End every session except the current one. */
   revokeOtherSessions: () =>
-    axiosInstance.post<{ message: string }>("/api/auth/me/sessions/revoke-others"),
+    axiosInstance.post<{ message: string }>("/auth/me/sessions/revoke-others"),
 
   twoFactorStatus: () =>
-    axiosInstance.get<TwoFactorStatus>("/api/auth/me/two-factor"),
+    axiosInstance.get<TwoFactorStatus>("/auth/me/two-factor"),
 
   /** Begin enrolment. Returns the secret and codes **once** — they are not retrievable. */
   enableTwoFactor: () =>
-    axiosInstance.post<TwoFactorEnrolment>("/api/auth/me/two-factor"),
+    axiosInstance.post<TwoFactorEnrolment>("/auth/me/two-factor"),
 
   /** Prove a code works. This is what actually turns 2FA on. */
   confirmTwoFactor: (data: { code: string }) =>
-    axiosInstance.post<{ message: string }>("/api/auth/me/two-factor/confirm", data),
+    axiosInstance.post<{ message: string }>("/auth/me/two-factor/confirm", data),
 
   disableTwoFactor: () =>
-    axiosInstance.delete<{ message: string }>("/api/auth/me/two-factor"),
+    axiosInstance.delete<{ message: string }>("/auth/me/two-factor"),
 
   regenerateRecoveryCodes: () =>
     axiosInstance.post<{ recovery_codes: string[]; message: string }>(
-      "/api/auth/me/two-factor/recovery-codes"
+      "/auth/me/two-factor/recovery-codes"
     ),
 
-  logout: () => axiosInstance.post<{ message: string }>("/api/auth/logout"),
+  logout: () => axiosInstance.post<{ message: string }>("/auth/logout"),
 
   /** Identity plus resolved roles and permissions. */
-  me: () => axiosInstance.get<CurrentUser>("/api/auth/me"),
+  me: () => axiosInstance.get<CurrentUser>("/auth/me"),
 
   updateProfile: (data: {
     first_name?: string;
@@ -142,7 +144,7 @@ export const authApi = {
     personal_email?: string | null;
     company_name?: string | null;
     timezone_preference?: string;
-  }) => axiosInstance.patch<CurrentUser>("/api/auth/me", data),
+  }) => axiosInstance.patch<CurrentUser>("/auth/me", data),
 
   /**
    * `current_password` is omitted only when the user has verified an OTP —
@@ -153,7 +155,7 @@ export const authApi = {
     current_password?: string;
     password: string;
     confirm_password: string;
-  }) => axiosInstance.post<{ message: string }>("/api/auth/me/change-password", data),
+  }) => axiosInstance.post<{ message: string }>("/auth/me/change-password", data),
 
   /**
    * Email a 6-digit code to the signed-in user's own address so they can change
@@ -161,21 +163,21 @@ export const authApi = {
    * cooldown is in force.
    */
   sendPasswordOtp: () =>
-    axiosInstance.post<{ message: string }>("/api/auth/me/password-otp/send"),
+    axiosInstance.post<{ message: string }>("/auth/me/password-otp/send"),
 
   /**
    * Verify the code. Returns the refreshed user so `password_otp_grace` is
    * picked up in the same round trip.
    */
   verifyPasswordOtp: (data: { otp: string }) =>
-    axiosInstance.post<CurrentUser>("/api/auth/me/password-otp/verify", data),
+    axiosInstance.post<CurrentUser>("/auth/me/password-otp/verify", data),
 
   forgotPassword: (data: { email: string }) =>
-    axiosInstance.post<{ message: string }>("/api/auth/forgot-password", data),
+    axiosInstance.post<{ message: string }>("/auth/forgot-password", data),
 
   /** Confirm an address from an emailed link. Idempotent — a second click is fine. */
   verifyEmail: (data: { token: string }) =>
-    axiosInstance.post<{ message: string }>("/api/auth/verify-email", data),
+    axiosInstance.post<{ message: string }>("/auth/verify-email", data),
 
   /**
    * Request a fresh verification link.
@@ -184,10 +186,10 @@ export const authApi = {
    * send failed — so the UI must not try to report which happened.
    */
   resendVerification: (data: { email: string }) =>
-    axiosInstance.post<{ message: string }>("/api/auth/resend-verification", data),
+    axiosInstance.post<{ message: string }>("/auth/resend-verification", data),
 
   resetPassword: (data: { token: string; password: string; confirm_password: string }) =>
-    axiosInstance.post<{ message: string }>("/api/auth/reset-password", data),
+    axiosInstance.post<{ message: string }>("/auth/reset-password", data),
 
   /** Complete a partner invitation. Signs you in immediately. */
   acceptInvitation: (data: {
@@ -198,7 +200,7 @@ export const authApi = {
     confirm_password: string;
   }) =>
     axiosInstance.post<{ message: string; user: CurrentUser }>(
-      "/api/auth/accept-invitation",
+      "/auth/accept-invitation",
       data
     ),
 
@@ -209,7 +211,7 @@ export const authApi = {
    * AJAX on the consent screen. Use `window.location.href = url`.
    */
   googleAuthorizeUrl: (invitation?: string) =>
-    axiosInstance.get<{ authorization_url: string }>("/api/auth/google/authorize", {
+    axiosInstance.get<{ authorization_url: string }>("/auth/google/authorize", {
       params: invitation ? { invitation } : undefined,
     }),
 };
