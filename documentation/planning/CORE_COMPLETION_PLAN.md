@@ -288,23 +288,39 @@ already. **Porting it again would be a regression.** Two genuine gaps worth taki
 - [ ] Fix the sticky header: it is `bg-brand/10`, **translucent**, with no opaque `<th>` fill, so
       rows scroll visibly through it. `UI_PATTERNS.md` mandates an opaque background
 
-### 4.2 What to build
+### 4.2 What to build — ✅ built 2026-08-07
 
-- [ ] **`ResourceIndex`** — the shell every index page repeats: page header, filter bar, table, bulk
-      bar, delete confirm. A module supplies columns, filters and handlers; it supplies nothing else.
-      **This is the piece that prevents our index pages becoming LeapDesk's 936-line ones.**
-- [ ] **`FilterBar`** — declarative filters (`text` / `select` / `dateRange`), a reset button that is
-      always visible and disabled when nothing is active, and 500ms debounce on text. LeapDesk has no
-      equivalent; this is ours to design.
-- [ ] **`ResourceForm`** — the `record?: T` create/update shell of § 2.1: dirty tracking, unsaved-changes
-      guard, server-error mapping onto fields, consistent submit/cancel footer.
-- [ ] **`ShowPage` primitives** — port the *shape* of LeapDesk's `show-page.tsx`: `ShowPageHeader`
-      (eyebrow, title, id, badges, back link, actions), `ShowPageGrid`, `ShowPageMain`,
-      `ShowPageSidebar`, `InfoCard`, `Field`, `MetaCard`, `AuditCard`. **Retint to our tokens** — its
-      `TONE_CLASSES` hardcodes emerald/rose/amber/violet, which is exactly the pattern our Viho
-      migration removed. Map onto our existing `Badge` tones instead.
-- [ ] **`useResourceQuery`** — one hook owning page / per-page / sort / filters / debounce, synced to
-      the URL so a filtered list is shareable and survives reload.
+- [x] **`useResourceQuery`** (`lib/hooks/`) — page, per-page, sort, filters, debounce, selection, and
+      query-string sync. Enforces the three coordination rules that were hand-written `useEffect`s in
+      `UsersModule` and are bugs when forgotten: a filter change resets to page 1, a filter change
+      clears the selection, and text filters debounce while dropdowns do not.
+- [x] **`FilterBar`** (`components/common/`) — declarative `text` / `select` filters, always-visible
+      Reset disabled when nothing is active. `dateRange` deferred: no module needs it until Activity
+      Log, and inventing the API before its first consumer is how it ends up wrong.
+- [x] **`ResourceIndex`** (`components/common/`) — header, filters, table, paging. **The piece that
+      keeps our index pages short.**
+- [x] **`ResourceForm`** (`components/common/`) — the `record?: T` shell, `beforeunload` guard while
+      dirty, focus-first-error, and a consistent footer.
+- [x] **`ShowPage` primitives** (`components/common/`) — `ShowPageHeader`, `ShowPageGrid`,
+      `ShowPageMain`, `ShowPageSidebar`, `InfoCard`, `MetaCard`, `Field`, `AuditCard`. Shape ported;
+      tones delegate to `Badge` rather than the reference's hardcoded emerald/rose/amber palette.
+
+**Two decisions worth keeping:**
+
+1. **`useResourceQuery` does not use `useSearchParams()`.** That hook opts a route into dynamic
+   rendering and throws at build time unless every consumer sits in a `<Suspense>` boundary, and
+   `next build` currently prerenders `/dashboard/*` as **static** — adopting it would break the build
+   or force a Suspense wrapper into eight pages. It uses `history.replaceState`, which is not a
+   navigation and adds no history entry per keystroke.
+2. **The URL is read in a mount effect, not during render**, because the server has no `window` and
+   deriving it during render would fail hydration. That needs a targeted
+   `react-hooks/set-state-in-effect` disable, justified in a comment at the site. It is the only
+   suppression in the new code, and lint is back to its pre-existing 17 — **none of them in these
+   files**.
+
+> ⚠️ **These have not been rendered yet.** They typecheck, lint clean and build, but nothing imports
+> them until module 1 migrates `UsersModule`. Treat the first migration as the real test — and expect
+> to change the APIs when a real screen meets them.
 
 ### 4.3 Component rules
 
