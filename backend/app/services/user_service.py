@@ -18,10 +18,11 @@ UI and the API cannot disagree about what is allowed.
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
-from sqlalchemy import Select, func, or_, select
+from sqlalchemy import Select, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import settings
+from app.core.query import ListParams, ListSpec, run_list
 from app.core.security import hash_password
 from app.models.activity_log import EVENT_STATUS_CHANGED
 from app.models.role import Role
@@ -31,15 +32,25 @@ from app.services import activity_service, session_service, two_factor_service
 from app.services.auth_service import email_exists, normalise_email
 from app.services.rbac_service import resolve_roles
 
-_SORTABLE = {
-    "created_at": User.created_at,
-    "email": User.email,
-    "first_name": User.first_name,
-    "last_name": User.last_name,
-    "status": User.status,
-    "account_type": User.account_type,
-    "last_login_at": User.last_login_at,
-}
+_LIST_SPEC = ListSpec(
+    sortable={
+        "created_at": User.created_at,
+        "email": User.email,
+        "first_name": User.first_name,
+        "last_name": User.last_name,
+        "status": User.status,
+        "account_type": User.account_type,
+        "last_login_at": User.last_login_at,
+    },
+    default_sort="created_at",
+    # `created_at` is not unique — a seeded batch or two users created in the same
+    # request share a timestamp. Without this tiebreak the sort is partial, and a
+    # tying row can appear on two consecutive pages or on neither.
+    # `activity_service.list_entries` already sorts by `id` for exactly this
+    # reason; this listing did not, and that was a live bug.
+    tiebreak=User.id,
+    searchable=(User.email, User.first_name, User.last_name, User.company_name),
+)
 
 
 # --- Predicates (single source of truth for both flags and writes) -----------
@@ -119,17 +130,8 @@ def list_users(
     if not actor.has_admin_access:
         stmt = stmt.where(User.id == actor.id)
 
-    if search:
-        term = f"%{search.strip().lower()}%"
-        stmt = stmt.where(
-            or_(
-                func.lower(User.email).like(term),
-                func.lower(User.first_name).like(term),
-                func.lower(User.last_name).like(term),
-                func.lower(func.coalesce(User.company_name, "")).like(term),
-            )
-        )
-
+    # Filters needing a join stay here — `run_list` owns only what is identical
+    # for every resource (search, sort allowlist, tiebreak, clamping, count).
     if status_filter:
         stmt = stmt.where(User.status == status_filter)
     if account_type:
@@ -137,17 +139,18 @@ def list_users(
     if role_id is not None:
         stmt = stmt.where(User.roles.any(Role.id == role_id))
 
-    total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
-
-    column = _SORTABLE.get(sort_by, User.created_at)
-    stmt = stmt.order_by(column.desc() if sort_order == "desc" else column.asc())
-
-    per_page = max(1, min(per_page, 100))
-    page = max(1, page)
-    stmt = stmt.offset((page - 1) * per_page).limit(per_page)
-
-    users = list(db.scalars(stmt).unique())
-    return users, total
+    return run_list(
+        db,
+        stmt,
+        _LIST_SPEC,
+        ListParams(
+            page=page,
+            per_page=per_page,
+            sort_by=sort_by,
+            sort_order=sort_order,
+            search=search,
+        ),
+    )
 
 
 # --- Writes -----------------------------------------------------------------
