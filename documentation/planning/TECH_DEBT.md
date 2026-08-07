@@ -5,6 +5,13 @@
 >
 > Planning docs are reference only — verify against the code before acting.
 
+> **⚠️ API paths in dated entries are as they were on that date.** All routes moved from
+> `/api/…` to `/api/v1/…` on **2026-08-06** (PM-40). Resolved entries and every *Original entry follows* section say
+> `/api/…` and have deliberately **not** been rewritten — this is a record of what was
+> true when it was written, and editing it would make the log unreliable for exactly the
+> question it exists to answer. For current paths, read the `core/` and `system-design/`
+> docs, which were swept.
+
 **Last audited:** 2026-07-31, after the auth/RBAC rebuild.
 **Since then:** PM-25 added 2026-07-31 (containerisation); PM-26/27/28 added 2026-07-31
 during the auth/RBAC rebuild, which also closed PM-1, 3, 6, 7, 9, 14, 15, 16, 17 and 18.
@@ -60,7 +67,7 @@ since 2026-07-31 — only the documentation was wrong, and wrong in a way that b
 | [PM-22](#pm-22--unused-tailwind-v4-dependency) | ⚪ | Unused Tailwind v4 dependency | Frontend |
 | [PM-23](#pm-23--two-dead-virtualenvs-in-the-tree) | ⚪ | Two dead virtualenvs in the tree | Housekeeping |
 | [PM-24](#pm-24--production-build-failed-on-a-type-error--resolved) | ✅ | ~~Production build failed on a type error~~ | Build |
-| [PM-25](#pm-25--npm-ci-fails-react-19-against-next-14s-peer-range) | 🟠 | `npm ci` fails — React 19 against Next 14's peer range | Build |
+| [PM-25](#pm-25--npm-ci-fails-react-19-against-next-14s-peer-range--resolved) | ✅ | ~~`npm ci` fails — React 19 against Next 14's peer range~~ | Build |
 | [PM-26](#pm-26--no-http-rate-limiting-successor-to-pm-8--resolved) | ✅ | ~~No HTTP rate limiting~~ | Auth |
 | [PM-27](#pm-27--no-email-transport-so-invitations-and-resets-are-manual--resolved) | ✅ | ~~No email transport — invitations/resets are manual~~ | Infra |
 | [PM-28](#pm-28--google-sso-is-unverified-against-real-google) | 🟠 | Google SSO implemented but never run against Google | Auth |
@@ -389,7 +396,38 @@ Given PM-1's fix will touch every login path, tests should land first.
 
 ---
 
-### PM-25 — `npm ci` fails: React 19 against Next 14's peer range
+### PM-25 — `npm ci` fails: React 19 against Next 14's peer range ✅ RESOLVED
+
+**Resolved 2026-08-07 by downgrading React to 18.3.1** — the second option below. Forced rather than
+chosen: the "unsupported but works" pairing **stopped working**, and it took the whole dashboard with it.
+
+**How it surfaced.** Signing in appeared to fail. The console showed
+`TypeError: Cannot read properties of undefined (reading 'call')` at webpack's `options.factory`, thrown
+from a `<Lazy>` inside Next's own `layout-router`, crashing `NotFoundErrorBoundary`. The application
+contains **no** `next/dynamic` or `React.lazy` call — that `<Lazy>` is framework-internal, so this was the
+App Router's client runtime failing against a React it does not support. `npm ls` agreed:
+`react@19.2.4 invalid: "^18.2.0" from node_modules/next`, exit code `ELSPROBLEMS`.
+
+**Downgrading was the minimal fix, not the ambitious one.** Next 15 would have made React 19 supported,
+but it is a major-version migration with its own breaking changes (async `cookies()`/`headers()`/`params`,
+changed caching defaults) — not something to do inside a bug fix while sign-in is broken. React 18.3.1
+matches Next 14's declared peer range exactly and restores a combination the framework actually tests.
+
+**It cost no code changes.** The app uses no React 19-only API — no `useActionState`, `useFormStatus`,
+`useOptimistic` or `use()`. `forwardRef` is used in three components and behaves identically on 18.
+`@types/react` and `@types/react-dom` moved to `^18` to match the runtime.
+
+**Verified:** `npm ls` clean (0 invalid peers) · **the dependency tree now resolves with no
+`--legacy-peer-deps` at all** · `tsc --noEmit` clean · `next build` compiles all 20 routes · `npm run
+lint` 17 errors, unchanged · `/sign-in` and `/dashboard` both 200 on a from-scratch build.
+
+**Docs corrected in the same change:** `NEXTJS_STANDARDS.md` (title, § 1 stack line, known-issues row,
+pending list), `ONBOARDING.md` § 6 and § 9, `ARCHITECTURE.md`, `VERSION_SUMMARY.md`,
+`CORE_HARDENING_PLAN.md`.
+
+**Still to follow up:** `frontend/Dockerfile.dev` and `.github/workflows/ci.yml` still pass
+`--legacy-peer-deps`. It is now harmless rather than load-bearing, so removing it is housekeeping — but
+worth doing, because a flag that silences nothing today will silence the next real `ERESOLVE`.
 
 **Where:** `frontend/package.json:16-18`, `frontend/package-lock.json`
 

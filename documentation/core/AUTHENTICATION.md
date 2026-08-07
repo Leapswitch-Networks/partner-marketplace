@@ -49,7 +49,7 @@ Configured, not hardcoded — `STAFF_EMAIL_DOMAINS`, `ALLOW_PARTNER_SELF_REGISTR
 | Who | Route in | Lands as | Approval needed? |
 |---|---|---|---|
 | **Staff** (`@leapswitch.com`) | Google SSO, or an invitation | `staff`, role `User` | **Yes** — unless invited |
-| **Partner** (anyone else) | `POST /api/auth/register`, or an invitation | `partner`, role `Partner` | **Yes** — unless invited |
+| **Partner** (anyone else) | `POST /api/v1/auth/register`, or an invitation | `partner`, role `Partner` | **Yes** — unless invited |
 
 Two refusals are load-bearing:
 
@@ -102,7 +102,7 @@ Unchanged in shape from before, and still sound:
 | Cookie | Path | httpOnly | samesite | secure | Lifetime |
 |---|---|:---:|:---:|:---:|---|
 | `access_token` | `/` | yes | config (`lax`) | **config** | `ACCESS_TOKEN_EXPIRE_MINUTES` (60) |
-| `refresh_token` | `/api/auth/refresh` | yes | config (`lax`) | **config** | `REFRESH_TOKEN_EXPIRE_DAYS` (7) |
+| `refresh_token` | `/api/v1/auth/refresh` | yes | config (`lax`) | **config** | `REFRESH_TOKEN_EXPIRE_DAYS` (7) |
 
 - Every token carries a `type` claim (`access` \| `refresh`) which is **asserted on every decode**, so
   a 7-day refresh token cannot be replayed as an access token. Verified.
@@ -171,9 +171,9 @@ locked out or recovering from a compromise and may be on a borrowed device, so n
 
 | Method | Path | Effect |
 |---|---|---|
-| `GET` | `/api/auth/me/sessions` | The caller's live sessions, newest activity first, with `is_current` |
-| `DELETE` | `/api/auth/me/sessions/{id}` | End one. **`404`, not `403`,** for an id that is not yours — `403` would confirm the id exists |
-| `POST` | `/api/auth/me/sessions/revoke-others` | "Sign out everywhere else", sparing the current session |
+| `GET` | `/api/v1/auth/me/sessions` | The caller's live sessions, newest activity first, with `is_current` |
+| `DELETE` | `/api/v1/auth/me/sessions/{id}` | End one. **`404`, not `403`,** for an id that is not yours — `403` would confirm the id exists |
+| `POST` | `/api/v1/auth/me/sessions/revoke-others` | "Sign out everywhere else", sparing the current session |
 
 **LeapDesk has no equivalent** — Laravel's session table makes it possible but Fortify does not expose it —
 so this is parity-plus rather than a port.
@@ -188,7 +188,7 @@ would log the user out of the page they are reading with no explanation.
 
 ### Admin 2FA reset
 
-`POST /api/users/{id}/reset-two-factor`, surfaced as a per-row action in the Users table and offered only
+`POST /api/v1/users/{id}/reset-two-factor`, surfaced as a per-row action in the Users table and offered only
 where `two_factor_enabled` is true. Clears the enrolment **and revokes every session** — if the phone was
 stolen rather than lost, clearing only the secret would strip the second factor and leave the attacker
 signed in.
@@ -226,14 +226,14 @@ phone they then wiped — would be required to produce codes nothing can generat
 
 | Method | Path | Notes |
 |---|---|---|
-| `POST` | `/api/auth/login` | Returns `{two_factor_required, challenge_token}` and **no cookies** when 2FA is on |
-| `POST` | `/api/auth/two-factor-challenge` | Exchange the token + a TOTP **or** a recovery code for a session |
-| `GET` | `/api/auth/me/two-factor` | Status, including `pending_confirmation` and codes remaining |
-| `POST` | `/api/auth/me/two-factor` | Begin enrolment — **password confirmation required** |
-| `POST` | `/api/auth/me/two-factor/confirm` | Prove a code; this is what enables it |
-| `DELETE` | `/api/auth/me/two-factor` | Disable — **password confirmation required** |
-| `POST` | `/api/auth/me/two-factor/recovery-codes` | Regenerate — **password confirmation required** |
-| `POST` | `/api/auth/me/confirm-password` | Re-prove the password |
+| `POST` | `/api/v1/auth/login` | Returns `{two_factor_required, challenge_token}` and **no cookies** when 2FA is on |
+| `POST` | `/api/v1/auth/two-factor-challenge` | Exchange the token + a TOTP **or** a recovery code for a session |
+| `GET` | `/api/v1/auth/me/two-factor` | Status, including `pending_confirmation` and codes remaining |
+| `POST` | `/api/v1/auth/me/two-factor` | Begin enrolment — **password confirmation required** |
+| `POST` | `/api/v1/auth/me/two-factor/confirm` | Prove a code; this is what enables it |
+| `DELETE` | `/api/v1/auth/me/two-factor` | Disable — **password confirmation required** |
+| `POST` | `/api/v1/auth/me/two-factor/recovery-codes` | Regenerate — **password confirmation required** |
+| `POST` | `/api/v1/auth/me/confirm-password` | Re-prove the password |
 
 ### Design decisions
 
@@ -293,7 +293,7 @@ successful login ──> counter = 0, locked_until = NULL, last_login_at/ip reco
 
 While locked, login returns **429** with the remaining minutes. A password reset also clears the
 lockout — the legitimate owner has just proved control of the mailbox. An administrator can clear it
-with `POST /api/users/{id}/unlock`.
+with `POST /api/v1/users/{id}/unlock`.
 
 ⚠️ This is **per-account**, not per-IP. An attacker can still spray one attempt each across many
 accounts — see TECH_DEBT PM-26.
@@ -309,13 +309,13 @@ untested until PM-28 is closed.
 Implemented directly with `httpx` (three requests; an SDK would add a dependency for no gain).
 
 ```
-GET /api/auth/google/authorize   -> { authorization_url }   (or /redirect for a plain <a href>)
+GET /api/v1/auth/google/authorize   -> { authorization_url }   (or /redirect for a plain <a href>)
         │  browser navigates (MUST be a full navigation — Google blocks cross-origin XHR)
         ▼
 Google consent
         │
         ▼
-GET /api/auth/google/callback?code=…&state=…
+GET /api/v1/auth/google/callback?code=…&state=…
         ├─ verify `state`         signed JWT, 10-min expiry — CSRF defence on the handshake,
         │                         and it carries the optional invitation token
         ├─ exchange code          -> access token -> userinfo
@@ -347,17 +347,17 @@ become `GET {FRONTEND_URL}/sign-in?error=<message>` instead.
 
 | Method | Path | Auth | Purpose |
 |---|---|---|---|
-| POST | `/api/auth/register` | — | Partner self-registration. **Does not sign you in.** |
-| POST | `/api/auth/login` | — | Single login for everyone |
-| POST | `/api/auth/logout` | — | Unauthenticated on purpose — must work with an expired token |
-| POST | `/api/auth/refresh` | refresh cookie | Rotates both cookies; re-checks status |
-| GET | `/api/auth/me` | access cookie | Identity + resolved roles + resolved permissions |
-| PATCH | `/api/auth/me` | access cookie | Partial profile update. Email is **not** editable here |
-| POST | `/api/auth/me/change-password` | access cookie | Requires current password |
-| POST | `/api/auth/forgot-password` | — | Always answers identically (no enumeration) |
-| POST | `/api/auth/reset-password` | token | 1-hour token; clears lockout |
-| POST | `/api/auth/accept-invitation` | token | Partner invitation → ACTIVE + signed in |
-| GET | `/api/auth/google/authorize` · `/redirect` · `/callback` | — | SSO |
+| POST | `/api/v1/auth/register` | — | Partner self-registration. **Does not sign you in.** |
+| POST | `/api/v1/auth/login` | — | Single login for everyone |
+| POST | `/api/v1/auth/logout` | — | Unauthenticated on purpose — must work with an expired token |
+| POST | `/api/v1/auth/refresh` | refresh cookie | Rotates both cookies; re-checks status |
+| GET | `/api/v1/auth/me` | access cookie | Identity + resolved roles + resolved permissions |
+| PATCH | `/api/v1/auth/me` | access cookie | Partial profile update. Email is **not** editable here |
+| POST | `/api/v1/auth/me/change-password` | access cookie | Requires current password |
+| POST | `/api/v1/auth/forgot-password` | — | Always answers identically (no enumeration) |
+| POST | `/api/v1/auth/reset-password` | token | 1-hour token; clears lockout |
+| POST | `/api/v1/auth/accept-invitation` | token | Partner invitation → ACTIVE + signed in |
+| GET | `/api/v1/auth/google/authorize` · `/redirect` · `/callback` | — | SSO |
 
 `whoami`, `admin/login`, `admin/me` and `admin/register` are **gone** — one table, one set of endpoints.
 
@@ -368,10 +368,10 @@ outstanding invitation. It is an admin action.
 
 ## Frontend Integration
 
-- **`GET /api/auth/me`** hydrates `authSlice` on mount, and returns `permissions` already resolved —
+- **`GET /api/v1/auth/me`** hydrates `authSlice` on mount, and returns `permissions` already resolved —
   with the super-admin bypass expanded server-side into the full catalog, so the UI never needs to
   know that super admins are special. Read it through `usePermissions()`.
-- **`axiosInstance`** retries a 401 once through `/api/auth/refresh` and rejects with the *original*
+- **`axiosInstance`** retries a 401 once through `/api/v1/auth/refresh` and rejects with the *original*
   error on failure. `_retry` prevents a loop. Unchanged and still correct.
 - **`middleware.ts`** checks only for cookie *presence*. It is UX, not security — an expired cookie
   passes it and is then rejected by the API.
@@ -392,9 +392,9 @@ surface is now large enough that this is the highest-value remaining gap.
 ```bash
 # Manual smoke
 curl -s localhost:8002/health/ready
-curl -s -c /tmp/c.txt -X POST localhost:8002/api/auth/login \
+curl -s -c /tmp/c.txt -X POST localhost:8002/api/v1/auth/login \
   -H 'Content-Type: application/json' -d '{"email":"…","password":"…"}'
-curl -s -b /tmp/c.txt localhost:8002/api/auth/me | python3 -m json.tool
+curl -s -b /tmp/c.txt localhost:8002/api/v1/auth/me | python3 -m json.tool
 ```
 
 ---
@@ -404,11 +404,11 @@ curl -s -b /tmp/c.txt localhost:8002/api/auth/me | python3 -m json.tool
 | Symptom | Cause / Fix |
 |---|---|
 | 403 "awaiting administrator approval" after registering | Working as designed. An admin must approve, or invite instead. |
-| 403 on `/api/auth/me` with a valid-looking cookie | Account is no longer ACTIVE. Status is re-read per request. |
-| 429 on login | Account lockout. Wait it out, reset the password, or `POST /api/users/{id}/unlock`. |
+| 403 on `/api/v1/auth/me` with a valid-looking cookie | Account is no longer ACTIVE. Status is re-read per request. |
+| 429 on login | Account lockout. Wait it out, reset the password, or `POST /api/v1/users/{id}/unlock`. |
 | Google sign-in returns 503 | Not configured. Set the three `GOOGLE_*` variables. |
 | Google sign-in 403 "limited to @…" | Non-staff address. Partners use credentials. |
-| `/api/auth/refresh` 401 with a good session | The refresh cookie is path-scoped to that exact URL. No trailing slash, no proxy rewrite. |
+| `/api/v1/auth/refresh` 401 with a good session | The refresh cookie is path-scoped to that exact URL. No trailing slash, no proxy rewrite. |
 | Change-password 400 on an SSO account | Correct — no password exists to verify. |
 | Registration 400 "must sign in with Google" | Staff-domain address on `/register`. Intentional. |
 | Registration 422 | Password policy: 8+ chars, one uppercase, one digit. |
@@ -437,7 +437,7 @@ curl -s -b /tmp/c.txt localhost:8002/api/auth/me | python3 -m json.tool
       exchange, `email_verified` check, domain gate, three-step account resolution) and
       `settings.google_oauth_configured` is false, so the endpoints return `503`. **Treat this code as
       untested.** Needs an OAuth client, then `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` /
-      `GOOGLE_REDIRECT_URI=http://localhost:8002/api/auth/google/callback`, then walk the flow.
+      `GOOGLE_REDIRECT_URI=http://localhost:8002/api/v1/auth/google/callback`, then walk the flow.
 - [ ] **Email deliverability is unproven.** The SMTP protocol path was verified against a purpose-built
       fake relay, so *sending* works. **Nothing has ever landed in a real inbox** — SPF, DKIM and DMARC
       are unconfigured, and authentication against a real provider is untested. The protocol is proven;
@@ -451,7 +451,7 @@ curl -s -b /tmp/c.txt localhost:8002/api/auth/me | python3 -m json.tool
       `TwoFactorSettings.tsx` / `TwoFactorChallenge.tsx` exist, but confirm the whole path is wired end
       to end — enrol → scan → confirm → recovery codes → sign out → challenge → recover. This is the
       feature most likely to lock a real user out if a step is missing.
-- [ ] **`GET /api/activity/export` has no UI button.** It is an API call only. Note it also needs
+- [ ] **`GET /api/v1/activity/export` has no UI button.** It is an API call only. Note it also needs
       `LONG_TIMEOUT_MS` from `lib/api/axiosInstance.ts` — the 5s default kills a working export.
 
 ### 🟡 Operational and lifecycle

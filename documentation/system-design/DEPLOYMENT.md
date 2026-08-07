@@ -33,8 +33,8 @@ get lost among the six that aren't.
 
 | # | Blocker | Where | Required change |
 |---|---------|-------|-----------------|
-| 1 | **No error logging or monitoring** | — | No exception handler, no structured logging, no alerting. A 500 in production would be invisible. PM-10 |
-| 2 | **No automated tests** — *partially addressed 2026-08-06* | — | Nothing verified a deploy didn't break auth. The production build was **silently broken** by a type error until 2026-07-30 (PM-24) precisely because no workflow ran `npm run build`. **Since 2026-08-06** there are 74 tests and a CI workflow running `ruff`, `pytest`, `tsc --noEmit`, `npm run lint` and `npm run build` on every push (PM-39) — so the hand-run instruction below is now a fallback rather than the only line of defence. **Still blocking**, because the suite covers three properties (token types, refresh reuse, password hashing) and **not RBAC enforcement across the 56 routes** — which is what a deploy most needs proven. PM-11 stays open |
+| 1 | **No monitoring or alerting** | — | Structured JSON logging with request-id correlation and three exception handlers **exist** since 2026-08-03, and `APP_ENV=production` enforces `LOG_FORMAT=json`. What is missing is a destination: no error tracker, no aggregation, no retention — container stdout is lost on `docker compose down`, so a 500 in production is recorded and then discarded. PM-10 |
+| 2 | **No automated tests** — *partially addressed 2026-08-06* | — | Nothing verified a deploy didn't break auth. The production build was **silently broken** by a type error until 2026-07-30 (PM-24) precisely because no workflow ran `npm run build`. **Since 2026-08-06** there are **241 tests** and a CI workflow running `ruff`, `pytest`, `tsc --noEmit`, `npm run lint` and `npm run build` on every push (PM-39) — so the hand-run instruction below is now a fallback rather than the only line of defence. **Still blocking**, because the suite covers authentication primitives, config validation, upload validation and theme contrast, and **not RBAC enforcement across the routes, a login round trip, or migrations** — which is what a deploy most needs proven. PM-11 stays open |
 | 3 | **No production topology** | — | The Compose services are development-only: bind-mounted source, reload servers, no Nginx, no TLS terminator. See § 1 |
 
 ### Configuration that must change per environment — not defects
@@ -71,7 +71,7 @@ get lost among the six that aren't.
 | ~~Passwords stored in plaintext~~ | bcrypt at 12 rounds; migration `e7b41c9a2d10` hashed every existing row in place. PM-1 |
 | ~~`secure=False` on both auth cookies~~ | Driven by `COOKIE_SECURE`, on set **and** clear. PM-2 |
 | ~~CORS origins hardcoded to localhost~~ | `settings.allowed_origins`. PM-9 |
-| ~~No login rate limiting and no account lockout~~ | **Half closed.** Per-account lockout works — five failures, fifteen minutes, `429`. Per-IP HTTP rate limiting still does not exist: PM-26, and it remains required before public exposure |
+| ~~No login rate limiting and no account lockout~~ | **Both closed.** Per-account lockout — five failures, fifteen minutes, `429`. Per-IP sliding-window rate limiting in three tiers since 2026-08-03 (PM-26), which also fixed an `X-Forwarded-For` bypass that made the limiter useless. ⚠️ Counters are **per process**, so N workers multiply every limit by N — see PM-44 |
 | ~~Any admin can create a `super_admin`~~ | Elevated roles refused unless the actor holds one, on both the user and invitation paths. PM-3 |
 | ~~Seed credentials in a public repo~~ | `seed_admin.py` no longer exists. `seed_rbac.py` takes `ROOT_PASSWORD` from the environment and generates a random one if unset — **there is no committed credential**. PM-4 |
 
@@ -259,8 +259,14 @@ curl -sf https://<host>/health
 # OpenAPI served (consider disabling docs in production)
 curl -s -o /dev/null -w "%{http_code}\n" https://<host>/docs
 
-# Unauthenticated access is refused
-curl -s -o /dev/null -w "%{http_code}\n" https://<host>/api/auth/whoami   # expect 401
+# Unauthenticated access is refused.
+# `whoami` was removed in the account merge — this used to hit it and would have
+# returned 404, passing as "not 200" while proving nothing about authentication.
+curl -s -o /dev/null -w "%{http_code}\n" https://<host>/api/v1/auth/me       # expect 401
+
+# Branding is public and answers before any session exists — this is what the
+# sign-in page renders from, so a 200 here is a real end-to-end check.
+curl -s -o /dev/null -w "%{http_code}\n" https://<host>/api/v1/settings/branding  # expect 200
 
 # Frontend renders
 curl -s -o /dev/null -w "%{http_code}\n" https://<host>/sign-in           # expect 200
@@ -269,7 +275,7 @@ curl -s -o /dev/null -w "%{http_code}\n" https://<host>/sign-in           # expe
 curl -s -o /dev/null -w "%{http_code}\n" https://<host>/                  # expect 307
 
 # Cookies are Secure + HttpOnly
-curl -si -X POST https://<host>/api/auth/admin/login \
+curl -si -X POST https://<host>/api/v1/auth/admin/login \
   -H 'Content-Type: application/json' -d '{"email":"…","password":"…"}' | grep -i set-cookie
 ```
 
@@ -322,14 +328,14 @@ they currently publish the full API surface to anyone.
 | DB admin | Adminer on :8083 | **Not exposed** |
 | Reverse proxy | none | Required (TLS, single origin) |
 | TLS | none | Required |
-| Cookie `secure` | `False` | **`True`** |
-| CORS | hardcoded localhost | Environment-configured |
-| Passwords | plaintext (accepted debt) | **Hashed — blocker** |
+| Cookie `secure` | `False` (local HTTP) | **`True`** — and § 0 **refuses to boot** without it |
+| CORS | `CORS_ORIGINS`, **defaulting** to localhost | `CORS_ORIGINS` set to the real origin — and § 0 now **refuses** a localhost origin in production |
+| Passwords | **bcrypt, 12 rounds** | same — resolved 2026-07-31 (PM-1) |
 | Migrations | manual, by hand | Explicit, reviewed deploy step |
 | Secrets | `.env` files on disk | Secret manager / platform env vars |
-| Logging | uvicorn stdout | Structured, aggregated, alerting |
+| Logging | **structured JSON with request-id correlation** | same, plus aggregation and alerting — the missing half (PM-10) |
 | `/docs` | open | Decide — probably closed |
-| Seed admin | present | absent |
+| Seed admin | `seed_rbac.py`, **no committed credential** | same; `ROOT_PASSWORD` from the environment, or generated and printed once |
 
 ---
 
@@ -428,6 +434,16 @@ Every row of § 1 is still open. These three shape all the others:
       security headers present, `/docs` closed if that is the decision) over a list someone reads.
 
 ### Documentation accuracy — § 7 has three stale rows
+> **✅ The *Documentation accuracy* items below were cleared on 2026-08-06.** The API-path sweep
+> (`/api/…` → `/api/v1/…`, 110 references across 13 current-state docs) and every stale section named
+> here have been corrected. They are kept, struck through, as the record of what had drifted and why —
+> deleting them would lose the more useful lesson, which is that all of it accumulated in under two
+> weeks while the code was being actively improved.
+>
+> Historical documents were deliberately **not** rewritten: `DAILY_CHANGES.md` and `TECH_DEBT.md`'s
+> dated entries still say `/api/…` because that is what was true when they were written, and both now
+> carry a note saying so. The four inherited test-platform docs were left alone too — `INDEX.md`
+> already marks them untrustworthy.
 
 - [ ] **§ 7 *Local vs Deployed* row "Passwords | plaintext (accepted debt) | Hashed — blocker"** — wrong.
       bcrypt at 12 rounds since 2026-07-31 (PM-1); migration `e7b41c9a2d10` hashed every existing row in

@@ -1,4 +1,4 @@
-# Next.js 14 + React 19 + Redux Toolkit Standards
+# Next.js 14 + React 18 + Redux Toolkit Standards
 
 > **Page and feature composition.** For design atoms (colours, Button, dark mode) read
 > `UI_PATTERNS.md`. For backend conventions read `FASTAPI_STANDARDS.md`.
@@ -24,16 +24,22 @@
 | The `lib/api` layer and error handling | Deployment (`DEPLOYMENT.md`) |
 | Forms with React Hook Form + Zod | |
 
-**Verified stack:** Next.js 14.2.35 · React 19.2.4 · TypeScript 5 · Tailwind 3.4.19 ·
+**Verified stack:** Next.js 14.2.35 · React 18.3.1 · TypeScript 5 · Tailwind 3.4.19 ·
 Redux Toolkit 2.11.2 · react-redux 9.2.0 · React Hook Form 7.72.1 · `@hookform/resolvers` 5.2.2 ·
 Zod 4.3.6 · Axios 1.15.0.
 
-> ⚠️ **React 19 on Next 14 is an unsupported pairing, not a verified one.** `next@14.2.35` declares
-> `peer react@^18.2.0`; React 19 support landed in Next 15. It works at runtime and the production
-> build passes, but `npm ci` and `npm install` both **fail** without `--legacy-peer-deps`. Tracked as
-> **PM-25** in `../planning/TECH_DEBT.md`, which lists the three ways out. Bear it in mind when
-> reaching for a React 19-only API — this project is on a Next version that does not officially
-> support the runtime it is pinned to.
+> **React is 18.3.1, and that is now a supported pairing** — inside `next@14.2.35`'s declared
+> `peer react@^18.2.0`, so the tree resolves with no `--legacy-peer-deps`.
+>
+> It was React 19.2.4 until **2026-08-07**, which this document called "verified" while npm rejected the
+> pairing outright. The correction is worth reading rather than skipping, because the entry below it said
+> the combination "works at runtime": **it stopped.** An unsupported React took down the App Router's
+> client runtime — `Cannot read properties of undefined (reading 'call')` from a `<Lazy>` inside Next's
+> own `layout-router` — and with it the entire dashboard. See **PM-25** in `../planning/TECH_DEBT.md`.
+>
+> So: **do not reach for a React 19-only API** (`useActionState`, `useFormStatus`, `useOptimistic`,
+> `use()`). None is available, and none was in use — which is why the downgrade needed no code changes.
+> Moving to React 19 means moving to Next 15 first, as its own piece of work.
 
 ---
 
@@ -77,7 +83,10 @@ frontend/
 │       ├── profile/page.tsx
 │       ├── all-users/page.tsx
 │       ├── add-user/page.tsx
-│       └── candidates/page.tsx
+│       ├── roles/page.tsx
+│       └── activity/page.tsx
+│   ├── settings/             # profile, password, appearance, branding
+│   └── brand/favicon/route.ts  # dynamic favicon — see the note in the file
 ├── components/
 │   ├── common/                # cross-feature primitives
 │   ├── auth/                  # sign-in/up specific
@@ -154,27 +163,53 @@ sign-up can share a layout that the dashboard doesn't.
 |------|---------|
 | `page.tsx` | The route's UI (required to make a route public) |
 | `layout.tsx` | Wraps children; persists across navigation within the segment |
-| `loading.tsx` | Suspense fallback — **not currently used anywhere** |
-| `error.tsx` | Error boundary — **not currently used anywhere** |
-| `not-found.tsx` | 404 UI — **not currently used anywhere** |
+| `loading.tsx` | Suspense fallback |
+| `error.tsx` | Error boundary |
+| `not-found.tsx` | 404 UI |
+| `global-error.tsx` | Catches a failure in the **root layout itself** |
+| `route.ts` | A route handler rather than a page — e.g. `app/brand/favicon/route.ts` |
 
-Adding `loading.tsx` and `error.tsx` per segment is a real improvement opportunity; today loading and
-errors are handled ad hoc inside client components.
+**All present since 2026-08-03 (PM-19)** — eight files: `app/global-error.tsx`, `app/error.tsx`,
+`app/dashboard/error.tsx`, `app/(auth)/error.tsx`, `app/not-found.tsx`, `app/loading.tsx`,
+`app/dashboard/loading.tsx`, plus the shared `components/common/ErrorState.tsx` body.
+
+Three things that are easy to get wrong:
+
+1. **`global-error.tsx` renders its own `<html>` and `<body>`, and uses inline styles.** It *replaces*
+   the root layout rather than nesting inside it, so it cannot assume `Providers`, the Redux store, the
+   theme class, or that `globals.css` even loaded.
+2. **`error.digest`, not `error.message`, is what users see.** Next replaces a server-thrown message
+   with an opaque digest before it reaches the browser, deliberately.
+3. **A folder starting with `_` is private and not routable** — a verification attempt using
+   `app/(auth)/__boom/` returned 404 because the route never existed, not because the boundary failed.
 
 ### Root layout
 
 ```tsx
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+// `async`, because branding is resolved server-side once for every route.
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const branding = await getBranding();
+  const themeRule = themeStyleRule(branding);
+
   return (
-    <html lang="en" className={`${inter.variable} h-full antialiased`} suppressHydrationWarning>
-      <head><script dangerouslySetInnerHTML={{ __html: themeScript }} /></head>
-      <body className="min-h-full flex flex-col font-sans bg-white dark:bg-gray-950 …">
-        <Providers>{children}</Providers>
+    <html lang="en" className={`${montserrat.variable} h-full antialiased`} suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        {themeRule && <style dangerouslySetInnerHTML={{ __html: themeRule }} />}
+      </head>
+      <body className="min-h-full flex flex-col font-sans text-sm bg-white dark:bg-night-body …">
+        <BrandingProvider branding={branding}>
+          <Providers>{children}</Providers>
+        </BrandingProvider>
       </body>
     </html>
   );
 }
 ```
+
+⚠️ **`getBranding` uses `fetch` with `next.revalidate`, and that choice is load-bearing.** It is
+compatible with static generation, so the 16 prerendered routes stay prerendered. `cache: "no-store"`
+here — or reading `cookies()`/`headers()` — would flip **all of them** to server-rendered-on-demand.
 
 Three things here are deliberate — don't remove them:
 
@@ -223,11 +258,14 @@ const PROTECTED = ["/test", "/result", "/admin", "/dashboard"];
 
 ```ts
 const axiosInstance = axios.create({
-  baseURL: API_BASE_URL,
-  timeout: 5000,          // fail fast when the backend is unreachable
-  withCredentials: true,  // send httpOnly cookies on every request
+  baseURL: `${API_BASE_URL}${API_PREFIX}`,  // the version lives here, once
+  timeout: DEFAULT_TIMEOUT_MS,              // 5s — fail fast when the backend is down
+  withCredentials: true,                    // send httpOnly cookies on every request
 });
 ```
+
+`LONG_TIMEOUT_MS` (120s) is exported for the endpoints the 5s default would kill — the streamed
+activity-log export, and asset uploads. Pass it per request; do not raise the default.
 
 `withCredentials: true` is **mandatory** — without it no cookie is sent and every request 401s.
 
@@ -235,9 +273,9 @@ const axiosInstance = axios.create({
 
 ```
 request → 401
-   ├─ url is /api/auth/refresh or /api/auth/logout → reject (prevents recursion)
+   ├─ url is /api/v1/auth/refresh or /api/v1/auth/logout → reject (prevents recursion)
    ├─ original._retry already true                 → reject (one attempt only)
-   └─ else POST /api/auth/refresh (3s timeout)
+   └─ else POST /api/v1/auth/refresh (3s timeout)
         ├─ ok   → replay the original request
         └─ fail → reject with the ORIGINAL error
 ```
@@ -252,11 +290,18 @@ Two invariants to preserve if you touch this:
 
 | Module | Covers |
 |--------|--------|
-| `authApi.ts` | register, login, adminLogin, logout, refresh, whoami, me |
-| `adminApi.ts` | admin user CRUD |
-| `categoryApi.ts` | categories |
-| `candidateApi.ts` | candidates (inherited) |
-| `testApi.ts` | tests (inherited) |
+| `authApi.ts` | register, login, logout, refresh, me, profile, change/reset password, 2FA, sessions, invitations, email verification, Google URL |
+| `adminApi.ts` | user administration — CRUD, approve, toggle status, unlock, bulk, reset 2FA |
+| `rbacApi.ts` | roles, the permission catalog, nav preferences, invitations |
+| `navigationApi.ts` | the server-driven sidebar |
+| `settingsApi.ts` | installation branding — text, theme presets, logo/favicon upload |
+
+⚠️ **Paths are written relative to the version**, because `axiosInstance`'s `baseURL` is
+`${API_BASE_URL}${API_PREFIX}` (PM-40). Write `"/auth/login"`, **not** `"/api/v1/auth/login"` — the
+latter would resolve to `/api/v1/api/v1/auth/login`. A v2 is then one constant instead of 57 edits.
+
+**The exception:** `/api/revalidate-branding` is a **Next route handler** served by this application,
+not by the backend. It is called with a bare `fetch` on a relative path and must not be prefixed.
 
 ### Rules
 
@@ -303,11 +348,14 @@ import useAppSelector from "@/lib/hooks/useAppSelector";
 
 **Default to `useState`.** Only promote to Redux when a second consumer actually exists.
 
-`AuthInitializer.tsx` hydrates identity on mount by calling `whoami`, so a page refresh restores the
-session from the cookie instead of losing it.
+`AuthInitializer.tsx` hydrates identity on mount via `fetchCurrentUser` (`GET /api/v1/auth/me`), so a
+page refresh restores the session from the cookie instead of losing it. `whoami` was removed in the
+account merge — there is one identity endpoint.
 
-⚠️ `testSlice` is inherited test-platform state and a removal candidate — see
-`../planning/SCAFFOLD_CLEANUP_PLAN.md`.
+`authSlice` is the only slice. `testSlice` was deleted with the inherited domain on 2026-08-06.
+
+Branding is **not** in Redux: it is resolved server-side and passed down through
+`BrandingProvider`'s context, which is what keeps it off PM-30's fetch-on-mount ledger.
 
 ---
 
@@ -332,7 +380,7 @@ export default function SignInForm() {
   const onSubmit = async (data: FormValues) => {
     setServerError(null);
     try {
-      const res = await authApi.adminLogin(data);
+      const res = await authApi.login(data);
       dispatch(setUser(res.data.user));
       router.push("/dashboard");
     } catch (err: unknown) {
@@ -375,9 +423,13 @@ export default function SignInForm() {
    ```
    This exact mistake broke the production build (`../planning/TECH_DEBT.md` PM-24).
 
-⚠️ Note `SignInForm` calls `authApi.adminLogin`, so the main sign-in page authenticates against
-`admin_users`. If partner/end-user login is added, this needs an explicit account-type choice rather
-than an implicit default.
+⚠️ **`SignInForm` may need to handle a two-factor challenge.** `authApi.login` can resolve to
+`TwoFactorRequiredResponse` instead of a session — use the `isTwoFactorRequired` type guard the module
+exports rather than assuming `res.data.user` exists.
+
+(This paragraph previously warned that sign-in authenticated against `admin_users` and that end users
+had no entry point. Both stopped being true with migration `e7b41c9a2d10`: there is one account table,
+one login endpoint, and roles decide capability.)
 
 ---
 
@@ -404,7 +456,8 @@ setServerError(detail ?? "Something went wrong.");
 
 ## 9. Loading States
 
-Skeletons exist: `components/common/Skeleton.tsx`, `components/dashboard/TestCardSkeleton.tsx`.
+One skeleton exists: `components/common/Skeleton.tsx`. It is generic — most pages have no matching
+shape, which is worth pairing with PM-41 rather than doing alone.
 
 | State | Pattern |
 |-------|---------|
@@ -450,7 +503,7 @@ const { can } = usePermissions();
 {can("user-create") && <Button onClick={openCreate}>Add user</Button>}
 ```
 
-The permission list arrives already resolved from `GET /api/auth/me`, with the super-admin bypass
+The permission list arrives already resolved from `GET /api/v1/auth/me`, with the super-admin bypass
 expanded server-side — so there is no client-side special case for super admins.
 
 **Three rules:**
@@ -504,15 +557,19 @@ Checklist for `/dashboard/listings`:
 
 ## 13. Known Issues
 
+**Rewritten 2026-08-06** — five of the seven rows described code that no longer existed. Resolved rows
+are recorded in [`../planning/TECH_DEBT.md`](../planning/TECH_DEBT.md) rather than carried here as
+struck-through text, which is how a "known issues" list becomes unreadable.
+
 | Issue | Detail |
 |-------|--------|
-| ~~`metadata.title` says "Test Platform"~~ | ✅ Fixed 2026-07-30 across `layout.tsx`, all 7 route `page.tsx` files, and the sidebar/navbar brand text |
-| `@tailwindcss/postcss ^4` is an unused dependency | `postcss.config.mjs` uses the Tailwind **v3** plugin (`tailwindcss: {}`) and `tailwindcss ^3.4.19` is installed, so the build is consistent. The v4 package is dead weight — removing it is safe; installing v4 is not. |
-| No `error.tsx` / `loading.tsx` / `not-found.tsx` anywhere | No error boundaries and no route-level suspense. Errors surface as ad-hoc component state. |
-| `testSlice` is inherited state | Test-platform leftover; removal candidate |
-| Main sign-in uses `adminLogin` | `/sign-in` authenticates against `admin_users`; end users have no working entry point |
-| Hardcoded brand colour in components | **242 occurrences across 37 files** — 44% of the frontend — bypass the `brand` token: 151 × `#F97316`/`#EA6C0A` plus 91 × `orange-*` utilities, which a hex grep misses. Re-counted 2026-08-05; this row previously said "`Button.tsx` and `Input.tsx`". Now blocks the Viho rebrand — see [`../design/VIHO_ADOPTION_PLAN.md`](../design/VIHO_ADOPTION_PLAN.md) and `TECH_DEBT.md` PM-20. Prefer the token. |
-| `app/page.tsx` is unreachable | Middleware redirects `/` unconditionally |
+| **18 react-hooks errors** (PM-30) | `npm run lint` reports them, and CI runs the lint step with `continue-on-error` because of it. **They are not a lint problem**: every one is fetch-on-mount, which is what a codebase does when it has no data layer — so the count grows with each new client component. PM-41 removes the cause. PM-25 was thought to gate this too, but settling it changed nothing here: the rules come from `eslint-config-next@16` judging a Next 14 codebase, and the React version was never what made them fire. **Do not blanket-disable them** — the same rule set caught a real defect, `memo()` components declared inside `Sidebar`'s render |
+| **No data layer** (PM-41) | 44 of 76 components are `"use client"`; all 24 server components under `app/` are shells that fetch nothing. Every screen is a two-round-trip waterfall, nothing is cached or deduplicated or cancelled, and `loading.tsx` almost never renders because the segment resolves instantly |
+| ~~**`npm ci` fails**~~ (PM-25) | **Resolved 2026-08-07** — React is on 18.3.1, inside Next 14's peer range, and the tree resolves with no flag. It was not a build-only annoyance in the end: the unsupported pairing broke the App Router client runtime and sign-in with it |
+| ~~Types are hand-copied~~ (PM-42) | ✅ **Resolved 2026-08-06.** `types/api.d.ts` is generated from `backend/openapi.json`; `types/api-contract.ts` asserts the hand-written types still match it in both directions. **Add a line there for every new response type** — a schema with no assertion is a schema that can drift. Regenerate with `npm run codegen:api` |
+| `@tailwindcss/postcss ^4` is unused (PM-22) | `postcss.config.mjs` uses the v3 plugin form and `tailwindcss ^3.4.19` is installed, so the build is consistent. Dead weight — safe to remove, **not** safe to activate |
+| `app/page.tsx` is unreachable | `middleware.ts` redirects `/` unconditionally. Either delete it or note that it exists only to satisfy the route tree |
+| `Skeleton` has no per-page shapes | Worth pairing with PM-41 rather than doing alone — until pages fetch server-side, a shaped skeleton has almost nowhere to appear |
 
 ---
 
@@ -537,7 +594,7 @@ Checklist for `/dashboard/listings`:
       `"use client"`**, 22 using `useEffect`, and **all 24 server components under `app/` are shells** —
       each sets `metadata` and renders one client component. Not one fetches anything or reads a cookie
       server-side. Four consequences:
-  - [ ] **Every screen is a waterfall.** HTML → JS → mount → `useEffect` → `/api/auth/me` → the screen's
+  - [ ] **Every screen is a waterfall.** HTML → JS → mount → `useEffect` → `/api/v1/auth/me` → the screen's
         own data. Two sequential round trips a server component could collapse into zero.
   - [ ] **Nothing is cached, deduplicated or cancelled.** Two components needing the same list fetch it
         twice; navigating away leaves the response to arrive at an unmounted tree.
@@ -560,20 +617,20 @@ Checklist for `/dashboard/listings`:
 
 ### 🟠 Decisions that gate the above
 
-- [ ] **PM-25 — settle React/Next.** `package.json` pins React 19 against `next@14.2.35`'s
-      `peer react@^18.2.0`, so **plain `npm ci` fails outright**; both `Dockerfile.dev` and
-      `.github/workflows/ci.yml` carry `--legacy-peer-deps` as a documented workaround, and CI runs
-      `npm run lint` with `continue-on-error` because of PM-30. Three options — upgrade to Next 15+,
-      downgrade React to 18.3.x, or commit an `.npmrc` making the bypass explicit. **§ 1 of this file
-      presents "Next.js 14 + React 19" as the verified stack without recording that npm rejects the
-      pairing** — that line needs correcting whichever way the decision goes.
-- [ ] **Delete the two CI compromises once PM-25 lands**: the `--legacy-peer-deps` flag and
-      `continue-on-error` on the lint step. Both are marked for deletion in the workflow.
+- [x] ~~**PM-25 — settle React/Next.**~~ **Settled 2026-08-07: React downgraded to 18.3.1.** Not chosen
+      so much as forced — React 19 broke the App Router's client runtime and took sign-in with it. § 1 is
+      corrected. Needed no code changes: no React 19-only API was in use.
+- [ ] **Delete the `--legacy-peer-deps` flag** from `frontend/Dockerfile.dev` and
+      `.github/workflows/ci.yml`. It is no longer doing anything — the tree resolves strictly since
+      PM-25 — so this is housekeeping, and worth doing so the next real `ERESOLVE` is not silenced.
+- [ ] **`continue-on-error` on the lint step** stays until PM-30 is dealt with, which is PM-41's job.
+      PM-25 no longer gates it: those rules come from `eslint-config-next@16` judging a Next 14
+      codebase, and that mismatch is unchanged by the React version.
 
 ### 🟡 Conventions worth writing down
 
 - [ ] **No convention for a long-running request.** `lib/api/axiosInstance.ts` now exports
-      `LONG_TIMEOUT_MS` for `GET /api/activity/export` — the one read with no upper bound, which the 5s
+      `LONG_TIMEOUT_MS` for `GET /api/v1/activity/export` — the one read with no upper bound, which the 5s
       default was silently killing. § 5 does not mention it, so the next streaming or bulk endpoint will
       hit the same wall.
 - [ ] **The refresh interceptor is now single-flight — § 5's description predates that.** It used to fire
@@ -593,6 +650,16 @@ Checklist for `/dashboard/listings`:
       changes protection), and nothing verifies they agree.
 
 ### Documentation accuracy — § 13 is stale in five of seven rows
+> **✅ The *Documentation accuracy* items below were cleared on 2026-08-06.** The API-path sweep
+> (`/api/…` → `/api/v1/…`, 110 references across 13 current-state docs) and every stale section named
+> here have been corrected. They are kept, struck through, as the record of what had drifted and why —
+> deleting them would lose the more useful lesson, which is that all of it accumulated in under two
+> weeks while the code was being actively improved.
+>
+> Historical documents were deliberately **not** rewritten: `DAILY_CHANGES.md` and `TECH_DEBT.md`'s
+> dated entries still say `/api/…` because that is what was true when they were written, and both now
+> carry a note saying so. The four inherited test-platform docs were left alone too — `INDEX.md`
+> already marks them untrustworthy.
 
 - [ ] **"No `error.tsx` / `loading.tsx` / `not-found.tsx` anywhere"** — wrong since 2026-08-03. Eight
       files exist and are confirmed registered in `.next/app-build-manifest.json` (PM-19). Note the

@@ -57,7 +57,7 @@ Next.js; all data comes from the API over HTTP.
 | DB admin | Adminer (Docker), host port 8083 |
 | Reverse proxy | none |
 | Queue / scheduler | none |
-| Container for app tiers | none — both run on the host |
+| Container for app tiers | **development containers** for backend and frontend (bind-mounted source, reload servers). No production topology yet |
 
 ---
 
@@ -116,7 +116,7 @@ users ──user_roles──> roles ──role_permissions──> permissions �
 | Staff or partner? | `users.account_type` — drives **signup policy** only, never authorization |
 | What may they do? | roles → permissions, checked by `require_permission(...)` |
 
-`whoami` is gone; `GET /api/auth/me` returns identity plus resolved roles and permissions. Do **not**
+`whoami` is gone; `GET /api/v1/auth/me` returns identity plus resolved roles and permissions. Do **not**
 add a second identity table for partners — add a role. See [`AUTHORIZATION.md`](./AUTHORIZATION.md).
 
 ### 4. Frontend: server shell, client data
@@ -125,7 +125,7 @@ Pages under `app/` are React Server Components by default, but every data-bearin
 a client component (e.g. `app/dashboard/page.tsx` → `DashboardClient.tsx`). Data is fetched
 client-side through Axios so the `httpOnly` cookie rides along from the browser.
 
-Redux Toolkit holds cross-page state (`authSlice`, `testSlice`); component-local state stays in
+Redux Toolkit holds cross-page state (`authSlice` is the only slice); component-local state stays in
 `useState`.
 
 ---
@@ -208,9 +208,9 @@ Response  serialised through the router's response_model
 
 ```
 Any request → 401
-  │  (skipped entirely for /api/auth/refresh and /api/auth/logout)
+  │  (skipped entirely for /api/v1/auth/refresh and /api/v1/auth/logout)
   ▼
-POST /api/auth/refresh  (3s timeout)
+POST /api/v1/auth/refresh  (3s timeout)
   ├─ success → replay the original request once (_retry guard prevents loops)
   └─ failure → reject with the ORIGINAL error, so the caller sees the real status/detail
 ```
@@ -240,12 +240,12 @@ All routers are mounted under `/api`.
 | Group | Routes | Gating |
 |-------|--------|--------|
 | `/health`, `/health/ready` | 2 | none — shallow liveness and a deep DB probe |
-| `/api/auth/*` | 11 | mostly unauthenticated (register, login, reset) or access-cookie |
-| `/api/auth/google/*` | 3 | unauthenticated; signed `state` guards the handshake |
-| `/api/users/*` | 10 | `user-view` / `-create` / `-update` / `-delete` / `-approve` |
-| `/api/roles/*` | 5 | `role-view` / `-create` / `-update` / `-delete` |
-| `/api/permissions` | 1 | `permission-view` — read-only catalog |
-| `/api/invitations/*` | 6 | `invitation-*`; `/preview` is deliberately unauthenticated |
+| `/api/v1/auth/*` | 11 | mostly unauthenticated (register, login, reset) or access-cookie |
+| `/api/v1/auth/google/*` | 3 | unauthenticated; signed `state` guards the handshake |
+| `/api/v1/users/*` | 10 | `user-view` / `-create` / `-update` / `-delete` / `-approve` |
+| `/api/v1/roles/*` | 5 | `role-view` / `-create` / `-update` / `-delete` |
+| `/api/v1/permissions` | 1 | `permission-view` — read-only catalog |
+| `/api/v1/invitations/*` | 6 | `invitation-*`; `/preview` is deliberately unauthenticated |
 | `/api/categories/*`, `/api/candidates/*` | 10 | `category-*` / `candidate-*` — inherited domain |
 
 `whoami`, `admin/login`, `admin/me`, `admin/register` and `/api/admin/users` are **gone** — one account
@@ -308,11 +308,11 @@ autogenerate sees.
 - `type` is asserted on every decode, so a refresh token can't be used as an access token
 - Tokens live in `httponly` cookies — not readable by JavaScript, so XSS can't exfiltrate them
 - `samesite=lax` gives baseline CSRF protection for cross-site POSTs
-- The refresh cookie is path-scoped to `/api/auth/refresh`, so it isn't sent on ordinary requests
+- The refresh cookie is path-scoped to `/api/v1/auth/refresh`, so it isn't sent on ordinary requests
 - CORS is an explicit allowlist with credentials, not `*`
 - Inactive admins are rejected at the dependency layer, not just at login
-- Email uniqueness is enforced on both tables (DB constraint + a service-level pre-check that
-  returns a clean 409 instead of an integrity error)
+- Email uniqueness is enforced on the single `users` table (DB constraint + a service-level pre-check
+  that returns a clean 409 instead of an integrity error)
 
 ### What is missing — read before trusting this
 
@@ -328,12 +328,10 @@ Still open:
 | No CSRF token | `samesite=lax` alone; no double-submit or synchroniser token |
 | ~~No HTTP rate limiting~~ | **Done 2026-08-03** — per-IP, three tiers, in `core/rate_limit.py`. Counters are per process, so N workers multiply every limit by N (PM-26) |
 | No monitoring or alerting | Structured logging with request correlation exists as of 2026-08-03; **nothing alerts**, and container stdout is lost on `down` (PM-10) |
-| No email transport | Invitations return the accept URL; reset tokens are only readable in the DB (PM-27) |
 | Google SSO unverified | Implemented but never run against real Google credentials (PM-28) |
 | No row-level / partner scoping | Users and invitations are admin-or-self; no ownership model (PM-5) |
-| No automated tests | Verified by a 41-check shell script, not a suite (PM-11) |
+| Test coverage is partial | **241 tests and CI exist** as of 2026-08-06 (PM-39), but none covers RBAC enforcement across the routes, a login round trip, or migrations — which is what PM-5 needs (PM-11) |
 | `SECRET_KEY` has no rotation story | Rotating it logs everyone out |
-| No request logging or error monitoring | An unhandled exception is a bare 500 (PM-10) |
 
 ---
 
@@ -348,20 +346,18 @@ Still open:
 | `/dashboard` | protected | Server page → `DashboardClient` |
 | `/dashboard/profile` | protected | Profile form |
 | `/dashboard/all-users`, `/dashboard/add-user` | protected | Admin user management |
-| `/dashboard/candidates` | protected | Inherited domain |
 
 ### State
 
 | Slice | Holds |
 |-------|-------|
 | `authSlice` | Current identity, `user_type`, auth status |
-| `testSlice` | Inherited test-taking state — removal candidate |
 
 `usePermissions()` (`lib/hooks/usePermissions.ts`) is how components gate themselves; it reads the
 server-resolved `permissions` list, so the super-admin bypass needs no client-side special case.
 
 `Providers.tsx` wraps the tree with the Redux provider; `AuthInitializer.tsx` hydrates identity on
-mount by calling `GET /api/auth/me`. `useAppDispatch` / `useAppSelector` are the typed accessors — never use
+mount by calling `GET /api/v1/auth/me`. `useAppDispatch` / `useAppSelector` are the typed accessors — never use
 the untyped hooks directly.
 
 ### API layer
@@ -373,9 +369,8 @@ One module per resource under `lib/api/`, all sharing `axiosInstance`:
 | `authApi.ts` | register, login, logout, me, profile, change/reset password, accept invitation, Google URL |
 | `adminApi.ts` | user administration — CRUD, approve, toggle, unlock, bulk |
 | `rbacApi.ts` | roles, permission catalog, invitations |
-| `candidateApi.ts` | candidates (inherited) |
-| `categoryApi.ts` | categories |
-| `testApi.ts` | tests (inherited) |
+| `navigationApi.ts` | the server-driven sidebar |
+| `settingsApi.ts` | installation branding — text, theme, logo/favicon |
 
 **Rule:** components never call `axios` or `fetch` directly.
 
@@ -384,7 +379,7 @@ One module per resource under `lib/api/`, all sharing `axiosInstance`:
 - `next.config.mjs`: `compress: true`, `poweredByHeader: false`, `reactStrictMode: true`
 - `optimizePackageImports` for `@/components/{admin,dashboard,common}`
 - Cache headers: `/api/*` → `no-store`; hashed static assets → `max-age=31536000, immutable`
-- Skeleton components (`Skeleton.tsx`, `TestCardSkeleton.tsx`) for loading states
+- Skeleton components (`Skeleton.tsx`) for loading states
 - Backend gzips responses ≥1000 bytes
 
 ---
@@ -469,10 +464,11 @@ One module per resource under `lib/api/`, all sharing `axiosInstance`:
 
 ### 🟡 Decisions that gate other work
 
-- [ ] **PM-25 — settle React/Next.** `package.json` pins React 19 against `next@14.2.35`'s
-      `peer react@^18.2.0`, so **plain `npm ci` fails outright**; CI and `Dockerfile.dev` both carry
-      `--legacy-peer-deps` as a documented workaround. This is a decision, not a task, and it gates
-      PM-30 and shapes PM-41's server-component step.
+- [x] ~~**PM-25 — settle React/Next.**~~ **Settled 2026-08-07: React 18.3.1.** It turned out not to be a
+      decision anyone got to make at leisure — React 19 broke Next 14's App Router client runtime and
+      sign-in stopped working. It did **not** gate PM-30 after all (those lint errors come from
+      `eslint-config-next@16` on a Next 14 codebase, unrelated to the React version), and it no longer
+      blocks PM-41's server-component step.
 - [ ] **PM-11 — extend the test suite.** 74 tests now cover token types, refresh reuse, password
       hashing and config validation (PM-39). They do **not** cover RBAC enforcement across the 56
       routes, which is the suite PM-5 needs before it can be trusted.
@@ -480,6 +476,16 @@ One module per resource under `lib/api/`, all sharing `axiosInstance`:
       only when concurrency is measured to be the bottleneck — it is a large migration, not a flag.
 
 ### Documentation accuracy — this file is stale in six places
+> **✅ The *Documentation accuracy* items below were cleared on 2026-08-06.** The API-path sweep
+> (`/api/…` → `/api/v1/…`, 110 references across 13 current-state docs) and every stale section named
+> here have been corrected. They are kept, struck through, as the record of what had drifted and why —
+> deleting them would lose the more useful lesson, which is that all of it accumulated in under two
+> weeks while the code was being actively improved.
+>
+> Historical documents were deliberately **not** rewritten: `DAILY_CHANGES.md` and `TECH_DEBT.md`'s
+> dated entries still say `/api/…` because that is what was true when they were written, and both now
+> carry a note saying so. The four inherited test-platform docs were left alone too — `INDEX.md`
+> already marks them untrustworthy.
 
 The 2026-08-06 deletion of the inherited test-platform domain invalidated part of this document, and
 § *What is missing* predates the 2026-08-03 work. Fix in one pass:

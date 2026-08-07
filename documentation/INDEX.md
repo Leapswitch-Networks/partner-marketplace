@@ -66,9 +66,13 @@ Each file has ONE clear purpose. Load only what the task needs.
 ## Planning
 
 Planning docs are **reference only** — they describe intent, not current state. Check the code.
+The one exception is `planning/PLANNING.md`, which records state *measured* on its stated date; when
+it and another register disagree, it says so and names the one that is stale.
 
 | File | Purpose | Status |
 |------|---------|--------|
+| `planning/PLANNING.md` | **The working plan — start here.** What is in flight now, what is next, what is blocked and on whom. State verified against the running system, not copied from the other registers | **Live — 2026-08-07** |
+| `planning/CORE_COMPLETION_PLAN.md` | **How the core gets to 100%.** The Index/Form/Show contract every module follows, the shared backend and frontend layers to build first, module-by-module state, build order, and what we deliberately do *not* copy from LeapDesk | **Live — 2026-08-07** |
 | `planning/LEAPDESK_PARITY_PLAN.md` | Port spec for LeapDesk's eight core admin modules + the Settings area — schemas, endpoints, permissions, build order | **Spec — awaiting review. Current focus** |
 | `planning/MARKETPLACE_DOMAIN_PLAN.md` | Marketplace domain model — partners, tiers, customers, catalog, quotes | Design — **parked** pending LeapDesk parity |
 | `planning/SCAFFOLD_CLEANUP_PLAN.md` | Retiring the inherited test-platform domain | **Tiers 2–3 executed 2026-08-06** — the domain is gone. Tier 1 housekeeping remains |

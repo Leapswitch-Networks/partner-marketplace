@@ -98,21 +98,21 @@ Two decisions worth knowing:
 
 ## Endpoints
 
-Self-service lives on `/api/auth/*` — see [`AUTHENTICATION.md`](./AUTHENTICATION.md).
-Administration is `/api/users/*`, every route permission-gated:
+Self-service lives on `/api/v1/auth/*` — see [`AUTHENTICATION.md`](./AUTHENTICATION.md).
+Administration is `/api/v1/users/*`, every route permission-gated:
 
 | Method | Path | Requires |
 |---|---|---|
-| GET | `/api/users` | `user-view` — paginated, searchable, filterable, sortable |
-| GET | `/api/users/{id}` | `user-view` — 404 for someone else's row without admin access |
-| POST | `/api/users` | `user-create` — password optional (omit for SSO-only staff) |
-| PATCH | `/api/users/{id}` | `user-update` |
-| DELETE | `/api/users/{id}` | `user-delete` |
-| POST | `/api/users/{id}/approve` | `user-approve` |
-| POST | `/api/users/{id}/toggle-status` | `user-update` — ACTIVE ↔ INACTIVE only |
-| POST | `/api/users/{id}/unlock` | `user-update` — clears a lockout |
-| POST | `/api/users/bulk-delete` | `user-delete` |
-| POST | `/api/users/bulk-status` | `user-update` |
+| GET | `/api/v1/users` | `user-view` — paginated, searchable, filterable, sortable |
+| GET | `/api/v1/users/{id}` | `user-view` — 404 for someone else's row without admin access |
+| POST | `/api/v1/users` | `user-create` — password optional (omit for SSO-only staff) |
+| PATCH | `/api/v1/users/{id}` | `user-update` |
+| DELETE | `/api/v1/users/{id}` | `user-delete` |
+| POST | `/api/v1/users/{id}/approve` | `user-approve` |
+| POST | `/api/v1/users/{id}/toggle-status` | `user-update` — ACTIVE ↔ INACTIVE only |
+| POST | `/api/v1/users/{id}/unlock` | `user-update` — clears a lockout |
+| POST | `/api/v1/users/bulk-delete` | `user-delete` |
+| POST | `/api/v1/users/bulk-status` | `user-update` |
 
 `toggle-status` deliberately refuses a SUSPENDED account: un-suspending is a decision, not a flip, so
 it goes through `PATCH`.
@@ -169,7 +169,7 @@ Rotate them (PM-4).
 | 400 "cannot change your own status" | Intentional — no self-approval, no self-lockout. |
 | Bulk action affected fewer than requested | Protected rows were skipped. Read `skipped_reasons`. |
 | `.filter(User.is_super_admin)` fails | Python property, not a column. Join `roles` and filter on `Role.name`. |
-| A user's permissions look stale | They are cached in `authSlice` from `/api/auth/me`. Refetch after a role change. |
+| A user's permissions look stale | They are cached in `authSlice` from `/api/v1/auth/me`. Refetch after a role change. |
 | Created a user with no password and they can't sign in | Correct — that's an SSO-only account, and Google SSO requires a staff-domain address. |
 
 ---
@@ -234,6 +234,16 @@ Rotate them (PM-4).
       up by primary key, but backups, `VACUUM` and the active-sessions screen all notice.
 
 ### Documentation accuracy — this file
+> **✅ The *Documentation accuracy* items below were cleared on 2026-08-06.** The API-path sweep
+> (`/api/…` → `/api/v1/…`, 110 references across 13 current-state docs) and every stale section named
+> here have been corrected. They are kept, struck through, as the record of what had drifted and why —
+> deleting them would lose the more useful lesson, which is that all of it accumulated in under two
+> weeks while the code was being actively improved.
+>
+> Historical documents were deliberately **not** rewritten: `DAILY_CHANGES.md` and `TECH_DEBT.md`'s
+> dated entries still say `/api/…` because that is what was true when they were written, and both now
+> carry a note saying so. The four inherited test-platform docs were left alone too — `INDEX.md`
+> already marks them untrustworthy.
 
 - [ ] § *Profile & classification* lists **`phone`**; the column is
       **`personal_mobile_number`** (`String(30)`). The table also omits `personal_email`,

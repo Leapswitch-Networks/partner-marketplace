@@ -24,7 +24,7 @@ users ──user_roles──> roles ──role_permissions──> permissions �
 | Model-level rules | `user_service` predicates and `rbac_service` guards |
 | Data visibility | `User.has_admin_access` — admins see all rows, others see only their own |
 | Vocabulary | `core/permissions.py` — the single source of truth the seeder writes from |
-| Frontend | `permissions` resolved server-side into `GET /api/auth/me`, read via `usePermissions()` |
+| Frontend | `permissions` resolved server-side into `GET /api/v1/auth/me`, read via `usePermissions()` |
 
 ### The one deliberate divergence from LeapDesk
 
@@ -156,7 +156,7 @@ if not actor.has_admin_access:
 ```
 
 Applied in `user_service.list_users` and `invitation_service.list_invitations` (own invitations only).
-`GET /api/users/{id}` returns **404**, not 403, for someone else's record — a 403 would confirm it
+`GET /api/v1/users/{id}` returns **404**, not 403, for someone else's record — a 403 would confirm it
 exists.
 
 ⚠️ **There is still no partner-scoped ownership model** (TECH_DEBT PM-5). The current rule is the
@@ -169,32 +169,32 @@ centrally — see [`../planning/MARKETPLACE_DOMAIN_PLAN.md`](../planning/MARKETP
 
 | Method | Route | Requires |
 |---|---|---|
-| GET | `/api/users` | `user-view` (scoped) |
-| GET | `/api/users/{id}` | `user-view` (self only without admin access) |
-| POST | `/api/users` | `user-create` |
-| PATCH | `/api/users/{id}` | `user-update` + protection rules |
-| DELETE | `/api/users/{id}` | `user-delete` + protection rules |
-| POST | `/api/users/{id}/approve` | `user-approve` |
-| POST | `/api/users/{id}/toggle-status` · `/unlock` | `user-update` |
-| POST | `/api/users/bulk-delete` · `bulk-status` | `user-delete` · `user-update` |
-| GET | `/api/roles` · `/api/roles/{id}` | `role-view` |
-| POST/PATCH/DELETE | `/api/roles*` | `role-create` / `role-update` / `role-delete` |
-| GET | `/api/permissions` | `permission-view` |
-| GET | `/api/invitations` | `invitation-view` (own only without admin access) |
-| POST | `/api/invitations` · `/bulk` | `invitation-create` |
-| POST | `/api/invitations/{id}/resend` | `invitation-resend` |
-| DELETE | `/api/invitations/{id}` | `invitation-cancel` |
-| GET | `/api/invitations/preview` | **none** — the invitee has no account yet |
+| GET | `/api/v1/users` | `user-view` (scoped) |
+| GET | `/api/v1/users/{id}` | `user-view` (self only without admin access) |
+| POST | `/api/v1/users` | `user-create` |
+| PATCH | `/api/v1/users/{id}` | `user-update` + protection rules |
+| DELETE | `/api/v1/users/{id}` | `user-delete` + protection rules |
+| POST | `/api/v1/users/{id}/approve` | `user-approve` |
+| POST | `/api/v1/users/{id}/toggle-status` · `/unlock` | `user-update` |
+| POST | `/api/v1/users/bulk-delete` · `bulk-status` | `user-delete` · `user-update` |
+| GET | `/api/v1/roles` · `/api/v1/roles/{id}` | `role-view` |
+| POST/PATCH/DELETE | `/api/v1/roles*` | `role-create` / `role-update` / `role-delete` |
+| GET | `/api/v1/permissions` | `permission-view` |
+| GET | `/api/v1/invitations` | `invitation-view` (own only without admin access) |
+| POST | `/api/v1/invitations` · `/bulk` | `invitation-create` |
+| POST | `/api/v1/invitations/{id}/resend` | `invitation-resend` |
+| DELETE | `/api/v1/invitations/{id}` | `invitation-cancel` |
+| GET | `/api/v1/invitations/preview` | **none** — the invitee has no account yet |
 | GET/POST/PATCH/DELETE | `/api/categories*` · `/api/candidates*` | `category-*` / `candidate-*` |
 
-`/api/invitations/preview` is the only intentionally unauthenticated data route. It returns the
+`/api/v1/invitations/preview` is the only intentionally unauthenticated data route. It returns the
 invited email, role name, account type and expiry — nothing about the inviter or the wider system.
 
 ---
 
 ## Frontend Authorization
 
-`GET /api/auth/me` returns `permissions` already resolved, and **for a super admin it is the full
+`GET /api/v1/auth/me` returns `permissions` already resolved, and **for a super admin it is the full
 catalog**, expanded server-side. So the frontend has no bypass rule to know about:
 
 ```tsx
@@ -220,7 +220,7 @@ LeapDesk splits these — `role-update` for edit/update, `role-permissions` for 
 it is right to. **Renaming a role and rewriting what it grants are different risk levels.** Conflated,
 anyone who can tidy up a label can also hand out every permission in the catalog.
 
-`PATCH /api/roles/{id}` still declares `role-update`; the service additionally requires
+`PATCH /api/v1/roles/{id}` still declares `role-update`; the service additionally requires
 `role-permissions` when the payload carries `permission_ids`. That is the same shape as `update_user`,
 where the route requires `user-update` and the service additionally requires admin access to touch
 `status` or `role_ids` — **the route states the minimum, the service enforces the rest.**
@@ -299,8 +299,8 @@ a role grant is the change most likely to be the subject of *"who did that, and 
 
 ### Reading it
 
-`GET /api/activity` requires the **`activity-view`** permission and filters on log name, event, subject,
-actor, description substring and date range. `GET /api/activity/events` lists the event names actually
+`GET /api/v1/activity` requires the **`activity-view`** permission and filters on log name, event, subject,
+actor, description substring and date range. `GET /api/v1/activity/events` lists the event names actually
 present, so the filter dropdown is built from the data rather than a hardcoded list that goes stale.
 
 **The read surface is read-only structurally, not by policy.** There is no create, update or delete route
@@ -350,7 +350,7 @@ The seeder never touches an administrator-created role, so re-running is safe.
 
 | Symptom | Cause / Fix |
 |---|---|
-| 403 "requires the 'x-view' permission" | The role lacks it. Grant via `PATCH /api/roles/{id}`, then re-login or refetch `/me`. |
+| 403 "requires the 'x-view' permission" | The role lacks it. Grant via `PATCH /api/v1/roles/{id}`, then re-login or refetch `/me`. |
 | Admin gets 403 editing another admin | Target holds a super-admin role. Only a super admin may. |
 | 403 assigning a role | Granting `RootUser`/`SuperAdmin` requires being one. |
 | Permissions look stale in the UI | `authSlice` caches from `/me`. Refetch after a role change. |
@@ -435,6 +435,6 @@ The seeder never touches an administrator-created role, so re-running is safe.
 - [ ] **The super-admin bypass is not expanded into `permission_names`.** `has_permission` applies it;
       the raw property does not. Any new code that reads `permission_names` directly instead of calling
       `has_permission` will silently under-authorise a super admin. There is no lint or test for this.
-- [ ] **The frontend caches permissions in `authSlice` from `/api/auth/me`.** They go stale after a role
+- [ ] **The frontend caches permissions in `authSlice` from `/api/v1/auth/me`.** They go stale after a role
       change until a refetch — listed under § *Common Issues* as a symptom, but there is no invalidation
       mechanism, so it will keep being reported. PM-41's data layer is where a fix would live.

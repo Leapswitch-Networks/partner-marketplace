@@ -35,7 +35,7 @@ Covers everything under `backend/app/`: routers, services, models, schemas, depe
 9. [Configuration](#9-configuration)
 10. [Everything Is Synchronous](#10-everything-is-synchronous)
 11. [Adding a New Resource](#11-adding-a-new-resource)
-12. [Anti-Patterns Already in the Codebase](#12-anti-patterns-already-in-the-codebase)
+12. [Anti-Patterns That Are Live Today](#12-anti-patterns-that-are-live-today)
 
 ---
 
@@ -68,13 +68,13 @@ router = APIRouter(prefix="/categories", tags=["categories"])
 ```
 
 - One router per resource, in `app/api/<resource>.py`
-- `prefix` is the resource path; the `/api` prefix is added once in `main.py`
+- `prefix` is the resource path; the **version** prefix (`settings.API_PREFIX` = `/api/v1`) is added once in `main.py` — never write it in a router
 - `tags` groups the endpoints in `/docs` — always set it
 
 Register in `app/main.py`:
 
 ```python
-app.include_router(category.router, prefix="/api")
+app.include_router(category.router, prefix=settings.API_PREFIX)
 ```
 
 ### A router function should delegate, not decide
@@ -332,10 +332,27 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 - **No nested transactions** anywhere yet. If you need one, use `db.begin_nested()` deliberately and
   document why.
 
-⚠️ There is **no** `try/except` rollback wrapper around requests. An exception mid-transaction leaves
-the session dirty; it's closed by `get_db()`'s `finally`, which discards the transaction. That works,
-but it means **partial multi-step writes are not atomic unless you commit once at the end.** Do all
-your mutations, then commit.
+⚠️ **Updated 2026-08-06 (PM-38).** `get_db()` now rolls back **explicitly** on exception before
+closing, and `db/session.py` provides `unit_of_work(db)` — commit on success, roll back on anything —
+for a flow that writes more than one table:
+
+```python
+with unit_of_work(db):
+    user = user_service.create_user(db, data, actor)    # must NOT commit inside
+    rbac_service.assign_roles(db, user, data.role_ids)  # must NOT commit inside
+# one commit here, or nothing at all
+```
+
+The original warning's conclusion still holds for anything **not** wrapped: **partial multi-step writes
+are not atomic unless you commit once at the end.** The 49 existing `db.commit()` calls across
+`app/services/` are single-write and were deliberately left alone, so wrapping a call to one of them
+does *not* make it atomic — the nested commit ends the outer transaction and the wrapper becomes
+decoration. Move the commit out first.
+
+**`activity_service` stays outside every boundary**, deliberately: it swallows its own exceptions,
+because failing a login because an audit write failed turns observability into an outage. Rolling an
+audit row back with the operation it records would be the same mistake in the other direction — the
+trail would lose exactly the failed operations worth investigating.
 
 ---
 
@@ -438,23 +455,30 @@ Checklist for a resource called `listing`:
 
 ---
 
-## 12. Anti-Patterns Already in the Codebase
+## 12. Anti-Patterns That Are Live Today
 
-Present in the inherited scaffold. **Don't copy them; don't silently "fix" them either — they're
-tracked in `../planning/TECH_DEBT.md`.**
+**Rewritten 2026-08-06.** This section used to list ten anti-patterns "present in the inherited
+scaffold" and **nine of the ten no longer existed** — the code they named had been fixed or deleted.
+That inverted the section's purpose: instead of *"don't copy this"* it read as a list of current
+problems, so a reader either distrusted the file or went looking for code that was not there. The
+closed items are recorded in [`../planning/TECH_DEBT.md`](../planning/TECH_DEBT.md) (PM-1, 3, 6, 7, 9,
+13, 14, 15) and are not repeated here.
 
-| Anti-pattern | Where | Why it's wrong |
-|--------------|-------|----------------|
-| Plaintext password storage/comparison | `core/security.py`, `services/auth_service.py` | Accepted debt — see `../core/AUTHENTICATION.md` § Known Debt |
-| Token decoding duplicated in routers | `api/auth.py` — `refresh`, `whoami` | Three copies of decode-and-assert logic that `dependencies.py` should own |
-| `except Exception:` | `api/auth.py` `whoami` | Swallows real bugs as 401s |
-| Dead dependencies | `require_admin`, `require_super_admin`, `get_client_ip` | Look like enforcement, enforce nothing |
-| Dead columns | `admin_users` lockout/audit/reset columns | Suggest features that don't exist |
-| Privilege check in service instead of a guard | `update_admin_user`, `delete_admin_user` | Invisible in OpenAPI; easy to forget on the next endpoint |
-| No role check on admin creation | `services/auth_service.register_admin` | Any admin can mint a `super_admin` |
-| Inconsistent password rules | `RegisterRequest` vs `AdminRegisterRequest` | Two standards in one file |
-| `PATCH` schemas with required fields | `UpdateProfileRequest` | Behaves like `PUT`; misleading verb |
-| Hardcoded CORS origins | `main.py` | Not environment-configurable; deploying needs a code edit |
+These four are **live**, and each is a mistake this codebase makes easy:
+
+| Anti-pattern | Why it's wrong |
+|--------------|----------------|
+| Reading `user.permission_names` instead of calling `user.has_permission(p)` | The raw property does **not** apply the super-admin bypass. A check written against it silently **under**-authorises a RootUser/SuperAdmin — and it fails open in the safe direction, so it looks fine until a super admin reports a 403 |
+| Filtering a query on a Python `@property` | `User.is_super_admin`, `User.is_locked`, `Role.is_protected`, `User.password_otp_grace` are computed in Python and **cannot** appear in a `.where()`. Join `roles` and filter on `Role.name`, or filter on a real column |
+| Post-filtering a paginated query to scope rows | Corrupts the page count and the total — the caller is told there are 40 records and receives 12. Scoping has to reach the SQL (PM-5) |
+| A dead column that implies a feature | `users.profile_photo_path` is a `String(2048)` that **nothing writes and nothing reads** — `avatar_url` returns `google_avatar` only, and there is no upload endpoint. This is exactly what PM-6 was about, reappearing on the new table. Either build it or say so in the column comment |
+
+**Two more that are not defects but are load-bearing conventions**, easy to undo by tidying:
+
+| Pattern | Why it must stay |
+|---|---|
+| `activity_service` swallowing its own exceptions | Failing a login because an audit write failed turns observability into an outage. It commits on its own and never raises — do not "fix" it into the caller's transaction |
+| `db.expire_all()` after a bulk `UPDATE` | Objects already loaded in the Session hold pre-UPDATE state, so a caller re-reading one sees the old value. `session_service._revoke_where` does this; any new bulk update needs it too |
 
 ---
 
@@ -490,7 +514,7 @@ tracked in `../planning/TECH_DEBT.md`.**
       precisely because rows sharing a timestamp make an unstable sort put a row on two pages) is
       established in code and written down nowhere.
 - [ ] **No idempotency convention for mutating requests.** Nothing prevents a double-submitted
-      `POST /api/users` from creating two accounts beyond the email uniqueness constraint that happens
+      `POST /api/v1/users` from creating two accounts beyond the email uniqueness constraint that happens
       to catch it. Bulk endpoints have no such backstop.
 
 ### 🟠 Adopt what now exists
@@ -529,6 +553,16 @@ tracked in `../planning/TECH_DEBT.md`.**
       and services are where this document says the logic lives.
 
 ### Documentation accuracy — two sections are now wrong
+> **✅ The *Documentation accuracy* items below were cleared on 2026-08-06.** The API-path sweep
+> (`/api/…` → `/api/v1/…`, 110 references across 13 current-state docs) and every stale section named
+> here have been corrected. They are kept, struck through, as the record of what had drifted and why —
+> deleting them would lose the more useful lesson, which is that all of it accumulated in under two
+> weeks while the code was being actively improved.
+>
+> Historical documents were deliberately **not** rewritten: `DAILY_CHANGES.md` and `TECH_DEBT.md`'s
+> dated entries still say `/api/…` because that is what was true when they were written, and both now
+> carry a note saying so. The four inherited test-platform docs were left alone too — `INDEX.md`
+> already marks them untrustworthy.
 
 - [ ] **§ 7's closing ⚠️ is out of date.** It states *"There is **no** `try/except` rollback wrapper
       around requests"* and that a dirty session is discarded by `get_db()`'s `finally`. Since

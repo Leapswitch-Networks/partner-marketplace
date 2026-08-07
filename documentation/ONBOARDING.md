@@ -378,11 +378,11 @@ npm run dev -- --port 3001
 
 Frontend runs at **http://localhost:3001**.
 
-**`--legacy-peer-deps` is required, not optional.** `package.json` pins `react` 19.2.4 while
-`next` 14.2.35 declares `peer react@^18.2.0` — React 19 support arrived in Next 15, not 14. Without
-the flag, `npm install` and `npm ci` both abort with `ERESOLVE`. This is a real pre-existing defect
-in the dependency set, tracked as **PM-25** in `planning/TECH_DEBT.md`; the flag is a workaround, not
-a fix.
+**`--legacy-peer-deps` is no longer required (2026-08-07).** It was, for as long as `package.json`
+pinned React 19.2.4 against `next@14.2.35`'s `peer react@^18.2.0` — React 19 support arrived in Next 15,
+not 14, so `npm install` and `npm ci` both aborted with `ERESOLVE`. **PM-25 is now resolved**: React and
+React DOM are on 18.3.1, which is inside Next 14's declared range, and the tree resolves with no flag at
+all. `Dockerfile.dev` still passes it; that is now harmless rather than load-bearing.
 
 `NEXT_PUBLIC_API_URL` must point at port 8002 — see § 3.1. `lib/utils/constants.ts` falls back to
 `http://localhost:8000`, which is the wrong port for this setup, so without `.env.local` every API
@@ -402,26 +402,26 @@ add the origin there.
       `candidates`, `categories` and `health` tag groups
 - [ ] http://localhost:3001 redirects to `/sign-in` (root always redirects — see `frontend/middleware.ts`)
 - [ ] Signing in as the root account from § 5.2 reaches `/dashboard`
-- [ ] `curl -s localhost:8002/api/auth/me` without a cookie → `401`
+- [ ] `curl -s localhost:8002/api/v1/auth/me` without a cookie → `401`
 - [ ] http://localhost:8083 (Adminer) connects to the `db` server
 
 The whole set as one paste-able block:
 
 ```bash
 curl -s localhost:8002/health                                   # {"status":"ok"}
-curl -s -o /dev/null -w '%{http_code}\n' localhost:8002/api/auth/me       # 401
+curl -s -o /dev/null -w '%{http_code}\n' localhost:8002/api/v1/auth/me       # 401
 curl -s -o /dev/null -w '%{http_code} %{redirect_url}\n' localhost:3001/  # 307 …/sign-in
 
-# One login endpoint for everyone. There is no /api/auth/admin/login and no
-# /api/auth/whoami — both were removed when the two account tables were merged
+# One login endpoint for everyone. There is no /api/v1/auth/admin/login and no
+# /api/v1/auth/whoami — both were removed when the two account tables were merged
 # (migration e7b41c9a2d10). Capability comes from roles, not from the endpoint.
 # Use the root credentials from § 5.2; there is no committed default.
-curl -s -X POST localhost:8002/api/auth/login \
+curl -s -X POST localhost:8002/api/v1/auth/login \
   -H 'Content-Type: application/json' \
   -d "{\"email\":\"root@leapswitch.com\",\"password\":\"$ROOT_PASSWORD\"}"  # 200 + Set-Cookie
 
 # CORS preflight must echo the frontend origin back
-curl -s -i -X OPTIONS localhost:8002/api/auth/login \
+curl -s -i -X OPTIONS localhost:8002/api/v1/auth/login \
   -H 'Origin: http://localhost:3001' \
   -H 'Access-Control-Request-Method: POST' | grep -i access-control-allow-origin
 ```
@@ -452,6 +452,7 @@ docker compose logs backend --since 15s | grep Reloading   # WatchFiles detected
 | Roll back one | `docker compose run --rm backend alembic downgrade -1` |
 | Current revision | `docker compose run --rm backend alembic current` |
 | Seed RBAC + root account | `docker compose run --rm -e ROOT_PASSWORD backend python -m app.db.seed_rbac` |
+| **Backend tests + lint** | `docker compose run --rm --no-deps backend sh -c "pip install -q pytest ruff && python -m pytest -q && ruff check ."` |
 | Lint frontend | `docker compose exec frontend npm run lint` |
 | Production build | `docker compose exec frontend npm run build` |
 | Rebuild after a dependency change | `docker compose up -d --build backend` (or `frontend`) |
@@ -459,6 +460,13 @@ docker compose logs backend --since 15s | grep Reloading   # WatchFiles detected
 
 `alembic` and `seed_rbac` use `run --rm` rather than `exec` for the reason in § 4.3. Everything else
 uses `exec` because it doesn't touch the database.
+
+**The test command installs its own tooling, and that is not an oversight.** `pytest` and `ruff` live in
+`requirements-dev.txt`, which the backend image deliberately does not install — a deployed image carries
+no dev tooling (§ 10). `--no-deps` skips starting Postgres, because the default suite connects to
+nothing. The install is a few seconds from pip's cache. If you run the suite often, build a local
+`backend/.venv` on **Python 3.12** instead and use Path B — note that a 3.14 virtualenv will not install
+the pinned dependencies at all, which is the whole reason § 2 tells you to delete the inherited ones.
 
 ### Path B
 
@@ -489,7 +497,12 @@ uses `exec` because it doesn't touch the database.
 | Alembic can't find migrations | You ran it outside `backend/`. `script_location = app/db/migrations` is relative. |
 | Frontend loads but every API call fails with a CORS error | Frontend is on a port other than 3000/3001. Add the origin to `allow_origins` in `backend/app/main.py`. |
 | Logged in but immediately bounced to `/sign-in` | `access_token` cookie missing. Cookies are `httponly` + `samesite=lax` + `secure=False`; over plain HTTP the host must be `localhost` for both, not a mix of `localhost` and `127.0.0.1`. |
-| `POST /api/auth/refresh` returns 401 even with a valid session | The refresh cookie is scoped to `path=/api/auth/refresh`, so it's only sent to that exact path. That's intentional — call refresh at exactly that URL. |
+| Sign-in appears to fail, and the console shows a **404 on an unversioned path** like `GET /api/auth/me` | The browser is running a client bundle built **before PM-40 versioned the API**. No source file contains that path — check with `grep -r '"/api/auth' frontend/lib` (→ nothing). Sign-in itself succeeded; `activity_logs` will show the `login` row. Fix: **clear the browser cache** — see the row below. |
+| `Text content did not match. Server: "" Client: "PM"` in the dashboard shell | Same cause. The server renders the current `BrandMark` (an `<img src="/logo.svg">`, so the span holds no text) while a cached client chunk predates `APP_LOGO` and falls through to the monogram. Both halves are individually correct; they are from different builds. |
+| `TypeError: Cannot read properties of undefined (reading 'call')` at webpack's `options.factory` | Same cause, worst symptom — a cached chunk requires a module that has since been **deleted**, so webpack has a module id with no factory. This is what a renamed or removed component does to a browser holding the old chunk. |
+| **Stale browser bundle — the fix** | **Clear the browser cache for `localhost:3001`** (DevTools → Application → Storage → Clear site data), or hard-reload. **Recreating the `.next` volume does not help** — the stale copy is in the browser, not the container. Tells you are looking at this and not a code bug: the server returns 200 for the page *and* every chunk, `tsc` and `next build` are clean, and the stack-trace line numbers are a little off from the current source (stale sourcemap). |
+| Why it happened at all, and why it should not recur | `next.config.mjs` applied `Cache-Control: …immutable` to every `.js` — correct for production's content-hashed filenames, ruinous in dev where `page.js` keeps its name while its contents change. **Fixed 2026-08-07**: the rule is now `NODE_ENV`-conditional and dev serves `no-store`. Entries cached *before* that fix still need one manual clear. |
+| `POST /api/v1/auth/refresh` returns 401 even with a valid session | The refresh cookie is scoped to `path=/api/v1/auth/refresh`, so it's only sent to that exact path. That's intentional — call refresh at exactly that URL. |
 | Requests hang then fail after 5s | `axiosInstance` has a hard 5s timeout. The backend is slow or down. |
 | `data/db` permission errors | The Postgres cluster is owned by the container's uid. Don't `chown` it. For a clean slate: `docker compose down` then `sudo rm -rf data/db`, then `up -d` and re-migrate. Note `down -v` does **not** clear it — `data/db` is a bind mount, not a named volume, so `-v` leaves it untouched. |
 | Tailwind classes not applying | `tailwind.config.ts` only scans `./app` and `./components`. A new top-level folder needs adding to `content`. |
@@ -498,7 +511,8 @@ uses `exec` because it doesn't touch the database.
 
 | Symptom | Cause / Fix |
 |---------|-------------|
-| `npm ci` fails with `ERESOLVE … peer react@^18.2.0 from next@14.2.35` | Pre-existing dependency conflict, **PM-25**. React 19 is pinned against Next 14, which doesn't support it. `Dockerfile.dev` already passes `--legacy-peer-deps`; if you're installing by hand, do the same. |
+| `npm ci` fails with `ERESOLVE … peer react@^18.2.0 from next@14.2.35` | **Fixed 2026-08-07 (PM-25)** — React is on 18.3.1 now and the tree resolves with no flag. If you still see this, your `package.json` predates the fix. |
+| `TypeError: Cannot read properties of undefined (reading 'call')` at webpack's `options.factory`, thrown from a `<Lazy>` inside Next's `layout-router` | React/Next version mismatch — this is what an unsupported React does to the App Router's client runtime, and it broke sign-in entirely (**PM-25**). Check with `docker compose exec frontend npm ls react react-dom`; any `invalid:` marker is the cause. The app has no `next/dynamic` or `React.lazy` of its own, so a `<Lazy>` in a trace is always framework-internal. |
 | `connection refused` / `could not translate host name "localhost"` from a backend command | You used `docker compose exec` for something that talks to the database. `exec` skips the entrypoint that rewrites `DATABASE_URL`. Use `docker compose run --rm backend …` — § 4.3. |
 | `Bind for 0.0.0.0:3001 failed: port is already allocated` | Something else holds the port. Find it with `ss -ltnp \| grep 3001`, then either stop it or start with `FRONTEND_PORT=3005 docker compose up -d` — and add the new origin to the CORS allowlist in `backend/app/main.py`. |
 | Edits on the host don't reload the container | Check the mount resolved: `docker compose exec backend ls /app` should show your source. If watching is silently missing events, `WATCHPACK_POLLING=true` is already set for the frontend; for the backend add `--reload-delay 1` or fall back to `docker compose restart backend`. |
@@ -594,3 +608,34 @@ If anything in this file doesn't work:
 1. Check § 9 (Common Gotchas).
 2. Ask the project owner (Ayush Mishra, `ayush.mishra@leapswitch.com`).
 3. Once you've solved it — **update this file** so the next person doesn't hit the same wall.
+
+### Locked out of your own local account
+
+The API locks an account after `MAX_FAILED_LOGIN_ATTEMPTS` failures for
+`ACCOUNT_LOCKOUT_MINUTES`. The production defaults (5 / 15) are painful on a local
+box, where you mistype your own password far more often than an attacker guesses
+it — a 15-minute lockout costs you 15 minutes to protect a database with nothing
+in it.
+
+`backend/.env` (gitignored) therefore raises them locally:
+
+```bash
+MAX_FAILED_LOGIN_ATTEMPTS=50
+ACCOUNT_LOCKOUT_MINUTES=1
+```
+
+Raised, not disabled, so the code path is still exercised. `app/core/config.py`
+keeps the real defaults, so nothing changes for any other environment.
+
+If you do get locked out:
+
+```bash
+./scripts/unlock-user.sh                      # root@leapswitch.com
+./scripts/unlock-user.sh someone@example.com
+```
+
+It clears the counter and the lock. It cannot show you a password — they are
+bcrypt-hashed.
+
+**A password is compared byte-for-byte.** Copying one out of a chat window often
+picks up a trailing space, which fails as surely as a wrong password. Type it.

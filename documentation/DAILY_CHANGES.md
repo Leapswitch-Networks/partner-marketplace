@@ -6,6 +6,655 @@
 > Update this file as part of the same change as the code. A task that isn't here is invisible to the
 > next person.
 
+## August 7, 2026 — One list pipeline for every index, and a pagination bug it made visible
+
+**Every index endpoint now has one place to get search, sorting and pagination right.** `app/core/query.py`
+holds a `ListSpec` — a per-resource declaration of which columns may be sorted on, which are searched,
+and which column breaks ties — plus `run_list()`, which applies all of it. `app/schemas/common.py` adds
+a generic `Page[T]`, field-for-field identical to the `PaginatedUsers` it replaces, so no JSON changed
+and no client broke.
+
+**It found a live bug on its first use.** `list_users` sorted by `created_at` and stopped there.
+`created_at` is not unique — a seeded batch, or two users created in one request, share a timestamp —
+so the sort was partial and **a tying row could appear on two consecutive pages or on neither**. The
+symptom would read as a data bug, not a pagination one. `activity_service.list_entries` already sorted
+by `id` with a comment explaining exactly this hazard; users never got the same treatment. `ListSpec`
+makes `tiebreak` a **required field**, so a resource cannot now be registered without one.
+
+**The other thing it makes impossible.** The reference implementation we are porting from takes the
+sort column straight off the query string — `$query->orderBy($request->input('sort_by'))`. `sortable`
+is an allowlist and the only path to an ORDER BY, so an unrecognised name falls back to the default and
+never reaches SQL. It falls back rather than 422-ing on purpose: a stale bookmark carrying a renamed
+column should render the list, not an error.
+
+**`list_users` lost 20 lines and gained nothing to remember.** Filters needing a join stay in the
+service, where they are readable; only what is identical for every resource moved.
+
+**Verified against the live database** — `docker compose run --rm backend`, five seeded users:
+
+| Case | Result |
+|---|---|
+| Baseline | 5 rows, total 5 |
+| `search='a'` | 5 rows |
+| `sort_by=email&sort_order=asc` | correctly ordered |
+| `sort_by=` `password; DROP TABLE users` | fell back to default — no error, no SQL |
+| `per_page=99999` | clamped to 100 |
+| Paged 2 at a time | 5 fetched, 5 unique, **stable** |
+
+`export_openapi --check` reports the committed contract still matches, `/health` is 200, and the
+reloader came back clean.
+
+> **Not finished.** This is the first slice of `CORE_COMPLETION_PLAN.md` § 3. `activity_service` and
+> `invitation_service` still hand-roll their own listings, and the CRUD base (§ 3.3) and the
+> activity-logging and scoping hooks (§ 3.4) are not written. `ruff` could not be run — it is in
+> `requirements-dev.txt`, which the dev image does not install, the same gap that keeps `pytest` from
+> running locally.
+
+---
+
+## August 7, 2026 — The signed-in chrome is green, and it took the border system with it
+
+**Every surface in the signed-in frame is now the brand's light green** — the page canvas, the left
+navigation, the top header, and the module card. All of them use `surface-wash` (`#eaf0ef`), the teal
+at 10% over white that the sign-in page and the branding form already sit on. No new colour entered
+the palette; the existing one reached eight more surfaces. Dark mode is untouched throughout.
+
+Done in three passes as the owner looked at each result: the module card first, then the sidebar and
+header, then the page canvas behind them. The mobile drawer and mobile top bar were included without
+being asked — leaving them white would have made the app change colour when you narrow the window.
+
+**`surface-page` (`#f5f7fb`) is now referenced by nothing.** It was the blue-grey canvas the card used
+to sit on. The token is still defined; no code renders it.
+
+**What stayed white, on purpose.** The three-dot menu, the column picker, modals, the dashboard stat
+tiles and every settings surface. This design has no shadows, so white-on-green is now the only thing
+that says "this floats above". Popovers need that more than they need to match.
+
+**A tint dark enough to read as green is dark enough to break small grey text.** The card header's
+one-line description is 11px, which needs 4.5:1 to pass AA. `ink-muted` (`#6b7280`) measures 4.83:1
+on white but only **4.19:1** on the new surface — a fail, and all three modules pass a description,
+so it would have shipped on every module page. It now uses `ink-label` (`#59667a`), **5.05:1** on the
+same surface. The reason is written next to the class so nobody quietly reverts it.
+
+**Then the borders disappeared, and with them the card.** `surface-border` is `#e6edef`. Against
+`#eaf0ef` that is **1.02:1** — not faint, *gone*. This design deliberately separates surfaces with
+borders instead of shadows, so once the card and the canvas behind it were the same green, the card
+had no edge, the table had no frame, and every divider in the sidebar vanished. Twenty-two hairlines
+that sit on green moved to `border-brand/20`, which composites to a soft `#c2d5d2` and reads clearly.
+The handful still on white — the column picker, modals, form inputs — kept `surface-border`, which is
+correct there.
+
+> **The durable fix is one line and was not taken.** Retinting `surface.border` in
+> `tailwind.config.ts` would do in one token what 22 call sites now do by hand. That file is on the
+> protected list, so it needs the owner's say-so.
+
+**The table header got clearer for free.** It is `bg-brand/10`, a *translucent* fill, so on a white
+card it landed on exactly `#eaf0ef` — the same value the card itself now is. Over green it composites
+darker, giving the header a visible band it never had.
+
+> **Pre-existing, untouched, worth knowing:** that header is translucent while being `sticky`, and no
+> `<th>` carries an opaque fill, so rows show through it while the table scrolls. Unrelated to this
+> change and unchanged by it — the bleed reads the same on either background.
+
+**Grey stopped working the moment the surface stopped being white.** The sidebar's chrome buttons —
+collapse, expand, mobile open and close — hovered to `bg-gray-100`, which on green reads as a dull
+grey smudge rather than a highlight. They now hover to `bg-brand/10` like every other control in the
+sidebar. Their icons were `text-gray-400`, **2.54:1 on white and 2.20:1 on green**, both under the
+3:1 an interactive control needs; they are now `ink-muted` at **4.19:1**. That one was already broken
+before today — the green just made it impossible to keep ignoring.
+
+**Keyboard focus would have drawn a white halo.** Tailwind's ring offset defaults to white, and the
+three focusable things in `TopNav` all use `ring-offset-2`. On a green header that is a visible white
+gap between control and ring. They now carry `ring-offset-surface-wash` plus a `dark:` counterpart,
+which also fixes the same halo in dark mode, where it was wrong already.
+
+**Two real bugs surfaced in the collapsed sidebar rail and were fixed.** Both were pre-existing and
+neither is caused by the colour change:
+
+- **The active icon was invisible.** It was `bg-white/20 text-white` — a treatment that only makes
+  sense on a dark sidebar. Over the old white surface that is white text on white. It is now
+  `bg-brand text-white`, identical to the expanded nav item. Green would not have rescued it: 20%
+  white over `surface-wash` is still near-white.
+- **The pre-Viho orange was still in the tree.** `UI_PATTERNS.md` § Surfaces publishes a grep for
+  `F97316` and says that if it ever returns a hit, "that is the defect". It returned a hit — as
+  `rgba(249, 115, 22, 0.2)` in an inline `boxShadow` on the active icon's pulse ring. Now brand teal,
+  matching the retint `pulse-ring` itself already received in `tailwind.config.ts`.
+
+Inactive icons in that rail also lost their `bg-gray-100` tile, which `UI_PATTERNS.md` § Sidebar
+Anatomy already forbade: "bare outline icon (never in a tinted tile)".
+
+**Verified:** `tsc --noEmit` clean in the container, dev server recompiled with no warnings, `/sign-in`
+still 200, and all four new utilities confirmed present in the served CSS with the expected values.
+Contrast figures above are computed WCAG ratios, not estimates. ESLint could not be run — the project
+has no ESLint config and `next lint` drops into its interactive setup prompt.
+
+---
+
+## August 7, 2026 — A one-line caching rule made the browser run yesterday's code for a year
+
+**This is the actual cause of "I cannot sign in", after two wrong diagnoses.** One line in
+`frontend/next.config.mjs`:
+
+```js
+source: "/:path*.(js|css|woff2|png|jpg|svg|ico)",
+headers: [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }],
+```
+
+**Correct in production, catastrophic in development, and applied to both.** `next build` emits
+**content-hashed** filenames (`page-a1b2c3.js`), so there a changed file *is* a changed URL and
+`immutable` is exactly right. `next dev` emits **stable** ones:
+`/_next/static/chunks/app/dashboard/page.js` keeps that URL while its contents change on every edit. So
+every dev chunk was cached for a year and marked **never revalidate**.
+
+**The mechanism, confirmed rather than inferred.** `DashboardClient.tsx` was deleted in the 2026-08-06
+dashboard restructure and **no current chunk defines it** — verified by extracting every module id defined
+and required across all 17 chunks. A browser holding the previous day's `app/dashboard/page.js` still
+calls `__webpack_require__("(app-pages-browser)/./app/dashboard/DashboardClient.tsx")`, finds no factory,
+and throws precisely what was reported:
+
+```
+TypeError: Cannot read properties of undefined (reading 'call')
+    at options.factory (webpack.js:715)
+```
+
+**Why the mix was possible at all:** `webpack.js` and `main-app.js` are served with `?v=<timestamp>`, so
+those two were *always* fresh. Everything else was frozen. A current webpack runtime asking a
+year-old chunk for modules is guaranteed to find gaps.
+
+**Why it resisted every fix.** The stale copy was in the **browser**, so deleting the `.next` volume,
+recreating the container and rebuilding from scratch could not touch it. Meanwhile the server side was
+provably healthy the whole time and kept saying so: `/dashboard` returned **200**, its RSC payload
+returned 200, all 11 referenced chunks returned 200, the on-disk chunk set had **0**
+required-but-undefined modules, an import-cycle scan of all 105 files found **0**, `tsc` was clean and
+`next build` compiled every route. Every server-side signal was green while the browser was broken.
+
+**The fix splits one rule into two, both conditional on `NODE_ENV`:**
+
+| Assets | Production | Development |
+|---|---|---|
+| `/_next/static/*` (hashed) | `max-age=31536000, immutable` | `no-store, must-revalidate` |
+| `public/` files (**not** hashed) | `max-age=86400, stale-while-revalidate=604800` | `no-store, must-revalidate` |
+
+**The second row fixes a latent production bug too.** `public/` filenames survive deploys — `/logo.svg`
+is `/logo.svg` forever — so `immutable` meant a replaced logo would have been unreachable until each
+visitor cleared their cache. `BrandMark`'s comment claimed changing it "requires a deploy, which changes
+the build", but a deploy does not change that *URL*. Uploaded brand assets were always safe: the API
+serves them with `?v=<epoch>`.
+
+**Verified in both modes.** Development: dev chunks and `/logo.svg` both `no-store, must-revalidate`;
+`/sign-in` and `/dashboard` 200 on a from-scratch build. Production via `next start`: hashed chunk
+`immutable`, `/logo.svg` `max-age=86400, stale-while-revalidate=604800`, pages on Next's own
+`s-maxage=300`. All five security headers still present on pages — the rewrite left them untouched.
+
+> ⚠️ **`next.config.mjs` is a protected file.** Edited because it was the direct cause of a blocker
+> reported three times. The rewrite is documented in a header comment in the file itself, so the next
+> person to consider a blanket `immutable` rule reads the story first.
+
+**Anyone still seeing the error must clear their browser cache once** — `immutable` entries already stored
+will not be revalidated on a normal reload. DevTools → Application → Storage → Clear site data for
+`localhost:3001`, or a hard reload. New entries carry `no-store`, so this is a one-time cost.
+
+### Two corrections
+
+**The React 19 → 18 downgrade earlier today did not fix this.** PM-25 was a real defect and closing it was
+correct — `npm ls` reported `react@19.2.4 invalid` and `npm ci` genuinely failed — but the runtime error
+it was blamed for had a different cause, and the error persisted unchanged after the downgrade. The
+version pairing was a real latent problem found while chasing this one. **The stack stays on React 18.3.1**
+regardless: it is the supported pairing for Next 14 and the change cost nothing.
+
+**The stale-bundle diagnosis earlier today was right about the mechanism and wrong about the remedy.**
+Clearing the `.next` volume was recommended; it cannot work, because the stale copy was never in the
+volume. The ONBOARDING § 9 rows written this morning have been corrected accordingly.
+
+---
+
+## August 7, 2026 — PM-25 closed: React 19 on Next 14 finally broke (revised — it did not break sign-in)
+
+**The version mismatch filed as a build-tooling annoyance was the thing stopping anyone signing in.**
+`TECH_DEBT` had said of PM-25: *"the combination happens to work at runtime, it is simply unsupported."*
+That is no longer true, and the failure was not subtle:
+
+```
+TypeError: Cannot read properties of undefined (reading 'call')
+    at options.factory (webpack.js)
+```
+
+thrown from a `<Lazy>` inside Next's own `layout-router`, crashing `NotFoundErrorBoundary` and every
+route beneath it. **The application contains no `next/dynamic` and no `React.lazy`** — that `<Lazy>` is
+framework-internal, so this was the App Router's client runtime failing against a React it does not
+support. `npm ls` had been saying so all along: `react@19.2.4 invalid: "^18.2.0" from node_modules/next`,
+exit code `ELSPROBLEMS`.
+
+**Resolved by downgrading React and React DOM to 18.3.1** — inside `next@14.2.35`'s declared peer range.
+This was the second of PM-25's three recorded options, and it was the minimal one. Next 15 would have
+made React 19 legitimate, but it is a major migration with its own breaking changes — async
+`cookies()`/`headers()`/`params`, changed caching defaults — and that is not something to attempt inside a
+bug fix while sign-in is down. It remains available as its own piece of work.
+
+**It cost zero code changes,** which is the strongest evidence the downgrade was the right size of fix. The
+codebase uses no React 19-only API: no `useActionState`, `useFormStatus`, `useOptimistic` or `use()`.
+`forwardRef` appears in three components and behaves identically on 18. `@types/react` and
+`@types/react-dom` moved to `^18` so the types match the runtime.
+
+**`npm ci` now resolves with no `--legacy-peer-deps` at all** — the original PM-25 symptom, closed as a
+side effect. The flag is still in `Dockerfile.dev` and CI; it is now inert, and worth deleting precisely
+because a flag that silences nothing today will silence the next genuine `ERESOLVE`.
+
+**Verification.** `npm ls react react-dom` → **0** invalid peer markers · strict resolve (no flag) clean ·
+`tsc --noEmit` clean · `next build` compiles all 20 routes · `npm run lint` **17 errors, unchanged** ·
+`/sign-in` and `/dashboard` both **200** on a from-scratch build, React 18.3.1 confirmed in the container.
+
+**Six documents corrected**, because the stack line was wrong in most of them: `NEXTJS_STANDARDS.md` (its
+*title* said React 19, as did the § 1 "verified stack"), `ONBOARDING.md` § 6 and § 9, `ARCHITECTURE.md`,
+`VERSION_SUMMARY.md`, `CORE_HARDENING_PLAN.md`, `TECH_DEBT.md`, plus a stray line in
+`design/VIHO_THEME_REFERENCE.md`.
+
+**The lesson worth keeping: "unsupported but working" is a countdown, not a state.** PM-25 sat at 🟠 for a
+week with a note explaining why it had not bitten yet. Two things had to be reconsidered when it did —
+that it was a *build* problem (it was a runtime one) and that it *gated PM-30* (it never did; those lint
+errors come from `eslint-config-next@16` judging a Next 14 codebase, which the React version does not
+touch).
+
+---
+
+## August 7, 2026 — "Cannot sign in as root" was a stale browser bundle, not an auth failure
+
+**Root's sign-in was working the whole time.** `activity_logs` recorded `Root User logged in` from a real
+browser at 05:42:47, and the account checked out clean: `ACTIVE`, password set, **0 failed attempts**,
+not locked, role `RootUser`. There is not one failed-login row for it. So the password was right and the
+backend accepted it — the app just refused to show anything afterwards, which is indistinguishable from
+"I cannot sign in" from the outside.
+
+**What actually broke: the browser was running a client bundle built before PM-40 versioned the API.**
+It called `GET /api/auth/me` — no `/v1` — and got a 404. No source file contains that path; the axios
+`baseURL` is `${API_BASE_URL}${API_PREFIX}`, and the freshly compiled chunks had 16 references to
+`/api/v1` and **zero** to the unversioned path. So `/auth/me` failed, `AuthInitializer` never received a
+user, and it redirected straight back to `/sign-in`.
+
+**The hydration error in the same trace had the same single cause** — `Server: "" Client: "PM"`. The
+current `BrandMark` always renders `<img src="/logo.svg">`, so the badge span holds **no text**; an old
+client chunk predating `APP_LOGO` fell through to the monogram `"PM"`. Two correct renders from two
+different builds. Confirmed by rebuilding: the server now emits
+`<span …><img src="/logo.svg" alt="Partner Marketplace"…/></span>` and the client bundle carries the same
+eight `logo.svg` references.
+
+**Three details made this diagnosable, and each is worth remembering.** The stack trace pointed at
+`authApi.ts:134` where `me` now sits at **136** — a stale sourcemap. The dev server had logged
+`⚠ Fast Refresh had to perform a full reload` and a 404 for a `webpack.hot-update.json` it no longer had.
+And the on-disk bundle disagreed with the request the browser made, which is only possible across builds.
+
+**Fixed by deleting the `.next` volume, not the host directory.** `docker compose stop frontend`,
+`rm -f frontend`, `docker volume rm partnermarketplace_frontend_next`, `up -d frontend`. The container
+never reads `frontend/.next` on the host, so clearing that does nothing — a genuinely misleading dead end.
+
+**Verified after the rebuild**, with a throwaway account (created, measured, deleted):
+`POST /api/v1/auth/login` → `GET /api/v1/auth/me` **200** with roles and permissions resolved, while
+`GET /api/auth/me` correctly stays **404**. Zero unversioned references in the fresh bundle.
+
+**Three new rows in ONBOARDING § 9**, because anyone who pulls the API-versioning and branding work hits
+this on their first page load, and both symptoms point away from the cause.
+
+---
+
+## August 7, 2026 — "Keep me signed in" is verified end to end, and it really does mean 30 days
+
+**Confirmed against the running stack what yesterday could only claim.** The work was finished on
+2026-08-06 but the end-to-end check never ran, so the feature sat in the repository as *implemented and
+unproven* — which is indistinguishable from broken until someone looks. Measured today:
+
+| Sign-in | Refresh cookie `Max-Age` | Session row lifetime |
+|---|---|---|
+| `remember_me: true` | 2,591,999 s | **30 days** |
+| `remember_me: false` | 604,799 s | 7 days |
+| Field omitted entirely | 604,799 s | 7 days |
+
+The refresh token inside the cookie carries a matching 30-day `exp` — checked by decoding it, because a
+30-day cookie holding a 7-day token is the worst combination available: the session is alive, the cookie
+is present, and the token in it is refused, so the user is signed out while every piece of state says
+they should not be.
+
+**A refresh does not slide the window forward.** Refreshing the 30-day session re-issued cookies with
+2,591,981 seconds left — thirty days *minus the eighteen seconds that had passed*, not a fresh thirty.
+`user_sessions.expires_at` is the single authority on when a session dies, so a session someone keeps
+touching still expires on schedule. A sliding window would mean an active session never expires at all.
+
+**Done with a throwaway account, which was then deleted** along with its three sessions. No real user's
+sessions were touched.
+
+**Twelve regression tests now cover it** — `backend/tests/test_session_lifetime.py`. They read no
+database (the three functions are pure), so they run in the default suite rather than behind the `db`
+marker. One of them asserts `REMEMBER_ME_DAYS > REFRESH_TOKEN_EXPIRE_DAYS`: it guards the *configuration*
+rather than the code, because setting them equal leaves every other test passing while the feature
+silently does nothing. Two assert the default is the **short** session — from `LoginRequest` and from
+`TwoFactorChallengeRequest` separately — since too-long is the silent failure. Too-short gets reported by
+an annoyed user, which is exactly how this whole thread started.
+
+**The backend test command is now written down** (ONBOARDING § 8). It was not, and reconstructing it
+today cost real time: `pytest` and `ruff` are in `requirements-dev.txt`, which the image deliberately
+omits, and the `backend/.venv` on this machine is Python **3.14** — which cannot install the pinned
+dependencies at all. Undocumented tooling is tooling that stops being run.
+
+**Verification.** **254 tests** passed, 4 skipped (was 241) · `ruff check .` clean.
+
+### Start here next
+
+1. **Commit.** Everything below is uncommitted, including two generated files that `codegen:check`
+   *requires* to be committed or it fails by design: `backend/openapi.json` and
+   `frontend/types/api.d.ts`.
+2. **Check `backend/app/db/migrations/env.py` before you commit it.** An uncommitted change it held was
+   destroyed on 2026-08-06 by a `git checkout --` used to undo a `ruff --fix` reordering. Unrecoverable;
+   review the file rather than assuming it is as you left it.
+3. **`frontend/app/dashboard/DashboardClient.tsx` is staged as deleted while `DashboardHome.tsx` is
+   untracked** — a rename that is half-staged. Stage both or neither.
+4. **Then the task list.** One item is still waiting on an owner decision and blocks three others: the
+   deployment topology (DEPLOYMENT § 1 — it gates Redis-backed state, production artefacts and log
+   shipping). *PM-25 was the other one; it settled itself later the same day — see the entry above.* The
+   next thing that needs nobody else is **PM-11**: RBAC enforcement across the routes, a login round trip,
+   and migrations — the three things a deploy most needs proven and the ones 254 tests still do not cover.
+
+---
+
+## August 6, 2026 — Users were being signed out every hour, and "Remember me" was a decorative checkbox
+
+**Reported from real use: "how many times do I have to login — every time I sign in I click remember me
+and still after some time I need to sign in again."** Two separate faults, one visible symptom.
+
+**Fault one: the edge middleware bounced valid sessions.** It checked `access_token` alone, and that
+cookie carries `Max-Age=3600` — so **the browser deletes it after an hour**. The refresh token lives for
+seven days but is deliberately path-scoped to `/api/v1/auth/refresh`, so a page request never carries it
+and the middleware could not see it. An hour after signing in, opening any page redirected to `/sign-in`
+**before any JavaScript ran** — so the axios interceptor that would have refreshed the session silently
+never got the chance. The refresh mechanism was correct, tested, and unreachable.
+
+**The database said so plainly:** 77 un-revoked sessions, every one still inside its seven days, and
+**only 4 ever refreshed**. 73 sessions used for zero minutes each. Users were signing in over and over,
+each time creating another session that was abandoned an hour later.
+
+**The fix is a hint cookie, not a credential.** The backend now also sets `session_active` — same
+lifetime as the refresh token, scoped to `/` so the middleware can see it. It holds `"1"`. No user id, no
+signature, nothing to forge that gains anything: forging it yields a page shell the client immediately
+bounces, which is what a signed-out visitor sees anyway. A missing access token now means *"probably
+needs a refresh"* rather than *"logged out"*, and only when **both** cookies are absent is the visitor
+actually sent to sign in. Authorization was never here and still is not — every protected route is
+enforced by the backend guards, which re-check the session row on every request.
+
+Verified in all three states: no cookies → 307 to `/sign-in` · `session_active` only → 200 ·
+access token only → 200. Logout clears all three cookies.
+
+**Fault two: the checkbox had never been wired to anything.** The form posted no such field and the
+backend had never heard of one, so every session lasted seven days whether or not the box was ticked.
+`REMEMBER_ME_DAYS` (30) now flows through `session_service.create(lifetime_days=…)`, and the cookie
+lifetimes and the refresh token's own `exp` are all derived from `session.expires_at` — one authority, so
+nothing has to remember which kind of session it was.
+
+**Threaded through the 2FA path too**, which is the one that would have been forgotten: for a 2FA user
+the session is created at `/two-factor-challenge`, two requests after the box was ticked, so the choice
+has to be carried through the challenge or it is lost for exactly the users most likely to care.
+
+**The label was renamed "Remember Password" → "Keep me signed in".** It never remembered a password, and
+saying so invited people to expect their credentials to be filled in.
+
+---
+
+## August 6, 2026 — The API contract is generated and asserted, and it found a live bug immediately
+
+**PM-42 closed.** `frontend/types/index.ts` mirrored `backend/app/schemas/` with **nothing connecting
+them**, so a renamed backend field produced a `tsc`-clean frontend that read `undefined` at runtime.
+Types that agree by convention give the *appearance* of an enforced contract, which is worse than none
+because it stops anyone checking.
+
+**Three layers, each catching drift on its own.** Verified by injecting a real backend change and
+confirming all three failed independently, then reverting:
+
+| Layer | Catches |
+|---|---|
+| `python -m app.tools.export_openapi --check` | The committed `backend/openapi.json` no longer matches the routes |
+| `npm run codegen:check` | `types/api.d.ts` is stale against the spec, **or is not committed** |
+| `types/api-contract.ts` + `tsc` | The hand-written types disagree with the generated ones |
+
+**The spec is exported statically, not fetched from a running server.** `app.openapi()` builds it from
+the route definitions, so CI regenerates and compares **without standing up Postgres**, and generation
+stays reproducible from a checkout alone. A build that reaches for a running backend fails on a laptop
+with the stack down and — worse — silently generates types from whatever version happens to be running.
+
+**The hand-written types were kept, not replaced.** `openapi-typescript` generates from Pydantic, which
+types several fields more loosely than the UI wants: `account_type` is `string` there and
+`"staff" | "partner"` here, because the column is a SQLAlchemy `Enum` serialised as `str`. Replacing
+them wholesale would discard every narrowing and every exhaustive `switch`. So the contract file asserts
+**key-set equality in both directions** instead, plus one-way assignability for the narrowed fields.
+
+Both directions matter. A **removed** field is the obvious case; an **added** one is usually missed, and
+without that assertion it stays invisible to the frontend forever — which is how a feature ships
+half-wired. The assertions return a tuple **naming the offending key** rather than `false`, because
+`Type 'false' does not satisfy the constraint 'true'` tells you nothing.
+
+**The bug it found on its first run.** `CurrentUser.two_factor_enabled` was declared in the frontend
+and **`/auth/me` never sent it** — `CurrentUserResponse` omitted it while `UserListItem` had it.
+Anything reading it off the current user got `undefined`. Fixed on the backend rather than by deleting
+the field, because the model property's docstring says it is named for direct serialisation by schemas,
+so the omission was accidental. **This had existed unnoticed; the guard found it in under a minute.**
+
+**A flaw in the guard, found by testing the guard.** The first `codegen:check` was
+`npm run codegen:api && git diff --exit-code -- types/api.d.ts`. **`git diff` is blind to an untracked
+file**, so while `api.d.ts` was new the check passed unconditionally — a guard reporting success
+without checking anything, in exactly the state it shipped in. Now `git ls-files --error-unmatch`
+catches "not committed" and `git diff` catches "stale", as two conditions with distinct messages. It
+stays tolerant of *staged but not yet committed* so it does not block someone mid-commit.
+
+**⚠️ Two generated files must be committed:** `backend/openapi.json` and `frontend/types/api.d.ts`.
+Neither is gitignored (checked). If they are not committed, `codegen:check` fails by design.
+
+**When adding a response type, add a line to `types/api-contract.ts`.** The guard only covers what it
+is pointed at — currently `CurrentUser`, `ManagedUser`, `RoleSummary` and `Branding`.
+
+**Verification.** `ruff` clean · **241 tests** · `tsc` clean · `next build` compiles · lint **18
+errors, 0 warnings** · `export_openapi --check` matches · 64 operations across 50 paths.
+
+---
+
+## August 6, 2026 — Documentation swept: every claim now matches the running code
+
+**The docs had drifted from the code in about a dozen places, and I had made 190 lines of it worse the
+same day by versioning the API.** Swept.
+
+**110 API paths versioned across 13 current-state docs** — `/api/…` → `/api/v1/…`. Done with a regex
+carrying two guards, both tested against samples first: `backend/app/api/auth.py` is a **file path**,
+not a URL, and `/api/v1/…` must not become `/api/v1/api/v1/…`. Verified afterwards that no file path
+was mangled and nothing was double-prefixed.
+
+**Three categories of document, treated differently — this was the main judgment call:**
+
+| Category | Files | Treatment |
+|---|---|---|
+| **Current state** | `core/*`, `system-design/*`, `ONBOARDING`, `VERSION_SUMMARY`, two planning specs | **Swept.** 110 paths |
+| **Historical record** | `DAILY_CHANGES.md` (30 refs), `TECH_DEBT.md` (15) | **Left alone**, note added |
+| **Dead inherited** | `architecture.md`, `phases.md`, `planning.md`, `instruction.md` | **Left alone** |
+
+**Rewriting history would have been the wrong fix.** `DAILY_CHANGES` is a dated log and `TECH_DEBT`'s
+resolved entries are records of what was true then — editing them to say `/api/v1` would make the log
+unreliable for exactly the question it exists to answer. Both now carry a note saying paths in dated
+entries are as-of-that-date. The four inherited docs were skipped because `INDEX.md` already marks them
+untrustworthy; adding a to-do list to a document scheduled for deletion is negative value.
+
+**Stale sections rewritten:**
+
+- **`DATABASE_MIGRATIONS` § 2 was eleven revisions behind** — the worst of them. It claimed 8 revisions
+  with head `e7b41c9a2d10`; there are **19** and head is **`d8c31f60a927`**. Anyone comparing
+  `alembic current` against it concludes their database is ahead of the code. Regenerated from
+  `alembic history`, and it now records which revisions are **not reversible** (`e7b41c9a2d10` and
+  `c1e70a5d94b2` both raise `NotImplementedError`), so nobody discovers that during an incident. Its
+  § 1 `env.py` snippet also listed **8 deleted models**; § 6's template pointed `Revises` at a
+  mid-chain revision.
+- **`FASTAPI_STANDARDS` § 12 was stale in 9 of 10 rows** — every anti-pattern named code that no longer
+  exists, inverting "don't copy this" into a list of fixed problems presented as current. Replaced with
+  the four that are genuinely live (reading `permission_names` instead of `has_permission`, filtering on
+  a Python property, post-filtering a paginated query, `profile_photo_path` as a dead column) plus two
+  load-bearing conventions that look like tidying opportunities. § 7 still said there was no rollback
+  wrapper, which PM-38 changed hours earlier.
+- **`NEXTJS_STANDARDS` was stale in more places than catalogued** — § 5's module table (5 of 6 rows),
+  § 13 (5 of 7), and also § 1's folder tree, § 3's file conventions claiming error/loading boundaries
+  are "not currently used anywhere" when eight exist, § 3's root-layout snippet still on Inter, and a
+  code example calling `authApi.adminLogin`, which does not exist.
+- **`DEPLOYMENT`** § 7 said passwords were plaintext — the single most misleading line left in the
+  deployment docs. § 0 blocker 1 claimed there was no structured logging; blocker 2 said 74 tests; a
+  "closed" row still said per-IP rate limiting did not exist.
+- **`ARCHITECTURE`** — 9 spots, including a routing table listing `/dashboard/candidates` and three
+  deleted API modules.
+
+**One real bug found in a runbook:** § 6's smoke test curled `/api/v1/auth/whoami`, an endpoint removed
+in the account merge. It would return **404**, pass as "not 200", and prove nothing about
+authentication. Now hits `/auth/me` (expect 401) plus a public branding check (expect 200).
+
+**Verified by comparing claims against the running system**, not by reading: docs say head
+`d8c31f60a927` / alembic says `d8c31f60a927` · docs say 19 revisions / 19 files · docs say 241 tests /
+pytest says 241 passed · no unversioned API path left in any current-state section.
+
+The `## Pending` sections keep their *Documentation accuracy* items, annotated as cleared rather than
+deleted — the record of what drifted is more useful than a clean list, and all of it accumulated in
+under two weeks while the code was being actively improved.
+
+---
+
+> **⚠️ API paths in dated entries are as they were on that date.** All routes moved from
+> `/api/…` to `/api/v1/…` on **2026-08-06** (PM-40). Entries written before that say
+> `/api/…` and have deliberately **not** been rewritten — this is a record of what was
+> true when it was written, and editing it would make the log unreliable for exactly the
+> question it exists to answer. For current paths, read the `core/` and `system-design/`
+> docs, which were swept.
+
+---
+
+## August 6, 2026 — SVG upload is supported, and the real logo ships as the default
+
+**The owner supplied `logo/` — master SVG, 1024px PNG, favicon PNG and ICO — and asked for
+SVG in the branding module. Phase 4 had rejected SVG outright. That decision is reversed,
+implemented safely rather than by widening the allowlist.**
+
+**Why it was rejected, and what changed.** The original reasoning holds: an SVG is a
+*document*, not a bitmap. It can carry `<script>`, event handlers and external references,
+and served from our own origin a malicious one is stored XSS in the single asset shown on
+every page including the login screen.
+
+What the first pass missed is an asymmetry. An SVG rendered through `<img src>` — which is
+how every consumer here uses it — **cannot execute script in any current browser**. An SVG
+*navigated to directly* is a top-level document on our origin and **can**. So the exposure
+is someone opening the asset URL, not the application rendering it. Two independent
+controls close that, and both are applied because either alone is one mistake from failing:
+
+1. **Refused on upload, not sanitised.** Rejecting beats stripping — silently rewriting
+   somebody's logo hands back a file they did not upload, and a half-stripped SVG fails in
+   ways nobody can debug from the rendered result. Refused: `<script>`, `<foreignObject>`,
+   `<iframe>`, `<embed>`, `<object>`, `<set>`/`<animate>` (SMIL can fire on load and set
+   `href`), `<!DOCTYPE>`/`<!ENTITY>` (XXE, billion laughs), `javascript:` and
+   `data:text/html`, `@import`, **any** `on…=` attribute, and any `href`/`src` that is not
+   a `#fragment`.
+2. **A hard `Content-Security-Policy` on the serve response** —
+   `default-src 'none'; style-src 'unsafe-inline'; sandbox` — so a file that somehow got
+   past control 1 executes nothing. `sandbox` also drops it into an opaque origin.
+
+**Detection is structural, not a magic-byte check**, because SVG is XML. `<svg` must be the
+**root** element, behind at most a BOM, XML declaration or comments — so an HTML page
+containing an inline SVG is *not* an SVG, which matters because that is a navigable document.
+
+**Verified: 11 attack payloads, all refused** — inline script, `onload` on the root,
+`onmouseover` on a child, `foreignObject`, `javascript:` href, external `<use>`, an external
+`<image>` beacon, billion-laughs entity expansion, SMIL `<animate>` rewriting `href`, CSS
+`@import`, and an HTML page disguising an inline SVG. Each is a named test case, so a
+failure says which attack got through. The suite also asserts **the project's own logo is
+accepted**, guarding against tightening the rules until they reject our own artwork.
+
+**The artwork is now the bundled default**, so the app ships branded rather than showing a
+letter: `logo/logo-master.svg` → `public/logo.svg` (445 bytes), `logo/favicon.ico` →
+`public/favicon.ico` (replacing the 25 KB inherited one), `logo/favicon-32.png` →
+`public/icon-32.png`. `logo-candidates.png` (215 KB contact sheet) is deliberately not
+shipped. `BrandMark` now falls back in **three** steps — uploaded → `NEXT_PUBLIC_APP_LOGO`
+(default `/logo.svg`) → monogram — and every step is a complete answer, so a project
+reusing this core sets `NEXT_PUBLIC_APP_LOGO=""` and gets the letter badge back.
+
+**⚠️ Worth knowing: the logo's teal is not the brand token, and should not become it.**
+`#2f8a78` gives white-on-it **4.18:1**; the brand token `#24695c` gives 6.46:1. The logo's
+shade is **fine as a mark** — WCAG's non-text threshold is 3.0:1 — but it would **fail** as
+`--brand`, where white button labels need 4.5:1. The two teals differing is correct, not a
+mismatch to fix by adopting the logo's shade.
+
+**Verification.** `ruff` clean · **241 tests passed** (217 before) · `tsc` clean ·
+`next build` compiles · lint still **18 errors, 0 warnings** · the real SVG uploaded and
+served byte-identical with the CSP, `nosniff` and a version-keyed ETag · `/logo.svg` 200
+(445 bytes, `image/svg+xml`) · `/favicon.ico` 200 (2089 bytes) · `/brand/favicon` falls back
+to the new icon.
+
+Two earlier tests correctly failed once SVG became valid — they listed it as an
+unrecognised format — and were updated as stale expectations, not loosened.
+
+**The database copy of the logo was cleared afterwards.** The bundled default already serves
+the same artwork on every surface, so storing it twice would be redundant; the upload slot is
+left empty and available.
+
+---
+
+## August 6, 2026 — The API is versioned, the purge command exists, and a role label stops lying
+
+**Three items closed: PM-40, PM-43, and the Navbar bug the branding work uncovered.**
+
+**PM-40 — every route now answers under `/api/v1`.** `settings.API_PREFIX` drives all 9 routers. **No
+unversioned alias**, because nothing was pinned — the OpenAPI stays clean. `/health` and `/health/ready`
+stay unversioned deliberately: a liveness probe should not need to know the API's contract version.
+
+On the frontend the version went into `axiosInstance`'s `baseURL`, so the **57** paths across five
+`lib/api` modules are written relative to it — `"/auth/login"`, not `"/api/v1/auth/login"`. A v2 is one
+constant instead of 57 edits.
+
+**Three places keyed on the literal path, and each would have broken silently.** The routes moving was
+the easy part:
+
+- **The refresh cookie's `Path`.** `_REFRESH_PATH = "/api/auth/refresh"` scopes the refresh cookie so it
+  is never sent on ordinary requests. Left as a literal, the cookie would have been scoped to a path
+  that no longer exists — the browser would never send it, and **the symptom is every session dying an
+  hour after sign-in**, which points nowhere near a path constant. Verified by constructing the response
+  and reading `Path=/api/v1/auth/refresh` off the `Set-Cookie`.
+- **The rate limiter's tiering** — 14 absolute paths plus a `startswith("/api/auth")` test. Stale, every
+  credential endpoint would silently fall from the `sensitive` tier (10/min) to `default` (300/min):
+  rate limiting that looks present and is thirty times weaker. Re-verified: login 10, `/auth/me` 60,
+  `/navigation` 300.
+- **The interceptor's own guards**, which test `original.url` for `/auth/refresh` and `/auth/logout` to
+  avoid recursing on the refresh call. That URL is now relative, so a check for the old absolute path
+  would never match and a dead session would loop instead of failing.
+
+A script cross-checked **all 43 distinct frontend API paths against the live OpenAPI document** — every
+one resolves to a real versioned endpoint. That is what makes 57 mechanical edits trustworthy.
+`/api/revalidate-branding` was deliberately **not** versioned: it is a Next route handler served by the
+frontend, not the backend.
+
+**PM-43 — `python -m app.db.maintenance`.** Two careful purge functions had no caller, so `user_sessions`
+grew by one row per sign-in forever. A command, not a scheduler — meant for a cron line.
+
+**Sessions and the audit trail are treated differently, and that asymmetry is the design.** Expired
+sessions are *expired*, so clearing them at 30 days runs by default. Trimming the audit log requires
+`--activity` **explicitly**: retention is a policy decision, and deleting evidence should be an
+instruction rather than something a cron line does because a default said so. `--dry-run` previews, and
+the count and the delete share one cutoff helper so a dry run cannot disagree with the delete it
+precedes. Verified: dry run reported 0 sessions / 73 audit rows; `--activity-days 0` was **refused**
+rather than read as "everything"; `--sessions-only` overrides `--activity`, resolving a contradictory
+invocation toward deleting less.
+
+**The Navbar was lying about roles in three places, not one.** The branding pass found a hardcoded
+`"Super Admin"` subtitle; fixing it surfaced two more — a `{displayName || "Super Admin"}` fallback that
+invented a role for anyone without a full name, and a mobile-menu heading that told **every** user they
+were a super admin. A Partner opening that menu was shown "Super Admin". Now: the brand block uses
+`chrome_subtitle` (matching the sidebar), the fallback is gone (`getUserDisplayName` already falls back
+to the email), and the menu heading uses the existing `getRoleLabel(user)` — rendered only when there is
+something to say.
+
+**Verification.** `ruff` clean · **217 tests passed** (197 before) · `tsc --noEmit` clean · `next build`
+compiles · lint still **18 errors, 0 warnings** — the PM-30 baseline · `/api/v1/settings/branding` 200,
+old `/api/settings/branding` 404, `/health` 200 · all three rate-limit tiers correct · the rendered
+sign-in page still branded, so the server-side fetch found the versioned endpoint.
+
+**Next up is PM-25** — the React/Next version decision. It is a decision rather than a task, `npm ci`
+fails until it is made, and it gates both PM-30 and PM-41. **PM-42 (OpenAPI → TypeScript codegen) moved
+ahead of PM-41** in the plan: PM-40 just unblocked it, it is a fraction of the size, and doing it first
+means the eventual data-layer rewrite is typed against a generated contract rather than a hand-copied one.
+
 ---
 
 ## August 6, 2026 — Branding is complete: eight themes, logo and favicon upload

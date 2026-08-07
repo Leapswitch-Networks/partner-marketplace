@@ -128,10 +128,17 @@ Two further notes on Viho's palette, adopted as-is and worth knowing so they don
 **New code must use the tokens — no hardcoded hex, no palette utilities.** The regression guard is:
 
 ```bash
-grep -rn 'F97316\|EA6C0A\|orange-[0-9]\|blue-[0-9]\|purple-[0-9]\|amber-[0-9]' app components
+grep -rniE 'F97316|EA6C0A|orange-[0-9]|blue-[0-9]|purple-[0-9]|amber-[0-9]|249, *115, *22|234, *108, *10' app components
 ```
 
 It returns nothing today. If it ever returns something, that is the defect.
+
+> **The last two alternates were added 2026-08-07, because the grep had a blind spot and something
+> was hiding in it.** `Sidebar.tsx` still carried the orange as `rgba(249, 115, 22, 0.2)` in an inline
+> `boxShadow` — an rgba() triple is neither the hex nor an `orange-*` utility, so the guard reported
+> clean for two days while the colour was on screen. Same lesson as the `orange-*` trap noted above:
+> **a colour can hide in any notation you did not think to grep for.** If you add a token, add every
+> spelling of it here.
 
 ### Surfaces & text
 
@@ -237,6 +244,44 @@ means neither behaves.
 
 ---
 
+## The Signed-In Chrome Is Green
+
+Since 2026-08-07 the whole signed-in frame is `bg-surface-wash` (`#eaf0ef`) in light mode — the brand
+teal at 10% over white, the same token the sign-in page uses. That covers the page canvas, the desktop
+sidebar, the mobile drawer and its top bar, `TopNav`, and `Card`. Dark mode is unchanged
+(`night-card` / `night-body` throughout).
+
+**`surface-page` (`#f5f7fb`) is now unreferenced.** It was the light blue-grey canvas behind the card.
+The token still exists in `tailwind.config.ts`; nothing renders it. Delete it or repurpose it, but do
+not assume it is live.
+
+Five rules follow. Get these wrong and the result looks like a bug, not a preference:
+
+- **Popovers and menus stay `bg-white`.** There are no shadows in this design, so white-on-green is the
+  only cue that something floats. `RowActions`, the column picker and every modal rely on it.
+- **Hairlines on green must be `border-brand/20`, not `border-surface-border`.** `#e6edef` on
+  `#eaf0ef` is **1.02:1** — not faint, *gone*. Since this design separates surfaces with borders rather
+  than elevation, that erases the card, the table frame and every divider. `surface-border` is still
+  correct on the white surfaces that remain.
+- **`text-ink-muted` (`#6b7280`) is not safe for small text here** — 4.19:1, an AA fail. Use
+  `text-ink-label` (`#59667a`, 5.05:1), as `CardHeader`'s description does. It remains fine for *icons*,
+  which need only 3:1.
+- **Never hover to a grey.** `hover:bg-gray-100` reads as a smudge on green. The house hover is
+  `hover:bg-brand/10` with `hover:text-brand`, and its dark twin `dark:hover:bg-brand/20`.
+- **Any `ring-offset-*` needs a colour.** Tailwind's offset defaults to white and will draw a halo.
+  Pair `focus:ring-offset-2` with `ring-offset-surface-wash dark:ring-offset-night-card`.
+
+Translucent brand fills gain definition for free here. `bg-brand/10` composited on white produced
+exactly `#eaf0ef` — the surface colour itself — so anything using it was previously invisible against
+its own background. Over green it lands darker. The table header and the Log out button both benefit.
+
+> **The durable fix is one line, and it needs the owner's sign-off.** Retinting `surface.border` in
+> `tailwind.config.ts` to a value that works on both white and green would replace the 22 hand-edited
+> `border-brand/20` call sites with a single token change. `tailwind.config.ts` is a protected file, so
+> it was left alone.
+
+---
+
 ## Component Primitives
 
 All in `components/common/`. Hand-written, no library. Keep them dumb — no data fetching, no Redux.
@@ -339,7 +384,7 @@ Usage with React Hook Form:
 
 ### Skeleton
 
-`components/common/Skeleton.tsx` (generic) and `components/dashboard/TestCardSkeleton.tsx`
+`components/common/Skeleton.tsx` (generic)
 (shape-specific). Use for initial loads. A skeleton must **match the final layout's dimensions** —
 otherwise it trades a spinner for layout shift.
 
@@ -356,7 +401,7 @@ Matched to `dashboard-default-light-top.png` / `dashboard-default-dark.png` on 2
 
 | Region | Treatment |
 |--------|-----------|
-| Surface | `bg-white` / `dark:bg-night-card`, right border, **no shadow** |
+| Surface | `bg-surface-wash` (`#eaf0ef`) / `dark:bg-night-card`, right border, **no shadow**. Green since 2026-08-07 — see § The Signed-In Chrome Is Green |
 | Logo row | Brand tile + wordmark, collapse toggle on the right |
 | **Section heading** | `text-[17px] font-semibold text-brand`, **sentence case**, hairline rule beneath. **Not** a 10px uppercase micro-label, and **not** clickable |
 | Nav item | **Bare outline icon** (never in a tinted tile) + bold label, `rounded-[10px]` |
@@ -610,7 +655,7 @@ Rules:
       Policy" as **plain text, not a link**, because the page does not exist. Asking a user to agree to a
       document they cannot read is the kind of thing that only looks fine until someone asks.
       Make it a `<Link>` when it exists.
-- [ ] **`GET /api/activity/export` has no UI.** The endpoint streams CSV and is gated on `activity-view`;
+- [ ] **`GET /api/v1/activity/export` has no UI.** The endpoint streams CSV and is gated on `activity-view`;
       there is no button. When adding one, pass `LONG_TIMEOUT_MS` from `lib/api/axiosInstance.ts` — the
       5s default kills a working export, and the failure will look like a server error.
 - [ ] **2FA enrolment UI needs an end-to-end pass.** `TwoFactorSettings.tsx` and

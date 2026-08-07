@@ -188,8 +188,8 @@ PM's `users` table already carries **every** field LeapDesk's profile form edits
 | LeapDesk route | PM route | Notes |
 |---|---|---|
 | `GET /settings` → redirect `/settings/profile` | same | |
-| `GET|PATCH /settings/profile` | `/settings/profile` + existing `PATCH /api/auth/me` | |
-| `GET|PUT /settings/password` | `/settings/password` + existing `POST /api/auth/me/change-password` | **UI is the whole gap** |
+| `GET|PATCH /settings/profile` | `/settings/profile` + existing `PATCH /api/v1/auth/me` | |
+| `GET|PUT /settings/password` | `/settings/password` + existing `POST /api/v1/auth/me/change-password` | **UI is the whole gap** |
 | `POST /settings/password/otp/send` \| `/verify` | new | see OTP note below |
 | `GET /settings/appearance` | `/settings/appearance` | |
 | `DELETE /settings/profile` (self-delete) | **skip** | see below |

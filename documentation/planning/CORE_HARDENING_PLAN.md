@@ -43,13 +43,13 @@ one developer's memory, and nothing mechanical stops the next change from breaki
 
 | ID | Sev | Title | Cost |
 |----|:---:|-------|------|
-| [PM-37](#pm-37--no-environment-concept-so-every-deployment-safety-rule-is-unenforced) | 🔴 | No environment concept — every deployment-safety rule is unenforced | S |
-| [PM-38](#pm-38--no-transaction-boundary-49-commits-and-a-session-that-never-rolls-back) | 🟠 | No transaction boundary: 49 commits, a session that never rolls back | M |
-| [PM-39](#pm-39--nothing-mechanical-verifies-anything-no-tests-no-ci) | 🟠 | Nothing mechanical verifies anything — no tests, no CI | L |
-| [PM-40](#pm-40--56-routes-are-unversioned) | 🟠 | 56 routes are unversioned | S |
+| [PM-37](#pm-37--no-environment-concept-so-every-deployment-safety-rule-is-unenforced) | ✅ | ~~No environment concept~~ — `APP_ENV` + startup validator, closed 2026-08-06 | S |
+| [PM-38](#pm-38--no-transaction-boundary-49-commits-and-a-session-that-never-rolls-back) | ✅ | ~~No transaction boundary~~ — explicit rollback + `unit_of_work`, closed 2026-08-06 | M |
+| [PM-39](#pm-39--nothing-mechanical-verifies-anything-no-tests-no-ci) | ⏳ | Nothing mechanical verifies anything — **217 tests + CI exist**; not coverage | L |
+| [PM-40](#pm-40--56-routes-are-unversioned) | ✅ | ~~56 routes are unversioned~~ — `/api/v1`, closed 2026-08-06 | S |
 | [PM-41](#pm-41--the-frontend-has-no-data-layer-and-does-no-server-side-fetching) | 🟠 | The frontend has no data layer and does no server-side fetching | L |
-| [PM-42](#pm-42--the-api-contract-is-hand-copied-into-typescript) | 🟡 | The API contract is hand-copied into TypeScript | M |
-| [PM-43](#pm-43--two-purge-functions-exist-and-nothing-runs-them) | 🟡 | Two purge functions exist and nothing runs them | S |
+| [PM-42](#pm-42--the-api-contract-is-hand-copied-into-typescript) | ✅ | ~~The API contract is hand-copied into TypeScript~~ — generated + asserted, closed 2026-08-06 | M |
+| [PM-43](#pm-43--two-purge-functions-exist-and-nothing-runs-them) | ✅ | ~~Two purge functions exist and nothing runs them~~ — closed 2026-08-06 | S |
 | [PM-44](#pm-44--three-pieces-of-state-live-in-process-memory) | 🟡 | Three pieces of state live in process memory | M |
 
 Existing register items this plan re-prioritises rather than duplicates: **PM-5** (row-level scoping),
@@ -197,13 +197,45 @@ running an unversioned alias forever.
 
 `/api/v1` now is a prefix string and one constant. Later it is a migration.
 
-**Fix (not yet applied — it is a coordinated two-tier change):**
+### ✅ Resolved 2026-08-06
 
-1. `API_PREFIX = "/api/v1"` in `core/config.py`; `main.py` mounts every router there.
-2. `frontend/lib/utils/constants.ts` grows `export const API = "/api/v1"`; the 38 literals become
-   template strings. Mechanical, and `tsc` catches a miss.
-3. Mount the routers a second time at `/api` with `include_in_schema=False` for one release if any
-   client is already pinned. **Nothing is — do it without the alias and keep the OpenAPI clean.**
+`settings.API_PREFIX = "/api/v1"`; all 9 routers mount there. **No unversioned alias** — nothing was
+pinned, so the OpenAPI stays clean. `/health` and `/health/ready` stay **unversioned deliberately**: a
+liveness probe should not have to know the API's contract version, and health is not part of that
+contract.
+
+On the frontend the version went into `axiosInstance`'s `baseURL`, so the **57** paths across five
+`lib/api` modules are now written relative to it — `"/auth/login"`, not `"/api/v1/auth/login"`. A v2 is
+one constant instead of 57 string edits. Server-side `fetch` calls, which bypass axios, use a
+`SERVER_API_URL` constant.
+
+#### Three things that would have broken silently
+
+The routes moving is the easy part. Three places keyed on the literal path, and each fails in a way
+that does not look like a versioning problem:
+
+1. **The refresh cookie's `Path`.** `_REFRESH_PATH = "/api/auth/refresh"` scopes the refresh cookie so
+   it is never sent on ordinary requests. Left as a literal, the cookie would have been scoped to a
+   path that no longer exists — the browser would never send it, `/refresh` would 401 for everyone, and
+   **the symptom is every session dying an hour after sign-in**, which points nowhere near a path
+   constant. Now derived from `API_PREFIX`; verified by constructing the response and reading
+   `Path=/api/v1/auth/refresh` off the `Set-Cookie`.
+2. **The rate limiter's tiering.** 14 absolute paths plus a `path.startswith("/api/auth")` test. Stale,
+   every credential endpoint would silently fall from the `sensitive` tier (10/min) to `default`
+   (300/min) — rate limiting that looks present and is thirty times weaker. Verified after the move:
+   login 10, `/auth/me` 60, `/navigation` 300.
+3. **The `axiosInstance` interceptor's own guards.** They test `original.url` for `/auth/refresh` and
+   `/auth/logout` to avoid recursing on the refresh call. `original.url` is the path *as the caller
+   wrote it* — now relative — so a check for `/api/auth/refresh` would never match and a dead session
+   would loop instead of failing.
+
+**Verified:** `/api/v1/settings/branding` → 200, old `/api/settings/branding` → 404, `/health` → 200.
+A script cross-checked **all 43 distinct frontend API paths against the live OpenAPI document** — every
+one resolves to a real versioned endpoint, which is what makes 57 mechanical edits trustworthy.
+
+**Note `/api/revalidate-branding` was deliberately NOT versioned.** It is a Next route handler served
+by the frontend, not the backend. Prefixing it would have broken it, and it is the one `/api/` string
+that should stay.
 
 **While in that file:** `constants.ts` defaults `API_BASE_URL` to `http://localhost:8000`, and the
 backend runs on **8002**. A developer with no `NEXT_PUBLIC_API_URL` gets connection refused against a
@@ -270,10 +302,62 @@ The failure mode is the quiet one: a backend field renamed or made optional prod
 the *appearance* of an enforced contract, which is worse than no types, because it stops anyone
 looking.
 
-**Fix:** generate. `openapi-typescript` reads `/openapi.json` into a `.d.ts` at build time; a
-committed generated file plus a CI check that regenerating produces no diff turns contract drift into
-a failing build. Depends on PM-40 being settled first — generate against the versioned paths, not
-against paths that are about to move.
+### ✅ Resolved 2026-08-06
+
+**Three layers, each of which catches drift on its own.** Verified by injecting a real backend change
+and confirming all three failed independently, then reverting.
+
+| Layer | Catches | Fails with |
+|---|---|---|
+| `python -m app.tools.export_openapi --check` | The committed `backend/openapi.json` no longer matches the routes | *"openapi.json is out of date — the routes have changed"* |
+| `npm run codegen:check` | `types/api.d.ts` is stale against the spec, **or is not committed** | *"types/api.d.ts is stale — the API changed"* |
+| `types/api-contract.ts` + `tsc` | The hand-written types disagree with the generated ones | `["API sends fields the UI has not modelled:", "injected_field"]` |
+
+**The spec is exported statically, not fetched from a running server.** `app.openapi()` builds the
+document from the route definitions, so CI regenerates and compares it **without standing up
+Postgres** — and generation stays reproducible from a checkout alone. A build that reaches for a
+running backend fails on a laptop with the stack down and, worse, silently generates types from
+whatever version happens to be running.
+
+**The hand-written types were kept, not replaced.** `openapi-typescript` generates from Pydantic, which
+types several fields more loosely than the UI wants — `account_type` is `string` there and
+`"staff" | "partner"` here, because the column is a SQLAlchemy `Enum` that Pydantic serialises as
+`str`. Replacing them wholesale would throw away every narrowing, and with them every exhaustive
+`switch`. So `types/api-contract.ts` asserts **key-set equality in both directions** instead, plus
+one-way assignability for the deliberately narrowed fields.
+
+Both directions matter. A field the backend **removed** is the obvious case; a field the backend
+**added** is the one usually missed, and without the second assertion it stays invisible to the
+frontend forever — which is how a feature ships half-wired.
+
+The assertions return a **tuple naming the offending key** rather than `false`, because
+`Type 'false' does not satisfy the constraint 'true'` tells you nothing.
+
+#### The drift it found on its first run
+
+`CurrentUser.two_factor_enabled` was declared in the frontend and **`/auth/me` never sent it** —
+`CurrentUserResponse` omitted it while `UserListItem` had it. Anything reading it off the current user
+would have got `undefined`. Fixed on the backend rather than by deleting the field, because the model
+property's own docstring says it is named for direct serialisation by schemas, so the omission was
+accidental.
+
+That is precisely the failure this item describes: **a `tsc`-clean frontend reading `undefined` at
+runtime.** It existed, nobody had noticed, and the guard found it in under a minute.
+
+#### One flaw in the guard, found by testing it
+
+The first `codegen:check` was `npm run codegen:api && git diff --exit-code -- types/api.d.ts`.
+**`git diff` is blind to an untracked file**, so while `api.d.ts` was new the check passed
+unconditionally — a guard that reports success without checking anything, in exactly the state it
+shipped in. Now `git ls-files --error-unmatch` catches "not committed" and `git diff` catches "stale",
+as two separate conditions with distinct messages. It stays tolerant of *staged but not yet committed*
+so it does not block someone mid-commit; CI checks out committed files, where both are exact.
+
+#### Adding a response type
+
+Add a line to `types/api-contract.ts`. **A schema with no assertion is a schema that can drift** — the
+guard only covers what it is pointed at, currently `CurrentUser`, `ManagedUser`, `RoleSummary` and
+`Branding`.
 
 ---
 
@@ -298,10 +382,28 @@ The register is right that *how long* to keep audit history is a policy decision
 "we have not decided the retention window" and "nothing can ever delete anything" are different
 states, and the second one is not implied by the first.
 
-**Fix:** a `python -m app.db.maintenance` entry point wrapping both, documented as a cron line. No
-scheduler dependency, no new service. Session purge can ship with its 30-day default immediately —
-that one is not a policy question, expired sessions are expired. Audit retention stays opt-in until
-someone decides.
+### ✅ Resolved 2026-08-06
+
+`python -m app.db.maintenance` — a command, not a scheduler, meant for a cron line:
+
+```bash
+15 3 * * *  docker compose run --rm backend python -m app.db.maintenance
+```
+
+**Sessions and the audit trail are treated differently, and that asymmetry is the design.** Expired
+sessions are *expired*, so clearing them at 30 days is housekeeping and runs by default. Trimming the
+audit log requires `--activity` **explicitly**: retention is a policy decision, and deleting evidence
+should be an instruction rather than something a cron line does because a default said so. A test
+asserts that default, because it is the one worth protecting.
+
+`--dry-run` reports without deleting, backed by `count_purgeable` on both services. Both the count and
+the delete route through one `_purge_cutoff` helper, so a dry run cannot preview a different set of
+rows from the delete it preceded — asserted rather than assumed.
+
+**Verified against the running stack:** dry run reported `0 sessions` / `73 audit rows`; the real run
+deleted 0 sessions and left the trail alone; `--activity --activity-days 0` was **refused** ("Retention
+must be a positive number of days") rather than read as "everything"; and `--sessions-only` overrides
+`--activity`, resolving a contradictory invocation toward deleting less.
 
 ---
 
@@ -338,19 +440,24 @@ serving no current need.
 
 Sequenced by *what unblocks what*, not by severity.
 
-| # | Item | Why here |
+| # | Item | Status / why here |
 |---|---|---|
-| 1 | **PM-37** config validation | Self-contained, zero risk, converts 7 remembered rules into assertions. Done. |
-| 2 | **PM-38** transaction boundary | Must land **before** PM-5's scoped writes, not after. Done. |
-| 3 | **PM-39** tests + CI | Everything below is safer with it and unverifiable without it. Started. |
-| 4 | **PM-40** `/api/v1` | Cheapest now than at any future point. Blocks PM-42. |
-| 5 | **PM-25** React/Next decision | Blocks PM-30, and shapes PM-41's step 3. A decision, not a task. |
-| 6 | **PM-41** data layer | Largest item here. Retires PM-30 by construction. |
-| 7 | **PM-42** OpenAPI codegen | Needs PM-40 settled. |
-| 8 | **PM-5** row-level scoping | The gate in front of the marketplace domain. Do it on top of 1–4, not before. |
-| 9 | **PM-43** purge entry point | Small, independent, do it whenever. |
+| 1 | **PM-37** config validation | ✅ Done. Converted 7 remembered rules into assertions. |
+| 2 | **PM-38** transaction boundary | ✅ Done. Had to land **before** PM-5's scoped writes. |
+| 3 | **PM-39** tests + CI | ⏳ Floor laid — **217 tests** and a CI workflow. Not coverage. |
+| 4 | **PM-40** `/api/v1` | ✅ Done. Was cheapest now; unblocks PM-42. |
+| 5 | **PM-43** purge entry point | ✅ Done. Small and independent. |
+| 6 | **PM-25** React/Next decision | ✅ Done 2026-08-07 — React 18.3.1. **Decided by the code, not by us:** React 19 broke Next 14's App Router runtime and sign-in with it. Did *not* block PM-30 after all. |
+| 7 | **PM-42** OpenAPI codegen | ✅ Done. Found a live drift on its first run. |
+| **8** | **PM-41** data layer | Largest item here. Retires PM-30 by construction. **Now the biggest open build item**, and PM-25 no longer stands in front of it. |
+| 9 | **PM-5** row-level scoping | The gate in front of the marketplace domain. Items 1–4 now make it verifiable. |
 | 10 | **PM-44** Redis | With the production topology, not before. |
 | 11 | **PM-10** monitoring | With the production topology. Needs somewhere to send to. |
+
+**PM-42 moved ahead of PM-41.** It was blocked on PM-40, which is now done, and it is a fraction of
+PM-41's size while removing a whole class of silent failure — a renamed backend field currently
+produces a `tsc`-clean frontend that reads `undefined` at runtime. Doing it before the data-layer
+rewrite also means that rewrite is typed against a generated contract rather than a hand-copied one.
 
 **PM-5 sits at 8 deliberately.** It is the register's highest open priority and the marketplace's hard
 prerequisite, and it is the single change most likely to leak data across tenants. Writing it before
@@ -453,12 +560,13 @@ environment before importing `app.*` — load-bearing, because `app.core.config`
 module scope, and without it every CI run fails at collection with a Pydantic error that looks like a
 broken suite rather than a missing `.env`. A `db` marker exists for the first test that needs one.
 
-Two deliberate compromises in CI, both marked for deletion in the file:
+Two deliberate compromises in CI, both marked for deletion in the file. **One is now obsolete:**
 
-- `npm ci --legacy-peer-deps`, mirroring `Dockerfile.dev`, because plain `npm ci` **fails outright** on
-  React 19 against Next 14's peer range (PM-25).
+- ~~`npm ci --legacy-peer-deps`~~, mirroring `Dockerfile.dev`, because plain `npm ci` **failed outright**
+  on React 19 against Next 14's peer range. **PM-25 was resolved 2026-08-07** (React 18.3.1) and the tree
+  resolves strictly, so the flag can go — and should, since it would now hide a genuine `ERESOLVE`.
 - `npm run lint` is `continue-on-error`, because it reports PM-30's 20 react-hooks errors today. A red
-  CI nobody can turn green is a CI nobody reads.
+  CI nobody can turn green is a CI nobody reads. This one stays until PM-41.
 
 **Not claimed as complete.** This is a floor over three properties. It does **not** touch RBAC
 enforcement across the 56 routes — which is the suite **PM-5** needs, and the reason PM-11 stays open.

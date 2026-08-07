@@ -51,15 +51,19 @@ would otherwise crash Alembic. **Don't remove it.**
 
 ```python
 from app.db.base import Base
-import app.models.user          # noqa: F401
-import app.models.admin_user    # noqa: F401
-import app.models.test          # noqa: F401
-import app.models.question      # noqa: F401
-import app.models.option        # noqa: F401
-import app.models.test_session  # noqa: F401
-import app.models.session_answer# noqa: F401
-import app.models.candidate     # noqa: F401
-import app.models.category      # noqa: F401
+
+# Core identity + RBAC
+import app.models.associations      # noqa: F401
+import app.models.permission        # noqa: F401
+import app.models.permission_group  # noqa: F401
+import app.models.role              # noqa: F401
+import app.models.user              # noqa: F401
+import app.models.user_invitation   # noqa: F401
+import app.models.user_session      # noqa: F401
+import app.models.activity_log      # noqa: F401
+
+# Installation settings
+import app.models.app_settings      # noqa: F401
 
 target_metadata = Base.metadata
 ```
@@ -69,22 +73,54 @@ metadata to the database — an unregistered model whose table already exists wi
 the table is *extraneous* and it may emit a `drop_table`. **Always add the import in the same commit
 as the model, and always read the generated file.**
 
+Two further warnings, both learned the hard way:
+
+- **`env.py` is a protected file** (`../AGENTS.md` § Protected Files) and it is **excluded from
+  linting** in `backend/pyproject.toml`. On 2026-08-06 a `ruff --fix` import sort hoisted an import
+  *above* the comment quoted here, detaching the warning from the list it governs. Do not narrow that
+  exclude back to `versions/` only.
+- **Nothing verifies the list is complete.** A test comparing `Base.metadata.tables` against these
+  imports would make the most dangerous omission in this workflow impossible to make silently. It does
+  not exist yet — tracked in this file's § Pending.
+
 ---
 
 ## 2. Current Revision Chain
 
-Linear, eight revisions. **Head is `e7b41c9a2d10`.**
+Linear, **19 revisions**. **Head is `d8c31f60a927`.**
 
-| # | Revision | Down revision | What it did |
-|---|----------|---------------|-------------|
-| 1 | `003f7590e39b` | `None` (base) | Create `users` and `admin_users` |
-| 2 | `a1ebf7c66c45` | `003f7590e39b` | Fix `failed_login_attempts` to integer |
-| 3 | `b818194d8e23` | `a1ebf7c66c45` | Add `tests`, `questions`, `options`, `test_sessions`, `session_answers` |
-| 4 | `c4a2f81d9e10` | `b818194d8e23` | Add `role` to `admin_users` |
-| 5 | `d9e3f1a2b4c5` | `c4a2f81d9e10` | Create `candidates` |
-| 6 | `cc12bb0fb8fb` | `d9e3f1a2b4c5` | Rename `password_hash` → `password` ⚠️ |
-| 7 | `3ab496a7c5b7` | `cc12bb0fb8fb` | Create `categories` |
-| 8 | `e7b41c9a2d10` | `3ab496a7c5b7` | Unify `users`/`admin_users` into one table, add RBAC, bcrypt every existing password in place ← **head** |
+Taken from `alembic history`, not maintained by hand — regenerate it rather than editing rows. This
+section was **eleven revisions behind** on 2026-08-06, still naming `e7b41c9a2d10` as head, which is
+the most actively misleading thing a migration doc can do: anyone comparing `alembic current` against
+it concludes their database is ahead of the code.
+
+| # | Revision | What it did |
+|---|----------|-------------|
+| 1 | `003f7590e39b` | Create `users` and `admin_users` |
+| 2 | `a1ebf7c66c45` | Fix `failed_login_attempts` to integer |
+| 3 | `b818194d8e23` | Add `tests`, `questions`, `options`, `test_sessions`, `session_answers` — *dropped by 14* |
+| 4 | `c4a2f81d9e10` | Add `role` to `admin_users` |
+| 5 | `d9e3f1a2b4c5` | Create `candidates` — *dropped by 14* |
+| 6 | `cc12bb0fb8fb` | Rename `password_hash` → `password` — see the callout below |
+| 7 | `3ab496a7c5b7` | Create `categories` — *dropped by 14* |
+| 8 | `e7b41c9a2d10` | **Unify `users`/`admin_users`, add RBAC, bcrypt every existing password in place** |
+| 9 | `f3c81a5be204` | Add `user_sessions`, so tokens can be revoked |
+| 10 | `a7d92c4f1b83` | Align user columns with LeapDesk's names |
+| 11 | `b6e15d3a9f27` | Add `activity_log` for the audit trail |
+| 12 | `c8f42e7b91d5` | Add two-factor auth and password confirmation |
+| 13 | `d4a71f6c8e93` | Add refresh-token rotation with reuse detection |
+| 14 | `e2b8d5c31f47` | Add password-OTP recovery |
+| 15 | `f5a3c81b7d29` | Add per-role sidebar navigation preferences |
+| 16 | `c1e70a5d94b2` | **Drop the 7 inherited test-platform tables.** Hand-written — autogenerate emits drops in arbitrary order and they fail on foreign keys |
+| 17 | `a4f19c72e8d3` | Create `app_settings` (single-row, `CHECK (id = 1)`) |
+| 18 | `b7e42d19f0c5` | Add `theme_preset` to `app_settings` |
+| 19 | `d8c31f60a927` | Add brand assets (`logo_*`, `favicon_*`) ← **head** |
+
+**Not every revision is reversible, and that matters before an incident.** `e7b41c9a2d10` and
+`c1e70a5d94b2` both raise `NotImplementedError` in `downgrade()` — the first would need the original
+plaintext passwords, which are gone by design; the second would recreate a retired product's schema
+without being able to restore its data. So `alembic downgrade -1 && alembic upgrade head` is **not** a
+usable smoke test across the whole chain. Restore a backup instead.
 
 Verify at any time:
 
@@ -185,7 +221,7 @@ Every revision needs a working `downgrade()`. Template:
 """create listings table
 
 Revision ID: abc123def456
-Revises: e7b41c9a2d10
+Revises: d8c31f60a927
 Create Date: 2026-07-30 …
 """
 from typing import Sequence, Union
@@ -194,7 +230,7 @@ import sqlalchemy as sa
 from alembic import op
 
 revision: str = "abc123def456"
-down_revision: Union[str, None] = "e7b41c9a2d10"
+down_revision: Union[str, None] = "d8c31f60a927"  # ← the CURRENT head
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
@@ -356,15 +392,26 @@ startup." **It does not.** `main.py` has no startup hook.
       per sign-in, forever.
 
 ### Documentation accuracy
+> **✅ The *Documentation accuracy* items below were cleared on 2026-08-06.** The API-path sweep
+> (`/api/…` → `/api/v1/…`, 110 references across 13 current-state docs) and every stale section named
+> here have been corrected. They are kept, struck through, as the record of what had drifted and why —
+> deleting them would lose the more useful lesson, which is that all of it accumulated in under two
+> weeks while the code was being actively improved.
+>
+> Historical documents were deliberately **not** rewritten: `DAILY_CHANGES.md` and `TECH_DEBT.md`'s
+> dated entries still say `/api/…` because that is what was true when they were written, and both now
+> carry a note saying so. The four inherited test-platform docs were left alone too — `INDEX.md`
+> already marks them untrustworthy.
 
-- [ ] **§ 2 *Current Revision Chain* is eight revisions behind.** It says *"Linear, eight revisions.
-      **Head is `e7b41c9a2d10`**"* — there are **16**, and the head is **`c1e70a5d94b2`** (confirmed with
+- [ ] **§ 2 *Current Revision Chain* is ELEVEN revisions behind.** It says *"Linear, eight revisions.
+      **Head is `e7b41c9a2d10`**"* — there are **19**, and the head is **`d8c31f60a927`** (confirmed with
       `alembic heads`, single head). This is the most actively misleading paragraph in the file: anyone
       checking `alembic current` against it concludes their database is ahead of the code. Missing:
       `a7d92c4f1b83` (align user columns with LeapDesk), `f3c81a5be204` (sessions), `d4a71f6c8e93`
       (refresh rotation), `c8f42e7b91d5` (2FA + password confirmation), `b6e15d3a9f27` (activity log),
-      `e2b8d5c31f47` (password OTP), `f5a3c81b7d29` (role nav preferences), and `c1e70a5d94b2` (drops the
-      7 inherited tables).
+      `e2b8d5c31f47` (password OTP), `f5a3c81b7d29` (role nav preferences), `c1e70a5d94b2` (drops the 7 inherited
+      tables), `a4f19c72e8d3` (app_settings), `b7e42d19f0c5` (theme_preset) and `d8c31f60a927`
+      (brand assets).
 - [ ] **§ 9 is stale in two rows.** *"Five inherited domain tables"* — dropped by `c1e70a5d94b2` on
       2026-08-06, along with `candidates` and `categories`; **7 tables, not 5**, and the migration was
       written by hand because autogenerate emits drops in arbitrary order and they fail on foreign keys.

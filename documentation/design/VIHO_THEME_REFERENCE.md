@@ -25,7 +25,7 @@ Viho is commercial. The project owner holds the licence; this repo does not cont
 |---------|-------------|
 | Reading the public demo to understand layout and spacing | Copying `.vue`, `.js` or `.scss` files into this repo |
 | Recording colour values, type scale, and structure as notes (this file) | Vendoring the theme's compiled CSS bundle |
-| Rebuilding a screen from scratch in **our** stack (React 19 + Tailwind 3) | Copying its icon fonts (Themify, IcoFont, FontAwesome) or images |
+| Rebuilding a screen from scratch in **our** stack (React 18 + Tailwind 3) | Copying its icon fonts (Themify, IcoFont, FontAwesome) or images |
 | Keeping screenshots in `assets/screenshots/` for internal reference | Committing the theme's own image/font assets as project assets |
 
 Two practical consequences:

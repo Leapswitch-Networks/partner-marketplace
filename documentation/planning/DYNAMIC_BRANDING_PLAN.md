@@ -435,9 +435,10 @@ security boundary** (32 tests):
 
 - **The type comes from magic bytes**, never `Content-Type` or the filename. A PHP
   payload named `logo.png` is refused.
-- **SVG is rejected** despite being the obvious logo format: it is a document that can
-  carry `<script>`, and served from our own origin that is stored XSS on every page
-  including the login screen.
+- **SVG was rejected** at this point despite being the obvious logo format. **Reversed
+  the same day — see § 8**: accepted now, behind an upload check that refuses script,
+  event handlers, external references and DOCTYPEs, plus a `Content-Security-Policy` on
+  the serve response.
 - **Size is capped at 512 KB before the body is fully read** — the route reads
   `MAX_UPLOAD_BYTES + 1` and stops, so a caller cannot choose the process's memory use.
 - **Dimensions are capped at 2048 independently of size**, by parsing PNG `IHDR` and
@@ -514,7 +515,100 @@ fetches carry that tag. Remove the tags and the route silently does nothing.
 
 ---
 
-## 8. Related
+## 8. SVG support, and reversing the decision that rejected it (2026-08-06)
+
+**§ 3.4 and phase 4 rejected SVG outright. The owner asked for it, and it is now
+accepted — safely, rather than by widening the allowlist.**
+
+The original reasoning was sound and is worth keeping in view: an SVG is a *document*,
+not a bitmap. It can carry `<script>`, event handlers and external references, and
+served from our own origin a malicious one is stored XSS in the single asset shown on
+every page including the login screen.
+
+**What the first pass missed is an asymmetry:**
+
+| How the SVG is loaded | Can it run script? |
+|---|---|
+| `<img src="…">` — how every consumer here renders it | **No**, in any current browser |
+| Navigated to directly, as a top-level document | **Yes** |
+
+So the exposure is someone opening the asset URL, not the application rendering it.
+Two independent controls close it, and both are applied because either alone is one
+mistake from failing:
+
+**1 — Refused on upload, not sanitised** (`core/images.py::validate_svg`). Rejecting
+beats stripping: silently rewriting somebody's logo hands back a file they did not
+upload, and a half-stripped SVG fails in ways nobody can debug from the rendered
+result. Refused: `<script>`, `<foreignObject>`, `<iframe>`, `<embed>`, `<object>`,
+`<set>`/`<animate>` (SMIL can fire on load and set `href`), `<handler>`, `<!DOCTYPE>`
+and `<!ENTITY>` (XXE, billion laughs), `javascript:` and `data:text/html` URLs,
+`@import`, **any** `on…=` attribute, and any `href`/`src` that is not a `#fragment`.
+
+**2 — Served under a hard CSP** (`api/settings.py`), so a file that somehow got past
+control 1 executes nothing:
+
+```
+Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; sandbox
+```
+
+`default-src 'none'` forbids every script and every fetch. `style-src 'unsafe-inline'`
+is the one allowance, because presentational CSS is how SVGs are legitimately styled
+and cannot itself execute. `sandbox` drops the response into an opaque origin, so even
+successful script would have no access to ours.
+
+**Detection is structural, not a magic-byte check** — SVG is XML. `<svg` must be the
+**root** element, behind at most a BOM, an XML declaration or comments. An HTML page
+containing an inline SVG is therefore *not* an SVG, which matters because that is a
+navigable document.
+
+### Verified — 11 attack payloads, all refused
+
+`inline script` · `onload` on the root · `onmouseover` on a child · `foreignObject` ·
+`javascript:` href · external `<use>` · external `<image>` beacon · billion-laughs
+entity expansion · SMIL `<animate>` rewriting `href` · CSS `@import` · an HTML page
+disguising an inline SVG.
+
+Each is a named test case in `tests/test_image_validation.py`, so a failure says which
+attack got through. The suite also asserts **the project's own logo is accepted** — a
+guard against tightening these rules until they reject our own artwork.
+
+### The owner's artwork is now the bundled default
+
+`logo/` supplied `logo-master.svg`, `logo-1024.png`, `favicon-32.png` and `favicon.ico`.
+Installed:
+
+| Source | Destination | Role |
+|---|---|---|
+| `logo/logo-master.svg` | `frontend/public/logo.svg` | Default logo (445 bytes) |
+| `logo/favicon.ico` | `frontend/public/favicon.ico` | Default favicon, replacing the 25 KB inherited one |
+| `logo/favicon-32.png` | `frontend/public/icon-32.png` | PNG icon variant |
+
+`logo-candidates.png` (215 KB contact sheet) is deliberately not shipped.
+
+`BrandMark` now falls back in **three** steps — uploaded logo → `NEXT_PUBLIC_APP_LOGO`
+(defaulting to `/logo.svg`) → monogram. Every step is a complete answer: a project
+reusing this core sets `NEXT_PUBLIC_APP_LOGO=""` and gets the letter badge back rather
+than a broken image.
+
+The static default needs none of the upload validation — nobody can replace
+`public/logo.svg` without a deploy.
+
+### ⚠️ The logo's teal is not the brand token, and should not become it
+
+| Colour | White-on-it |
+|---|---:|
+| Logo `#2f8a78` | **4.18:1** |
+| Brand token `#24695c` | 6.46:1 |
+
+`#2f8a78` is **fine for the logo** — WCAG's non-text threshold is 3.0:1 and it clears
+that comfortably. It would **fail** as `--brand`, where white button labels need 4.5:1.
+So the two teals differing is correct, not a mismatch to "fix" by adopting the logo's
+shade. If a preset matching the logo is ever wanted, darken it until white-on-it clears
+4.5 and add it through `core/theme.py`, where the test suite will check it.
+
+---
+
+## 9. Related
 
 - [`CORE_HARDENING_PLAN.md`](./CORE_HARDENING_PLAN.md) — PM-37…44; **PM-41's data layer changes how phase 1 is wired**, so prefer doing that first if both are in scope
 - [`../system-design/UI_PATTERNS.md`](../system-design/UI_PATTERNS.md) § Colour System — the `brand-on-dark` rule § 3.5 must not break
