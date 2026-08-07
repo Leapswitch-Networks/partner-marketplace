@@ -3203,6 +3203,18 @@
             }
           },
           {
+            "description": "Drop rows with no human causer (automation)",
+            "in": "query",
+            "name": "hide_system",
+            "required": false,
+            "schema": {
+              "default": false,
+              "description": "Drop rows with no human causer (automation)",
+              "title": "Hide System",
+              "type": "boolean"
+            }
+          },
+          {
             "in": "query",
             "name": "page",
             "required": false,

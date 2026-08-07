@@ -67,6 +67,9 @@ def list_activity(
     search: str | None = Query(default=None, description="Substring of the description"),
     date_from: datetime | None = Query(default=None),
     date_to: datetime | None = Query(default=None),
+    hide_system: bool = Query(
+        default=False, description="Drop rows with no human causer (automation)"
+    ),
     page: int = Query(default=1, ge=1),
     per_page: int = Query(default=25, ge=1, le=100),
     db: Session = Depends(get_db),
@@ -88,6 +91,7 @@ def list_activity(
         search=search,
         date_from=date_from,
         date_to=date_to,
+        hide_system=hide_system,
         page=page,
         per_page=per_page,
     )

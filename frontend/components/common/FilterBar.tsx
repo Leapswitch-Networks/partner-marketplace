@@ -42,6 +42,14 @@ export interface TextFilter<F extends FilterValues> {
   minWidth?: number;
 }
 
+export interface DateFilter<F extends FilterValues> {
+  type: "date";
+  key: keyof F;
+  /** Accessible name — "From", "To". These have no visible label. */
+  label: string;
+  minWidth?: number;
+}
+
 export interface SelectFilter<F extends FilterValues> {
   type: "select";
   key: keyof F;
@@ -57,7 +65,22 @@ export interface SelectFilter<F extends FilterValues> {
   hidden?: boolean;
 }
 
-export type FilterDef<F extends FilterValues> = TextFilter<F> | SelectFilter<F>;
+/**
+ * A boolean filter, as a checkbox. Stored as `"1"` / `""` rather than a real
+ * boolean so the whole filter record stays `Record<string, string>` — which is
+ * what makes the query-string round-trip lossless.
+ */
+export interface CheckFilter<F extends FilterValues> {
+  type: "check";
+  key: keyof F;
+  label: string;
+}
+
+export type FilterDef<F extends FilterValues> =
+  | TextFilter<F>
+  | SelectFilter<F>
+  | DateFilter<F>
+  | CheckFilter<F>;
 
 export default function FilterBar<F extends FilterValues>({
   query,
@@ -74,7 +97,28 @@ export default function FilterBar<F extends FilterValues>({
       {filters.map((filter) => {
         if (filter.type === "select" && filter.hidden) return null;
         const key = String(filter.key);
-        const width = filter.minWidth ?? (filter.type === "text" ? 180 : 140);
+
+        // A checkbox sizes to its label rather than sharing the flex row, or a
+        // two-word control gets the same width as a search box.
+        if (filter.type === "check") {
+          return (
+            <label
+              key={key}
+              className="flex shrink-0 items-center gap-1.5 text-xs text-ink dark:text-gray-300"
+            >
+              <input
+                type="checkbox"
+                checked={query.filters[filter.key] === "1"}
+                onChange={(e) => query.setFilter(filter.key, e.target.checked ? "1" : "")}
+                className="h-3.5 w-3.5 accent-brand"
+              />
+              {filter.label}
+            </label>
+          );
+        }
+
+        const width =
+          filter.minWidth ?? (filter.type === "text" ? 180 : filter.type === "date" ? 150 : 140);
 
         return (
           <div
@@ -82,7 +126,17 @@ export default function FilterBar<F extends FilterValues>({
             className="flex-1"
             style={{ minWidth: `${width}px` }}
           >
-            {filter.type === "text" ? (
+            {filter.type === "date" ? (
+              <Input
+                label=""
+                type="date"
+                id={`filter-${key}`}
+                aria-label={filter.label}
+                value={query.filters[filter.key]}
+                onChange={(e) => query.setFilter(filter.key, e.target.value)}
+                className="!h-9 !py-0 !text-xs"
+              />
+            ) : filter.type === "text" ? (
               <Input
                 label=""
                 id={`filter-${key}`}

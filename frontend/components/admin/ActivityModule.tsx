@@ -2,14 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Badge, { type BadgeTone } from "@/components/common/Badge";
-import Button from "@/components/common/Button";
-import { Card, CardContent, CardHeader, FilterRow } from "@/components/common/Card";
-import DataTable, { type Column } from "@/components/common/DataTable";
-import Input from "@/components/common/Input";
+import ResourceIndex from "@/components/common/ResourceIndex";
+import { type Column } from "@/components/common/DataTable";
 import Modal from "@/components/common/Modal";
-import Select from "@/components/common/Select";
 import useAutoPerPage from "@/lib/hooks/useAutoPerPage";
-import useDebouncedValue from "@/lib/hooks/useDebouncedValue";
+import useResourceQuery from "@/lib/hooks/useResourceQuery";
 import { activityApi, type ActivityEntry } from "@/lib/api/rbacApi";
 
 /**
@@ -62,41 +59,27 @@ export default function ActivityModule() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [page, setPage] = useState(1);
   const autoPerPage = useAutoPerPage();
-  const [perPage, setPerPage] = useState(autoPerPage);
-
-  const [search, setSearch] = useState("");
-  const debouncedSearch = useDebouncedValue(search, 500);
-  const [logName, setLogName] = useState("");
-  const [event, setEvent] = useState("");
   const [events, setEvents] = useState<string[]>([]);
-
   const [detail, setDetail] = useState<ActivityEntry | null>(null);
 
-  const filtersActive = Boolean(debouncedSearch || logName || event);
-
-  /** Changing any filter returns to page 1. Staying on page 7 of a result set that
-   *  now has two pages shows an empty table and reads as a bug. */
-  const changeSearch = (value: string) => {
-    setSearch(value);
-    setPage(1);
-  };
-  const changeLogName = (value: string) => {
-    setLogName(value);
-    setPage(1);
-  };
-  const changeEvent = (value: string) => {
-    setEvent(value);
-    setPage(1);
-  };
-
-  const resetFilters = () => {
-    setSearch("");
-    setLogName("");
-    setEvent("");
-    setPage(1);
-  };
+  // Four filters the API already supported and the UI never exposed —
+  // subject_type, the date range and hide_system — plus the three it did.
+  const q = useResourceQuery({
+    filters: {
+      search: "",
+      log_name: "",
+      event: "",
+      subject_type: "",
+      date_from: "",
+      date_to: "",
+      hide_system: "",
+    },
+    debounced: ["search"],
+    defaultSortBy: "id",
+    defaultSortOrder: "desc",
+    autoPerPage,
+  });
 
   const load = useCallback(
     async (isLive: () => boolean = () => true) => {
@@ -104,11 +87,15 @@ export default function ActivityModule() {
       setError(null);
       try {
         const res = await activityApi.list({
-          page,
-          per_page: perPage,
-          ...(debouncedSearch ? { search: debouncedSearch } : {}),
-          ...(logName ? { log_name: logName } : {}),
-          ...(event ? { event } : {}),
+          page: q.page,
+          per_page: q.perPage,
+          ...(q.applied.search ? { search: q.applied.search } : {}),
+          ...(q.applied.log_name ? { log_name: q.applied.log_name } : {}),
+          ...(q.applied.event ? { event: q.applied.event } : {}),
+          ...(q.applied.subject_type ? { subject_type: q.applied.subject_type } : {}),
+          ...(q.applied.date_from ? { date_from: q.applied.date_from } : {}),
+          ...(q.applied.date_to ? { date_to: q.applied.date_to } : {}),
+          ...(q.applied.hide_system === "1" ? { hide_system: true } : {}),
         });
         if (!isLive()) return;
         setRows(res.data.items);
@@ -120,16 +107,19 @@ export default function ActivityModule() {
         if (isLive()) setLoading(false);
       }
     },
-    [page, perPage, debouncedSearch, logName, event]
+    [q.page, q.perPage, q.applied]
   );
 
   useEffect(() => {
+    // `ready` is false until the query string has been applied; fetching before
+    // then issues a throwaway request with default filters.
+    if (!q.ready) return;
     let live = true;
     void load(() => live);
     return () => {
       live = false;
     };
-  }, [load]);
+  }, [load, q.ready]);
 
   // Loaded once: the event list changes only when a new kind of action first
   // occurs, so refetching it alongside every filter change would be waste.
@@ -159,7 +149,7 @@ export default function ActivityModule() {
       {
         id: "index",
         header: "#",
-        cell: (_row, i) => (page - 1) * perPage + i + 1,
+        cell: (_row, i) => (q.page - 1) * q.perPage + i + 1,
         className: "w-10 text-center px-0.5 text-gray-400",
         headerClassName: "w-10 text-center px-0.5",
         hideable: false,
@@ -216,73 +206,62 @@ export default function ActivityModule() {
         hideable: false,
       },
     ],
-    [page, perPage]
+    [q.page, q.perPage]
   );
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <Card>
-        <CardHeader
-          title="Activity Log"
-          description={`${total} recorded action${total === 1 ? "" : "s"} — read-only`}
-        />
-        <CardContent>
-          <FilterRow>
-            <Input
-              label=""
-              placeholder="Search what happened…"
-              value={search}
-              onChange={(e) => changeSearch(e.target.value)}
-              className="min-w-[180px]"
-            />
-            <Select
-              label=""
-              value={logName}
-              onChange={(e) => changeLogName(e.target.value)}
-              options={[
-                { value: "", label: "All logs" },
-                { value: "auth", label: "Authentication" },
-                { value: "default", label: "Changes" },
-              ]}
-            />
-            <Select
-              label=""
-              value={event}
-              onChange={(e) => changeEvent(e.target.value)}
-              options={[
-                { value: "", label: "All events" },
-                ...events.map((e) => ({ value: e, label: humanise(e) })),
-              ]}
-            />
-            <Button variant="outline" onClick={resetFilters} disabled={!filtersActive}>
-              Reset
-            </Button>
-          </FilterRow>
-
-          <DataTable
-            columns={columns}
-            rows={rows}
-            rowKey={(row) => String(row.id)}
-            loading={loading}
-            error={error}
-            onRetry={() => void load()}
-            page={page}
-            perPage={perPage}
-            total={total}
-            pages={pages}
-            onPageChange={setPage}
-            onPerPageChange={setPerPage}
-            emptyTitle={filtersActive ? "No matching activity" : "Nothing recorded yet"}
-            emptyHint={
-              filtersActive
-                ? "Try a different filter."
-                : "Actions appear here as they happen."
-            }
-            filtersActive={filtersActive}
-            onResetFilters={resetFilters}
-          />
-        </CardContent>
-      </Card>
+    <ResourceIndex<ActivityEntry, typeof q.filters>
+      title="Activity Log"
+      description={`${total} recorded action${total === 1 ? "" : "s"} — read-only`}
+      query={q}
+      filters={[
+        { type: "text", key: "search", placeholder: "Search description, subject or log…", label: "Search activity" },
+        {
+          type: "select",
+          key: "log_name",
+          placeholder: "All logs",
+          label: "Filter by log",
+          options: [
+            { value: "auth", label: "Auth" },
+            { value: "default", label: "Default" },
+          ],
+        },
+        {
+          type: "select",
+          key: "event",
+          placeholder: "All events",
+          label: "Filter by event",
+          options: events.map((e) => ({ value: e, label: e })),
+          // Read from the data, so it is empty until the first load returns.
+          hidden: events.length === 0,
+        },
+        {
+          type: "select",
+          key: "subject_type",
+          placeholder: "All subjects",
+          label: "Filter by subject type",
+          options: [
+            { value: "User", label: "User" },
+            { value: "Role", label: "Role" },
+          ],
+        },
+        { type: "date", key: "date_from", label: "From date" },
+        { type: "date", key: "date_to", label: "To date" },
+        { type: "check", key: "hide_system", label: "Hide automation" },
+      ]}
+      columns={columns}
+      rows={rows}
+      rowKey={(r) => String(r.id)}
+      loading={loading}
+      error={error}
+      onRetry={() => void load()}
+      total={total}
+      pages={pages}
+      emptyTitle={q.filtersActive ? "No matching activity" : "Nothing recorded yet"}
+      emptyHint={
+        q.filtersActive ? "Try a different filter." : "Actions appear here as they happen."
+      }
+    >
 
       {detail && (
         <Modal
@@ -334,6 +313,6 @@ export default function ActivityModule() {
           </div>
         </Modal>
       )}
-    </div>
+    </ResourceIndex>
   );
 }

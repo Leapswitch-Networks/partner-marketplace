@@ -295,7 +295,14 @@ _LIST_SPEC = ListSpec(
     sortable={"id": ActivityLog.id},
     default_sort="id",
     tiebreak=ActivityLog.id,
-    searchable=(ActivityLog.description,),
+    # description + subject_type + log_name, matching the reference. Searching
+    # only the description missed "show me everything about a Role", because the
+    # model name never appears in the sentence.
+    searchable=(
+        ActivityLog.description,
+        ActivityLog.subject_type,
+        ActivityLog.log_name,
+    ),
     default_per_page=25,
 )
 
@@ -311,6 +318,7 @@ def list_entries(
     search: str | None = None,
     date_from: datetime | None = None,
     date_to: datetime | None = None,
+    hide_system: bool = False,
     page: int = 1,
     per_page: int = 25,
 ) -> tuple[list[ActivityLog], int, dict[str, str]]:
@@ -347,6 +355,11 @@ def list_entries(
         stmt = stmt.where(ActivityLog.created_at >= date_from)
     if date_to:
         stmt = stmt.where(ActivityLog.created_at <= date_to)
+    if hide_system:
+        # Rows with no causer are automation — seeders, CLI, scheduled purges.
+        # Someone reading a who-did-what feed can drop them. Ported from the
+        # reference, which does exactly `whereNotNull('causer_id')`.
+        stmt = stmt.where(ActivityLog.causer_id.isnot(None))
 
     # Search, count, ordering and paging come from the shared pipeline. The
     # ordering this module documented — by `id`, because rows written in one

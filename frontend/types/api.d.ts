@@ -2530,6 +2530,8 @@ export interface operations {
                 search?: string | null;
                 date_from?: string | null;
                 date_to?: string | null;
+                /** @description Drop rows with no human causer (automation) */
+                hide_system?: boolean;
                 page?: number;
                 per_page?: number;
             };
