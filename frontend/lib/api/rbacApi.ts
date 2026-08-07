@@ -1,5 +1,5 @@
 import axiosInstance from "./axiosInstance";
-import type { AccountType, Invitation, PermissionGroup, Role } from "@/types";
+import type { AccountType, Paginated, Invitation, PermissionGroup, Role } from "@/types";
 
 /** Roles, the permission catalog, and invitations. */
 
@@ -21,6 +21,12 @@ export interface ClonePayload {
   name: string;
   display_name?: string | null;
   description?: string | null;
+}
+
+export interface NavSectionOption {
+  key: string;
+  label: string;
+  collapsible: boolean;
 }
 
 export interface RoleUserItem {
@@ -59,6 +65,20 @@ export const roleApi = {
   remove: (id: number) =>
     axiosInstance.delete<{ message: string }>(`/roles/${id}`),
   users: (id: number) => axiosInstance.get<RoleUserItem[]>(`/roles/${id}/users`),
+
+  /**
+   * Per-role sidebar preferences. `collapsible` is the stored value itself, not
+   * a capability flag — it says whether that section renders collapsed for this
+   * role. The response always carries the FULL catalog, so the UI never needs to
+   * know the defaults.
+   */
+  navPreferences: (id: number) =>
+    axiosInstance.get<{ sections: NavSectionOption[] }>(`/roles/${id}/nav-preferences`),
+  setNavPreferences: (id: number, preferences: Record<string, { collapsible: boolean }>) =>
+    axiosInstance.post<{ sections: NavSectionOption[] }>(
+      `/roles/${id}/nav-preferences`,
+      { preferences }
+    ),
   clone: (id: number, data: ClonePayload) =>
     axiosInstance.post<Role>(`/roles/${id}/clone`, data),
 };
@@ -125,11 +145,21 @@ export const activityApi = {
   events: () => axiosInstance.get<string[]>("/activity/events"),
 };
 
+export interface ListInvitationsParams {
+  status?: Invitation["status"];
+  account_type?: AccountType;
+  /** Matches email or note. */
+  search?: string;
+  sort_by?: string;
+  sort_order?: "asc" | "desc";
+  page?: number;
+  per_page?: number;
+}
+
 export const invitationApi = {
-  list: (status?: Invitation["status"]) =>
-    axiosInstance.get<Invitation[]>("/invitations", {
-      params: status ? { status } : undefined,
-    }),
+  /** Returns the shared `Page` envelope, as of the 2026-08-07 pagination change. */
+  list: (params: ListInvitationsParams = {}) =>
+    axiosInstance.get<Paginated<Invitation>>("/invitations", { params }),
 
   /**
    * Unauthenticated — the invitee has a token but no account yet.

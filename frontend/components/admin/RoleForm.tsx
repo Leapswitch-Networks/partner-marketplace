@@ -11,7 +11,7 @@ import Input from "@/components/common/Input";
 import ResourceForm from "@/components/common/ResourceForm";
 import Skeleton from "@/components/common/Skeleton";
 import PermissionPicker from "@/components/admin/PermissionPicker";
-import { permissionApi, roleApi } from "@/lib/api/rbacApi";
+import { permissionApi, roleApi, type NavSectionOption } from "@/lib/api/rbacApi";
 import type { PermissionGroup, Role } from "@/types";
 
 /**
@@ -51,6 +51,9 @@ export default function RoleForm({ roleId }: { roleId?: number }) {
   const [record, setRecord] = useState<Role | null>(null);
   const [groups, setGroups] = useState<PermissionGroup[]>([]);
   const [checked, setChecked] = useState<Set<number>>(new Set());
+  //: Per-role sidebar preferences. Edit-mode only — the endpoint is keyed on a
+  //  role id, which a role being created does not have yet.
+  const [navSections, setNavSections] = useState<NavSectionOption[] | null>(null);
   const [loading, setLoading] = useState(Boolean(roleId));
   const [serverError, setServerError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -86,6 +89,8 @@ export default function RoleForm({ roleId }: { roleId?: number }) {
           setChecked(new Set(role.permissions.map((p) => p.id)));
         }
       })
+      .then(() => roleApi.navPreferences(roleId))
+      .then((res) => !cancelled && setNavSections(res.data.sections))
       .catch((err) => !cancelled && setServerError(apiMessage(err, "Could not load this role.")))
       .finally(() => !cancelled && setLoading(false));
     return () => {
@@ -133,6 +138,18 @@ export default function RoleForm({ roleId }: { roleId?: number }) {
           description: values.description.trim() || null,
           permission_ids,
         });
+      }
+      // Sidebar preferences are a second endpoint, so a second request. Sent
+      // after the role save rather than before: if the role update is rejected
+      // there is nothing to attach preferences to, and a preferences-only write
+      // would leave the two out of step.
+      if (record && navSections) {
+        await roleApi.setNavPreferences(
+          record.id,
+          Object.fromEntries(
+            navSections.map((section) => [section.key, { collapsible: section.collapsible }])
+          )
+        );
       }
       setSaved(true);
       router.push("/dashboard/roles");
@@ -182,6 +199,38 @@ export default function RoleForm({ roleId }: { roleId?: number }) {
         error={formState.errors.description?.message}
         {...register("description")}
       />
+
+      {navSections && navSections.length > 0 && (
+        <div>
+          <p className="mb-1 text-xs font-semibold text-ink dark:text-gray-300">Sidebar</p>
+          <p className="mb-2 text-[11px] text-ink-label dark:text-night-muted">
+            Which sections start collapsed for someone holding this role. Affects the sidebar only —
+            it hides nothing they have permission to reach.
+          </p>
+          <div className="flex flex-col gap-1.5 rounded-[5px] border border-brand/20 px-3 py-2.5 dark:border-night-border">
+            {navSections.map((section) => (
+              <label
+                key={section.key}
+                className="flex cursor-pointer items-center gap-2 rounded-[5px] px-1.5 py-1 text-xs hover:bg-brand/10"
+              >
+                <input
+                  type="checkbox"
+                  checked={section.collapsible}
+                  onChange={(e) =>
+                    setNavSections((prev) =>
+                      (prev ?? []).map((s2) =>
+                        s2.key === section.key ? { ...s2, collapsible: e.target.checked } : s2
+                      )
+                    )
+                  }
+                  className="h-3.5 w-3.5 accent-brand"
+                />
+                <span className="text-ink dark:text-gray-300">{section.label}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div>
         <div className="mb-2 flex items-center justify-between">
