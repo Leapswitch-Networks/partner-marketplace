@@ -56,6 +56,16 @@ export interface UseResourceQueryOptions<F extends FilterValues> {
   defaultSortOrder?: SortOrder;
   defaultPerPage?: number;
   /**
+   * Viewport-derived page size from `useAutoPerPage()`.
+   *
+   * Adopted on every resize **until the user picks a page size explicitly**,
+   * after which their choice sticks — resizing the window should not silently
+   * override a deliberate selection. A page size in the URL counts as explicit:
+   * a shared link that says 50 must show 50 regardless of the recipient's
+   * viewport, or the link does not mean what its sender saw.
+   */
+  autoPerPage?: number;
+  /**
    * Query-string prefix, for a page hosting two independent tables. Omit
    * otherwise — an unprefixed URL reads better when shared.
    */
@@ -100,6 +110,7 @@ export default function useResourceQuery<F extends FilterValues>({
   defaultSortBy,
   defaultSortOrder = "desc",
   defaultPerPage = 15,
+  autoPerPage,
   urlKey,
 }: UseResourceQueryOptions<F>): ResourceQuery<F> {
   const prefix = urlKey ? `${urlKey}_` : "";
@@ -122,6 +133,9 @@ export default function useResourceQuery<F extends FilterValues>({
   const [sortOrder, setSortOrder] = useState<SortOrder>(defaultSortOrder);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [ready, setReady] = useState(false);
+  //: Set once the user chooses a page size, or once one arrives from the URL.
+  //  While false, `autoPerPage` wins on every resize.
+  const [perPageLocked, setPerPageLocked] = useState(false);
 
   // --- read the query string once, after mount ------------------------------
   //
@@ -154,7 +168,10 @@ export default function useResourceQuery<F extends FilterValues>({
     if (Number.isFinite(urlPage) && urlPage > 0) setPageState(urlPage);
 
     const urlPerPage = Number(params.get(`${prefix}per_page`));
-    if (Number.isFinite(urlPerPage) && urlPerPage > 0) setPerPageState(urlPerPage);
+    if (Number.isFinite(urlPerPage) && urlPerPage > 0) {
+      setPerPageState(urlPerPage);
+      setPerPageLocked(true);
+    }
 
     const urlSortBy = params.get(`${prefix}sort_by`);
     if (urlSortBy) setSortBy(urlSortBy);
@@ -168,6 +185,17 @@ export default function useResourceQuery<F extends FilterValues>({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
+
+  // --- adopt the viewport-derived page size until the user overrides it -----
+  useEffect(() => {
+    if (perPageLocked || autoPerPage === undefined) return;
+    // Same justification as the mount effect above: `autoPerPage` is measured
+    // from the viewport by `useAutoPerPage`, so it cannot be derived during
+    // render. The early return above keeps this to at most one extra render per
+    // resize, and none at all once the user has chosen a page size.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPerPageState(autoPerPage);
+  }, [autoPerPage, perPageLocked]);
 
   // --- debounce the text filters -------------------------------------------
   //
@@ -223,7 +251,10 @@ export default function useResourceQuery<F extends FilterValues>({
       set(String(key), applied[key], applied[key] === defaults[key]);
     }
     set("page", String(page), page === 1);
-    set("per_page", String(perPage), perPage === defaultPerPage);
+    // Omitted while unlocked: an auto-sized value is a property of the viewport,
+    // not a choice, and putting it in a shared link would impose the sender's
+    // window size on the recipient.
+    set("per_page", String(perPage), !perPageLocked);
     set("sort_by", sortBy, sortBy === defaultSortBy);
     set("sort_order", sortOrder, sortOrder === defaultSortOrder);
 
@@ -243,6 +274,7 @@ export default function useResourceQuery<F extends FilterValues>({
     sortBy,
     sortOrder,
     prefix,
+    perPageLocked,
     defaultPerPage,
     defaultSortBy,
     defaultSortOrder,
@@ -279,6 +311,7 @@ export default function useResourceQuery<F extends FilterValues>({
 
   const setPerPage = useCallback((next: number) => {
     setPerPageState(next);
+    setPerPageLocked(true);
     setPageState(1);
     setSelected(new Set());
   }, []);

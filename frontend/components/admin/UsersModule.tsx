@@ -3,8 +3,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Badge from "@/components/common/Badge";
 import Button from "@/components/common/Button";
-import { Card, CardContent, CardHeader, FilterRow } from "@/components/common/Card";
-import DataTable, { type Column } from "@/components/common/DataTable";
+import { type Column } from "@/components/common/DataTable";
+import ResourceIndex from "@/components/common/ResourceIndex";
 import Input from "@/components/common/Input";
 import Modal from "@/components/common/Modal";
 import RowActions from "@/components/common/RowActions";
@@ -14,8 +14,8 @@ import { adminApi, type CreateUserPayload, type UpdateUserPayload } from "@/lib/
 import { roleApi } from "@/lib/api/rbacApi";
 import useAppSelector from "@/lib/hooks/useAppSelector";
 import useAutoPerPage from "@/lib/hooks/useAutoPerPage";
-import useDebouncedValue from "@/lib/hooks/useDebouncedValue";
 import usePermissions from "@/lib/hooks/usePermissions";
+import useResourceQuery from "@/lib/hooks/useResourceQuery";
 import type { ManagedUser, Role, UserStatus } from "@/types";
 
 /** Extract a readable message from a FastAPI error, which may be a 422 detail array. */
@@ -58,21 +58,18 @@ export default function UsersModule({ initialModal }: { initialModal?: ModalMode
   const autoPerPage = useAutoPerPage();
 
   // --- query state ---
-  const [search, setSearch] = useState("");
-  const debouncedSearch = useDebouncedValue(search);
-  const [status, setStatus] = useState("");
-  const [accountType, setAccountType] = useState("");
-  const [roleId, setRoleId] = useState("");
-  const [sortBy, setSortBy] = useState("created_at");
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
-  const [page, setPage] = useState(1);
-  const [perPage, setPerPage] = useState(autoPerPage);
-  const [perPageTouched, setPerPageTouched] = useState(false);
-
-  // Adopt the auto value until the user picks one explicitly.
-  useEffect(() => {
-    if (!perPageTouched) setPerPage(autoPerPage);
-  }, [autoPerPage, perPageTouched]);
+  //
+  // One hook replaces eleven `useState`s and three coordinating `useEffect`s.
+  // It also owns the rules those effects encoded — reset to page 1 on a filter
+  // change, clear the selection with it, debounce text but not dropdowns — so
+  // the next seven modules inherit them instead of reimplementing them.
+  const q = useResourceQuery({
+    filters: { search: "", status: "", account_type: "", role_id: "" },
+    debounced: ["search"],
+    defaultSortBy: "created_at",
+    defaultSortOrder: "desc",
+    autoPerPage,
+  });
 
   // --- data ---
   const [rows, setRows] = useState<ManagedUser[]>([]);
@@ -87,21 +84,19 @@ export default function UsersModule({ initialModal }: { initialModal?: ModalMode
   const [modal, setModal] = useState<ModalMode>(initialModal ?? null);
   const [target, setTarget] = useState<ManagedUser | null>(null);
 
-  const filtersActive = Boolean(debouncedSearch || status || accountType || roleId);
-
   const fetchUsers = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
       const res = await adminApi.listUsers({
-        search: debouncedSearch || undefined,
-        status: (status as UserStatus) || undefined,
-        account_type: (accountType as "staff" | "partner") || undefined,
-        role_id: roleId ? Number(roleId) : undefined,
-        sort_by: sortBy,
-        sort_order: sortOrder,
-        page,
-        per_page: perPage,
+        search: q.applied.search || undefined,
+        status: (q.applied.status as UserStatus) || undefined,
+        account_type: (q.applied.account_type as "staff" | "partner") || undefined,
+        role_id: q.applied.role_id ? Number(q.applied.role_id) : undefined,
+        sort_by: q.sortBy,
+        sort_order: q.sortOrder,
+        page: q.page,
+        per_page: q.perPage,
       });
       setRows(res.data.items);
       setTotal(res.data.total);
@@ -111,11 +106,15 @@ export default function UsersModule({ initialModal }: { initialModal?: ModalMode
     } finally {
       setLoading(false);
     }
-  }, [debouncedSearch, status, accountType, roleId, sortBy, sortOrder, page, perPage]);
+  }, [q.applied, q.sortBy, q.sortOrder, q.page, q.perPage]);
 
   useEffect(() => {
+    // `ready` is false until the query string has been read. Fetching before
+    // then issues a throwaway request with default filters, then immediately
+    // repeats it with the real ones.
+    if (!q.ready) return;
     fetchUsers();
-  }, [fetchUsers]);
+  }, [fetchUsers, q.ready]);
 
   // Roles drive both the filter and the pickers; fetched once.
   useEffect(() => {
@@ -126,18 +125,6 @@ export default function UsersModule({ initialModal }: { initialModal?: ModalMode
       .catch(() => setRoles([]));
   }, [can]);
 
-  // Any filter change invalidates the current page number.
-  useEffect(() => {
-    setPage(1);
-    setSelected(new Set());
-  }, [debouncedSearch, status, accountType, roleId]);
-
-  const resetFilters = () => {
-    setSearch("");
-    setStatus("");
-    setAccountType("");
-    setRoleId("");
-  };
 
   // --- row actions ---
   const runAction = async (
@@ -422,126 +409,61 @@ export default function UsersModule({ initialModal }: { initialModal?: ModalMode
   const roleFilterOptions = roles.map((r) => ({ value: String(r.id), label: r.display_name }));
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <Card>
-        <CardHeader
-          title="Users"
-          description={`${total} account${total === 1 ? "" : "s"} · roles decide what each one can do`}
-          actions={
-            can("user-create") ? (
-              <Button onClick={() => setModal("create")}>Add user</Button>
-            ) : undefined
-          }
-        />
-
-        <CardContent>
-          <FilterRow>
-            <div className="relative min-w-[180px] flex-1">
-              <Input
-                label=""
-                id="user-search"
-                placeholder="Search name, email or company…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                className="!h-9 !py-0 !text-xs"
-              />
-            </div>
-            <div className="min-w-[140px] flex-1">
-              <Select
-                aria-label="Filter by status"
-                placeholder="All statuses"
-                options={STATUS_OPTIONS}
-                value={status}
-                onChange={(e) => setStatus(e.target.value)}
-              />
-            </div>
-            <div className="min-w-[130px] flex-1">
-              <Select
-                aria-label="Filter by account type"
-                placeholder="All types"
-                options={ACCOUNT_TYPE_OPTIONS}
-                value={accountType}
-                onChange={(e) => setAccountType(e.target.value)}
-              />
-            </div>
-            {roleFilterOptions.length > 0 && (
-              <div className="min-w-[140px] flex-1">
-                <Select
-                  aria-label="Filter by role"
-                  placeholder="All roles"
-                  options={roleFilterOptions}
-                  value={roleId}
-                  onChange={(e) => setRoleId(e.target.value)}
-                />
-              </div>
-            )}
-            <button
-              type="button"
-              onClick={resetFilters}
-              disabled={!filtersActive}
-              className="h-9 shrink-0 rounded-[5px] border border-brand/20 px-3 text-xs font-medium text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-night-border dark:text-gray-400 dark:hover:bg-gray-800"
+    <ResourceIndex<ManagedUser, typeof q.filters>
+      title="Users"
+      description={`${total} account${total === 1 ? "" : "s"} · roles decide what each one can do`}
+      actions={can("user-create") ? <Button onClick={() => setModal("create")}>Add user</Button> : undefined}
+      query={q}
+      filters={[
+        { type: "text", key: "search", placeholder: "Search name, email or company…", label: "Search users" },
+        { type: "select", key: "status", placeholder: "All statuses", label: "Filter by status", options: STATUS_OPTIONS },
+        { type: "select", key: "account_type", placeholder: "All types", label: "Filter by account type", options: ACCOUNT_TYPE_OPTIONS },
+        {
+          type: "select",
+          key: "role_id",
+          placeholder: "All roles",
+          label: "Filter by role",
+          options: roleFilterOptions,
+          // Hidden rather than empty: roles need `role-view`, and a dropdown
+          // with no options reads as broken rather than as unavailable.
+          hidden: roleFilterOptions.length === 0,
+        },
+      ]}
+      columns={columns}
+      rows={rows}
+      rowKey={(r) => r.id}
+      loading={loading}
+      error={error}
+      onRetry={fetchUsers}
+      total={total}
+      pages={pages}
+      selectable={can("user-update") || can("user-delete")}
+      bulkActions={
+        <>
+          {can("user-update") && (
+            <>
+              <BulkButton onClick={() => handleBulk("ACTIVE")} disabled={busy === "bulk"}>
+                Activate
+              </BulkButton>
+              <BulkButton onClick={() => handleBulk("INACTIVE")} disabled={busy === "bulk"}>
+                Deactivate
+              </BulkButton>
+            </>
+          )}
+          {can("user-delete") && (
+            <BulkButton
+              onClick={() => handleBulk("delete")}
+              disabled={busy === "bulk"}
+              destructive
             >
-              Reset
-            </button>
-          </FilterRow>
-
-          <DataTable
-            className="min-h-0 flex-1"
-            columns={columns}
-            rows={rows}
-            rowKey={(r) => r.id}
-            loading={loading}
-            error={error}
-            onRetry={fetchUsers}
-            page={page}
-            perPage={perPage}
-            total={total}
-            pages={pages}
-            onPageChange={setPage}
-            onPerPageChange={(n) => {
-              setPerPageTouched(true);
-              setPerPage(n);
-              setPage(1);
-            }}
-            sortBy={sortBy}
-            sortOrder={sortOrder}
-            onSortChange={(key, order) => {
-              setSortBy(key);
-              setSortOrder(order);
-            }}
-            selectable={can("user-update") || can("user-delete")}
-            selected={selected}
-            onSelectedChange={setSelected}
-            bulkActions={
-              <>
-                {can("user-update") && (
-                  <>
-                    <BulkButton onClick={() => handleBulk("ACTIVE")} disabled={busy === "bulk"}>
-                      Activate
-                    </BulkButton>
-                    <BulkButton onClick={() => handleBulk("INACTIVE")} disabled={busy === "bulk"}>
-                      Deactivate
-                    </BulkButton>
-                  </>
-                )}
-                {can("user-delete") && (
-                  <BulkButton
-                    onClick={() => handleBulk("delete")}
-                    disabled={busy === "bulk"}
-                    destructive
-                  >
-                    Delete
-                  </BulkButton>
-                )}
-              </>
-            }
-            filtersActive={filtersActive}
-            onResetFilters={resetFilters}
-            emptyTitle="No users yet"
-            emptyHint={can("user-create") ? "Use “Add user” to create the first one." : undefined}
-          />
-        </CardContent>
-      </Card>
+              Delete
+            </BulkButton>
+          )}
+        </>
+      }
+      emptyTitle="No users yet"
+      emptyHint={can("user-create") ? "Use “Add user” to create the first one." : undefined}
+    >
 
       {modal === "create" && (
         <UserFormModal
@@ -590,7 +512,7 @@ export default function UsersModule({ initialModal }: { initialModal?: ModalMode
       )}
 
       <Toast toast={toast} onDismiss={dismiss} />
-    </div>
+    </ResourceIndex>
   );
 }
 
