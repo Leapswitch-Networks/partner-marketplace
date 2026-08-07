@@ -232,16 +232,38 @@ docstring says so explicitly, so nobody assumes it authorises anything today.
 
 LeapDesk uses traits (`LogsAllActivity`, `HasDataAccess`). Our equivalent is FastAPI dependencies:
 
-- [ ] **`require_permission("user-view")`** — a dependency factory. Exists in spirit; make it the
-      only way a route is gated.
-- [ ] **Activity logging** — one hook on the CRUD base, so a new module is audited by construction.
-      LeapDesk's `LogsAllActivity` trait is the model.
-- [ ] **Data-access scoping** — one composable filter, so `HasDataAccess` semantics and PM-5's
-      row-level scoping land in the *same* place rather than fighting each other later.
+- [x] **`require_permission`** — already exists in `app/core/dependencies.py`, alongside
+      `require_any_permission`, `require_roles`, `require_super_admin`, `require_admin_access` and
+      `require_password_confirmation`. **Audited 2026-08-07: every route carries a guard except the
+      14 that must be public** — register, verify-email, resend-verification, refresh,
+      two-factor-challenge, forgot/reset-password, the three Google OAuth legs, invitation preview,
+      and the three public branding reads the sign-in page needs *before* anyone is logged in.
+      There is no ungated route that should be gated.
+      *"Make it the only way a route is gated" was the wrong goal.* Six guards exist because
+      self-service (`/me/*`), permission-gated, super-admin and password-confirmed are genuinely
+      different questions. Branding writes, for instance, require **super-admin *and* a password
+      confirmation** — stronger than any permission check.
 
-> **Sequencing note:** § 3.4's scoping hook is the seam where **PM-5** (row-level scoping) and
-> **Module 3 (Data Access)** meet. Build the seam now, even if empty. Retrofitting it into eight
-> modules later is the expensive version.
+- [ ] **Activity logging — keep the explicit calls.** § 3.4 originally wanted one hook on the CRUD
+      base so modules were audited by construction. There is no CRUD base (§ 3.3), and more
+      importantly `activity_service`'s docstring already **records a deliberate decision against the
+      global-hook approach**: SQLAlchemy has the equivalent events, but wiring them globally logs
+      every write in the app including the session `last_seen_at` touches, and *"an audit trail full
+      of noise is one nobody reads"*.
+      That trade-off is understood and documented — explicit calls can be forgotten where a hook
+      cannot — and the mitigation is that the security-relevant paths are listed in
+      `AUTHORIZATION.md` so a reviewer can check the list against the routes. **Do not override an
+      existing documented decision to satisfy a line in this plan.** Per-module work: add the call,
+      and add the path to that list.
+
+- [x] **Data-access scoping seam** — marked in `get_or_404`, which is the single place a per-row
+      visibility check belongs. The docstring states plainly that it authorises nothing today, so
+      nobody mistakes the seam for the feature.
+
+> **Sequencing note:** that seam is where **PM-5** (row-level scoping) and **module 5 (Data Access)**
+> meet. It exists now, empty, because retrofitting it into eight modules later is the expensive
+> version. Note the list side has its own seam: `list_users` already narrows by
+> `actor.has_admin_access`, so scoping has two entry points to keep consistent, not one.
 
 ---
 
