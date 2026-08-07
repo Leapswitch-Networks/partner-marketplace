@@ -22,10 +22,17 @@ import useAppDispatch from "@/lib/hooks/useAppDispatch";
 export default function TwoFactorChallenge({
   challengeToken,
   recoveryCodesRemaining,
+  rememberMe,
   onCancel,
 }: {
   challengeToken: string;
   recoveryCodesRemaining: number;
+  /**
+   * Carried from the sign-in form. **The session is created by this request**, not by
+   * `/login`, so without threading it through, ticking "keep me signed in" would be
+   * silently ignored for every 2FA user.
+   */
+  rememberMe: boolean;
   onCancel: () => void;
 }) {
   const router = useRouter();
@@ -45,6 +52,7 @@ export default function TwoFactorChallenge({
     try {
       const res = await authApi.twoFactorChallenge({
         challenge_token: challengeToken,
+        remember_me: rememberMe,
         ...(isTotp ? { code: value.trim() } : { recovery_code: value.trim() }),
       });
       dispatch(setUser(res.data.user));

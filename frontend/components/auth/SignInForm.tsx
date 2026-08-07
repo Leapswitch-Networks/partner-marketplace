@@ -49,6 +49,7 @@ export default function SignInForm({ hideForgotPassword = false }: SignInFormPro
   const [challenge, setChallenge] = useState<{
     token: string;
     recoveryCodesRemaining: number;
+    rememberMe: boolean;
   } | null>(null);
 
   const {
@@ -62,7 +63,11 @@ export default function SignInForm({ hideForgotPassword = false }: SignInFormPro
     try {
       // One login endpoint for everyone — staff and partners share the `users`
       // table, and roles decide what happens next.
-      const res = await authApi.login({ email: data.email, password: data.password });
+      const res = await authApi.login({
+        email: data.email,
+        password: data.password,
+        remember_me: data.rememberMe ?? false,
+      });
 
       // Two possible shapes. Branch on the explicit flag rather than checking for
       // a missing `user`: a correct password with 2FA enabled is NOT a sign-in,
@@ -71,6 +76,10 @@ export default function SignInForm({ hideForgotPassword = false }: SignInFormPro
         setChallenge({
           token: res.data.challenge_token,
           recoveryCodesRemaining: res.data.recovery_codes_remaining,
+          // Carried through: for a 2FA user the session is created by the challenge
+          // request, two steps after this box was ticked. Dropping it here would
+          // silently lose the choice for exactly the users most likely to want it.
+          rememberMe: data.rememberMe ?? false,
         });
         return;
       }
@@ -90,6 +99,7 @@ export default function SignInForm({ hideForgotPassword = false }: SignInFormPro
       <TwoFactorChallenge
         challengeToken={challenge.token}
         recoveryCodesRemaining={challenge.recoveryCodesRemaining}
+        rememberMe={challenge.rememberMe}
         onCancel={() => setChallenge(null)}
       />
     );
@@ -152,7 +162,7 @@ export default function SignInForm({ hideForgotPassword = false }: SignInFormPro
             className="h-4 w-4 rounded-none border-surface-border accent-brand"
             {...register("rememberMe")}
           />
-          Remember Password
+          Keep me signed in
         </label>
 
         {!hideForgotPassword && (
