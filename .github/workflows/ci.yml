@@ -62,6 +62,16 @@ jobs:
       - name: Test
         run: pytest -m "not db"
 
+      # The committed OpenAPI document is the source of the frontend's types (PM-42),
+      # so a stale one means the frontend is typed against yesterday's API — which
+      # passes every check while being wrong. No database needed: `app.openapi()`
+      # builds the document from the route definitions.
+      - name: Committed openapi.json must match the routes
+        env:
+          DATABASE_URL: postgresql+psycopg2://u:p@db:5432/x
+          SECRET_KEY: ci-only-key-not-used-for-anything-at-all-here
+        run: python -m app.tools.export_openapi --check
+
       # The check that would have caught what PM-37 was built for. A default that is
       # safe locally and unsafe in production is invisible until something asserts
       # it, and asserting it here means the assertion itself cannot rot.
@@ -100,6 +110,16 @@ jobs:
       - name: Install
         run: npm ci --legacy-peer-deps
 
+      # Before the typecheck, because `types/api-contract.ts`'s assertions are only
+      # meaningful against a freshly generated `api.d.ts`. Regenerate, then fail if the
+      # committed file moved — a stale one would let the contract assertions pass
+      # against an API that no longer exists, which is the single way this guard can lie.
+      - name: Generated API types must be up to date
+        run: npm run codegen:check
+
+      # This is where a backend/frontend contract break surfaces:
+      # `types/api-contract.ts` asserts the hand-written types still match the generated
+      # ones, in both directions, and names the offending field when they do not.
       - name: Typecheck
         run: npm run typecheck
 

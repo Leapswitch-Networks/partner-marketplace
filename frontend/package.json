@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "eslint app components lib types",
     "lint:fix": "eslint app components lib types --fix",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "codegen:api": "openapi-typescript ../backend/openapi.json -o types/api.d.ts",
+    "codegen:check": "npm run codegen:api && git ls-files --error-unmatch types/api.d.ts > /dev/null 2>&1 || { echo 'types/api.d.ts is not committed \u2014 run `npm run codegen:api` and commit it'; exit 1; } && git diff --exit-code -- types/api.d.ts || { echo 'types/api.d.ts is stale \u2014 the API changed. Commit the regenerated file.'; exit 1; }"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -16,8 +18,8 @@
     "autoprefixer": "^10.5.0",
     "axios": "^1.15.0",
     "next": "^14.2.35",
-    "react": "19.2.4",
-    "react-dom": "19.2.4",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
     "react-hook-form": "^7.72.1",
     "react-redux": "^9.2.0",
     "zod": "^4.3.6"
@@ -25,10 +27,11 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
+    "@types/react": "^18",
+    "@types/react-dom": "^18",
     "eslint": "^9",
     "eslint-config-next": "16.2.3",
+    "openapi-typescript": "^7.13.0",
     "tailwindcss": "^3.4.19",
     "typescript": "^5"
   }
