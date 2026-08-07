@@ -131,7 +131,11 @@ export default function BrandAssetUpload({
           type="file"
           className="hidden"
           // A picker filter only. The server decides from the bytes.
-          accept={asset === "favicon" ? "image/png,image/x-icon,.ico" : "image/png,image/jpeg,image/webp"}
+          accept={
+            asset === "favicon"
+              ? "image/svg+xml,image/png,image/x-icon,.svg,.ico"
+              : "image/svg+xml,image/png,image/jpeg,image/webp,.svg"
+          }
           onChange={(event) => {
             const file = event.target.files?.[0];
             if (file) void upload(file);

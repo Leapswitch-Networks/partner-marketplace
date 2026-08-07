@@ -1,10 +1,10 @@
 "use client";
 
 import { useBranding } from "@/components/common/BrandingProvider";
-import { API_BASE_URL } from "@/lib/utils/constants";
+import { API_BASE_URL, APP_LOGO } from "@/lib/utils/constants";
 
 /**
- * The square brand badge: the uploaded logo, or the monogram.
+ * The square brand badge: the uploaded logo, the bundled default, or the monogram.
  *
  * One component rather than a conditional at each of the five sites that render it
  * (three in `Sidebar`, one in `Navbar`, one in `AuthInitializer`). Those five had
@@ -12,17 +12,25 @@ import { API_BASE_URL } from "@/lib/utils/constants";
  * product after three brand audits, because it is only visible during the session
  * check. Collapsing them into one component is what stops that recurring.
  *
- * **The monogram is a complete fallback, not a placeholder.** There is no state where
- * this renders empty: no logo means the letter, which is what the application looked
- * like before uploads existed.
+ * **Every step is a complete answer, not a placeholder.** There is no state where this
+ * renders empty. The bundled default is the real artwork, and the monogram behind it is
+ * what the application looked like before uploads existed — so a project reusing this
+ * core can set `NEXT_PUBLIC_APP_LOGO=""` and get a working letter badge rather than a
+ * broken image.
  */
 export default function BrandMark() {
   const branding = useBranding();
 
-  // Prefixed with the API origin because `logo_url` is relative to the API, not to
-  // this app. It already carries `?v=<epoch>`, so the browser refetches when the
-  // image changes and caches it for a year when it does not.
-  const src = branding.logo_url ? `${API_BASE_URL}${branding.logo_url}` : null;
+  // Three steps, in order of specificity: an uploaded logo, then the bundled default,
+  // then the monogram.
+  //
+  // The uploaded URL is prefixed with the API origin because it is relative to the API,
+  // not to this app, and it already carries `?v=<epoch>` so a replacement busts the
+  // cache. The bundled default is a static file on this origin and needs no cache key —
+  // changing it requires a deploy, which changes the build.
+  const src = branding.logo_url
+    ? `${API_BASE_URL}${branding.logo_url}`
+    : APP_LOGO || null;
 
   // Takes no className, deliberately. The two branches need *different* styling —
   // the image fills its container, the monogram is a text node the container is

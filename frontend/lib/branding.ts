@@ -4,7 +4,7 @@ import {
   APP_NAME,
   APP_SHORT_NAME,
   APP_TAGLINE,
-  SERVER_API_BASE_URL,
+  SERVER_API_URL,
 } from "@/lib/utils/constants";
 
 /** The project's identity, fully resolved. Mirrors the backend's `BrandingResponse`. */
@@ -89,7 +89,7 @@ const REVALIDATE_SECONDS = 300;
  */
 export async function getBranding(): Promise<Branding> {
   try {
-    const res = await fetch(`${SERVER_API_BASE_URL}/api/settings/branding`, {
+    const res = await fetch(`${SERVER_API_URL}/settings/branding`, {
       next: { revalidate: REVALIDATE_SECONDS, tags: ["branding"] },
     });
     if (!res.ok) return FALLBACK_BRANDING;
@@ -134,7 +134,7 @@ export type ThemePreset = {
  */
 export async function getThemePresets(): Promise<ThemePreset[]> {
   try {
-    const res = await fetch(`${SERVER_API_BASE_URL}/api/settings/branding/themes`, {
+    const res = await fetch(`${SERVER_API_URL}/settings/branding/themes`, {
       next: { revalidate: REVALIDATE_SECONDS, tags: ["branding"] },
     });
     if (!res.ok) return [];

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { SERVER_API_BASE_URL } from "@/lib/utils/constants";
+import { SERVER_API_URL } from "@/lib/utils/constants";
 
 /**
  * Serve the installation's favicon: the uploaded one, or the bundled default.
@@ -32,7 +32,7 @@ import { SERVER_API_BASE_URL } from "@/lib/utils/constants";
  */
 export async function GET() {
   try {
-    const upstream = await fetch(`${SERVER_API_BASE_URL}/api/settings/branding/favicon`, {
+    const upstream = await fetch(`${SERVER_API_URL}/settings/branding/favicon`, {
       // No caching here. The upstream response carries its own long-lived,
       // version-keyed `Cache-Control`, and caching the *proxy* as well would mean two
       // caches to invalidate on upload instead of one.

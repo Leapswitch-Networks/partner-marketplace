@@ -204,7 +204,7 @@ export default function BrandingForm({
       <BrandAssetUpload
         asset="logo"
         label="Logo"
-        hint="Replaces the monogram badge in the sidebar and top bar. PNG, JPEG or WebP, up to 512 KB."
+        hint="Replaces the badge in the sidebar and top bar. SVG, PNG, JPEG or WebP, up to 512 KB. SVG is sharpest — it scales to any size."
         currentUrl={values.logo_url}
         onChanged={applyBranding}
         onNeedsPassword={(retry) => setPendingAction(() => retry)}
@@ -213,7 +213,7 @@ export default function BrandingForm({
       <BrandAssetUpload
         asset="favicon"
         label="Favicon"
-        hint="The browser tab icon. PNG or ICO, up to 512 KB. Square works best."
+        hint="The browser tab icon. SVG, PNG or ICO, up to 512 KB. Square works best; ICO or PNG is the safest for older browsers."
         currentUrl={values.favicon_url}
         square
         onChanged={applyBranding}
