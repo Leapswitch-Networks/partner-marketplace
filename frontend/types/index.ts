@@ -137,8 +137,10 @@ export interface Invitation {
   is_expired: boolean;
   role: RoleSummary | null;
   invited_by_name: string | null;
-  /** Only on create/resend responses, and only when no email was delivered. */
-  accept_url?: string | null;
+  // No `accept_url` here. The list endpoint does not send it — it exists only on
+  // InvitationCreatedResponse, which is what `InvitationCreated` below models.
+  // Declaring it on the base type made every listed invitation look as though it
+  // might carry a live accept link, and the contract assertion caught it.
 }
 
 /**
