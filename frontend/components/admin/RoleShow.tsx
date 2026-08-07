@@ -16,7 +16,7 @@ import {
   ShowPageSidebar,
 } from "@/components/common/ShowPage";
 import PermissionPicker from "@/components/admin/PermissionPicker";
-import { permissionApi, roleApi } from "@/lib/api/rbacApi";
+import { permissionApi, roleApi, type RoleUserItem } from "@/lib/api/rbacApi";
 import usePermissions from "@/lib/hooks/usePermissions";
 import type { PermissionGroup, Role } from "@/types";
 
@@ -32,6 +32,7 @@ export default function RoleShow({ roleId }: { roleId: number }) {
   const { can } = usePermissions();
   const [role, setRole] = useState<Role | null>(null);
   const [groups, setGroups] = useState<PermissionGroup[]>([]);
+  const [holders, setHolders] = useState<RoleUserItem[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -53,6 +54,16 @@ export default function RoleShow({ roleId }: { roleId: number }) {
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    // Fetched separately from the role: it is a second query server-side too,
+    // and a role with no `user-view` reader should still render its permissions.
+    if (!can("user-view")) return;
+    roleApi
+      .users(roleId)
+      .then((res) => setHolders(res.data))
+      .catch(() => setHolders([]));
+  }, [roleId, can]);
 
   useEffect(() => {
     if (!can("permission-view")) return;
@@ -128,6 +139,29 @@ export default function RoleShow({ roleId }: { roleId: number }) {
           </ShowPageMain>
 
           <ShowPageSidebar>
+            {holders !== null && (
+              <InfoCard title={`Users (${holders.length})`}>
+                {holders.length === 0 ? (
+                  <Field label="Holders" value={null} />
+                ) : (
+                  <div className="flex flex-col gap-1.5 py-2.5">
+                    {holders.map((u) => (
+                      <Link
+                        key={u.id}
+                        href={`/dashboard/users/${u.id}`}
+                        className="flex items-baseline justify-between gap-2 rounded-[5px] px-1.5 py-1 text-xs transition-colors hover:bg-brand/10"
+                      >
+                        <span className="truncate text-ink dark:text-gray-200">{u.full_name}</span>
+                        <span className="shrink-0 truncate text-[10px] text-ink-label dark:text-night-muted">
+                          {u.email}
+                        </span>
+                      </Link>
+                    ))}
+                  </div>
+                )}
+              </InfoCard>
+            )}
+
             <MetaCard>
               <Field label="Name" value={<span className="font-mono">{role.name}</span>} />
               <Field label="Display name" value={role.display_name} />

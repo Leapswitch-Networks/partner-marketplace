@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Badge from "@/components/common/Badge";
 import Button from "@/components/common/Button";
 import ResourceIndex from "@/components/common/ResourceIndex";
+import CloneRoleModal from "@/components/admin/CloneRoleModal";
 import { type Column } from "@/components/common/DataTable";
 import Modal from "@/components/common/Modal";
 import RowActions from "@/components/common/RowActions";
@@ -27,7 +28,7 @@ function apiMessage(err: unknown, fallback: string): string {
 }
 
 /** Only `delete` remains — create and edit are pages now. */
-type ModalMode = "delete" | null;
+type ModalMode = "delete" | "clone" | null;
 
 export default function RolesModule() {
   const router = useRouter();
@@ -229,9 +230,14 @@ export default function RolesModule() {
       title="Roles & Permissions"
       description={`${roles.length} roles · ${totalPermissions} permissions. A role is a bundle of permissions; users hold roles.`}
       actions={
-        can("role-create") ? (
-          <Button onClick={() => router.push("/dashboard/roles/new")}>Add role</Button>
-        ) : undefined
+        <>
+          <Button variant="outline" onClick={() => router.push("/dashboard/roles/matrix")}>
+            Matrix
+          </Button>
+          {can("role-create") && (
+            <Button onClick={() => router.push("/dashboard/roles/new")}>Add role</Button>
+          )}
+        </>
       }
       query={q}
       filters={[
@@ -247,6 +253,22 @@ export default function RolesModule() {
       pages={pages}
       emptyTitle="No roles"
     >
+
+      {modal === "clone" && target && (
+        <CloneRoleModal
+          role={target}
+          onClose={() => {
+            setModal(null);
+            setTarget(null);
+          }}
+          onCloned={(role) => {
+            setModal(null);
+            setTarget(null);
+            show(`${role.display_name} created from ${target.display_name}.`);
+            fetchRoles();
+          }}
+        />
+      )}
 
       {modal === "delete" && target && (
         <DeleteRoleModal

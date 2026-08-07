@@ -17,6 +17,39 @@ export interface UpdateRolePayload {
   permission_ids?: number[];
 }
 
+export interface ClonePayload {
+  name: string;
+  display_name?: string | null;
+  description?: string | null;
+}
+
+export interface RoleUserItem {
+  id: string;
+  full_name: string;
+  email: string;
+  status: string;
+  account_type: string;
+}
+
+export interface MatrixGroupCell {
+  group_id: number;
+  granted: number;
+  total: number;
+}
+
+export interface MatrixRow {
+  role_id: number;
+  role_name: string;
+  display_name: string;
+  is_system: boolean;
+  cells: MatrixGroupCell[];
+}
+
+export interface RoleMatrix {
+  groups: PermissionGroup[];
+  rows: MatrixRow[];
+}
+
 export const roleApi = {
   list: () => axiosInstance.get<Role[]>("/roles"),
   get: (id: number) => axiosInstance.get<Role>(`/roles/${id}`),
@@ -25,6 +58,15 @@ export const roleApi = {
     axiosInstance.patch<Role>(`/roles/${id}`, data),
   remove: (id: number) =>
     axiosInstance.delete<{ message: string }>(`/roles/${id}`),
+  users: (id: number) => axiosInstance.get<RoleUserItem[]>(`/roles/${id}/users`),
+  clone: (id: number, data: ClonePayload) =>
+    axiosInstance.post<Role>(`/roles/${id}/clone`, data),
+};
+
+export const matrixApi = {
+  get: () => axiosInstance.get<RoleMatrix>("/roles/matrix"),
+  setCell: (role_id: number, group_id: number, granted: boolean) =>
+    axiosInstance.post<Role>("/roles/matrix/cell", { role_id, group_id, granted }),
 };
 
 export const permissionApi = {
