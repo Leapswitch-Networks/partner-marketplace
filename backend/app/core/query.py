@@ -32,8 +32,9 @@ Splitting the work:
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Literal, Sequence, TypeVar
+from typing import Literal, TypeVar
 
 from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import InstrumentedAttribute, Session

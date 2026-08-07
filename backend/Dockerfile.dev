@@ -23,10 +23,19 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends postgresql-client \
  && rm -rf /var/lib/apt/lists/*
 
-# Dependencies are baked into the image so only a requirements.txt change
+# Dependencies are baked into the image so only a requirements change
 # invalidates this layer.
-COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+#
+# requirements-dev.txt is installed too, which it was not until 2026-08-07.
+# Without it neither `ruff` nor `pytest` existed in the container, so the two
+# checks CI runs on every push — `ruff check .` and `pytest -m "not db"` — could
+# not be reproduced locally at all. That is the condition where CI stops being a
+# tool you use and becomes something you find out about, and it meant backend
+# code was being written and committed with no way to lint it first.
+#
+# Dev-only image, so the extra layer costs nothing that matters.
+COPY requirements.txt requirements-dev.txt ./
+RUN pip install --no-cache-dir -r requirements.txt -r requirements-dev.txt
 
 COPY docker-entrypoint.dev.sh /usr/local/bin/docker-entrypoint.dev.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.dev.sh
