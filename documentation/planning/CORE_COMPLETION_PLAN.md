@@ -192,14 +192,41 @@ Every list endpoint returns this. The frontend gets one shape to handle, and `ty
 generates it once. **Do not** copy Laravel's `links[]`/`from`/`to` envelope — it exists to serve
 Blade/Inertia URL pagination, which we do not use.
 
-### 3.3 `app/core/crud.py` — the service base
+### 3.3 `app/core/crud.py` — ✅ done 2026-08-07, and smaller than specified
 
-A small generic for the five operations every module repeats: `list`, `get_or_404`, `create`,
-`update` (partial), `delete`. Modules subclass and override only what is genuinely different.
+**This section originally called for a CRUD base class** — `list`, `get_or_404`, `create`, `update`,
+`delete`, with modules subclassing and overriding. **Reading the real write paths killed that idea,
+and it was the right call to abandon it:**
 
-- [ ] `get_or_404` raises a consistent 404 body — today each service invents one.
-- [ ] `update` is **PATCH semantics**: `model_dump(exclude_unset=True)`. PM-15 fixed this once; the
-      base class makes it structural rather than remembered.
+- `user_service.update_user` runs permission predicates, snapshots an audit diff *before* mutating,
+  and gates `status` and `role_ids` behind separate admin checks. A generic `update()` would be
+  overridden in full — inheritance buying nothing but indirection.
+- `invitation_service` has no plain update at all. Its writes are resend, cancel and accept, each
+  with its own state machine.
+- `FASTAPI_STANDARDS.md` § 3 specifies services as **module-level functions**, `db` first and `actor`
+  last. A base class would introduce a second way of doing the same thing, which `AGENTS.md` § Core
+  Principles forbids.
+
+**What shipped instead:** `get_or_404(db, Model, pk, label=None)` — the one part that was genuinely
+identical everywhere. Five call sites had drifted to four different messages for the same failure
+("User not found", "Role not found", "Invitation not found", "This invitation link is not valid."),
+and a client cannot branch on prose.
+
+It is also **the seam for row-level scoping (PM-5)**: when a partner may only read its own rows, the
+check belongs in one function rather than at every `db.get()` in the codebase. Not implemented — the
+docstring says so explicitly, so nobody assumes it authorises anything today.
+
+- [x] `get_or_404` raises a consistent 404 body
+- [x] The two-404 masking in `invitation_service._get_owned_or_404` preserved — a caller who does not
+      own an invitation gets the *same* 404, not a 403, so the endpoint cannot confirm that an
+      invitation exists for an address they cannot see
+- [ ] ~~PATCH semantics in a base class~~ — **not done, and not to be done.** `exclude_unset=True`
+      already appears in the three services that need it. Hoisting it would mean hoisting the audit
+      snapshot and permission gates that surround it
+
+> **The general lesson, worth keeping:** the shared layer earns its place where behaviour is
+> *identical*, not merely *similar*. Reads were identical and became `run_list`. Single-row fetches
+> were identical and became `get_or_404`. Writes only looked similar.
 
 ### 3.4 Cross-cutting concerns, as dependencies not copy-paste
 

@@ -20,6 +20,7 @@ from sqlalchemy import Select, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.crud import get_or_404
 from app.core.security import generate_token, hash_password
 from app.models.user import User
 from app.models.user_invitation import UserInvitation
@@ -294,9 +295,10 @@ def _get_owned_or_404(db: Session, invitation_id: str, actor: User) -> UserInvit
     A 404 (not 403) for someone else's invitation, so the endpoint does not
     confirm that an invitation exists for an address the caller can't see.
     """
-    invitation = db.get(UserInvitation, invitation_id)
-    if invitation is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Invitation not found")
+    # `label` is passed because the model is `UserInvitation` but the word a user
+    # should read is "Invitation".
+    invitation = get_or_404(db, UserInvitation, invitation_id, "Invitation")
+    # Deliberately the *same* 404, not a 403 — see the docstring.
     if not actor.has_admin_access and invitation.invited_by != actor.id:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Invitation not found")
     return invitation

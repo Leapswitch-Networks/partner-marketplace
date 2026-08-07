@@ -22,6 +22,7 @@ from sqlalchemy import Select, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.config import settings
+from app.core.crud import get_or_404
 from app.core.query import ListParams, ListSpec, run_list
 from app.core.security import hash_password
 from app.models.activity_log import EVENT_STATUS_CHANGED
@@ -96,10 +97,7 @@ def decorate(target: User, actor: User) -> User:
 
 
 def get_user_or_404(db: Session, user_id: str) -> User:
-    user = db.get(User, user_id)
-    if user is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
-    return user
+    return get_or_404(db, User, user_id)
 
 
 # --- Listing ----------------------------------------------------------------

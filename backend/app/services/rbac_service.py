@@ -10,6 +10,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.crud import get_or_404
 from app.core.permissions import PROTECTED_ROLES, ROLE_PERMISSIONS, SUPER_ADMIN_ROLES
 from app.models.associations import user_roles
 from app.models.permission import Permission
@@ -48,10 +49,7 @@ def role_user_counts(db: Session) -> dict[int, int]:
 
 
 def get_role_or_404(db: Session, role_id: int) -> Role:
-    role = db.get(Role, role_id)
-    if role is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Role not found")
-    return role
+    return get_or_404(db, Role, role_id)
 
 
 def _resolve_grantable_permissions(
