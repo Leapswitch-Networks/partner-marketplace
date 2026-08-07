@@ -81,6 +81,79 @@ DASHBOARD_VIEW = "dashboard-view"
 SETTINGS_MANAGE = "settings-manage"
 
 
+# --- The eight-module core (CORE_COMPLETION_PLAN.md) -------------------------
+#
+# ⚠️ These are named in THIS project's convention — `{resource}-{action}`,
+# singular, kebab-case — not the reference implementation's dotted names
+# (`data-access.view`, `api-credentials.providers.create`). The mapping is
+# recorded below so it stays reversible.
+#
+# That contradicts one line in LEAPDESK_PARITY_PLAN.md, which is worth being
+# explicit about. That document says **both**: § Decisions settled records
+# "LeapDesk's dotted names verbatim", while § Open decisions still lists the same
+# question as undecided. It contradicts itself, so neither line settles it.
+#
+# What settles it is this module's own docstring — it calls itself the single
+# source of truth, states the convention, and gives `api-credential-update` as
+# its example. All 18 existing permissions follow it. Adopting dotted names would
+# put two conventions in one catalog, and the roles page renders that catalog.
+#
+# Permission names are internal identifiers, never shown to a user, so the parity
+# contract in CORE_COMPLETION_PLAN.md § 1.1 — which binds *what the user sees and
+# can do* — does not require the reference's spelling here. Behaviour is at
+# parity; the identifier is ours.
+#
+#   Reference                            Ours
+#   data-access.view                     data-access-view
+#   data-access.manage                   data-access-manage
+#   api-credentials.index                api-credential-view
+#   api-credentials.credentials.*        api-credential-{create,update,delete}
+#   api-credentials.providers.*          api-provider-{view,create,update,delete}
+#   search.entities.manage               search-entity-manage
+#   ai-assistant.use                     ai-assistant-use
+#   ai-assistant.query-database          ai-assistant-query-database
+#   user-email                           user-email          (already kebab)
+#   settings-view / settings-update      same
+#
+# The reference splits `api-credentials.index` (reach the module) from
+# `api-credentials.credentials.index` (list credentials). Both are required to
+# use the page, so they are merged into `api-credential-view`. That is the only
+# lossy step in the mapping.
+
+# Data Access (module 5)
+DATA_ACCESS_VIEW = "data-access-view"
+DATA_ACCESS_MANAGE = "data-access-manage"
+
+# API Credentials (module 6)
+API_CREDENTIAL_VIEW = "api-credential-view"
+API_CREDENTIAL_CREATE = "api-credential-create"
+API_CREDENTIAL_UPDATE = "api-credential-update"
+API_CREDENTIAL_DELETE = "api-credential-delete"
+API_PROVIDER_VIEW = "api-provider-view"
+API_PROVIDER_CREATE = "api-provider-create"
+API_PROVIDER_UPDATE = "api-provider-update"
+API_PROVIDER_DELETE = "api-provider-delete"
+
+# Global Search (module 7)
+SEARCH_ENTITY_MANAGE = "search-entity-manage"
+
+# AI Assistant (module 8)
+AI_ASSISTANT_USE = "ai-assistant-use"
+#: Distinct from AI_ASSISTANT_USE on purpose, and the more dangerous of the two:
+#: it lets the assistant read the database rather than only converse. The
+#: reference separates them for the same reason, and Partner holds neither.
+AI_ASSISTANT_QUERY_DATABASE = "ai-assistant-query-database"
+
+# Users — sending mail to an account from the admin UI (module 1 gap)
+USER_EMAIL = "user-email"
+
+#: Read and write the application settings surface. Distinct from
+#: SETTINGS_MANAGE, which predates these and gates the Branding nav entry
+#: specifically. Kept rather than merged: SETTINGS_MANAGE is live in
+#: `navigation_service`, and collapsing them would silently widen or narrow who
+#: sees that item.
+SETTINGS_VIEW = "settings-view"
+SETTINGS_UPDATE = "settings-update"
 
 
 #: Permission groups, in display order. The seeder creates these verbatim.
@@ -104,6 +177,7 @@ PERMISSION_CATALOG: dict[str, tuple[str, int, str, list[tuple[str, str]]]] = {
             (USER_UPDATE, "Update users"),
             (USER_DELETE, "Delete users"),
             (USER_APPROVE, "Approve pending users"),
+            (USER_EMAIL, "Send email to a user"),
         ],
     ),
     "roles": (
@@ -151,6 +225,56 @@ PERMISSION_CATALOG: dict[str, tuple[str, int, str, list[tuple[str, str]]]] = {
         "core",
         [
             (SETTINGS_MANAGE, "Change the application's name, monogram and branding"),
+            (SETTINGS_VIEW, "View the application settings"),
+            (SETTINGS_UPDATE, "Change the application settings"),
+        ],
+    ),
+    # --- The four modules still to be built --------------------------------
+    #
+    # Seeded ahead of their code deliberately. Nothing in modules 5–8 can be
+    # gated until the permissions exist, so seeding them first means each module
+    # starts with its guards available rather than adding a migration and a
+    # re-seed halfway through. They grant access to routes that do not exist
+    # yet, which is harmless — a permission with no route behind it is inert.
+    "data-access": (
+        "Data Access",
+        80,
+        "core",
+        [
+            (DATA_ACCESS_VIEW, "View data access grants"),
+            (DATA_ACCESS_MANAGE, "Grant and revoke data access"),
+        ],
+    ),
+    "api-credentials": (
+        "API Credentials",
+        90,
+        "core",
+        [
+            (API_CREDENTIAL_VIEW, "View stored credentials (values stay masked)"),
+            (API_CREDENTIAL_CREATE, "Add a credential"),
+            (API_CREDENTIAL_UPDATE, "Change a credential"),
+            (API_CREDENTIAL_DELETE, "Delete a credential"),
+            (API_PROVIDER_VIEW, "View integration providers"),
+            (API_PROVIDER_CREATE, "Add an integration provider"),
+            (API_PROVIDER_UPDATE, "Change an integration provider"),
+            (API_PROVIDER_DELETE, "Delete an integration provider"),
+        ],
+    ),
+    "search": (
+        "Global Search",
+        100,
+        "core",
+        [
+            (SEARCH_ENTITY_MANAGE, "Choose which records are searchable"),
+        ],
+    ),
+    "ai-assistant": (
+        "AI Assistant",
+        110,
+        "core",
+        [
+            (AI_ASSISTANT_USE, "Use the assistant"),
+            (AI_ASSISTANT_QUERY_DATABASE, "Let the assistant query the database"),
         ],
     ),
 }
@@ -169,6 +293,12 @@ ROLE_PERMISSION_MATRIX: dict[str, list[str] | str] = {
         PERMISSION_VIEW,
         INVITATION_VIEW,
         INVITATION_CREATE,
+        # Matching the reference's grants for the new modules: Staff may see what
+        # data access has been granted, and may converse with the assistant.
+        # It gets neither DATA_ACCESS_MANAGE (granting access is an admin act)
+        # nor AI_ASSISTANT_QUERY_DATABASE (that reads the database).
+        DATA_ACCESS_VIEW,
+        AI_ASSISTANT_USE,
     ],
     ROLE_PARTNER: [
         DASHBOARD_VIEW,
