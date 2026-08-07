@@ -12,10 +12,17 @@ import { setUser } from "@/lib/store/authSlice";
 import useAppDispatch from "@/lib/hooks/useAppDispatch";
 import { extractApiError } from "@/lib/utils/apiError";
 
+/**
+ * Mirrors `InvitationPreviewResponse`. `expires_at` and `requires_google` were
+ * both returned by the API and absent from this type, so neither was reachable —
+ * the same under-typing that hid eleven fields on `GET /users/{id}`.
+ */
 interface Preview {
   email: string;
   role_name: string | null;
   account_type: string;
+  expires_at: string;
+  requires_google: boolean;
 }
 
 /**
@@ -126,8 +133,12 @@ export default function AcceptInvitationClient({ token }: { token: string | null
   if (loadError || !preview) {
     return (
       <AuthCard title="This invitation can't be used" subtitle={loadError ?? undefined} footer={signInLink}>
+        {/* No hardcoded window. The lifetime is a server constant that can
+            change, and this branch renders when there is no `preview` to read a
+            real date from — so it says what is true without naming a number
+            that could be wrong. */}
         <p className="text-sm text-gray-500 dark:text-gray-400">
-          Invitations expire after 7 days and can only be accepted once. Ask whoever invited
+          Invitations expire after a while and can only be accepted once. Ask whoever invited
           you to resend it.
         </p>
       </AuthCard>
@@ -141,11 +152,24 @@ export default function AcceptInvitationClient({ token }: { token: string | null
       footer={signInLink}
     >
       <form onSubmit={submit} noValidate className="flex flex-col gap-4">
-        {preview.role_name && (
-          <p className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500 dark:bg-night-card dark:text-gray-400">
-            You&apos;ll join as <span className="font-semibold">{preview.role_name}</span>.
-          </p>
-        )}
+        {/* `expires_at` was fetched and never rendered, while the error branch
+            asserted a hardcoded 7 days. Showing the real date means the page
+            cannot disagree with the server about when the link dies. */}
+        <p className="rounded-lg bg-gray-50 px-3 py-2 text-xs text-gray-500 dark:bg-night-card dark:text-gray-400">
+          {preview.role_name && (
+            <>
+              You&apos;ll join as <span className="font-semibold">{preview.role_name}</span>.{" "}
+            </>
+          )}
+          This link expires on{" "}
+          <span className="font-semibold">
+            {new Date(preview.expires_at).toLocaleString(undefined, {
+              dateStyle: "medium",
+              timeStyle: "short",
+            })}
+          </span>
+          .
+        </p>
 
         {error && (
           <div

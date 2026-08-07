@@ -293,6 +293,17 @@ ROLE_PERMISSION_MATRIX: dict[str, list[str] | str] = {
         PERMISSION_VIEW,
         INVITATION_VIEW,
         INVITATION_CREATE,
+        # Resend and cancel go with create. Staff could previously send an
+        # invitation and then neither resend nor cancel it: they are not in
+        # ADMIN_ACCESS_ROLES, so they see only their own rows, and held no
+        # permission to act on them. That is an incoherent set — the ability to
+        # start something without the ability to correct it.
+        #
+        # Safe to grant because `_get_owned_or_404` scopes both actions to
+        # invitations the actor sent, and returns the same 404 for someone
+        # else's rather than a 403 that would confirm it exists.
+        INVITATION_RESEND,
+        INVITATION_CANCEL,
         # Matching the reference's grants for the new modules: Staff may see what
         # data access has been granted, and may converse with the assistant.
         # It gets neither DATA_ACCESS_MANAGE (granting access is an admin act)
