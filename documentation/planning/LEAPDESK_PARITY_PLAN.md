@@ -1,15 +1,30 @@
 # LeapDesk Core Parity Plan
 
-**Status: IN PROGRESS — 2 of 9 modules complete.** Spec below is unchanged except where
-a decision has been settled; see § Progress for what is actually built.
+**Status: IN PROGRESS — the module count is now 18 + Recycle Bin.** Spec below is unchanged except
+where a decision has been settled; see § Progress for what is actually built.
 
-> Scope was settled on 2026-08-04: replicate LeapDesk's **core admin shell** — the eight modules in its
+> **Modules 11–18 were added on 2026-08-11** — Configuration, Security, Feature Flags, Webhooks, API
+> Documentation, Queue Monitor, Error Tracking, System Health, plus Recycle Bin. They are a **different
+> kind of module** from 1–10: operations surfaces that observe or configure the running system, not
+> business objects a user authors. Read
+> [§ Modules 11–18](#modules-1118--the-platform-operations-tier--researched-2026-08-11) before assuming
+> the Users CRUD shape applies to them — for six of the nine, it does not.
+>
+> ---
+>
+> Scope was settled on 2026-08-04: replicate LeapDesk's **core admin shell** — the modules in its
 > two lower sidebar sections, plus the self-service Settings area — in Partner Marketplace's stack.
 > The marketplace domain ([`MARKETPLACE_DOMAIN_PLAN.md`](./MARKETPLACE_DOMAIN_PLAN.md)) is **parked**
 > until this lands.
 >
 > Planning docs are reference only — once code exists, the code is the truth. Everything below was read
 > from LeapDesk source at `/opt/lampp/htdocs/LeapDesk` on 2026-08-04, not from memory.
+>
+> **The scope grew on 2026-08-10.** LeapDesk shipped a tenth module — **Platform API** — on 2026-08-09,
+> five days after this plan was written. It was researched and specced on 2026-08-10 against LeapDesk
+> source and its own tracker; see [§ Module 10](#module-10--platform-api--entirely-new-added-to-the-reference-after-this-plan-was-written).
+> Nothing about it is built here. A reference that is still under active development will do this
+> again, so treat this plan's module list as a snapshot with a date, not a fixed set.
 
 ---
 
@@ -25,18 +40,46 @@ a decision has been settled; see § Progress for what is actually built.
 | 2 | Invitations admin index | ⬜ Started — nothing committed. Backend already complete; needs UI + bulk create, stats, 60s cooldown |
 | 3 | Users `user-email`; Roles matrix / clone / role-users / route split | ⬜ Not started |
 | 6 | Activity Log parity gaps | ⬜ Not started. **Scope shrank** — see the correction below |
-| 5 | Data Access | ⬜ Not started |
-| 7 | API Credentials | ⬜ Not started. Largest; gates module 9 |
-| 8 | Global Search | ⬜ Not started. Gates `LocateData` in module 9 |
+| 5 | Data Access | ✅ **Done 2026-08-11** (parallel agent) — grants, scoping helpers, admin screen at `/dashboard/data-access` |
+| 7 | API Credentials | ✅ **Done 2026-08-11** (parallel agent) — 4 tables, Fernet at rest via the existing HKDF path, masked by default, startup self-test. Unblocks module 9 |
+| 8 | Global Search | ✅ **Done 2026-08-11** (parallel agent) — configurable entities, model+field allowlists probed against hostile input, search logging |
 | 9 | AI Assistant | ⬜ Not started. Needs 7 and 8 |
+| 10 | **Platform API** (machine consumers + tokens) | ⬜ Not started — **specced 2026-08-10**. New in the reference; not part of the original scope |
+| 11 | **Configuration** (settings registry) | ✅ **Done 2026-08-11** — table, service, 2 endpoints, seeder, screen. 10 settings registered. Gates 12 and 13, which are now unblocked |
+| 12 | **Security** (`security.*` settings) | ✅ **Done 2026-08-11** — namespace-guarded router, tabs per group, audit panel over `auth` + `settings`. Found and did not copy a reference bug that hides two of its own settings |
+| 13 | **Feature Flags** | ✅ **Done 2026-08-11** (parallel agent) — full CRUD + toggle, role/user targeting, unknown key is OFF |
+| 14 | **Webhooks** | ⬜ Not started — specced 2026-08-11. Needs 10 |
+| 15 | **API Documentation** | ⬜ Not started — **we start ahead**; PM-42 already commits an OpenAPI document |
+| 16 | **Queue Monitor** | 🚫 **Blocked — we have no queue.** Not portable until something runs in the background |
+| 17 | **Error Tracking** | ✅ **Done 2026-08-11** — fingerprinting, regression reopen, recorder wired into the 500 handler, triage screen |
+| 18 | **System Health** | ✅ **Done 2026-08-11** — database, storage, errors live. Queue and provider panels report **not configured** rather than a fake zero |
+| — | **Recycle Bin** | ✅ **Done 2026-08-11** — soft deletes on 4 tables, allowlisted restore/purge, every auth and scoping path filtered |
 
-**Migrations: 2 of 7.** Applied: `e2b8d5c31f47` (password OTP), `f5a3c81b7d29` (role nav
-preferences). Head is `f5a3c81b7d29`. The five remaining are the Data Access, API
-Credentials, Global Search, AI Assistant and activity-source items in § Migrations required.
+### Re-audited 2026-08-11 — measured, not inherited
 
-**Permissions: 0 of 14.** `permissions.py` has not been touched. Nothing in modules 5–9
-can be gated until this lands, so it is a prerequisite for those rather than a tidy-up
-at the end.
+The block that used to sit here warned its own rows were stale and asked for a re-audit before anyone
+started from them. **That audit is this section.** Everything below was measured against the running
+system on 2026-08-11; the numbers the old block flagged as wrong are corrected.
+
+| Claim as it stood | Measured 2026-08-11 |
+|---|---|
+| "Permissions: 0 of 14" | **43 permission constants in `permissions.py`, 43 rows in the database** — the two agree |
+| "34 permissions live in the database" | **43.** The partner directory added nine on 2026-08-10 |
+| "Migrations: 2 of 7", head `f5a3c81b7d29` | Head is **`b3d7e02f4c19`**. Two more landed since: `a9f2c71e5b64` (partners) and `b3d7e02f4c19` (user status) |
+| Modules 2, 3, 5, 6 "not started" | All four have shipped work. See the routers below |
+
+**Routers that exist** (`backend/app/api/`): `auth`, `google`, `users`, `roles`, `permissions`,
+`invitations`, `activity`, `navigation`, `settings`, `partners`. **Ten.** No router exists for data
+access, API credentials, global search, the AI assistant, the platform API, or any of modules 11–18.
+
+**Frontend index modules that exist and are on the shared shape:** Users, Roles, Invitations, Activity
+— all four brought to parity on 2026-08-11, see [`MODULE_PARITY_PLAN.md`](./MODULE_PARITY_PLAN.md).
+
+> **What this re-audit does not do is re-verify the *quality* of modules 2–6 against their specs
+> below.** It establishes that code exists and that the permission and migration counts are right. Each
+> module's gap list — the Roles matrix, the Activity Log's four filters, the invitation cooldown — was
+> **not** re-checked line by line, and the ⬜/✅ marks in the table above predate that work. Treat them
+> as "something landed here", not as "this spec is satisfied".
 
 ### Correction — the Activity Log has no over-exposure
 
@@ -104,9 +147,12 @@ exactly this scope, and the Settings area is the user-menu counterpart:
 | **System Settings** (collapsible) | API Credentials → `/api-credentials` | `api-credentials.index` |
 | | Invitations → `/invitations` | `invitation-view` |
 | | Global Search → `/settings/search` | `search.entities.manage` |
+| | **Platform API** → `/settings/api/consumers` | `api.consumers.index` |
 | | AI Assistant → `/settings/ai-assistant` | `api-credentials.index` |
 
-Source: [`app/Services/NavigationService.php:211-224`](/opt/lampp/htdocs/LeapDesk/app/Services/NavigationService.php).
+Source: [`app/Services/NavigationService.php:211-226`](/opt/lampp/htdocs/LeapDesk/app/Services/NavigationService.php).
+**Platform API was added to that method on 2026-08-09** and is why the count moved from eight to nine
+items across the two sections, and from nine modules to ten here.
 The **Settings** area (`/settings/profile`, `/settings/password`, `/settings/appearance`) is a separate
 layout with its own sub-nav — heading "Settings", description "Manage your profile and account settings".
 
@@ -156,13 +202,20 @@ documents `{resource}-{action}`, singular, kebab-case — which is exactly what 
 | Style | Permissions |
 |---|---|
 | `{resource}-{action}` (matches PM) | `user-view/create/update/delete/email`, `role-view/create/update/delete`, `role-permissions`, `invitation-view/create/resend/cancel`, `activity-view`, `dashboard-view`, `settings-view/update` |
-| **Dotted** (diverges) | `data-access.view`, `data-access.manage`, `api-credentials.index`, `api-credentials.providers.{index,create,edit,delete}`, `api-credentials.credentials.{index,create,edit,delete}`, `search.entities.manage`, `ai-assistant.use`, `ai-assistant.query-database` |
+| **Dotted** (diverges) | `data-access.view`, `data-access.manage`, `api-credentials.index`, `api-credentials.providers.{index,create,edit,delete}`, `api-credentials.credentials.{index,create,edit,delete}`, `search.entities.manage`, `ai-assistant.use`, `ai-assistant.query-database`, and — added 2026-08-09 — `api.consumers.{index,create,edit,delete}`, `api.tokens.manage` |
 
-**Decision needed.** "Exactly replicate" means adopting the dotted names — which is what the nav,
-middleware and Gate calls actually reference. The alternative is normalising to PM's existing
-convention (`data-access-view`, `api-credential-view`, …), which is internally cleaner but diverges
-from LeapDesk. **Recommendation: adopt LeapDesk's names verbatim**, including the inconsistency — a
-future LeapDesk feature that references `data-access.manage` then ports without a rename table.
+> ### ✅ Settled in code on 2026-08-07 — **normalised**, not verbatim
+>
+> This section's recommendation (*"adopt LeapDesk's names verbatim"*) was **not** what shipped, and
+> `git` is the truth here. `backend/app/core/permissions.py` defines the new permissions in PM's own
+> `{resource}-{action}` convention — `data-access-view`, `api-credential-view`, `search-entity-manage`,
+> `ai-assistant-use` — and carries a reversible reference→ours mapping table in comments so a future
+> LeapDesk port still has one. **34 permissions are seeded in the database.**
+>
+> That file's own comment already notes this document contradicts itself — § Decisions settled records
+> "dotted names verbatim" while § Open decisions still lists the question as open, so neither line
+> settled anything. **The code did.** Both places are corrected here; Module 10's five permissions
+> follow the same convention.
 
 Also note: LeapDesk has **no `permission-view`** and **no `user-approve`**; PM has both. Keep PM's — they
 gate real endpoints that LeapDesk gates differently.
@@ -670,22 +723,637 @@ Keep the model ID in the credential row so it can be changed without a deploy, e
 
 ---
 
+## Module 10 — Platform API ⭐ entirely new, added to the reference after this plan was written
+
+**R&D 2026-08-10.** LeapDesk shipped this on **2026-08-09**, five days after this plan was scoped, so
+it is not a gap we missed — the reference grew. Live at
+`https://leapdesk.cloudjiffy.net/settings/api/consumers`. Everything below was read from
+`/opt/lampp/htdocs/LeapDesk` source and its own tracker,
+[`documentation/planning/LEAPDESK_PLATFORM_API.md`](/opt/lampp/htdocs/LeapDesk/documentation/planning/LEAPDESK_PLATFORM_API.md)
+(584 lines, the most complete design record any of these ten modules has).
+
+**What it is: the admin surface for machine identities.** A *consumer* is a system — not a person —
+permitted to call the API. It holds tokens; each token carries a set of *abilities* and an optional
+expiry. The screen exists so that who holds standing access, what it reaches, and when it last called
+are readable without SSHing into production. Before it, LeapDesk minted tokens through
+`php artisan api:issue-token` and nobody could answer those questions.
+
+### ⚠️ This is the opposite direction from Module 7 — do not merge them
+
+The single most likely mistake here, and LeapDesk refused it explicitly:
+
+| | Module 7 — API Credentials | Module 10 — Platform API |
+|---|---|---|
+| Direction | **Outbound** — credentials *we* hold to call third parties | **Inbound** — who may call *us* |
+| Secret belongs to | Anthropic, Google, SMTP, Slack | The consumer we issue it to |
+| Risk if wrong | We can't reach a provider | A third party reads our data |
+| Storage | Encrypted at rest, decryptable (we must send it) | **Hashed, never recoverable** (we only ever compare) |
+
+They sit side by side in the sidebar and both contain the word "API". *"Housing them together would blur
+an access-control boundary for the sake of a superficial 'both are API-ish' grouping"* — LeapDesk's
+tracker, § Placement. Keep them separate here for the same reason.
+
+### What LeapDesk built, and what it deliberately did not
+
+Its programme has two parts. **Part I is the module; Part II is a data-exposure engine.**
+
+| | Part I — governance surface | Part II — the resource engine |
+|---|---|---|
+| Scope | Consumers, tokens, abilities, audit reads, docs page | Registry-driven read API over arbitrary models |
+| Status in LeapDesk | ✅ Phases 1–4 complete, deployed + verified 2026-08-09 | Phases 5–10, **mostly not started** |
+| Tables | `api_consumers` + Sanctum's `personal_access_tokens` | `api_resources` (105 rows), `qmas_api_request_logs` |
+| Why it exists there | Auditability of access already being granted | One org project (RIaaS) asked for open-ended data access |
+
+**Recommendation: port Part I only.** Part II answers a question we do not have — the marketplace domain
+is greenfield (verified 2026-08-07: 11 tables, none of them domain tables), so there is nothing to
+expose and no consumer asking. Building an exposure engine before there is data to expose is
+speculative by definition. See § What not to port, below, for the condition that would change this.
+
+### Schema — one table here, one that Sanctum gives LeapDesk for free
+
+**`api_consumers`** (their migration `2026_08_03_120000`) — `id`, `name`, `slug` unique,
+`description` text nullable, `owner_name` nullable, `owner_email` nullable *(nullable in the column,
+**required** in validation — see below)*, `active` bool default true, `created_by`/`updated_by` FK to
+users `nullOnDelete`, timestamps.
+
+Two column-level notes worth carrying over verbatim:
+
+- **`active` is a kill switch that outranks the token.** An inactive consumer is refused at the gate
+  even when it presents a valid, unexpired token. That is the "disable an integration at 2am without
+  hunting down its credentials" control, and it is why `active` lives on the consumer rather than being
+  inferred from whether tokens exist.
+- **`owner_email` is required by the FormRequest** with the message *"someone must be contactable when
+  this integration needs revoking."* The column is nullable; the rule is not. Keep the rule.
+
+### 🔴 The hard translation — Sanctum does not exist for us
+
+This is the whole of the porting difficulty, and it is bigger than it looks. LeapDesk writes
+`$consumer->createToken($name, $abilities, $expiresAt)` and Sanctum supplies, for free: a polymorphic
+`personal_access_tokens` table, hashing, per-token `abilities` JSON, `expires_at`, `last_used_at`,
+one-time plaintext return, and `PersonalAccessToken::findToken($bearer)`. **We have none of it.** Our
+only token machinery is JWT (`core/security.py`), which is the wrong shape — a JWT is stateless and
+therefore cannot be revoked, and revocation is the entire point of this screen.
+
+So Module 10 needs a second table, `api_consumer_tokens`, and four decisions Sanctum otherwise makes
+for you:
+
+**1. Hash with SHA-256, not bcrypt.** Non-obvious, and the one most likely to be got wrong here because
+`security.py` already offers `hash_password`. Bcrypt is wrong for this in three separate ways:
+
+- It is *deliberately slow* — correct for a low-entropy human password, pointless for 256 bits of
+  `secrets.token_urlsafe`, which has nothing to brute-force.
+- It **salts every hash**, so an incoming bearer token cannot be looked up. You would have to load every
+  token row and `checkpw` each one — an O(n) scan on the hot path of every API call.
+- It truncates at 72 bytes (`_prepare()` in `security.py` does this explicitly).
+
+SHA-256 of the plaintext, stored in a **unique-indexed** column, is one indexed lookup and is what
+Sanctum itself does. The token's entropy, not the hash's cost factor, is the security property.
+
+**2. Give the token a recognisable prefix.** Store `pmp_<32+ url-safe chars>`, generated by the existing
+`generate_token()`. A fixed prefix is what makes a leaked token greppable and what lets secret scanners
+recognise it — and **this repository is public**, which makes that argument stronger here than at
+LeapDesk. Keep the first ~8 characters in a plain `prefix` column so the UI can show
+`pmp_a1b2c3d4…` to identify a token it can never re-read.
+
+**3. Abilities as a JSON/ARRAY column**, validated on write against a catalogue (below). Postgres
+`ARRAY(String)` is the natural fit and is queryable; JSONB works too. Never free-form.
+
+**4. `last_used_at` is a write on every authenticated request.** LeapDesk does
+`$token->forceFill(['last_used_at' => now()])->save()` inline in the middleware. That is one UPDATE per
+API call. Acceptable at their volume; worth knowing it is there before it is ours.
+
+Proposed `api_consumer_tokens`: `id` UUID, `consumer_id` FK **CASCADE**, `name`, `token_hash` String(64)
+**unique**, `prefix` String(16), `abilities` ARRAY(String), `expires_at` nullable, `last_used_at`
+nullable, `created_by` FK `SET NULL`, `created_at`. The CASCADE/SET NULL split is the same reasoning
+already applied in `data_access_grants` and should stay consistent: the credential dies with its
+consumer; the audit of who issued it outlives whoever issued it.
+
+### 🔴 The finding that outlives this module — a machine consumer is not a `User`
+
+**This is the third independent product requirement in four days for a principal that is not a `User`
+row**, and that changes it from a per-module annoyance into a design decision we should take once:
+
+| Source | The non-`User` principal |
+|---|---|
+| `PARTNER_DIRECTORY_PLAN.md` (2026-08-07) | The **anonymous** visitor on a public directory |
+| PM-5 / `MARKETPLACE_DOMAIN_PLAN.md` | A partner **organisation** as a tenant boundary |
+| **This module** (2026-08-10) | A **machine consumer** holding a token |
+
+Everything in our stack is typed `actor: User` — `get_current_user`, `require_permission`,
+every function in the `data_access_service` written on 2026-08-07, and `activity_service.record`'s
+`actor` parameter. A machine consumer has no user row, no role, and no permissions, and it must never
+acquire them (that is precisely why LeapDesk hangs tokens off `ApiConsumer` rather than `User` — *"so
+integrations never appear in user lists, never hold a role, and can never sign in"*).
+
+The tempting shortcut — a hidden service `User` per consumer — should be refused. It puts machine
+identities into user lists, RBAC screens and every `SELECT * FROM users`, and one forgotten filter turns
+an integration into a login.
+
+**Recommendation:** before Module 10 or PM-5 is built, introduce a `Principal` union
+(`UserPrincipal | MachinePrincipal | AnonymousPrincipal`) and type the scoping seams against it, with
+**anonymous as the most restrictive branch by construction**. `PARTNER_DIRECTORY_PLAN.md` already
+warned that the obvious `if actor is None: return stmt` would serve unfiltered rows to the internet; the
+machine case is the same hazard wearing a different hat. Worth noting that LeapDesk has this problem
+too and simply does not apply data access to its API at all — so there is nothing to copy, only to
+design.
+
+### The ability catalogue
+
+`ApiAbilityCatalogue` is a static list of grantable abilities, each with a label, group, **sensitivity**
+(`low` / `medium` / `high`) and a prose description of what it exposes. The grant screen renders the
+description and warns on `high`. Two rules from it are worth keeping regardless of how small our
+catalogue starts:
+
+- **Abilities are validated against the catalogue at write time.** *"A typo would otherwise mint a token
+  carrying an ability nothing honours, which reads as 'granted' on this screen and fails as 403 at the
+  consumer."*
+- **An ability's description is authored for the person granting it, not for the developer.** A token is
+  standing, unattended access; the grant screen is the only moment anyone reads what it opens up.
+
+We have no abilities to list yet. Start with an empty-but-real catalogue and a single ability when the
+first consumer exists — do not invent a taxonomy for a domain that does not exist.
+
+### Audit trail — one place where our architecture is simpler
+
+LeapDesk keeps API traffic in `qmas_api_request_logs`, separate from its activity log, and core reads it
+through `class_exists()` guards so that a core screen never hard-depends on a plugin. **We have no
+plugin system, so that entire defensive layer disappears** — `api_request_logs` is just a core table.
+
+Keep the two trails separate, though, for reasons that are ours and not inherited: `activity_log` records
+*meaningful actions* and its writer commits on its own transaction per row; an API log records *every
+request including rejections*, at request volume. LeapDesk's has 11,114 rows for one consumer. Rejections
+must be logged — *"a burst of 401s is how a leaked or probed token shows up"* — which means the table
+grows fastest exactly when something is wrong. **Give it a retention policy on day one.** LeapDesk has
+none, and its tracker does not list one as planned.
+
+### Rate limiting — we have a limiter, but not on this axis
+
+We already have `core/rate_limit.py` (PM-26), which is further along than a Laravel `throttle:` string in
+one respect and behind it in another:
+
+- ✅ **Token minting must be added to `SENSITIVE_PATHS`** (or given its own bucket, per the
+  `(prefix, suffix, bucket)` mechanism that already exists for `/users/{id}/email`). LeapDesk throttles
+  it `10,1` because *"a runaway script should not be able to mint hundreds before anyone notices."* Our
+  limiter is explicitly designed so a new route does **not** silently inherit a tier — so this is a
+  required step, not an automatic one.
+- ❌ **Per-consumer limiting does not exist.** Our buckets key on `f"{tier}:{ip}"`. A machine consumer
+  needs a limit keyed on its *token*, at a ceiling far above a browser's. That is a new dimension in the
+  limiter, not a new entry in a list.
+- ⚠️ **PM-26's known limitation gets worse here.** Counters are per-process memory, so N workers multiply
+  every limit by N. For a login form that is an honest speed bump; for an API where the rate limit is
+  the advertised contract (LeapDesk returns `x-ratelimit-limit` headers), it is a control that does not
+  hold. This is a second, independent argument for **PM-44 (Redis)** — record it there.
+
+### Permissions — five, and the split is deliberate
+
+Under our `{resource}-{action}` convention already established in `core/permissions.py`:
+
+| Reference | Ours |
+|---|---|
+| `api.consumers.index` | `api-consumer-view` |
+| `api.consumers.create` | `api-consumer-create` |
+| `api.consumers.edit` | `api-consumer-update` |
+| `api.consumers.delete` | `api-consumer-delete` |
+| `api.tokens.manage` | `api-token-manage` |
+
+**Token management is separate from consumer editing on purpose** — *"editing a description and minting
+standing credentials are not the same act and should not ride on one checkbox."* Keep that split; it is
+the one piece of the permission design that is about security rather than tidiness.
+
+> **The naming lesson does not transfer, but its cause does.** LeapDesk originally called it
+> `api.consumers.tokens`; its `PresalesViewerRoleSeeder` builds a read-only role by dropping permissions
+> whose final dotted segment is a write verb, so a *noun* ending sailed through the filter and handed
+> **credential-minting to a read-only role**. We have no such derived-role seeder, so we cannot inherit
+> the bug — but we should inherit the wariness: any rule that derives a role from a permission *name* is
+> one rename away from a privilege grant. If we ever build one, this is the test case.
+
+Grants: Admin / SuperAdmin / RootUser get all five. **Staff gets none** — not even `api-consumer-view`.
+Who holds standing machine access to our data is not general staff information, and unlike
+`data-access-view` (which we already granted Staff, and flagged in `data_access_service.list_grants` as
+questionable) there is no workflow reason to widen it.
+
+### Endpoints
+
+`{API_PREFIX}/api-consumers`, thin router + `api_consumer_service.py`:
+
+| Method | Path | Permission |
+|---|---|---|
+| GET | `/api-consumers` | `api-consumer-view` |
+| POST | `/api-consumers` | `api-consumer-create` |
+| GET | `/api-consumers/{id}` | `api-consumer-view` |
+| PATCH | `/api-consumers/{id}` | `api-consumer-update` |
+| POST | `/api-consumers/{id}/toggle` | `api-consumer-update` |
+| DELETE | `/api-consumers/{id}` | `api-consumer-delete` |
+| POST | `/api-consumers/{id}/tokens` | `api-token-manage` **+ rate limit** |
+| DELETE | `/api-consumers/{id}/tokens/{token_id}` | `api-token-manage` |
+| GET | `/api-consumers/{id}/usage` | `api-consumer-view` |
+
+The listing goes on `run_list` + `ListSpec` + the generic `Page[T]` envelope — all three already exist as
+of 2026-08-07, so unlike LeapDesk (which hand-rolls a `LengthAwarePaginator` around a full `get()`) we
+get search, sorting, tiebreak and clamped page size for free. LeapDesk loads every consumer unpaginated
+on the grounds that there will only ever be a handful; ours costs nothing to do properly.
+
+**The one-time reveal is simpler for us.** LeapDesk pushes the plaintext through an Inertia flash
+allowlist (`HandleInertiaRequests`, where an unlisted key is silently dropped — a trap they had to work
+around). We just return it in the `POST /tokens` response body, once. Two consequences to handle
+deliberately: **that response body must be excluded from any request/response logging**, and the
+frontend must not put it in Redux or `localStorage` — render it, offer copy, discard on dismiss.
+
+### Frontend
+
+Four screens, mirroring LeapDesk's (`Index` 461 lines, `Form` 283, `Show` 478, `IssueTokenModal` 291):
+
+- **Index** — `DataTable`, stat cards that double as filters (total / active / inactive / **no tokens**).
+  That fourth filter is a real insight worth copying: a consumer holding no token *"is the one state that
+  is neither active nor disabled but still means it cannot call — the difference between access granted
+  and access working."*
+- **Form** — create/edit. Slug is kebab-case validated with the message *"lowercase words separated by
+  hyphens, e.g. riaas, or riaas-reporting."*
+- **Show** — per-token abilities, expiry, last-used; recent calls from the audit table.
+- **IssueTokenModal** — abilities grouped by sensitivity with warnings, expiry choice
+  (never / 30d / 90d / 1y), then the one-time reveal with a copy button and an explicit *"send it over a
+  password manager's share link, not Slack or email; never commit it to a repository."*
+
+Per our own nav conventions this is a sidebar entry under System Settings gated on `api-consumer-view`,
+with a sub-nav shell if a second tab (usage/docs) ever lands.
+
+### Naming rule — after the system, never after a person
+
+LeapDesk created its first consumer as `karan-reporting` and **renamed it to `riaas` on live**. The
+reasoning transfers whole: a consumer is a machine identity, so naming it after a person breaks when
+that person changes role or leaves while the integration keeps running, leaves a second project by the
+same person nowhere to go, and makes an audit row read as though a human made the call when a server
+did. **The slug names the system; `owner_email` names who to ring about it.** Renaming is safe because
+tokens and audit rows key on the consumer id, not the slug.
+
+### What not to port — Part II, and the condition that would change that
+
+Skip `api_resources` and the generic read engine. Beyond "no data and no consumer", LeapDesk's own code
+review is the argument against building it casually — read
+[`LEAPDESK_PLATFORM_API.md` § Code review findings](/opt/lampp/htdocs/LeapDesk/documentation/planning/LEAPDESK_PLATFORM_API.md)
+before ever reviving this:
+
+- **100 of 105 registered resources had no field allowlist**, and NULL means *every column*. A
+  `quotes.read` token returned all **81 columns** of `bmaas_services` — the entire internal cost and
+  margin model. The design note claiming a new column could not leak by default was true of five rows
+  out of a hundred and five.
+- Relations bypassed the allowlist entirely — latent only because nothing registered one.
+- The fix was an **engine-level deny-list beneath the registry** (`password`, `secret`, `api_key`,
+  `access_token`, `refresh_token` stripped no matter what a row says), because *"the registry was the
+  only thing standing between a typo and a credential dump."*
+
+If we ever build it: that floor goes in first, not last, and it must include every column our stack
+treats as a secret — `password`, `two_factor_secret`, `password_reset_token`, `token_hash`.
+
+**What would change this recommendation** is a product decision that is currently open, not a technical
+one: `PARTNER_DIRECTORY_PLAN.md` describes a public, partner-facing surface. If that product is chosen,
+partners plausibly want programmatic access to their own listings and enquiries — and at that point a
+*scoped* API (per-consumer row-level scope, which is LeapDesk's own unbuilt Phase 6 item) becomes a
+product requirement rather than speculation. **Module 10 Part I is worth building either way; Part II
+should wait for that decision.**
+
+### One place we start ahead
+
+LeapDesk hand-writes its docs page and generates it from the live registry to stop it drifting — its
+Phase 8 wants *"auto-generated OpenAPI 3.1 spec from the registry"* as a future win. **We have that
+already**: FastAPI emits OpenAPI, `backend/openapi.json` is committed, and CI fails when it drifts
+(PM-42). A consumer-facing reference is closer to free for us than for them.
+
+One caveat before treating it as free: our OpenAPI document describes *every* endpoint including the
+admin surface. Handing a machine consumer the whole schema documents our internals. If a public API
+lands, it needs its own `APIRouter` and a filtered schema (or a mounted sub-app), not a link to `/docs`.
+
+### Effort
+
+Part I is comparable to Module 6 (Data Access), plus a token subsystem. Two tables, ~450 backend lines
+across model/service/router/schemas, four frontend screens, five permissions, one migration, and one
+genuinely new piece of security machinery (token hashing + the bearer gate). **The `Principal` type
+above is the prerequisite worth doing first**, because it is shared with PM-5 and the directory work and
+is much cheaper to introduce before three call sites exist than after.
+
+---
+
+## Modules 11–18 — the platform-operations tier ⭐ researched 2026-08-11
+
+> **The reference grew again.** § Progress predicted this: *"a reference that is still under active
+> development will do this again, so treat this plan's module list as a snapshot with a date."* It did.
+> Between 2026-08-10 and 2026-08-11 LeapDesk shipped **eight more modules**, and the owner's module
+> list on 2026-08-11 named all of them. Read from
+> `references/LeapDesk` on 2026-08-11 — routes, migrations, controllers and seeders, not from memory.
+>
+> **These eight are a different *kind* of module from 1–10**, and that is the most useful thing to say
+> about them. Modules 1–10 are business objects a user creates and edits. These are **operations
+> surfaces**: they observe the running system, or they configure it. Most have no create form, several
+> have no delete, and three are read-only. Applying the Users CRUD shape to all of them uncritically
+> would be wrong — see § The CRUD shape does not fit all eight.
+
+### The eight, at a glance
+
+| # | Module | Shape | Tables | Gates |
+|---|---|---|---|---|
+| 11 | **Configuration** | Registry — edit values, never create rows | `settings` | — |
+| 12 | **Security** | A filtered view of Configuration | (same `settings` table) | 11 |
+| 13 | **Feature Flags** | Full CRUD | `feature_flags` | 11 |
+| 14 | **Webhooks** | Full CRUD + a delivery log | `webhook_endpoints`, `webhook_deliveries` | 10 |
+| 15 | **API Documentation** | Generated, read-only | none | 10 |
+| 16 | **Queue Monitor** | Read + operate, no CRUD | `queue_job_runs` | — |
+| 17 | **Error Tracking** | Read + triage, no create | `error_groups`, `error_occurrences` | — |
+| 18 | **System Health** | Read-only dashboard | none | 16, 17 |
+| — | **Recycle Bin** | Restore / purge, no create or edit | none — reads `deleted_at` | soft deletes |
+
+**Recycle Bin has no number because it is not a module in the sense the others are.** It is a view over
+every table that carries `deleted_at`, and it grows automatically as tables gain soft deletes. Numbering
+it would imply it can be "built and finished", which it cannot.
+
+---
+
+### Module 11 — Configuration
+
+**One settings registry, replacing four parallel per-plugin implementations** — LeapDesk's own
+docblock says exactly that. This is the module that makes 12 and 13 possible.
+
+```
+settings
+  id, key (unique, 150), value (json, nullable), type (20, default 'string'),
+  group (64, indexed), module (32, default 'core', indexed),
+  label (191), description (500, nullable),
+  updated_by → users (nullOnDelete), timestamps
+  index (module, group)
+```
+
+**The design decision worth copying: validation is derived from the row's own `type`.** An `int`
+setting rejects `"abc"`, a `bool` rejects a string — and the rule comes from `SettingType`, not from a
+per-key validation table someone has to maintain. `value` is JSON so one column holds every type
+without a `value_int` / `value_bool` / `value_string` sprawl.
+
+`module` + `group` is what stops this becoming a 200-row list nobody can navigate: the index filters by
+module and orders `module → group → label`.
+
+**Endpoints:** `GET settings/configuration`, `PUT settings/configuration/{setting}`. **There is no
+create and no delete** — settings are seeded by a registry seeder, because a setting with no code
+reading it is dead weight, and code reading a setting that does not exist is a bug. Ours should keep
+that: the row set is a migration concern, not a UI one.
+
+### Module 12 — Security
+
+**Not its own table.** It is the `security.*` namespace of Module 11's registry, with its own screen
+because these controls need explaining and grouping in a way a generic settings list cannot do.
+
+The controller enforces the namespace: `abort_unless(str_starts_with($setting->key, 'security.'), 404)`
+— so the Security screen cannot be used as a back door to write any other setting. **Copy that guard**;
+it is the one line that keeps two screens over one table honest.
+
+Real keys, which double as the feature list:
+
+| Group | Key | What it controls |
+|---|---|---|
+| Authentication | `security.auth.*` | Two-factor requirement, privilege-escalation check |
+| Reauth Gates | `security.reauth.window_minutes` | Password-confirmation validity |
+| Reauth Gates | `security.reauth.*` | Which actions demand it — credential decrypt, permission change, user delete |
+| Audit | `security.audit.credential_decrypt` | Log every API credential decryption |
+| Audit | `security.audit.permission_changes` | Log role and permission changes |
+| Invitations | `security.invitations.expiry_days`, `.max_resends` | Both are currently **constants** in our code |
+| Email | `security.email.recipient_allowlist` | Allowed recipient domains for admin email |
+| Headers | `security.headers.csp_mode`, `security.session.force_secure_cookie` | |
+
+> **Every default reproduces today's behaviour**, so the screen changes nothing until someone
+> deliberately tightens something. That is the property that makes a security-settings page safe to
+> ship, and it is worth stating as a rule rather than rediscovering it.
+
+> ### 🔴 Divergence — the reference's tab list hides two of its own settings
+>
+> Found while building this, 2026-08-11. The **third** entry in § 1.1's *"where LeapDesk's behaviour is
+> a defect"* category, which requires the divergence be written down before diverging.
+>
+> `Security/Index.tsx` builds its tabs as `const tabs = [...groupNames, 'Audit']`, and
+> `SecuritySettingSeeder` registers two settings in a group **called `Audit`**
+> (`security.audit.credential_decrypt`, `security.audit.permission_changes`). So the tab list contains
+> `"Audit"` twice with the same React key, and the body renders
+> `tab === 'Audit' ? <AuditTab/> : <settings for groups[tab]>`.
+>
+> **The activity panel always wins, so those two settings can never be opened.** Two security controls
+> — including *"log every API credential decryption"* — are unreachable from the only screen that
+> edits them.
+>
+> Ours names the activity tab **"Recent activity"**, which cannot collide with a group name. Both
+> `security.audit.*` controls stay reachable. This is a one-word fix and it is not worth copying the
+> bug for parity's sake: the *contents* of the screen are identical, and the owner-visible difference
+> is that ours has one more working tab.
+
+The index also renders a **recent audit list** beside the controls — what was changed, by whom. A
+security screen with no record of its own edits is a gap, not a feature.
+
+### Module 13 — Feature Flags
+
+```
+feature_flags
+  id, key (unique 150), name (191), description (500, nullable),
+  enabled (bool, default false, indexed),
+  target_roles (json, nullable), target_user_ids (json, nullable),
+  updated_by → users (nullOnDelete), timestamps
+```
+
+Full CRUD plus a `toggle` endpoint. The two `target_*` JSON columns are what make it a flag system
+rather than a boolean table: a flag can be on for one role, or for three named people, without a
+schema change.
+
+### Module 14 — Webhooks
+
+**Depends on Module 10** — an endpoint belongs to an `api_consumer`, not to a user.
+
+```
+webhook_endpoints
+  id, api_consumer_id → api_consumers (cascade), name (191), url (500),
+  secret (text), events (json), is_active (bool, indexed),
+  last_delivery_at, failure_count (uint, default 0), disabled_at,
+  created_by → users (nullOnDelete), timestamps
+
+webhook_deliveries
+  id, webhook_endpoint_id → webhook_endpoints (cascade),
+  event (100, indexed), payload (json),
+  response_status (smallint, nullable), response_body (text, nullable),
+  attempts (tinyint, default 0), duration_ms (uint, nullable),
+  delivered_at, failed_at, timestamps
+  index (webhook_endpoint_id, created_at)
+```
+
+**Three mechanics to copy exactly:**
+
+1. **HMAC signing.** `hash_hmac('sha256', timestamp + '.' + json, secret)`, sent as
+   `X-LeapDesk-Signature: sha256=…`. The timestamp is **inside** the signed string, which is what stops
+   a captured payload being replayed later.
+2. **Backoff `[30, 120, 600]` seconds over 3 attempts.** Their comment is the reasoning: *"a receiver
+   that is down is usually down for minutes, not milliseconds."*
+3. **A 4xx is not retried; a 5xx is.** A receiver rejecting the payload will reject it again.
+
+`failure_count` + `disabled_at` are an auto-disable circuit breaker — an endpoint that has been failing
+for days stops being retried forever.
+
+**Endpoints:** full resource, plus `POST {webhook}/test` and
+`POST {webhook}/deliveries/{delivery}/redeliver`. The delivery log with a redeliver button *is* the
+module; without it, a webhook that failed silently is unrecoverable.
+
+### Module 15 — API Documentation
+
+**Generated, not written.** `ApiDocsController::index` renders the resource catalogue from
+`api_resources` (Module 10) plus a constant `OPERATORS` list — so the docs cannot go stale relative to
+what the API actually exposes.
+
+**We start ahead here.** We already commit an OpenAPI document (`backend/openapi.json`, PM-42) that is
+generated from the FastAPI app and CI-checked for staleness. A docs *page* is a renderer over that
+document, and the honest version of this module for us is "serve the OpenAPI spec and a viewer", not
+"build a second catalogue".
+
+### Module 16 — Queue Monitor
+
+```
+queue_job_runs
+  id, job_uuid (36, nullable, indexed), queue (64, indexed), job_class (255, indexed),
+  status (20, indexed), attempts (tinyint), queued_at, started_at, finished_at,
+  duration_ms (uint, nullable), exception (text, nullable),
+  payload_summary (json, nullable), timestamps
+  index (queue, status, queued_at)
+```
+
+Five read views — index, pending, failed, history, scheduled — and five operations: retry one, retry
+all, forget one, purge pending, purge dead. **The permission is split `system.queues.view` vs
+`system.queues.manage`**, which is right: seeing the queue is backlogged is an ops concern, purging it
+is a destructive one.
+
+> ⚠️ **We have no queue.** There is no Celery, no RQ, no background worker anywhere in this codebase —
+> every write is synchronous inside the request. **This module is not portable until something is
+> queued**, and building the monitor first would produce a page that says "0 jobs" forever. Its real
+> prerequisite is whatever first needs a background job — most likely outbound email, which is
+> currently synchronous and is the thing most likely to make a request hang.
+
+### Module 17 — Error Tracking
+
+```
+error_groups
+  id, fingerprint (32, unique), exception_class (255, indexed), module (32, indexed),
+  route_name (191, nullable), method (10, nullable), path (500, nullable),
+  file (500), line (uint), latest_message (text),
+  status (20, default 'open', indexed), occurrence_count (uint, default 0),
+  first_seen_at, last_seen_at (both indexed),
+  resolved_by → users (nullOnDelete), resolved_at, notes (text), timestamps
+  index (status, last_seen_at)
+
+error_occurrences
+  id, error_group_id → error_groups (cascade), user_id → users (nullOnDelete),
+  ip (45), url (1000), method (10), message (text), stack_trace (text),
+  context (json), occurred_at (indexed), timestamps
+  index (error_group_id, occurred_at)
+```
+
+**The fingerprint is the whole design**, and it is four fields:
+
+```php
+md5(exception_class | file | line | route_name)
+```
+
+That is what turns 40,000 log lines into 12 rows you can actually triage. **Note what is deliberately
+absent: the message.** Two failures differing only in an interpolated id group together, which is
+correct — they are one bug.
+
+Triage is `status` (`open` → resolved), `notes`, and a **"create bug report"** action that opens a
+FeedbackHub item from the error. Two-table split is right: the group is what you triage, the
+occurrences are the evidence.
+
+### Module 18 — System Health
+
+**No tables.** It composes what the other modules already know: storage, database, third-party provider
+reachability, an error summary from Module 17, and queue totals plus **worker liveness** from Module 16.
+
+Its own docblock states the discipline worth copying: *"Deliberately small: queue and error detail live
+in their own modules, and this page links across rather than restating them."* The one write is
+`POST probe/{slug}` — check a provider on demand and report the round-trip in ms.
+
+### Recycle Bin
+
+**Restore or permanently remove soft-deleted records.** LeapDesk's docblock: *"Before this existed
+every delete in the core was permanent."*
+
+Soft deletes were added to exactly four tables: **`users`, `user_invitations`, `api_consumers`,
+`searchable_entities`, `data_access_grants`.** Not everything — which is the point. A table gets
+`deleted_at` when losing a row is recoverable-worthy, not by default.
+
+**The security detail to copy:** `type` is validated against a service-level allowlist
+(`Rule::in(array_keys(RecycleBinService::TYPES))`) — *"a raw string from the request is never resolved
+to a class name."* Without that, `type` is an arbitrary-model-load primitive.
+
+Two operations, both `POST`/`DELETE` on a collection with `{type, id}` — no per-model routes, so adding
+a restorable table is a service-map entry rather than a new controller.
+
+---
+
+### The CRUD shape does not fit all eight
+
+`UI_PATTERNS.md` § The module CRUD contract makes the Users index the mandatory shape for every
+module. **Six of these nine surfaces are not CRUD**, and forcing them into it would produce exactly the
+"empty three-dot menu" the Activity Log work already rejected:
+
+| Surface | Index table | Create | Edit | Delete | Notes |
+|---|---|---|---|---|---|
+| Feature Flags | ✅ | ✅ | ✅ | ✅ | The only full CRUD of the eight |
+| Webhooks | ✅ | ✅ | ✅ | ✅ | Plus a nested delivery log |
+| Configuration | ❌ grouped cards | ❌ | ✅ inline | ❌ | **Corrected 2026-08-11 — see below** |
+| Security | ❌ grouped cards | ❌ | ✅ inline | ❌ | Needs prose per control |
+| Error Tracking | ✅ | ❌ | ✅ status/notes | ✅ | Triage, not authoring |
+| Queue Monitor | ✅ ×5 | ❌ | ❌ | ✅ purge | Operations, not records |
+| Recycle Bin | ✅ | ❌ | ❌ | ✅ purge | Plus restore |
+| System Health | ❌ dashboard | ❌ | ❌ | ❌ | Read-only |
+| API Docs | ❌ | ❌ | ❌ | ❌ | Generated |
+
+**The contract still applies to all of them — the parts of it that are about consistency.** The table,
+the filter row, the column factories, the modal shells, the toast, the ink tokens: those are universal.
+What varies is which *actions* exist, and the contract already says so in its own words: *parity means
+the same vocabulary, not the same feature list.*
+
+> **Correction, 2026-08-11 — Configuration is not a table, and this section said it was.**
+>
+> The row above originally read *"Index table ✅"*. Building it disproved that: the reference renders
+> **grouped `module · group` sections with an inline editor per row**, not a data table. The reasons
+> hold for us too, and they generalise —
+>
+> - **There is no row to open**, so there is no row action, so a table's principal affordance is
+>   missing.
+> - **Five types need five editors** — a toggle, a number, a line, a textarea, a JSON box. A table
+>   column has one cell renderer.
+> - **Nobody compares settings.** A table exists to let you scan rows against each other and pick one;
+>   a settings screen is a thing you arrive at already knowing which key you came for. Headings find it
+>   faster than a sortable grid.
+>
+> The general lesson, which is what makes this worth recording rather than just fixing: **the presence
+> of an index does not imply the presence of a table.** Security, Recycle Bin and System Health are all
+> "list something" screens and none of them wants a `DataTable` either — the question to ask is whether
+> rows are *compared* or merely *found*.
+
+---
+
 ## New permissions to seed
 
-Adopting LeapDesk's names verbatim (pending the decision above), 14 additions:
+**19 additions — 14 original plus Module 10's 5.** Names normalised to PM's `{resource}-{action}`
+convention, per the correction above. The first 14 were seeded on or before 2026-08-07 (34 permissions
+live in the database); Module 10's five are **not** seeded and are listed as specification.
 
-| Group | Permissions |
-|---|---|
-| `data-access` | `data-access.view`, `data-access.manage` |
-| `api-credentials` | `api-credentials.index`, `api-credentials.providers.{index,create,edit,delete}`, `api-credentials.credentials.{index,create,edit,delete}` |
-| `search` | `search.entities.manage` |
-| `ai-assistant` | `ai-assistant.use`, `ai-assistant.query-database` |
-| `users` | `user-email` |
-| `settings` | `settings-view`, `settings-update` |
+| Group | Permissions | State |
+|---|---|---|
+| `data-access` | `data-access-view`, `data-access-manage` | ✅ Seeded |
+| `api-credentials` | `api-credential-{view,create,update,delete}`, `api-provider-{view,create,update,delete}` | ✅ Seeded |
+| `search` | `search-entity-manage` | ✅ Seeded |
+| `ai-assistant` | `ai-assistant-use`, `ai-assistant-query-database` | ✅ Seeded |
+| `users` | `user-email` | ✅ Seeded |
+| `settings` | `settings-view`, `settings-update` | ✅ Seeded |
+| **`platform-api`** | **`api-consumer-{view,create,update,delete}`, `api-token-manage`** | ⬜ **Module 10 — not seeded** |
 
 `role-permissions` already exists in PM. Role grants follow LeapDesk: Admin and above get everything;
-Staff gets `data-access.view` and `ai-assistant.use`; Partner gets neither the admin modules nor
-`ai-assistant.query-database`.
+Staff gets `data-access-view` and `ai-assistant-use`; Partner gets neither the admin modules nor
+`ai-assistant-query-database`.
+
+**Module 10 diverges on one grant: Staff gets none of its five**, including view. Who holds standing
+machine access to our data is not general staff information, and there is no workflow reason to widen
+it — unlike `data-access-view`, which Staff does hold and which
+`data_access_service.list_grants` already flags as questionable for the same reason.
 
 ---
 
@@ -700,6 +1368,16 @@ Staff gets `data-access.view` and `ai-assistant.use`; Partner gets neither the a
 | 5 | Global search | `searchable_entities`, `search_logs` |
 | 6 | AI assistant | `agent_conversations`, `agent_conversation_messages`, `ai_message_feedback` |
 | 7 | Activity source | stamp `properties->source` on write (data/behaviour change, may need no DDL) |
+| 8 | **Platform API** (Module 10) | `api_consumers`, `api_consumer_tokens`, `api_request_logs` |
+
+**Module 10's three tables carry constraints the others do not.** `api_consumer_tokens.token_hash` is
+`String(64)` and **must be uniquely indexed** — it is the lookup key on every authenticated API request,
+and without the index the gate degrades to a scan. `consumer_id` is `CASCADE` (a credential must die
+with its consumer) while `created_by` is `SET NULL` (the audit of who issued it outlives them) — the
+same split already used in `data_access_grants`. `api_request_logs` needs
+`(consumer_id, created_at)` and `(endpoint, created_at)` indexes and, unlike anything else in this plan,
+**a retention policy**: it records every request *including rejections*, so it grows fastest exactly
+when something is wrong.
 
 **All FKs to `users` are `String(36)`** — PM's `users.id` is a UUID string, not a bigint. Roles use an
 Integer PK. LeapDesk's `bigint` IDs do not transfer.
@@ -720,11 +1398,24 @@ Dependencies constrain this more than preference does:
 7. API Credentials                                    ← largest; unblocks 9, helps PM-28
 8. Global Search                                       ← LocateData depends on it
 9. AI Assistant                                        ← needs 7 (Anthropic key) and 8 (LocateData)
+10. Platform API (Part I only)                         ← independent of 5–9; gated on a product decision
 ```
 
 **Two things could jump the queue.** Activity Log 4a is a live over-exposure of other users' audit rows —
 arguably it belongs at position 1 as a fix rather than a parity item. And the Password UI closes an
 endpoint that exists but is unreachable, which is a real user-facing hole.
+
+**Module 10 is placed last, but not because it depends on anything.** It shares no table and no service
+with modules 5–9 and could be built at any point. It is last because **nothing currently needs it**: we
+have no machine consumer, no external integration, and no data worth exposing until the marketplace
+domain exists. It moves up the moment one of three things happens — a real integration is requested, the
+partner-directory product is chosen (a partner-facing API becomes plausible product scope), or we decide
+the marketplace domain needs programmatic access from the start.
+
+> **One piece of Module 10 should be pulled forward regardless of when the module is built:** the
+> `Principal` type described in its § *a machine consumer is not a `User`*. It is shared with PM-5 and
+> with the partner-directory work, and introducing it before three call sites exist is far cheaper than
+> retrofitting it after.
 
 ---
 
@@ -732,8 +1423,8 @@ endpoint that exists but is unreachable, which is a real user-facing hole.
 
 Genuinely undecided; none blocks steps 1–3:
 
-1. **Permission naming** — adopt LeapDesk's dotted names for new modules (recommended) or normalise to
-   PM's `{resource}-{action}`.
+1. ~~**Permission naming**~~ — **settled in code 2026-08-07: normalised to PM's `{resource}-{action}`.**
+   See the correction under § Permission naming. Kept numbered so the list below does not shift.
 2. **Password OTP grace** — column on `users` (recommended), reuse `password_reset_token`, or a scoped JWT.
 3. **Credential caching** — no cache (recommended first cut), in-process TTL, or add Redis.
 4. **`role-permissions` as its own route** — split it out (recommended) or leave the service-layer check.
@@ -745,6 +1436,26 @@ Genuinely undecided; none blocks steps 1–3:
    Recommend not building it.
 8. **Whether Data Access ships before or after the marketplace `partner_id` scoping.** They're
    complementary; building delegation first means the tenant filter arrives later and must compose with it.
+
+**Four more, added 2026-08-10 with Module 10:**
+
+- **Is Module 10 in scope at all right now?** It is real parity work, but it serves no current need —
+  see § Build order. **Recommendation: spec it now (done), build it when something asks for it.** The
+  alternative reading is that machine access should be designed before the domain exists rather than
+  bolted on after, which is a defensible argument for building it early.
+- **`Principal` — take it once or three times?** A shared union type for user / machine / anonymous
+  callers, versus letting Module 10, PM-5 and the partner directory each solve it locally.
+  **Recommendation: take it once, before any of the three.** This is the highest-leverage item on this
+  page and the only one whose cost rises with every week it is deferred.
+- **Part II — the generic resource engine.** Recommendation is to skip it entirely for now. The
+  decision genuinely reopens if the partner-directory product is chosen, since partner-facing
+  programmatic access to their own listings becomes plausible scope. **Do not treat "skip" as
+  permanent** — treat it as contingent on a product decision that has not been taken.
+- **Token expiry default.** LeapDesk allows never-expiring tokens and its owner chose that, noting it
+  is *"defensible once the admin UI + rotation reminders exist."* We would ship the UI but not the
+  reminders. **Recommendation: default to an expiry (365 days) with never-expires available but not
+  preselected** — the opposite of LeapDesk's default, on the grounds that a token nobody remembers
+  issuing is the failure mode here.
 
 ---
 
@@ -767,6 +1478,14 @@ none of which fail loudly when they're wrong.
 - [`../system-design/UI_PATTERNS.md`](../system-design/UI_PATTERNS.md) — authoritative for how PM's UI is built
 - [`TECH_DEBT.md`](./TECH_DEBT.md) — PM-5 (scoping), PM-11 (tests), PM-28 (Google SSO)
 - [`MARKETPLACE_DOMAIN_PLAN.md`](./MARKETPLACE_DOMAIN_PLAN.md) — **parked** until this plan lands
+- [`PARTNER_DIRECTORY_PLAN.md`](./PARTNER_DIRECTORY_PLAN.md) — shares Module 10's `Principal` finding
+  from the anonymous-visitor angle; the two should be settled together
 - LeapDesk source: `/opt/lampp/htdocs/LeapDesk` — read directly; its `documentation/` covers Users,
   Roles, Invitations, Activity Log and UI patterns, but **not** Data Access, API Credentials, Global
   Search or the AI Assistant, which exist only as code
+- **LeapDesk's own Platform API tracker:**
+  [`documentation/planning/LEAPDESK_PLATFORM_API.md`](/opt/lampp/htdocs/LeapDesk/documentation/planning/LEAPDESK_PLATFORM_API.md)
+  — the exception to the line above. 584 lines covering the design, a line-by-line code review with ten
+  findings, ten programme phases, a file map, eight owner decisions and a post-deploy production
+  verification table. **Read it before building Module 10**; this plan summarises it but does not
+  replace it, and it is the only reference module that documents its own mistakes

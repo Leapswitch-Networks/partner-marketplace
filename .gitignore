@@ -62,3 +62,7 @@ next-env.d.ts
 # possibly passwords, and THIS REPOSITORY IS PUBLIC. The committed
 # `seed_users.example.json` shows the shape with obviously-fake values.
 backend/seed_users.json
+
+
+
+/references

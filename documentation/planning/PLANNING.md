@@ -161,7 +161,8 @@ The job is to replicate LeapDesk's core admin shell — the eight modules in its
 sections plus the self-service Settings area — in this stack. Full spec, schemas, endpoints and
 translation rules: [`LEAPDESK_PARITY_PLAN.md`](./LEAPDESK_PARITY_PLAN.md).
 
-**Status: 2 of 9 modules. Last worked 2026-08-04.**
+**Status: 2 of 10 modules by this register — but see the staleness warning below. Last worked
+2026-08-07.** The module count moved from 9 to 10 on 2026-08-10 when the reference added Platform API.
 
 | Module | State | Note |
 |---|---|---|
@@ -174,13 +175,57 @@ translation rules: [`LEAPDESK_PARITY_PLAN.md`](./LEAPDESK_PARITY_PLAN.md).
 | API Credentials | ⬜ Not started | Largest; gates AI Assistant, helps PM-28 |
 | Global Search | ⬜ Not started | Gates `LocateData` |
 | AI Assistant | ⬜ Not started | Needs API Credentials + Global Search |
+| **Platform API** | ⬜ Not started — **specced 2026-08-10** | **New: the reference grew.** Machine consumers + API tokens |
+
+> ### The reference added a tenth module — Platform API
+>
+> **Researched 2026-08-10** at the owner's request, from
+> `https://leapdesk.cloudjiffy.net/settings/api/consumers`. LeapDesk shipped it on **2026-08-09**, five
+> days after the parity plan was scoped, so this is scope growth in the reference rather than something
+> missed. Full spec: [`LEAPDESK_PARITY_PLAN.md`](./LEAPDESK_PARITY_PLAN.md) § Module 10.
+>
+> **What it is:** the admin surface for *machine* identities — a consumer (a system, never a person)
+> holds API tokens, each carrying abilities and an optional expiry, so that who has standing access to
+> our data is readable without SSHing into production.
+>
+> **It is the opposite direction from the API Credentials module** already in the queue: that one holds
+> credentials *we* use to call out to third parties; this one governs who may call *in*. LeapDesk
+> refused to house them together for exactly that reason and so should we.
+>
+> **Three things came out of the R&D that matter beyond this module:**
+>
+> 1. **A machine consumer is not a `User`, and that is now the third such caller in four days** — after
+>    the anonymous visitor in `PARTNER_DIRECTORY_PLAN.md` and the tenant boundary in PM-5. Everything we
+>    have is typed `actor: User`, including every function in the `data_access_service` written on
+>    2026-08-07. **Recommendation: introduce a `Principal` union once, before PM-5 and before this
+>    module.** It gets more expensive every week it waits. The shortcut of a hidden service `User` per
+>    consumer must be refused — it puts machine identities into user lists and RBAC screens.
+> 2. **PM-26's per-process rate limiter is a second argument for PM-44 (Redis).** Per-IP buckets in
+>    process memory are an honest speed bump for a login form; for an API whose rate limit is an
+>    advertised contract, they are a control that does not hold across workers. A per-*consumer* limit
+>    is also a new keying dimension the limiter does not have.
+> 3. **Skip the generic resource engine (their Part II).** LeapDesk's own code review found 100 of 105
+>    registered resources exposing every column of their table, including an 81-column internal cost and
+>    margin model behind an innocuous-sounding ability. We have no data to expose and no consumer asking.
+>    **This reopens only if the partner-directory product is chosen**, where partner-facing programmatic
+>    access becomes plausible scope.
+>
+> **Not urgent.** It shares no table with modules 5–9 and nothing currently needs it — no integration has
+> been requested and the domain is still greenfield. Positioned last in the build order, with the
+> `Principal` work pulled forward out of it.
 
 **Verified against the database today, not read from the plan:**
 
-- **Permissions: 0 of 14.** Confirmed — the 18 seeded permissions contain none of `data-access.*`,
-  `api-credentials.*`, `search.entities.manage`, `ai-assistant.*`, `user-email`, `settings-view`,
-  `settings-update`. Nothing in modules 5–9 can be gated until this lands, so it is a **prerequisite,
-  not end-of-project tidy-up**.
+- ~~**Permissions: 0 of 14.**~~ **Corrected 2026-08-10 — this was measured on 2026-08-07 and is now
+  wrong.** Re-measured against the running database today
+  (`docker compose exec db psql -U admin -d test_platformDB`): **34 permissions**, of which **16 are the
+  parity set** — `data-access-{view,manage}`, `api-credential-{view,create,update,delete}`,
+  `api-provider-{view,create,update,delete}`, `search-entity-manage`, `ai-assistant-{use,query-database}`,
+  `user-email`, `settings-{view,update}`. All in PM's `{resource}-{action}` convention; **none of the
+  reference's dotted names are present**, which settles the naming question the parity plan still lists
+  as open. The prerequisite for modules 5–9 is **met**.
+- **Module 10's five are not seeded**, as expected — no `api-consumer-*` and no `api-token-manage` in
+  the table.
 - **Parity migrations: 2 of 7** — `e2b8d5c31f47` and `f5a3c81b7d29` are both present. Still accurate.
 - **But the plan's "Head is `f5a3c81b7d29`" is stale.** Head is `d8c31f60a927` (brand assets), which
   landed after. 19 migration files total.
@@ -242,13 +287,17 @@ Per [`CORE_HARDENING_PLAN.md`](./CORE_HARDENING_PLAN.md) § 3. Not being started
 | **PM-27** — email deliverability | A real provider to send through |
 | § 3.2 sequencing | The PM-41 timing decision |
 | **Parity module 1 cannot be called done** | **Profile email: editable (LeapDesk parity) or read-only (this project's rule)?** Read-only today, because changing it breaks the Google account link and outstanding invitation links. LeapDesk edits it and clears the verification stamp. |
-| **Permission naming, before any of modules 5–9** | LeapDesk's dotted names (`data-access.view`) verbatim, or normalise to this project's `{resource}-{action}`? **Decide before seeding the 14** — changing it afterwards means a migration and a re-seed. |
-| `.claude/settings.json` | Commit it, or keep it out of a public repo? Still uncommitted. |
+| ~~Permission naming~~ | ✅ **Settled** — normalised to `{resource}-{action}`, seeded, verified in the database 2026-08-10. No longer blocked. |
+| `.claude/settings.json` | Commit it, or keep it out of a public repo? Still uncommitted — now with 28 further Bash allowlist entries added since the question was first asked. |
+| **`Principal` — one type or three** *(new 2026-08-10)* | A shared union for user / machine / anonymous callers, versus letting Module 10, PM-5 and the partner directory each solve it. Three separate needs have now appeared in four days. **This is a design decision, not a preference, and it gets more expensive the longer it waits.** |
+| **Module 10 timing** *(new 2026-08-10)* | Build the Platform API when something asks for it (recommended), or design machine access before the domain exists? Nothing currently needs it. |
 
-Five further parity decisions are listed in [`LEAPDESK_PARITY_PLAN.md`](./LEAPDESK_PARITY_PLAN.md)
+Nine further parity decisions are listed in [`LEAPDESK_PARITY_PLAN.md`](./LEAPDESK_PARITY_PLAN.md)
 § *Open decisions* — 2FA in the settings sub-nav, credential caching, `role-permissions` routing,
-`level`/`department` on role-users, and Data Access vs. marketplace `partner_id` ordering. **None of
-them blocks the next slice**, which is why the Invitations UI is the recommended next move.
+`level`/`department` on role-users, Data Access vs. marketplace `partner_id` ordering, and the four
+added with Module 10 (its scope, the `Principal` type, the generic resource engine, and the token
+expiry default). **None of them blocks the next slice**, which is finishing the Data Access module —
+its service layer is written but has no router, so it is currently unreachable code.
 
 ---
 

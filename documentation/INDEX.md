@@ -73,9 +73,10 @@ it and another register disagree, it says so and names the one that is stale.
 |------|---------|--------|
 | `planning/PLANNING.md` | **The working plan — start here.** What is in flight now, what is next, what is blocked and on whom. State verified against the running system, not copied from the other registers | **Live — 2026-08-07** |
 | `planning/CORE_COMPLETION_PLAN.md` | **How the core gets to 100%.** The Index/Form/Show contract every module follows, the shared backend and frontend layers to build first, module-by-module state, build order, and what we deliberately do *not* copy from LeapDesk | **Live — 2026-08-07** |
-| `planning/LEAPDESK_PARITY_PLAN.md` | Port spec for LeapDesk's eight core admin modules + the Settings area — schemas, endpoints, permissions, build order | **Spec — awaiting review. Current focus** |
-| `planning/PARTNER_DIRECTORY_PLAN.md` | **"Justdial, but only for our partners"** — the directory/listing product: research on Justdial's actual mechanics, comparable curated partner directories, a listing + enquiry domain model, the public-surface and scoping consequences, and the ten decisions the owner has to make. **Read its § 0 first — it contradicts `MARKETPLACE_DOMAIN_PLAN.md`** | **R&D — 2026-08-07. No decision taken** |
-| `planning/MARKETPLACE_DOMAIN_PLAN.md` | Marketplace domain model — partners, tiers, customers, catalog, quotes | Design — **parked**, and now **contested** by `PARTNER_DIRECTORY_PLAN.md` § 0 |
+| `planning/LEAPDESK_PARITY_PLAN.md` | Port spec for LeapDesk's core: **18 modules + Recycle Bin** — schemas, endpoints, permissions, build order. Modules 1–10 are business objects; **11–18 are operations surfaces and most are not CRUD** — read that section before assuming the Users shape applies | **Spec — 18 modules as of 2026-08-11.** Progress table re-audited against code that day. Module 16 (Queue Monitor) is **blocked**: we have no queue |
+| `planning/MODULE_PARITY_PLAN.md` | **Bringing every module to the Users index.** All 57 changes made to Users on 10–11 August as a checklist, a measured matrix of which module has each one, and the order to apply them. § 4 records the three structural decisions as taken; § 5 is the caution that matters | **Steps 1–4 done 2026-08-11** — Roles, Invitations and Activity are on the Users structure. `ProfileForm` sections and the sort-key audit remain |
+| `planning/PARTNER_DIRECTORY_PLAN.md` | **"Justdial, but only for our partners"** — the directory/listing product: research on Justdial's actual mechanics, comparable curated partner directories, a listing + enquiry domain model, the public-surface and scoping consequences, and the ten decisions the owner has to make. **Read § 0.1 first — the decisions, as taken.** § 7.1 explains why the actor type is a core decision, not a directory one | **Decided in shape 2026-08-10** — directory · public · 300+ partners. Six decisions still open; nothing built |
+| `planning/MARKETPLACE_DOMAIN_PLAN.md` | Marketplace domain model — partners, tiers, customers, catalog, quotes | **Partly superseded 2026-08-10.** Its `partners` / `partner_tiers` / scoping foundation is adopted; the catalog, quotes and quote machine are **shelved** |
 | `planning/SCAFFOLD_CLEANUP_PLAN.md` | Retiring the inherited test-platform domain | **Tiers 2–3 executed 2026-08-06** — the domain is gone. Tier 1 housekeeping remains |
 | `planning/CORE_HARDENING_PLAN.md` | The platform layer under the features — config safety, transactions, tests/CI, API versioning, the frontend data layer. PM-37 to PM-44 | **Active — PM-37/38/39 closed 2026-08-06** |
 | `planning/DYNAMIC_BRANDING_PLAN.md` | Project identity — name, monogram, tagline, theme, logo, favicon — configurable so the core is reusable across projects. **Read § 6 to rebrand a deployment**, § 7 for how theming and uploads work | **All four phases shipped 2026-08-06** |
@@ -116,7 +117,8 @@ documentation/
 ├── design/                  ← Adopted theme reference + the plan to implement it
 │   ├── VIHO_ADOPTION_PLAN.md    ← the decision, the cost, the phase order
 │   ├── VIHO_THEME_REFERENCE.md
-│   └── assets/screenshots/  ← owner-supplied screenshots
+│   ├── LOGO_BRIEF.md            ← hand-off spec for a logo designer
+│   └── assets/screenshots/  ← owner-supplied screenshots (+ its own README)
 ├── planning/                ← Domain plan, cleanup plan, tech debt
 ├── architecture.md          ← inherited (stale)
 ├── instruction.md           ← inherited (stale)
@@ -124,8 +126,13 @@ documentation/
 └── planning.md              ← inherited (stale)
 ```
 
-> **Only three `.md` files live outside this folder** — `README.md`, `CLAUDE.md` and `AGENTS.md` at the
-> project root. Everything else belongs here. There is exactly **one** README in the project.
+**31 `.md` files live under `documentation/`.** The root `README.md` carries a one-line-per-file
+version of the tables above; this index stays the detailed one. Keep both in step when adding a doc.
+
+> **Only three `.md` files live outside this folder** — `README.md`, `CLAUDE.md` and `AGENTS.md` at
+> the project root. Everything else belongs here. There are **two** READMEs: the project one in the
+> root, and `design/assets/screenshots/README.md`, which documents that folder's contents and its
+> public-repo rules. It goes away when the screenshots do.
 
 ---
 

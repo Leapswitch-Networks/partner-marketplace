@@ -6,6 +6,1934 @@
 > Update this file as part of the same change as the code. A task that isn't here is invisible to the
 > next person.
 
+## August 11, 2026 — Day in review: nine modules, and what the browser caught that the tooling did not
+
+**Seventeen entries below, so this is the map.** Read this, then whichever one you need.
+
+| What | Where |
+|---|---|
+| Nine LeapDesk modules shipped — 6, 7, 8, 11, 12, 13, 17, 18, Recycle Bin | the nine feature entries |
+| The Users index became a written contract every module follows | *The Users module became the template* |
+| Four agents built in parallel with no conflicts | *Four parallel agents merged* |
+| Eight admin screens were in the wrong shell; the sidebar was regrouped | the last three entries |
+
+**122 API operations, 17 pages, 49 permissions, 8 migrations.** Head `b6d41e807f92`.
+
+### The pattern worth carrying forward
+
+**Every bug found today was found by writing something down or by looking at the screen — none by
+the type checker or the linter.**
+
+Extracting shared pieces from four copied modules turned up seven live defects, including bulk-action
+buttons that had never worked and a `#` column wrong in two opposite directions. Writing a comment
+claiming the data-access upsert "revives a binned row" exposed that it did not. Probing the recycle
+bin proved three auth paths that would otherwise have let a deleted user keep signing in. And the
+owner found two more by opening the app: eight admin screens rendering inside the personal-settings
+shell, and six sidebar entries sharing one icon.
+
+Typecheck was clean and lint was flat through all of it.
+
+> **The honest caveat, unchanged since this morning:** most of this has still not been rendered in a
+> browser. Seventeen pages now share one table, one dialog shell and one set of column factories — a
+> mistake in any of those is a mistake in seventeen places. That remains the cheapest unrun check.
+
+---
+
+## August 11, 2026 — The agent rules now actually reach the agent, and delegation has a policy
+
+**Until today, five lines of project instruction loaded into a session, and the one instruction in
+them could not be followed.** `CLAUDE.md` was a single `@AGENTS.md` import, and root `AGENTS.md` was
+a five-line framework warning telling the agent to read `node_modules/next/dist/docs/` — **a
+directory that does not exist** in `next@14.2.35`, on the host or in the container. Bundled agent
+docs ship from Next 16. PM-19's writeup had already recorded that the instruction "cannot be
+followed literally"; nobody had corrected the instruction. It is corrected in both files now, and
+carries a note saying what to restore if this project ever upgrades to a Next that ships them.
+
+**The 303 lines that matter were reachable by nothing.** `documentation/AGENTS.md` holds the commit
+rules, the protected-file table, and the warning that a git write from `/opt/lampp/htdocs` would
+delete the company marketing site. Claude Code reads `CLAUDE.md`, never `AGENTS.md`, and **never
+auto-discovers an `AGENTS.md` in a subdirectory** — so that file was reached only by luck, via a
+personal global instruction to go looking for AGENTS.md files. An agent without that global setting
+would have had none of it.
+
+**The fix is not "import the big file".** Imports load **eagerly** — every imported line is in
+context on every turn — so importing 303 lines of process would have taxed each turn to carry a
+checklist that matters a few times per task. Instead root `AGENTS.md` is now a 150-line operating
+contract holding what must never be violated, and it *points at* the process file rather than
+importing it. All seventeen hard rules were extracted from the old files and checked present in the
+new one, one by one, before this was called done.
+
+> **Model tiering is now the documented default: Opus orchestrates and validates, Sonnet subagents
+> implement.** The orchestrator keeps planning, the risky code — migrations, RBAC, auth,
+> `app/core/`, API contracts, protected files — and **all** verification; it never rubber-stamps a
+> subagent's output. Sonnet takes bounded mechanical volume from an explicit spec. If a subagent is
+> wrong twice, Opus takes the task over rather than paying for more rework.
+
+Multi-worker rules came with it: non-overlapping file ownership, one worker owning an atomic
+refactor end-to-end, and approved packages chaining without asking — which does **not** extend to
+committing, because that rule is unchanged and absolute.
+
+**`.claude/agents/sonnet-implementer.md` is the agent that policy names.** It is scoped away from
+migrations, RBAC, `app/core/` and every protected file, and told to stop and report rather than
+widen its own file list.
+
+**The suggested policy was adopted with one correction, and it was a load-bearing one.** The source
+draft listed *"production build"* in the validation gate. **In this repo a production build is the
+thing that breaks it** — `.next` is a volume shared with the running dev server, so `npm run build`
+replaces the dev output and every `_next/static` request 404s as an HTML page. The gate here is
+`typecheck` + `lint`; CI runs the real build on its own checkout. The draft's Django vocabulary
+(views, urls, selectors) was translated to routers, services, Pydantic schemas and components, and
+its generic layer advice replaced with this project's own — including that SQLAlchemy here is
+**synchronous**, and that public data renders server-side while authenticated data cannot.
+
+**Checked, not assumed:** the subagent frontmatter parses and yields `model: sonnet` with six tools;
+both instruction files total 171 lines, inside the 200-line guidance; every hard rule from the old
+files greps present in the new one. Note that a **restart is required** before the new agent is
+usable — Claude Code's watcher only covers agent directories that existed when the session started,
+and `.claude/agents/` was created today.
+
+## August 11, 2026 — The README now tells you how to run the project, instead of pointing elsewhere
+
+**The README's four-line "Quick Start" is now a complete Docker runbook.** It previously deferred
+almost everything to `ONBOARDING.md` — including the fact that **three environment files have to be
+created by hand before anything works**, which was the one step most likely to stop a newcomer at the
+first command. The new "Running Locally with Docker" section carries the whole path: prerequisites,
+clone, all three `.env` files with their keys, build and start, migrations, all three seeders,
+verification, day-to-day commands, port overrides, reset, and troubleshooting.
+
+`ONBOARDING.md` is unchanged and is still the source of truth — it holds the host-based Path B and
+the full gotcha table. The README no longer *depends* on it to get someone to a running app.
+
+**Two seeders were missing from the README entirely.** It documented `alembic upgrade head` and
+`seed_rbac`, but not `seed_partner_tiers` — without which `partner_tiers` is empty and every partner
+onboards with no entitlement — and not the optional `seed_users` roster. Both are now in Step 4 with
+the reason you'd want them.
+
+**Three warnings were promoted out of ONBOARDING because they cost real time when hit.** Use
+`docker compose run --rm`, never `exec`, for anything touching the database — `exec` skips the
+entrypoint that rewrites `DATABASE_URL` and fails with a misleading `connection refused`. Never run
+`npm run build` in the frontend container — it overwrites the dev server's `.next` volume and every
+`_next/static` request then 404s as an HTML page, which the browser reports as a MIME-type fault.
+And `docker compose down -v` does **not** reset the database, because `data/db` is a bind mount, not
+a named volume — a genuinely dangerous thing to assume either way round.
+
+**Two of the commands were wrong when first written, and were caught by running them.** The psql
+one-liner used `$POSTGRES_USER` unquoted, so it expanded in the *host* shell where it is empty and
+failed with `role "root" does not exist`; it now uses the `sh -lc` form the repo's own
+`scripts/unlock-user.sh` already uses, which expands inside the container. And the secret generator
+called a `python:3.12-slim` image that is not present locally — a 50 MB pull to print one string —
+where `openssl rand -hex 48` was already on the machine. Hex, not base64, so no `/` or `=` for a
+dotenv parser to trip over.
+
+Nothing outside `README.md` changed. Every command in the new section was executed against the
+running stack before it was written down.
+
+## August 11, 2026 — The index table reads as rows again, and an account is now active or it is not
+
+**Five changes to how a data table looks, and one to what the Users module can store.** Owner's
+review of the Users screen, 2026-08-11.
+
+**Rows read as one block, so they now alternate to a lighter green.** The stripe was `bg-muted/30`,
+which over the green card composited to about one point of difference — a colour nobody could see.
+It is the same token at full strength now: `#eff3f2`, the brand teal at 8%, against a card that is
+the same teal at 10%. The striped row is therefore *lighter* than the one above it rather than
+darker, which is what the owner asked for and also the only direction that works on a green surface.
+The hover moved to brand at 10% in the same change, because a stripe that solid needs a hover that
+beats it, and `UI_PATTERNS.md` § The Signed-In Chrome Is Green rules out hovering to a grey.
+
+**Cells were 2px of vertical padding, which is why records merged into each other.** Now 8px, for a
+32px row instead of 20px. Horizontal padding went from 6px to 12px. The `#` and Actions columns still
+override it and stay narrow — they always did.
+
+**The white hairlines between header cells are gone.** The header row is filled with the brand green,
+and the divider was `#e6edef` — a near-white rule drawn across it. That reads as damage to the fill,
+not as column separation. The line under the header stays: that one divides the header from the rows,
+which is a real boundary. Body columns keep their dividers, which are drawn on white and look fine.
+
+**One font size across every column.** Badges were hardcoded to 11px while the cells around them were
+12px, so Status, Role and Type rendered one pixel smaller than Email and Last-login beside them —
+close enough to look like a rendering fault. Badges now follow the table's own scale, and so do the
+two lines in the User cell. Emphasis inside a row is carried by weight and colour, never by size.
+
+**Two of these fixed real bugs rather than only taste.** Our own `DataTable` — the one behind Roles,
+Invitations and Activity — carried `hover:bg-brand/10/40`, which is not a class: Tailwind takes one
+opacity modifier, a second makes the whole token unparseable, so it emitted nothing and those tables
+had **no hover at all** in light mode. And the Activity-Log `?highlight=` deep link never painted its
+yellow flash on an even-numbered row, because the stripe selector outranks a plain utility class on
+the row; only the ring was ever visible. Both are fixed, and both tables now match.
+
+> **A user account is ACTIVE or INACTIVE. There is no third value, and the database enforces it.**
+> `user_status` had SUSPENDED, distinguished from INACTIVE by intent — "never approved" versus
+> "approval withdrawn". Nothing ever acted on that distinction: both refuse the login, both revoke
+> the live sessions, and the only code that told them apart was the wording of a 403 and a guard
+> refusing to toggle a suspended account. **A state whose entire behaviour is another state's is a
+> label, not a state**, and it cost a three-armed conditional at every read.
+
+Removing it from the API alone would have left the database willing to hold a value every read path
+had stopped branching on — so migration `b3d7e02f4c19` rebuilds the type. Postgres cannot drop a
+value from an enum at any version, so it renames the old type aside, creates the two-value one, and
+retypes the column with a cast that folds any SUSPENDED row into INACTIVE. Measured first: 4 ACTIVE,
+1 INACTIVE, **0 SUSPENDED** — the mapping is defensive, not corrective. Verified to round-trip:
+downgrade restores the three-value type and upgrade returns to two.
+
+**What the downgrade cannot restore is which accounts were suspended**, because that stops existing
+the moment they fold into INACTIVE. The activity log keeps it — every status change is recorded with
+its `old` value — and that is the honest place for history, rather than a column that has to be
+branched on forever.
+
+The label changed too: INACTIVE read "Pending approval", which is true of an account that was never
+approved and false of one an admin just deactivated. It says "Inactive" now. Both status maps are
+typed `Record<UserStatus, …>` on purpose — if the domain ever grows again, they fail to compile
+rather than rendering an empty badge.
+
+**Checked, not assumed:** the enum holds two values and the column kept its default, its NOT NULL and
+its index; Pydantic rejects SUSPENDED and Postgres rejects it; the OpenAPI export is deterministic and
+the regenerated types show `SUSPENDED` only under `partner_status`, which is a different enum and was
+not touched; frontend typecheck passes; lint reports the same 18 pre-existing React Compiler errors as
+before the change, verified by stashing.
+
+## August 11, 2026 — Recycle Bin: deleting things stopped being permanent
+
+**The Recycle Bin is done.** LeapDesk's docblock says what it fixes and it was true of us until today:
+*"Before this existed every delete in the core was permanent."*
+
+Four tables gained `deleted_at` — `users`, `user_invitations`, `data_access_grants`,
+`searchable_entities` — matching the reference's five minus `api_consumers`, which arrives with
+Module 10. **A table gets soft deletes when losing a row is recoverable-worthy, not by default**, and
+the migration records why each excluded table is excluded: roles and permissions already refuse
+deletion while anything holds them; the activity log and error occurrences are append-only evidence
+nothing deletes; settings and feature flags come back on the next seed; partners have their own
+reversible state and a second one would give two ways to make a partner disappear.
+
+### The allowlist is the security control
+
+`TYPES` is a dict literal and a request's `type` is checked against it before anything is resolved.
+The reference states the rule outright — *"a raw string from the request is never resolved to a class
+name"* — and without it, `type` is an arbitrary-model-load primitive. Probed: `os`, `User`, `role`
+and `""` all rejected; only the four keys resolve.
+
+> ### The real work was deciding **which queries filter `deleted_at` and which must not**
+>
+> A blanket "hide deleted rows everywhere" is wrong here, and looks like an oversight until it is
+> written down:
+>
+> **Filtered**, because a binned record must not act or be picked — the login lookup, the session
+> lookup, the user list and detail, the invitation list, the **invitation token** lookup, the data
+> access scoping read, the grant list, the searchable-entity list.
+>
+> **Not filtered**, because the record is being named *as history* — the activity log's causer names,
+> the security audit panel, error occurrences. **A deleted user's name must still resolve**, or "who
+> did this" becomes "unknown" for precisely the accounts most likely to be asked about. `causer_id`
+> is retained on those tables for exactly this; filtering it away would waste that.
+>
+> Laravel's `SoftDeletes` global scope has the same problem and unpicks it with `withTrashed()` at
+> those call sites. Ours is the inverse default — filter where it matters, and the list is finite and
+> enumerated.
+
+**Three of those would have been silent holes**, and each is a different shape of failure:
+
+- **The login lookup.** Without the filter, a deleted account keeps its password and keeps signing in —
+  "delete the user" would silently mean "hide the user from one list".
+- **The session lookup.** Checked on every authenticated request, so binning a user ends their live
+  sessions immediately rather than whenever the token expires. The token cannot know.
+- **The data access scoping read.** A grant sitting in the bin that still grants — the worst version,
+  because the admin screen would show it as revoked.
+
+**Two queries deliberately still see binned rows, and both are about unique constraints.**
+`auth_service.email_exists` counts deleted accounts because `users.email` is UNIQUE at the database
+level: filtering would let registration accept an address that then fails on the constraint, and would
+make restoring that account **impossible** because its address had been taken meanwhile. So a binned
+account still reserves its email, and purging is what frees it — recoverable and reserved, or gone and
+released, not both. The searchable-entity `model_class` lookup does the same for the same reason.
+
+**A comment I wrote turned out to be a lie, and fixing it was the point.** The data-access upsert's
+note said it finds a binned row "and revives it" — it found it and did not revive it, so re-granting a
+previously-revoked permission would update the row, tell the admin it was granted, show it on the
+screen, and grant nothing. One line: `existing.deleted_at = None`.
+
+**Restore does not confirm; purge does.** Restoring is reversible and a dialog in front of an undo
+button is friction protecting nothing. Purge names the record and says it cannot be undone, because it
+is now **the only irreversible delete in the core** — everything else lands here first. The activity
+entry for a purge is written **before** the row goes, since afterwards there is nothing left to
+describe.
+
+**Verified end to end, not asserted:** created → listed → soft-deleted → invisible in the list,
+unfindable by email, 404 from the detail endpoint, present in the bin, email still reserved → restored
+→ visible and findable again → purged → gone from the database and the email freed.
+
+Lint **19 → 20**, one more of the same fetch-on-mount effect. Sidebar is now 15 entries across four
+sections, all with distinct icons.
+
+## August 11, 2026 — The sidebar was regrouped to LeapDesk's four sections, and Feature Flags stopped being a nav item
+
+**Read from `references/LeapDesk/app/Services/NavigationService.php` rather than assumed.** It has
+**four** sections where we had three, and two of our items were in the wrong one.
+
+| Section | LeapDesk | Ours, before | Ours, now |
+|---|---|---|---|
+| User Management | Users, Roles, Data Access, Activity Log | + Invitations | matches |
+| System Settings | Configuration, Security, API Credentials, Invitations, Global Search, Platform API, AI Assistant | + Error Tracking, System Health, Feature Flags; − Invitations | matches, + Branding |
+| **Operations** | Queue Monitor, Error Tracking, System Health, Recycle Bin | **did not exist** | Error Tracking, System Health |
+
+**Operations is the section we were missing**, and it is a real distinction rather than a longer menu:
+those screens **watch** the running system, where System Settings **configures** it. You open Error
+Tracking because something is wrong, not because you want to change something. Collapsing the two had
+produced a nine-item System Settings.
+
+Two of its four are absent for reasons already recorded: Queue Monitor is **blocked** (we run no
+worker) and Recycle Bin is not started. `filter_sections` drops an empty section, so Operations
+appears only because two of its items exist.
+
+**Invitations moved to System Settings.** On reflection LeapDesk's filing is the better reading: User
+Management is about people who already exist and what they may see; an invitation is a **pending
+grant**, which is configuration.
+
+> ### Feature Flags is no longer a sidebar entry, and the button that replaced it is load-bearing
+>
+> LeapDesk has no nav item for it either. It lists `/settings/feature-flags` among **Configuration's
+> `activePrefixes`** and reaches the page from a button in the Configuration header — so Configuration
+> stays highlighted while you are on it. Two sibling entries for one settings surface is a longer
+> sidebar that says less, and our `_item` already has `active_prefixes` for exactly this (it is how
+> the four Users routes share one entry).
+>
+> **The consequence is worth stating where someone will read it: that button is now the only route to
+> the page.** Removing it makes Feature Flags unreachable. The comment at the call site says so.
+
+`Search` was also renamed **Global Search** — LeapDesk's label and the more accurate one, since it
+configures what the *global* search box looks in, which is a different thing from the search box on
+every index page.
+
+**One label deliberately not changed:** ours reads *Roles & Permissions* where LeapDesk says *Roles*.
+The page heading, its metadata and the module have all read "Roles & Permissions" since 2026-08-07,
+and changing the nav alone would have made the sidebar and the page disagree. Left as-is rather than
+half-done.
+
+Verified: four sections render in order, every item permission-filtered, all seven affected routes
+still serve 200 — **including `/dashboard/feature-flags`, which no longer has a sidebar link**.
+Typecheck clean, lint **19 errors / 0 warnings**.
+
+## August 11, 2026 — Eight admin screens were in the profile shell, and the sidebar had six identical icons
+
+**Two problems the owner caught on screen, both invisible from the source.**
+
+### Eight admin modules were rendering inside the personal-settings shell
+
+`app/(app)/settings/layout.tsx` is the **profile** area: heading *"Manage your profile and account
+settings"*, a `max-w-5xl` column, and its own left sub-nav. Everything placed at `/settings/*`
+inherited it — so Configuration, Security, Error Tracking, System Health, Feature Flags, Search and
+API Credentials rendered with the wrong heading, the wrong sub-navigation, and width-capped so the
+full-height table layout could not work at all.
+
+Eight page routes moved to `/dashboard/*` — the seven above plus **Branding**, which had the same
+problem and predates this session. `/settings/*` now holds **exactly three**: Profile, Password,
+Appearance.
+
+**Branding also came out of the settings sub-nav.** It was listed there under an "Installation"
+heading gated on super-admin, so one admin screen sat in the profile shell while its seven siblings
+were full-page modules — the same screen reachable from two navigations that disagreed about what
+kind of thing it was.
+
+> **Only page routes moved. API paths did not.** `axiosInstance.get("/settings/configuration")` is a
+> backend router prefix and matches the reference; changing it would have broken every call for
+> nothing. Of the ten `/settings/*` references in the frontend, exactly one was a page `<Link>` and
+> only that one changed.
+
+Two things fell out of the move. `tsc` went red on modules that no longer exist — Next generates a
+type file per route and the deleted ones linger in `.next/types`; cleared those directories rather
+than rebuilding. And removing the Installation block orphaned `linkClasses`, which turned out to be
+**duplicated by an inline copy in the main loop** — the two had already drifted, with the inline
+version carrying `dark:text-brand-on-dark` twice. Collapsed onto the helper.
+
+### Six sidebar entries shared one icon
+
+`settings` was doing duty for Branding, Configuration, Security, System Health, Feature Flags, Search
+and API Credentials; Data Access borrowed `roles` and Error Tracking borrowed `activity`. **A sidebar
+where six entries carry the same glyph is one whose icons carry no information** — the eye has to read
+every label, which is the job the icon was there to save.
+
+Nine new icons, each chosen for what the screen *does* rather than for its name: Security is a shield,
+Data Access is a key in transit, Error Tracking is a warning triangle, System Health is a pulse trace,
+Feature Flags is a flag, Search is the same magnifier the filter bars use. Same 24px grid and 1.8
+stroke as the existing set so they sit level.
+
+**Cross-checked rather than eyeballed:** every icon name the server sends exists in the frontend
+registry — a mismatch renders the `dot` fallback silently — and **no two nav items share one**. 14
+entries, 14 distinct glyphs.
+
+Verified: all 9 relocated routes and all 3 profile routes serve 200, typecheck clean, lint back to
+**19 errors / 0 warnings**.
+
+## August 11, 2026 — Four parallel agents merged: the core is now 13 screens and 119 endpoints
+
+**Data Access (6), Global Search (8), Feature Flags (13) and API Credentials (7) were built in
+parallel and merged.** With Configuration (11), Security (12), Error Tracking (17) and System Health
+(18) built here, **eight modules landed in one day**. 119 operations across 89 paths; **all 13 pages
+render**; typecheck clean.
+
+### The parallelisation held, and the reason is worth keeping
+
+Nothing conflicted. Not because the agents were careful, but because the **shared files were taken
+away from them**: every migration, every model registration, every permission and every router mount
+was pre-built or reserved here, and each agent was given an explicit "do not open" list. The one that
+would have failed silently is Alembic — two migrations revising the same head produce two heads, and
+Alembic does not complain until someone runs `upgrade`, long after both authors believe they are
+finished.
+
+**The agents added zero lint errors.** Lint is 19 before and after the merge, which is the real
+signal: five new frontend modules and not one open-coded fetch, because they all used
+`useResourceList` as the contract requires.
+
+### Reviewed before mounting, not trusted
+
+**Global Search's model allowlist was attacked, not read.** `searchable_entities.model_class` is a
+string an admin can edit, and resolving it dynamically would be an arbitrary-import primitive. Probed
+with `os`, `app.core.config`, `builtins` and `subprocess` — **all four rejected**, `User` resolves.
+The registry is a dict literal and there is no `importlib`, `eval` or `getattr` anywhere near it.
+
+**API Credentials encrypts at rest, verified end to end.** A 34-character token becomes 140 characters
+of ciphertext, the plaintext does not appear in it, it round-trips, and two encryptions of the same
+value differ — Fernet is using a fresh IV rather than deterministic encryption, which is what stops
+"do these two providers share a key" being answerable from the ciphertext alone.
+
+> **The agent improved on my instruction, and was right to.** I asked for Fernet in a new module; it
+> found `app/core/encryption.py` — pre-existing, used for 2FA secrets, already deriving a Fernet key
+> from `SECRET_KEY` via HKDF with a distinct info string — and reused it. **No new dependency, and one
+> key-derivation path rather than two.** My probe initially reported "uses Fernet: False" because
+> `credential_service` delegates rather than importing it directly; the probe was wrong, not the code.
+
+**And it found a divergence I had not anticipated.** LeapDesk's accessor returns the **raw stored
+value** when decryption fails, so a key rotation degrades rather than crashes. That intent is right
+and the behaviour is not portable: our raw value is Fernet ciphertext, so returning it would render a
+wall of base64 into the UI as though it were the credential — and a `reveal` would hand an operator a
+string they might paste somewhere believing it was their key. It returns `None` and reports the field
+unreadable instead. Same degradation, honest about which one it is.
+
+`assert_encryption_available()` encrypts and decrypts a **constant probe** at startup and refuses to
+boot if it fails — so the failure mode is a dead service rather than a credential store quietly
+holding plaintext.
+
+Masking is right including the case that is easy to miss: a field typed `password` with
+`is_encrypted` false — secret to *show*, not worth encrypting at rest — **still masks**.
+
+### Where the merge put things
+
+`Data Access` sits under **User Management**, not System Settings, because it answers the same
+question as the two items above it: who may see whose records. The other three are System Settings.
+The sidebar is now 14 entries across three sections, every one permission-filtered on the server.
+
+## August 11, 2026 — Error Tracking and System Health shipped; the 500 handler now records what it catches
+
+**Modules 17 and 18 are done.** Four of the eight operations modules are now built
+(11, 12, 17, 18); three more are with other agents.
+
+### The fingerprint is the module
+
+`md5(exception_class | file | line | route)` — four fields, and **the message is deliberately not one
+of them**. Verified: `"User 41 not found"` and `"User 87 not found"` group as **one** row. That is
+what turns tens of thousands of log lines into a list somebody can work through, and grouping them
+apart would recreate the flood the table exists to replace.
+
+The cost is recorded rather than left to be rediscovered as a defect: two genuinely different bugs
+raised from the same line of a shared helper will merge. That is the right trade for a helper, and the
+occurrence rows keep the individual messages so the merge is visible rather than lossy.
+
+**One adaptation the reference does not need.** We take the **innermost** traceback frame, not the
+outermost. Python's `extract_tb` walks outward-in, so taking the first frame would fingerprint every
+error in a request to the same middleware entry point and collapse the entire table into one row.
+
+### The reopen rule, and the half of it that is easy to get wrong
+
+    after ignored : ignored   ← must stay
+    after muted   : muted     ← must stay
+    after resolved: open      ← regression, resolver cleared
+
+Only `resolved` reopens. `ignored` and `muted` are decisions someone made about a **known** error, and
+a new sighting is not new information about them; only `resolved` is a claim that the error stopped,
+which a sighting disproves. **One probe line was wrong, not the code** — the first version raised the
+same exception from two different source lines, which correctly produced two groups. Re-probed from an
+identical origin.
+
+**The recorder is wired into the existing 500 handler**, and three things had to be right: it opens
+**its own session** (the request's is often *why* we are there), it **never raises** (it runs inside
+the handler that exists to prevent crashes), and its context captures **user agent and referer only —
+never request input**, because bodies carry credentials and this table is readable by anyone holding
+`error-view`. Proved end to end against a real 500 through the middleware stack: recorded with path,
+method, URL and stack, and **the response body leaks nothing**.
+
+It reads `operations.errors.record_outside_production` from the Module 11 registry — the first real
+consumer of a setting, which is what the registry was built for.
+
+### System Health, and three panels that could not be ported straight
+
+**Storage is the database, not a disk.** Laravel writes uploads to `storage/app`; we have no upload
+directory at all — branding assets are `LargeBinary` columns on `app_settings`. Reporting free disk
+space would measure the container's ephemeral layer and tell nobody anything about whether *our* data
+is growing.
+
+**There is no log file to size.** Logging goes to stdout and is the container runtime's to rotate. So
+`operations.health.log_warn_mb` — seeded yesterday — is **the one setting in the registry with nothing
+reading it**. Recorded rather than quietly ignored, because the seeder's own rule is that a setting
+nothing reads is worse than no setting.
+
+> **Two panels report "not configured", and that is the feature.** A queue panel showing
+> **0 pending / 0 failed** is indistinguishable from a healthy queue and would be read as one. We run
+> no worker, so it says so. Provider reachability needs Module 7's credential chain, so it reports the
+> counts and states that nothing has been probed. **An unchecked green tick is worse than an honest
+> blank.**
+
+**A bug proved the error-handling design while I was building it.** The database panel's query used an
+unqualified `relname`, which exists on *both* `pg_class` and `pg_stat_user_tables` — an
+`AmbiguousColumn` error. Because every panel is wrapped to degrade rather than raise, the endpoint
+answered **200 with `reachable: false` and the message**, instead of a 500. A health endpoint that
+fails when the thing it monitors is unwell is useless exactly when it is needed; this one demonstrated
+that property by accident before it was ever needed on purpose.
+
+**Verified:** migrations round-trip; the fingerprint groups and separates correctly; the reopen rule
+holds for all four statuses; a live 500 is recorded with no leak; every health panel returns real data
+(10 MB database, PostgreSQL 16.13, watched-table sizes); all five of my routes serve 200. Lint
+**18 → 19**, one more of the same fetch-on-mount effect. `createBugReport` is **absent** — it opens a
+FeedbackHub item and we have no FeedbackHub, so the button would post nowhere.
+
+## August 11, 2026 — Security shipped, and the reference turned out to be hiding two of its own settings
+
+**Module 12 is done.** Not its own table — it is the `security.*` namespace of Module 11's registry,
+with its own screen because these controls need grouping and explaining in a way a generic settings
+list cannot. Four controls in three groups, plus an audit panel.
+
+**The guard is the module.** `PUT /settings/security/{id}` refuses any key outside `security.` — one
+line, reproduced from the reference, and it is what keeps two screens over one table honest. Without
+it this endpoint is a second write path to **every** setting, one that a reader of the Security
+screen's permissions would never think to check. It answers **404, not 403**: a caller with no
+business here learns the endpoint does not address that row, rather than that the row exists and is
+guarded. Verified — writing `operations.errors.record_outside_production` through the security
+endpoint returns 404.
+
+> ### 🔴 The reference has a bug here, and copying it would have hidden two security controls
+>
+> `Security/Index.tsx` builds its tabs as `[...groupNames, 'Audit']`, and its seeder registers two
+> settings in a group **called `Audit`**. So the tab list holds `"Audit"` twice with the same React
+> key, and the body renders `tab === 'Audit' ? <AuditTab/> : <settings>`. The activity panel always
+> wins.
+>
+> **`security.audit.credential_decrypt` and `security.audit.permission_changes` are unreachable in
+> LeapDesk** — including *"log every API credential decryption"*, from the only screen that edits it.
+>
+> Ours calls the tab **"Recent activity"**, which cannot collide with a group name. One word, both
+> controls reachable, contents otherwise identical. Registered as the third entry in the plan's *"where
+> LeapDesk's behaviour is a defect"* category, which requires writing the divergence down before
+> diverging.
+
+**A second bug was found by a probe rather than by reading.** The audit panel resolves causer names in
+one query; a row whose causer has since been **deleted** left `causer` null, which the schema forbids —
+it surfaced as a Pydantic error the moment a real request ran. The reference has the same hole and
+fails differently: `$a->causer ? name : 'system'` prints **"system"** for a deleted user, labelling a
+human action as automation **on the one screen where "did a person do this" is the question**. Ours
+has three states — a name, `"system"` for automation, `"deleted user"` when the account is gone.
+`causer_id` is retained on the row precisely so that distinction survives the account.
+
+**The row editor is now shared, not copied.** Configuration and Security edit the same table through
+two endpoints, so the editor is the same editor — extracted to `SettingRowEditor` with `save` injected,
+because which endpoint may write a row is an authorisation decision the *screen* makes, not a property
+of the row. Copying it would have been two places to keep five type-editors in step, which is the
+shape of every bug this session has found.
+
+**`LOG_SETTINGS` was declared**, and it already existed in the data: three call sites in
+`settings_service` wrote the bare string `"settings"` with no constant, while `LOG_AUTH` and
+`LOG_DEFAULT` had one. Settings changes now land on it rather than `default`, which is what puts them
+in the Security audit panel alongside sign-ins — who signed in, and who changed how signing in works.
+
+**Verified:** 4 controls across 3 groups, all keys namespaced; 50 audit rows from `auth` + `settings`;
+the out-of-namespace write 404s; an in-namespace write returns 200 and appears in the panel; all three
+`/settings/*` sidebar entries render; no backend tracebacks. Lint **17 → 18**, one more occurrence of
+the same fetch-on-mount effect — the two warnings now showing are in `FeatureFlagsModule`, another
+agent's work in progress, and were left alone.
+
+## August 11, 2026 — Configuration shipped: one settings registry, and the first constant moved out of code
+
+**Module 11 is done** — the shared settings registry LeapDesk's own docblock describes as *"replacing
+four parallel per-plugin implementations"*. Table, service, two endpoints, an idempotent seeder and the
+screen. **10 settings registered across 2 modules.** It unblocks Modules 12 (Security) and 13 (Feature
+Flags), both of which read this table rather than tables of their own.
+
+**Two endpoints, and deliberately no more.** There is no create and no delete: rows are declared in
+code by `setting_service.register` and reconciled by a seeder. That is what guarantees the screen
+always knows a label, a type and a group for everything it renders — a key inserted straight into the
+table would appear as an untyped, unlabelled row nobody could safely edit. A setting nothing reads is
+dead weight; code reading a setting that does not exist is a bug. Both are migration concerns.
+
+> **The property that makes this cheaper than the screens it replaces: validation comes from the row,
+> not from a rule table.** An `int` setting rejects `"abc"`, a `bool` rejects `"maybe"` — and a new
+> setting needs no new validation rule anywhere. The tempting shortcut is to validate everything as a
+> string and cast later, which throws exactly that away.
+>
+> Ours is **stricter than the reference's**, and that is the one place the port deliberately improves
+> on it. PHP's `(int)` turns `"abc"` into `0` and `(bool)` turns the string `"false"` into `true`, so
+> LeapDesk has to run a separate validation pass first and relies on it catching bad input before the
+> cast ever sees it. Merging validation and coercion into one function means there is no order to get
+> wrong. The case that matters most is `bool`: a checkbox that silently read `"false"` as **on** is the
+> kind of settings bug nobody finds until a security control is quietly off.
+
+**The idempotence guarantee was tested, not assumed.** A seeder that runs on every deploy must refresh
+a setting's *metadata* and never reset its *value* — otherwise every deploy silently reverts whatever
+an administrator has tightened. Verified end to end: default 10 → admin sets 45 → re-seed → **still
+45**, label still refreshed.
+
+**One constant has started moving out of code**, which is the point of the registry rather than a side
+effect. `security.reauth.window_minutes` is seeded at 180 because that is what
+`PASSWORD_CONFIRMATION_TIMEOUT_MINUTES` is today, so the row tells the truth about the running system
+on the day it appears. Two more — invitation expiry and max resends — are seeded at their real values
+with descriptions saying plainly that **the code still reads the constant** and they are wired up with
+Module 12. A setting that claims to control something it does not is worse than no setting.
+
+### Two things this port does differently, both forced by our stack
+
+**There is no cache, and the reason is LeapDesk's own comment.** They wrap every read in
+`Cache::rememberForever` because *"a setting that takes five minutes to take effect is worse than one
+that costs a query."* That argument runs **against** caching here: Laravel has a shared cache store, so
+one process busting a key busts it for all. We have none — an in-process dict would be per-worker, so a
+write served by worker A would leave B and C on the old value **until restart**. That is not a
+five-minute staleness window, it is an unbounded one, and it is the exact failure their comment
+rejects. Reads are one indexed query on a table of tens of rows.
+
+**Configuration is not a data table, and yesterday's spec said it was.** Building it disproved that:
+the reference renders grouped `module · group` sections with an inline editor per row. The reasons
+generalise, so the correction is recorded in the plan rather than quietly fixed — **there is no row to
+open**, **five types need five editors**, and **nobody compares settings**. A table exists to scan rows
+against each other and pick one; a settings screen is somewhere you arrive already knowing which key
+you want. `UI_PATTERNS.md` § The module CRUD contract already allows this — *parity means the same
+vocabulary, not the same feature list* — and the vocabulary is all still there: the Card shell,
+`FilterCombobox`, the house `Button` and `Badge`, the toast, the ink tokens.
+
+**Two primitives were missing and are now shared.** `Toggle` (a real `<button role="switch">`, not a
+styled div — `aria-checked` is what announces its state and a button is what makes Space work) and
+`Textarea` (a sibling of `Input`, not a `multiline` flag on it: that flag would make the forwarded ref
+type and the spread attributes conditional on a prop, which is how one component becomes two with a
+boolean between them). Booleans save the instant they are toggled, because a switch that needs a
+second click on Save reads as not having worked — it has already moved.
+
+**Verified, not asserted:** migration round-trips (`c4e1a9038d72` down and up); GET returns 10 items
+across 2 modules; a non-int is rejected **422 naming the setting** — `"Invitation expires after
+(days)" — Expected a whole number.` — because this screen edits ten rows and "invalid input" would not
+say which; unknown id 404s; the activity log records **old and new** for every change; the sidebar
+entry appears, gated on `settings-view` rather than `settings-manage` since the screen has a read-only
+mode and Branding does not. Typecheck clean. Lint **16 → 17**: one new occurrence of the fetch-on-mount
+effect that `useResourceList` and `RolesModule` already carry, not a new class of error. A second,
+avoidable one was written and removed — a prop-sync `useEffect`, replaced with React's documented
+adjust-during-render recipe, which also fixes the stale-value flash the effect version paints first.
+
+## August 11, 2026 — The reference grew by eight modules, and the CRUD shape became a written contract
+
+**LeapDesk shipped eight more modules between 10 and 11 August**, and all eight were on the owner's
+list: Configuration, Security, Feature Flags, Webhooks, API Documentation, Queue Monitor, Error
+Tracking, System Health, plus Recycle Bin. Researched from `references/LeapDesk` — routes, migrations,
+controllers and seeders — and specced into `LEAPDESK_PARITY_PLAN.md` as modules 11–18. **The module
+count went from 10 to 18.**
+
+> **The plan predicted this exactly.** Its Module 10 note, written on 2026-08-10, says *"a reference
+> that is still under active development will do this again, so treat this plan's module list as a
+> snapshot with a date, not a fixed set."* Eight modules arrived the next day. The prediction is worth
+> more than the list — this will keep happening, and the plan is structured so it can.
+
+**These eight are a different kind of module, and saying so is the useful part.** Modules 1–10 are
+business objects someone creates and edits. These are **operations surfaces**: they observe the running
+system or configure it. Six of the nine have no create form, three are read-only, and one — System
+Health — has no tables at all. **Applying the Users CRUD shape to them uncritically would produce
+exactly the empty three-dot menu the Activity Log work already rejected**, so § Modules 11–18 carries a
+table of which surface gets which affordances, and the answer is different for almost every one.
+
+**The mechanics worth copying were recorded rather than summarised.** Configuration derives each
+setting's validation from *its own declared `type`*, so an int setting rejects `"abc"` without a
+per-key rule table. Security is not a second table — it is the `security.*` namespace of the same
+registry, with a one-line guard that stops that screen writing any other key, and **every default
+reproduces current behaviour** so shipping it changes nothing until someone deliberately tightens
+something. Webhooks sign with the timestamp *inside* the HMAC string, which is what stops a captured
+payload being replayed. Error Tracking fingerprints on `class|file|line|route` and **deliberately
+excludes the message**, so two failures differing only in an interpolated id group as one bug. Recycle
+Bin validates the record type against a service allowlist, because without it `type` is an
+arbitrary-model-load primitive.
+
+**Two findings that change what we should build:**
+
+- **Queue Monitor is blocked, not pending.** We have no queue — no Celery, no RQ, no worker. Building
+  the monitor first produces a page that reads "0 jobs" forever. Its real prerequisite is whatever
+  first needs a background job, most likely outbound email, which is synchronous today and is the
+  thing most likely to make a request hang.
+- **API Documentation is a module we mostly already have.** PM-42 already commits a generated OpenAPI
+  document that CI checks for staleness. The honest version for us is a viewer over that, not a second
+  catalogue.
+
+**The Progress table was re-audited against the running system**, which it had been asking for since
+2026-08-10. Every number in it was wrong: permissions are **43**, not 0 and not 34; the migration head
+is `b3d7e02f4c19`, not `f5a3c81b7d29`; and four modules marked "not started" have shipped code. Ten
+routers exist. **What the audit deliberately does not claim** is that those modules satisfy their
+specs — it establishes that code exists, not that the gap lists are closed, and it says so.
+
+> ### `UI_PATTERNS.md` now carries **The module CRUD contract**
+>
+> The owner's instruction — *"every module CRUD should follow the exact structure and UI/UX of the
+> Users index"* — is now a mandatory section rather than a thing four files happen to do. It names
+> every shared piece and what it owns, states that create/edit/view are modals while the routes stay
+> as the deep-linkable version, and fixes the ink and font-size rules.
+>
+> **Its opening argument is the seven bugs.** Bringing four modules onto these pieces uncovered a `#`
+> column wrong in two opposite directions, dead bulk-action buttons, a sort control wired to nothing, a
+> delete button with no hover state, and a dead permission rule — **none visible without clicking to
+> page 2 or selecting a row.** Four careful copies are four chances to get it wrong.
+>
+> **And the line most likely to be misapplied is stated as the contract's own limit:** *parity means
+> the same vocabulary, not the same feature list.* Every module gets the same table, filters, columns,
+> dialogs and tokens. Which **actions** exist is decided by the domain and the API, never by symmetry
+> with Users — with the three current deviations named, and a rule that any new one carries its reason
+> in a comment at the deviation rather than in a plan file someone has to find.
+
+Verified: no broken anchors or relative links in any of the three documents, no orphaned table
+separators, 82 / 49 / 23 headings resolve.
+
+## August 11, 2026 — Roles, Invitations and Activity brought onto the Users structure
+
+**All three index pages now sit on the same shells, the same hooks, the same column factories and the
+same modals as Users**, per `MODULE_PARITY_PLAN.md`. Lint went **18 → 16 errors, 0 warnings**;
+typecheck clean; all six affected routes serve 200.
+
+**Every module's create, edit and view is a dialog now**, matching Users. `RoleForm`, `RoleShow` and
+`InvitationForm` gained the same `asModal` / `onDone` contract `UserForm` has carried since
+2026-08-10 — one component, two shells, so the schema, the fetch and the payload are shared and only
+the chrome differs. **The `/dashboard/roles/new`, `/roles/:id/edit` and `/invitations/new` routes all
+still exist and still render the full-page version**: they are the deep-linkable, bookmarkable form
+and the target of links from elsewhere. The modal is the path from the table, where losing your
+filters and scroll position to change one field is the thing being fixed.
+
+`RoleForm` also finally got its section cards — the flat column `DAILY_CHANGES.md` promised to split
+on 2026-08-10 and did not. Three sections, matching how the form is read: what the role **is**, what
+it **sees**, what it **may do**.
+
+> **Four more bugs surfaced, all in code the parity pass forced someone to read.**
+>
+> **1. Roles still had a hand-rolled red button.** `DeleteRoleModal` carried `bg-tone-danger` with
+> `hover:bg-tone-danger` — the same colour, so **the most destructive control on the page was the one
+> with no hover state at all.** That is the exact defect the 2026-08-10 pass set out to eliminate, and
+> it survived because it was a bare `<button>` rather than a `Button`, so nothing that pass grepped
+> for matched it. It is `DeleteDialog` now.
+>
+> **2. `RoleShow`'s Edit link was a hand-copied class string** at its own size, drifting from every
+> primary button beside it — the same defect fixed on `UserShow` in that pass and missed here. It
+> wears `buttonClasses()`.
+>
+> **3. Roles had dead permission logic.** It computed
+> `editable = … && (!row.is_protected || isSuperAdmin)` and applied it as
+> `.filter(a => a.label !== "Edit permissions" || editable || true)`. `|| true` makes the predicate
+> constant, so the variable was dead and **every caller saw "Edit permissions" regardless**. Restored
+> as the label rule it was evidently meant to be, rather than deleted.
+>
+> **4. Activity's `When` header was a control that could not do anything.** It declared
+> `sortKey: "created_at"`, which drew a sort arrow and accepted a click — but the endpoint takes no
+> sort parameter at all, deliberately: `activity_service.list_entries` says so, because rows written
+> in one transaction share a timestamp and only `id` orders stably. Removed rather than faked. A real
+> oldest-first toggle is an API change, and it is in `MODULE_PARITY_PLAN.md` § 3 rather than smuggled
+> into a UI pass.
+
+**Where the three deliberately still differ from Users, and why.** Parity means the same vocabulary,
+not the same feature list:
+
+| Module | Difference | Reason |
+|---|---|---|
+| Roles | Keeps client-side filtering and paging | `/api/roles` returns six rows unpaged. `useResourceList` refetches on every dep change — a network round trip per keystroke |
+| Activity | No Actions column, no selection, no bulk bar | There is no write route. A delete affordance on an audit trail would be the most damaging button in the product |
+| Invitations | Cancel is not `DeleteDialog` | Cancelling is not deleting. The row stays and stops working; "delete" would imply it leaves the table, and it does not |
+
+**Two columns were added while the files were open**, both for data already on the wire and never
+shown: Invitations gained **Last sent** — the API has sorted on it since the endpoint landed, and it
+is the column you want before chasing someone again — and Roles gained **Created**.
+
+**One deliberate improvement over `UserForm`, worth copying back.** Its loading skeleton is returned
+bare even in modal mode, so it renders wherever the module mounts its children — under the table,
+not in a dialog. The three converted forms wrap the skeleton in the modal instead.
+
+**Still outstanding:** `dark:text-gray-300` remains as dark-mode body ink in Activity and Invitations.
+**No token holds that value** — `night` has body/card/border/muted only — so fixing it needs a new one
+in `tailwind.config.ts`, a Protected File. Same shape as the sticky-header shade already waiting on
+the owner in `PLANNING.md` § 3.1.
+
+> **None of this has been rendered in a browser.** Four index pages now share one table, three forms
+> now share one dialog shell, and a mistake in either is a mistake in every one of them. **This is the
+> point at which looking is worth more than any further reasoning.**
+
+## August 11, 2026 — The Users module became the template, and three bugs fell out of the copies
+
+**Everything in the Users index that is not about users now lives in a shared piece**, so the next
+module writes its API call, its columns and its actions — and nothing else.
+
+| Concern | Now lives in |
+|---|---|
+| Page shell — header, filter row, table, paging | `ResourceIndex` *(existed)* |
+| Filter/sort/page/selection state, URL round-trip | `useResourceQuery` *(existed)* |
+| Fetching, loading, error, refetch, row patching | **`useResourceList`** |
+| Per-row write: busy row, toast, apply result | **`useRowAction`** |
+| Bulk write: skipped reasons, clear selection | **`useBulkAction`** |
+| Which dialog is open, and on which row | **`useModalState`** |
+| `#`, `Actions`, badge and date columns | **`columns.tsx`** |
+| Delete confirmation and its wording | **`DeleteDialog`** |
+| The search field's magnifier | `FilterBar`, by default |
+
+`UsersModule` went from 658 lines to 540, and about 35 of those are a new docblock listing the above
+— so the code itself is roughly 150 lines shorter.
+
+> **The case for doing this is not that the code was long. It is that four copies of a thing are four
+> chances to get it subtly wrong, and no amount of care catches it.** Extracting these turned up three
+> live bugs, none of which is visible without clicking to page 2 or selecting a row.
+
+**1. The `#` column was wrong on two of the three pages that had one — in opposite directions.** Our
+`DataTable` passes each cell the row's absolute position; the vendor table passes its position within
+the page. Users, on the vendor table, rendered `index + 1` and **restarted its numbering at 1 on every
+page**. Invitations, on ours, added the page offset to an index that already carried it and **jumped
+to 51 at the top of page 2**. Roles was correct by luck of which table it used. The contract is now
+stated on `Column.cell` — the index is absolute — the adapter rebases the vendor's to match, and one
+`numberColumn()` serves all three.
+
+**2. Bulk actions on the Users page did nothing.** The module kept its own `useState<Set<string>>`
+for the selection and read it in the bulk handler, but `ResourceIndex` wires the table to
+`useResourceQuery`'s selection. Nothing ever wrote to the local copy, so every bulk call hit its
+`ids.length === 0` guard and returned — **Set Active, Set Inactive and Delete Selected have been dead
+buttons for as long as they have existed**, silently, with no error to notice. Two pieces of state
+meaning one thing is how that happens.
+
+**3. The sort arrows and the column picker**, both recorded in their own entries below, were the same
+shape of problem: a control that existed on one table and not the other.
+
+**Two things were deliberately *not* extracted.** The roles lookup in `UsersModule` stays a plain
+`useEffect` — it is not paged, not filtered, and its failure must be silent rather than blocking the
+page, so `useResourceList`'s rules would be wrong for it. And `ConfirmDialog` was left alone;
+`DeleteDialog` sits on top of it supplying only the wording, because the mechanics were already right
+and it is the *copy* that had drifted into four spellings of one sentence.
+
+One lint error was introduced and removed on the way: `useCallback` cannot take a spread dependency
+array under the React Compiler rule, so `useResourceList` compares its deps by value instead — which
+it needed anyway, since `q.applied` is a fresh object every render and identity comparison would have
+refetched in a loop. Lint is back at the same 18 pre-existing errors, and `UsersModule` is no longer
+among them: its one error moved into the hook, where it is one occurrence instead of the four it would
+have become.
+
+Roles and Invitations were migrated to `numberColumn()` as well — a two-line change each that fixes
+Invitations' paging bug. Their fetch blocks and modal state are untouched and still open-coded; they
+can move to the hooks whenever they are next opened, and nothing forces it.
+
+## August 11, 2026 — Sorting worked on the server and had no control in the UI
+
+**The Users table's column headers looked clickable and did nothing.** No sort arrows, no reaction —
+on a table whose API has supported seven sort keys the whole time.
+
+**One line caused it.** The vendor table gates every sort branch on
+`column.sortable && onSort && column.accessorKey` — the header icon, the direction icon, and the
+click handler, all three. The adapter that maps our columns into the vendor's shape was setting
+`sortable` and **never setting `accessorKey`**, so all three were permanently false. The header kept
+its `cursor-pointer`, which is what made it read as broken rather than as read-only.
+
+The field now carries the **sort key**, not the column id, and that distinction is the second half of
+the fix. The vendor hands the same value to `onSort` *and* compares it against `sortBy` to decide
+which way to draw the arrow — and `sortBy` is the server's key (`last_login_at`), not ours
+(`last_login`). Anything else would have left every column drawing the neutral both-ways chevron even
+while it was the one being sorted on. The adapter's own handler had the matching bug waiting: it
+looked its argument up by column id, which would have found nothing and swallowed the click.
+
+Cross-checked rather than assumed: all six keys the UI declares are in the service's
+`ListSpec.sortable` map. The map has a seventh, `last_name`, with no column to attach to — the User
+column shows a full name and sorts on `first_name`.
+
+> **The header is a real button now, not a `<th>` with an `onClick`.** Upstream's version cannot be
+> reached with a keyboard and announces nothing to a screen reader; it went unnoticed precisely
+> because these headers never did anything. The cell carries `aria-sort`, the button carries the
+> click and a focus ring. The click moved onto the button rather than being added to it — a click
+> inside a button bubbles to its cell, so keeping both handlers would have sorted twice and landed
+> back where it started.
+
+Also caught before it shipped: the first version styled the button `w-[calc(100%+0.5rem)]`, which is
+invalid twice over — CSS requires whitespace around `+` inside `calc()`, and Tailwind emitted no rule
+at all for it. Verified by grepping the served stylesheet for every class the change introduces,
+which is the only way that class of mistake shows up.
+
+## August 11, 2026 — The Users index had no column picker, because two tables disagreed about who owns it
+
+**The `Cols` button was missing from the Users filter row**, next to Reset. Not misplaced — absent.
+
+The cause is worth recording because it is the kind of gap nothing catches. Users is the one module
+on the reference implementation's table, reached through the `VendorDataTable` adapter. That adapter
+passes `hideColumnToggle` to switch off the vendor's own column dropdown — which is right, since the
+vendor renders it as a lone button in a row of its own, styled to match nothing else here — **and
+then supplied no replacement.** Our own `DataTable` had the picker built into it inline, so every
+other index page had one and the only page anybody was looking at did not.
+
+**The picker is now one component used by both tables**, `ColumnPicker`. Copying the markup into the
+second table would have created two things to keep in step; the tables keep only their own `hidden`
+set, which is the part that legitimately differs.
+
+The hidden columns are filtered out **before** they reach the vendor rather than by driving its
+internal visibility state from outside. That state is seeded once from the first `columns` array it
+receives, and since nothing is hidden on the first render every id is seeded visible and stays that
+way — so filtering upstream simply shortens the list it renders, and the vendor file stays close to
+upstream, which is the entire point of having an adapter.
+
+Two smaller things fixed in passing. The picker now renders in the **loading and error** branches
+too, which return early — previously the row gained a button the moment data arrived, shifting the
+controls under the cursor mid-fetch. And the popover's rows hovered to `bg-gray-50`, a grey that
+`UI_PATTERNS.md` § The Signed-In Chrome Is Green rules out; they hover to `brand/10` now like
+everything else.
+
+## August 11, 2026 — Toasts moved to the top-right corner and were rebuilt from LeapDesk's
+
+**Ported from LeapDesk's custom toast**, read from `LeapReview360/resources/js/components/ui/toast.tsx`
+and `components/toast-container.tsx` at the owner's request. What changed:
+
+| | Before | Now |
+|---|---|---|
+| Position | bottom-right | **top-right** |
+| Stack | one at a time — a second message erased the first | up to three, oldest dropped |
+| Panel | tinted border in the tone's colour | dark card, tone carried by an icon badge |
+| Copy | one line | bold tone title over the message |
+| Motion | appeared and vanished | slides in and out, 300ms |
+| Duration | 3.5s | 5s, **paused while hovered** |
+
+**The panel is dark in both light and dark mode, and that is deliberate.** LeapDesk hardcodes a
+`zinc-900`; a literal copy would trip the brand-colour guard that keeps hand-painted colours out, so
+it is `night-card` on `night-border` — the same relationship in our palette. It does not flip with
+the theme because **a transient overlay that looks identical everywhere is easier to recognise than
+one that camouflages itself against whatever page it lands on.**
+
+The badge fills had to be chosen for that dark panel rather than copied: `tone-success` is #1b4c43,
+a dark teal that all but disappears on #111727, and `tailwind.config.ts` says outright that brand
+icons on a dark surface must not use the base brand — it is 2.83:1 there. So success uses
+`brand-on-dark`, error `tone-danger`, and notice `tone-info`, which is grey rather than blue because
+there is no blue in this palette to reach for.
+
+> **The rule that could not be copied, because LeapDesk has no equivalent: a toast carrying `details`
+> still does not auto-dismiss.** Bulk actions report what they skipped and why. Auto-hiding that after
+> five seconds turns a partial success into an apparent total one — the exact failure the API's
+> `skipped_reasons` field exists to prevent.
+
+Hover-to-pause is ours too. A five-second toast with a sentence and three bullets in it can outrun
+the person reading it, and the cost of getting that wrong is a message nobody ever saw. The timer
+restarts rather than resumes, which is the forgiving direction to round.
+
+**One real bug was written and caught before it shipped.** The first version passed
+`onDismiss={() => onDismiss(toast.id)}` from the container, which mints a new function on every
+render of whichever module owns the stack — and those re-render constantly. That changes the
+identity of the close callback, which re-runs the auto-dismiss effect, which restarts the five
+seconds. **A toast raised on a busy screen would simply never have left.** The id is applied inside
+the item now, against the hook's stable `dismiss`.
+
+Stacking meant the hook returns `toasts` rather than `toast` and `dismiss` takes an id. Four call
+sites updated — Users, Roles, Invitations, Role Matrix.
+
+Verified: every token and arbitrary-value class the toast uses appears in the served stylesheet, the
+users page compiles and renders clean, typecheck passes, lint reports the same 18 pre-existing errors.
+
+## August 11, 2026 — Dialogs grow with the screen, and the user record stopped being mostly scrollbar
+
+**Every modal was capped at one width regardless of the screen it opened on.** A form dialog was
+672px whether the display was 1366px or 2560px, which left most of a wide monitor unused and pushed
+the content into a scroll it did not need. Both dialog shells now step the cap up twice:
+
+| size | ≤1279px | ≥1280px | ≥1536px |
+|---|---|---|---|
+| `md` | 448 | 448 | 448 |
+| `lg` | 672 | 768 | 896 |
+| `xl` | 896 | 1024 | 1152 |
+
+**`md` deliberately does not grow, and that is the interesting half of the change.** It is the
+confirmation size — one sentence and two buttons, which is what Delete User and the status toggle
+use. Stretching that to 900px puts the question at the far left and the button that answers it at the
+far right with nothing in between: **harder to read, not easier.** Width is only worth taking when
+there is content to fill it.
+
+The steps also stop at 896px for a form rather than continuing, because past roughly that width a
+two-column form's fields are already wider than anything anyone types into them. **The way to use
+more width is more columns, not longer inputs.**
+
+> **Which is exactly what the View User dialog now does.** It carries four cards and nineteen fields
+> against a body capped at 60vh, so at 672px it was mostly scrollbar. It moved up to the `xl` size
+> *and* its cards pair into two columns — so the extra width makes the dialog **shorter** rather than
+> wider, and the cards stay around 340–540px, which is the range a label-left/value-right row reads
+> well in. Widening it without the second column would have been worse than leaving it alone: every
+> field would have had its label and its value at opposite ends of a 1100px row.
+
+Two details worth recording because both are easy to get wrong. The card grid uses `items-start`,
+without which the three-field Contact card grows a tall empty tail to match the eight-field Account
+card beside it — a grid item stretches to its row height by default. And the grid's breakpoint is
+tied to the width table above rather than picked by eye: it pairs from 768px because that is the
+first width at which two cards land inside the readable band and stay there at every step after.
+
+The full-page version of the same record is untouched — it already sits in a two-thirds column beside
+a sticky sidebar and is the right width.
+
+Verified: the new caps appear in the 1280px and 1536px media queries in the served stylesheet, the
+users page renders, typecheck passes, and lint reports the same 18 pre-existing errors.
+
+## August 10, 2026 — Every page specified: 14 public, 13 partner, 13 staff — each with what it must NOT have
+
+**`PARTNER_DIRECTORY_PLAN.md` § 20 specifies the frontend page by page** — purpose, data source,
+what it must have in priority order, **what it must not have**, its empty state, its SEO, and when it
+is done. The "must not" column carries as much weight as the "must": most of the ways a directory
+looks untrustworthy are things someone added, not things they forgot.
+
+**Two questions had to be settled before a single page could be specified, and both were live
+ambiguities in our own standards.**
+
+The first: `NEXTJS_STANDARDS.md` § 2 says *"don't fetch API data in a server component"*, which would
+make the whole public surface client-rendered and therefore invisible to search. That rule is about
+**authenticated** data — the `httpOnly` cookie cannot be forwarded server-side. **Public data has no
+cookie**, and the mechanism already exists: `SERVER_API_BASE_URL` in `lib/utils/constants.ts`, which
+`lib/branding.ts` has been using since August. So public pages render on the server via
+`INTERNAL_API_URL`, authenticated pages fetch from the client, and the section says so explicitly
+along with the warning that getting the two round the wrong way fails *silently*.
+
+The second: `UI_PATTERNS.md` makes the Index/Form/Show contract mandatory for **every module**. Those
+shells are the signed-in admin chrome — full-height flex, dense tables, bulk actions. **They are wrong
+for a public marketing surface**, and reusing `ResourceIndex` for a category page is the single most
+likely way this ends up looking like a CRM. The contract now explicitly governs `(app)`; the new
+`(public)` group gets its own shells.
+
+**Some specifics worth pulling out.** The trust bar on the home page is built from § 18.1's real
+figures — since 2006, the five ISO certifications, 20,000+ customers, 19 locations — and deliberately
+excludes the two numbers § 18.1 flags as self-contradictory. Search result pages are `noindex,follow`,
+always, because they are near-duplicate content. The enquiry status page is a **capability URL**
+reachable by its unguessable reference alone, excluded from the sitemap. And a category below § 8's
+indexing threshold renders a "still building this" state rather than a thin page — **a thin category
+page is worse than none, because it is what a buyer judges the whole directory by.**
+
+**The partner profile page carries the section's sharpest tension.** § 9.1 commitment 2 says we will
+not compete with a partner for their own company name — so where a partner has their own website, the
+profile emits a canonical pointing at it. That is a real cost in SEO terms, and it is the price of the
+commitment. The alternative, stated so it is a choice rather than a drift, is `noindex` on profiles
+with no listings.
+
+**Also recorded honestly:** `AGENTS.md` instructs agents to read `node_modules/next/dist/docs/` before
+writing Next.js code. **That directory does not exist** — checked on the host and in the container.
+The version is 14.2.35. So § 20 says to verify each API against the running app rather than assume,
+and names the three the spec depends on: `sitemap.ts` / `robots.ts` as file conventions,
+`generateMetadata`, and `generateStaticParams`.
+
+> **§ 20.7 lists the five ways this surface most plausibly fails**, because each is easy and each is
+> judged: it looks like a CRM, thin category pages get indexed, it ships light-mode only (`text-brand`
+> on a dark card is 2.83:1 and fails AA), empty states look like bugs, and we outrank our own partners.
+
+**The authenticated surfaces were then specified to the same depth** — 13 partner pages and 13 staff
+pages, each with its purpose, what it must have and what it must not. They needed less prose than the
+public side because `UI_PATTERNS.md`'s Index/Form/Show shells already decide the layout, but they
+needed three structural decisions written down before anyone starts.
+
+**The first is that there is one route tree, not two.** `/dashboard/listings` serves a partner *and* a
+staff member, and `apply_scope` decides what is in it. Building `/partner/listings` alongside
+`/admin/listings` would mean two components, two sets of permission checks, and two places to forget
+one — and the scoping module exists precisely so the route does not have to know who is asking. The
+same holds for enquiries and reviews.
+
+**The second is that the sidebar is already solved and must not be re-solved in React.**
+`navigation_service.build_sections()` assembles every item and filters by permission on the server, so
+the frontend renders what it receives. Adding a module means adding an item there, not writing
+`{can('listing-view') && <NavLink/>}` in a component — with the caveat that the nav is a *visibility*
+filter, never a guard.
+
+**The third is that a partner user is not a second-class staff user.** Same shells, same density, same
+keyboard behaviour. The difference is scope and vocabulary — "My listings" against "All listings" —
+never a cut-down interface.
+
+**Two screens got their own specification** because the shells do not decide them. The listing
+authoring form is the one screen the entire supply side depends on: four sections and no more, price
+fields that appear only when the pricing model is not `ON_REQUEST`, a live preview of the public card,
+autosave to draft, and an explicit warning that editing a published listing returns it to review. And
+the enquiry inbox, which must not be treated as one more CRUD list — it is a thread with an unread
+state and a response clock, and marking read on hover would corrupt `first_viewed_at`, which every
+measure in § 16 is computed from.
+
+**§ 20.6.4 lists what a partner must never reach**, because each line is one forgotten guard away:
+another organisation's anything (404, never 403), the internal columns on their own record, their own
+status and verification and listing flags, the moderation queue, and staff-internal enquiry messages.
+On the staff side the equivalent rule is that there is **no reply-as-partner control** — it would
+corrupt the response-time data the whole trust system runs on.
+
+## August 10, 2026 — The plan became executable: §19 is a contract an agent can build from without asking
+
+**A specification that needs a conversation to interpret is not a specification.**
+`PARTNER_DIRECTORY_PLAN.md` § 19 is now the execution contract — reading order, non-negotiable rules,
+exact internal API signatures, file manifest, the `Principal` and `scoping.py` specs, permissions and
+routes for every remaining module, the state machines, an acceptance check, and **a default for every
+open decision so the work never stops to ask.**
+
+**Auditing the file for what would actually confuse a builder was the useful half**, and the worst
+offender was a contradiction we had created ourselves. § 7 still instructed the reader to design
+scoping around `Optional[User]`; § 7.1 superseded it three sections later. An agent reading top to
+bottom would have implemented the wrong thing and been correct to. § 7 now carries a stop sign
+pointing at § 19.6, keeping only the part that survives — the anonymous branch must be the most
+restrictive, and its test must exist before the first listing row does.
+
+**The internal-API section exists because of a mistake made in this repo today.** The first
+`partner_service` called `activity_service.log()`, which does not exist — the real API is `record()`,
+`record_created()`, `record_deleted()` and `record_change()`, all keyword-only. That cost a rewrite.
+§ 19.3 now lists every signature a service will need, verified against source, plus the two traps this
+codebase sets: `activity_service` commits on its own and must never be wrapped in `unit_of_work`, and
+`user.permission_names` must never be read directly because it skips the super-admin bypass.
+
+**The `Principal` type is specified rather than deferred.** § 7.1 had raised it as a decision blocking
+phase 2; § 19.5 settles the technical shape — a frozen dataclass with three kinds, `anonymous()`
+constructible with no arguments so the safe case is the easy one to write, and `has_admin_access` as a
+plain field that is never re-derived from a user that may not exist. § 19.6 gives `scoping.py`'s
+matrix in evaluation order, with the row most likely to be got wrong called out: a staff user with no
+admin access and no partner must match **nothing**, because scoping them on `partner_id` would match
+every row.
+
+**Every open decision now has a build-this-meanwhile answer.** Fan-out builds `enquiry_recipients`
+with one row. Prices default to `ON_REQUEST`. The taxonomy seeds without the two categories Leapswitch
+competes in. The § 15.2b ordering proposal stays unadopted unless the owner says otherwise. **An open
+question in § 12 is no longer a reason to halt** — and where something genuinely cannot be defaulted,
+the instruction is to leave a `TODO` naming the decision and say so, because silence about a gap is
+worse than the gap.
+
+**Also specified because they would otherwise be invented differently each time:** slug generation and
+the rule that slugs are never reused or edited, the two-level category limit as a service check rather
+than a schema one, who maintains `search_vector` and the denormalised counters, that publishing must
+re-check the tier's `max_listings`, and that editing a published listing returns it to review —
+because moderation means nothing if a partner can publish and then rewrite.
+
+## August 10, 2026 — Visited the whole product estate, and found the directory's scope written on our own pricing page
+
+**The first pass at § 18 read four pages and inferred the rest of the product list from navigation.
+That is not research, and the gap showed.** Going through the estate properly — every product page on
+leapswitch.com plus the sibling brands — corrected several things and turned up the single most useful
+sentence in the whole exercise.
+
+**We are three storefronts, not one.** **CloudPe** (cloudpe.com) is a separate IaaS brand of Leapswitch
+with **its own datacenter footprint** — Navi Mumbai live, New Delhi in March 2026, Chennai announced —
+positioned directly against the hyperscalers at *"60% less than AWS"*. **CloudJiffy** (cloudjiffy.com)
+is a PaaS with its own app marketplace, owned by Leapswitch Pvt Ltd **and a US entity, Leapswitch
+Networks, Inc.**, which had not been recorded anywhere. And **Lacehost is gone** — `lacehost.com` now
+301-redirects to leapswitch.com, so the affiliate page that still names it is stale. That matters for
+the directory because it means **three demand pools**, not one: CloudPe's audience of startups,
+developers and GPU users maps onto the consulting categories far better than the legacy hosting base
+does.
+
+**The real catalogue, with real prices, is now in the plan** — shared hosting from ₹119, reseller from
+₹275, VPS ₹700 self-managed to ₹2,499 managed, bare metal ₹16,420 to ₹93,974 on EPYC up to 256 cores
+and 2TB RAM, GPUs from an A4000 at ₹16,523 to an H100 at ₹274,000, colocation ₹4,000 to ₹40,000 across
+1U to full rack, CloudPe VMs at ₹930 and S3 at ₹3.10/GB with zero egress. Those numbers matter because
+a directory's price facets have to be plausible next to what the host itself charges.
+
+**The finding worth the whole exercise is one sentence at the bottom of the Managed Services page:**
+*"Any additional requests or services outside this scope will be handled separately and billed as
+one-time engagements."* That is the directory's scope, stated by us, in public, already. **A category
+belongs in the taxonomy if it is work a Leapswitch customer needs that falls outside that catalogue** —
+which is a far better filter than intuition, and one that whoever runs the step 9 interviews can apply
+without any product knowledge.
+
+**A second finding reframes the licensing category.** We resell other people's products ourselves:
+business email is SmarterMail, Google Workspace and Microsoft 365 resold, and the stacks run on cPanel,
+Plesk, DirectAdmin, Virtualmin, Acronis, HAProxy and Nginx. Before this, "Licensing & Control Panels"
+looked like filler in the proposed taxonomy. It is not — **it is the same shape of business we are
+already in, one layer up.**
+
+**Corrections to the first pass:** the managed services tiers are **Self-Managed / Semi-Managed /
+Fully-Managed**, not the two I had; **APM** is in the catalogue and was missing; and the geography is
+not uniform — bare metal publishes to seven locations, VPS to eight, and CloudPe to its own three. If
+service areas are ever pre-seeded, they should come from the product a partner actually resells rather
+than the company-wide list.
+
+## August 10, 2026 — Researched our own company, and found that "partner" already means three things here
+
+**The directory's categories are defined relative to what Leapswitch sells, so the taxonomy could not
+be designed without first writing down what that is.** § 18 of `PARTNER_DIRECTORY_PLAN.md` now does,
+from leapswitch.com and its About, Affiliate and Reseller Hosting pages, cross-checked against the
+marketing site source already on this machine.
+
+**The company, as stated:** operating since 2006, Pune head office with Mumbai and Nashik offices,
+**19 datacenter locations across 3 continents and 10 countries**, 20,000+ customers from 110+
+countries, 3,000+ nodes, 80 Gbps, 99.99% uptime, and a certification stack — ISO/IEC 27001:2022,
+27017, 27018, ISO 20000-1 and ISO 9001 — that is itself a trust asset the directory can borrow. The
+product line runs from CloudPe IaaS and CloudJiffy PaaS through bare metal, VPS, shared and reseller
+hosting, to email, SSL, domains, backup and colocation.
+
+**The finding that matters is that "partner" is already an overloaded word at Leapswitch.** There is
+an **affiliate** programme paying tiered commission by monthly volume — 5% to 12.5% depending on
+product and count — and a **reseller** programme where partners buy hosting wholesale, white-label it
+behind their own nameservers, and resell it, with a tiered discount structure on dedicated servers.
+The directory partner, who supplies *their own* services, is a **third** thing.
+
+**That reframes something the plan had been treating as hypothetical.** § 0 shelved
+`MARKETPLACE_DOMAIN_PLAN.md`'s reseller-quoting model as "a different business". It is not
+hypothetical at all — it is a **live Leapswitch programme with real commission and discount tiers**.
+Shelving it for v1 is still right, because it is not what the brief asked for, but if it is ever
+revived there is an existing structure to model against rather than a blank page. And the three
+populations overlap: the reseller programme's stated audience is people starting their own hosting
+business, which is plausibly a large share of the 300+ partners the owner counted.
+
+**Two new decisions, recorded as #11 and #12.** Which partner population is actually listable — all
+partners, resellers only, or a vetted subset — because it changes the 300+ figure that § 0.1 settled
+and therefore the shape of the whole thing. And whether we list categories **Leapswitch competes in**:
+the affiliate page states we provide website design, development and SEO ourselves, which puts three
+proposed categories in direct conflict with our own service lines. The recommendation is that the host
+convenes the market and does not trade in it, which is the posture every comparable takes.
+
+**A 15-category starting taxonomy**, grounded in the gap between what Leapswitch sells and what a
+customer still needs — managed infrastructure and NOC, cloud migration and DevOps, security and
+compliance, backup and DR, database services, and so on. The five strongest sit directly on top of
+what we already sell, and their vocabulary is lifted from Leapswitch's own Managed Services catalogue,
+which is the words we already use with paying customers. **It does not replace the buyer interviews in
+step 9** — it means that interview starts from a draft instead of a blank page.
+
+**One observation that partially weakens a borrowed assumption.** Justdial's atomic search unit is
+category × city because a plumber has to be local. A Kubernetes consultant does not. If most listings
+turn out to be remote-capable, city faceting is a secondary filter rather than the primary axis — and
+that should be measured before the facet UI is designed rather than assumed from the reference.
+
+> **Also noted: the site disagrees with itself.** The home page says "19 locations world-wide" while
+> listing 12; About says 99.99% uptime and the home page says 99.9%; the affiliate page still claims
+> 12 locations in 5 countries. Flagged in § 18.1 so the directory's own copy does not repeat a number
+> without confirming it with marketing.
+
+## August 10, 2026 — The plan became implementable: every table, every column, every foreign key
+
+**`PARTNER_DIRECTORY_PLAN.md` § 17 is a full data dictionary**, written so an agent — or a developer —
+can build from the file without inferring a schema from prose. Twelve tables specified column by
+column with exact names, types, nullability and defaults; **24 foreign keys**, each with its
+`ON DELETE` and the reason for it; every index, unique constraint, check constraint and Postgres enum
+type. § 6 still explains *why* the domain is shaped this way and now says plainly that § 17 is what
+you build from.
+
+**The two built tables are documented from the database, not from the model file**, and the difference
+matters: a data dictionary copied from source drifts the moment a migration is hand-edited. The
+`partners` and `partner_tiers` specs were diffed against `information_schema.columns` — **39 columns
+in the database, 39 documented, nothing missing in either direction** — and § 17.6 now carries the
+exact query to re-run before trusting the section again.
+
+**Every column gets its own row.** The first draft grouped related ones (`logo_path` · `banner_path`,
+`city` · `state` · `country`) because it reads more compactly. That is worse for the stated purpose:
+the file is meant to be followed mechanically, and a grouped row makes a column list something you
+have to parse rather than read. Six grouped rows were split; the verification above only passed once
+they were.
+
+**The foreign-key work turned up two decisions worth stating rather than defaulting.** `enquiries` and
+`enquiry_recipients` point at `partners` with **RESTRICT, not CASCADE** — a partner carrying enquiries
+cannot be deleted at all, because § 16 makes enquiries the measure of the whole platform and a cascade
+there lets one admin action erase the evidence. And `service_categories.parent_id` is RESTRICT so
+deleting a parent category cannot silently orphan its children; the staff member has to move them
+first.
+
+**One constraint the prose implied but no schema would have enforced.** § 6.3 says a service area
+belongs to "`partner_id` *or* `listing_id`". Written as two nullable columns that is a comment, not a
+rule — so § 17 specifies
+`CheckConstraint("(partner_id IS NULL) <> (listing_id IS NULL)")`, which makes "exactly one" something
+the database guarantees rather than something every writer remembers.
+
+> **Specifications, not decisions.** § 17.6 says so explicitly: a column list does not settle § 12.
+> Decision #5 still shapes what goes in `enquiry_recipients`, #6 whether `price_from` is ever
+> populated, #9 how often `buyer_user_id` is non-NULL. And nothing here should be migrated ahead of
+> its phase — § 15 remains the order, and everything below `service_categories` needs scoping first.
+
+## August 10, 2026 — The Justdial research was pushed into the plan, and it found a column nothing enforces
+
+**Research that changes nothing is a reading list.** § 2.1's findings are now amendments to the plan
+itself — six sections changed, two added, and one genuine build gap surfaced that nobody had noticed.
+
+**Five commitments we bind ourselves to, published to partners alongside the ranking rule (§ 9.1).**
+Each is a practice that made Justdial's own listed businesses hostile to it, and the asymmetry is the
+argument: Justdial's suppliers are strangers to it, ours are 300+ organisations we hold commercial
+relationships with who talk to each other. The load-bearing one is **a lead that named you is yours** —
+never resold, never re-broadcast. The second is that we will not compete with a partner for their own
+company name, which has a concrete technical form: canonical the profile at the partner's own site
+where they have one, rather than outranking them for their own brand.
+
+**That commitment settles a question the plan had left open.** Decision #5 was "one enquiry to one
+partner, or fan out to several?" and it now has a shape rather than a toss-up: **support broadcast
+requirements, never redistribute a named enquiry.** The two `source` values were always two different
+products and the plan now says so — a `LISTING` enquiry belongs to the partner it named, while a
+`CATEGORY_BROADCAST` takes nothing from anyone because the buyer never named a partner. IndiaMART's
+core loop is the second one, and it is the larger B2B marketplace in the same country by a wide
+margin, so the expectation has shifted: broadcast may be the main path and the listing enquiry the
+narrower case.
+
+**A definition of success, which the plan did not have (§ 16).** One number — **enquiries per listed
+partner per month**, and the share answered within the SLA — with a per-phase ladder of leading
+indicators beneath it, all computable from tables already designed. Two numbers are explicitly marked
+as untrustworthy: page views, which rise with any spend and say nothing about match, and total
+listings, a supply-side vanity metric under which 300 partners publishing one stale listing each
+outscores 60 publishing four current ones. The section also states the uncomfortable part plainly:
+**every measure reads zero until phase 6**, because the enquiry is the product.
+
+**The SEO surface was re-scoped from volume to taxonomy (§ 8).** Justdial's transferable engine was
+millions of long-tail pages; at 300 partners we cannot have those and must not fake them. The honest
+surface is `category × city` over a real taxonomy — hundreds of pages that answer a question — with
+**indexing thresholds** so a category page with one partner on it is generated but `noindex`ed. A thin
+page is worse than no page, because it is what a buyer judges the whole directory by.
+
+**One real gap: `partner_tiers.max_listings` and `featured_slots` are columns that nothing checks.** A
+tier is currently a label. That was invisible while tiers were decorative, and became a problem the
+moment the research made tier-gated entitlement the favoured revenue model — you cannot sell an
+allowance you do not enforce. Recorded as § 14.1 row 2b and attached to the listings work in phase 4,
+where it belongs on the publish path rather than in the UI.
+
+**Two risks added (§ 13), both from the research.** Supply engagement is *not* solved just because the
+partners already exist — every one of them already has a free Google Business Profile, and a
+commercial relationship gets us the sign-up but not a maintained listing. And measuring the wrong
+thing is its own risk, which is why § 16 was written before there is any pressure to report the
+flattering number.
+
+> **One proposal is deliberately left undecided (§ 15.2b): swap phases 5 and 6.** Build the enquiry
+> loop on the authenticated surface before the public one. It does not reverse the owner's decision
+> that the destination is public — § 6's tables are identical either way — but it would produce the
+> § 16 number a phase earlier, take decision #4 off the critical path, and let the public surface be
+> built knowing which categories actually generate enquiries. **Recommended, not adopted.**
+
+## August 10, 2026 — Researched why Justdial reaches millions, and concluded we should not try to be one
+
+**The question was "why are platforms like Justdial so famous, and how do we build one at
+Leapswitch?"** The research is now § 2.1 of `PARTNER_DIRECTORY_PLAN.md`, and its answer is not the one
+the question expects.
+
+**Four engines made Justdial famous, and two of them are unavailable to anybody in 2026.** It was
+founded in 1996 with ₹50,000 in a garage, selling a phone number you called instead of leafing through
+a paper directory, into a market with no consumer internet — then rode the web and mobile waves rather
+than creating them. By 2012 it had over 7 million listings and 1.9 million calls a day, and that
+listing breadth is really an SEO surface: millions of long-tail pages nobody can buy their way onto.
+The two engines that do transfer are mechanics — monetise the **lead**, not the listing, and let the
+enquiry create a response race.
+
+**The more useful finding is that the model is being taken apart right now, by two forces at once.**
+Google absorbs the general case, because people increasingly search for the business directly and
+Google gives businesses free listings, which narrows the gap between a paid listing and a free one.
+And vertical specialists — Zomato, Practo, Urban Company — take the categories one at a time. **A
+Leapswitch partner directory sits on the specialist side of that split.** The brief's instinct is
+sound; the platform it names is the loser in the fight, not the winner.
+
+**Industry research on directories says the same thing with numbers.** A niche directory with domain
+authority 45 routinely outperforms a horizontal one at DA 90 for a matched audience, and niche leads
+convert around 40% faster because the visitor is further along by the time they use a specialised
+platform. That reframes what success means here: the measure is **enquiries per listed partner per
+month**, not visitors. A directory doing 2,000 well-matched visits that produces real enquiries beats
+one doing 200,000 that produces none — and only the second one looks like Justdial.
+
+**IndiaMART turned out to be the better reference, and nobody had named it.** Same country, same
+lead-generation mechanic, but B2B — a buyer posts a requirement and suppliers respond, which is
+exactly what our enquiry model already does. Its revenue split is the useful part: **subscriptions are
+roughly 95% of it.** That is the strongest evidence available that recurring supplier revenue beats
+per-lead billing, so § 10's tier-gated option is now the recommended eventual model and pay-per-lead
+is weaker than it looked.
+
+**Three of Justdial's practices are recorded as disqualifying rather than instructive**, and one would
+be actively damaging here: selling a lead onward to competitors after a buyer specifically named one
+business. Justdial's suppliers are strangers to it. **Ours are partners we hold commercial
+relationships with, and 300 of them talk to each other.** That gives decision #5 — one enquiry to one
+partner, or fan-out to several — an argument attached to it rather than only a schema cost.
+`enquiry_recipients` still gets built from day one; what goes in it is now a relationship question.
+
+**The honest verdict, written into the plan:** Leapswitch cannot build "a Justdial" and should be glad
+— what it can build is the thing currently taking Justdial's categories away, a focused vetted
+vertical directory where the curator's endorsement is the product. An asset inventory makes the case:
+we already hold verified supply, the host brand's trust, a first audience of existing customers, and a
+real niche, all of which Justdial spent two decades buying. **What we do not hold is traffic**, which
+is decision #4 again, and no amount of research substitutes for answering it.
+
+## August 10, 2026 — The inventory got an order: 34 numbered steps, and only four things actually constrain it
+
+**`PARTNER_DIRECTORY_PLAN.md` § 15 sequences everything § 14 listed** — every backend module and every
+page, as 34 numbered steps grouped under the existing phases, each carrying what blocks it. § 14
+answers "how big is this"; § 15 answers "what do I do on Monday".
+
+**Only four dependencies genuinely fix the order, and saying so is the useful part.** A table cannot be
+scoped by a module that does not exist, so scoping precedes the first partner-owned table. A listing
+cannot exist without a category to sit in. The public surface has nothing to show until listings are
+published — building it earlier produces a directory of empty categories, which is exactly the "UI that
+looks broken when empty" the comparables section warns about. And an enquiry that does not reach the
+partner is a lead lost, so email gates the whole of phase 6. **Everything else is arrangement**, and
+where an item is ordered by preference rather than dependency the plan now says so, because a
+preference presented as a constraint is how a queue becomes unchallengeable.
+
+**The critical path is eleven steps**, and neither of its two stall points is engineering: the
+`Principal` actor type, which is ours to settle, and an email provider, which is the owner's. A
+separate table lists what can run in parallel — the taxonomy interviews above all, which need no code,
+are the cheapest item on the whole list, and are the one most likely to be skipped.
+
+**Three gates are named explicitly, along with what each stops.** The actor type stops all
+engineering from step 5. Email stops the value loop. And "who owns buyer acquisition" stops nothing
+from being *built* — it decides whether the public surface is worth *shipping*, which is a different
+and more expensive kind of blocker, because the work can be completed before anyone discovers the
+answer was "nobody".
+
+**One thing broke while writing it and was caught by the linter**: the cross-reference note was
+inserted between § 11's table header and its first row, splitting one table into two. Fixed, and a
+check now confirms no table anywhere in the file is preceded by a stray line, and that § 15's steps
+run 1 to 34 with none missing or duplicated.
+
+## August 10, 2026 — The whole surface area is written down: 17 backend modules, 40 pages across three applications
+
+**`PARTNER_DIRECTORY_PLAN.md` § 14 now lists every module and every page the directory needs**, split
+the way the product actually splits: the public site, the partner's back office, and the Leapswitch
+staff shell. Until now the size of the thing had to be inferred from a domain model, which is how a
+project talks itself into believing the remaining work is "some more pages on the dashboard".
+
+**Seventeen backend modules, and four of them are not CRUD.** Scoping is one file every other module
+calls. The public directory is a read API with no writes and a different actor type. Ranking is a
+single ordering function whose politics cost more than its code. The market dashboard is aggregation
+over tables that do not exist yet. Reading the list as seventeen identical CRUD modules would
+mis-scope all four.
+
+**Forty pages: 14 public, 13 partner, 13 staff — and they are not equally expensive.** The staff
+surface is the cheapest, because five of its pages already have their API from today's phase 1 work
+and the rest are `ListSpec`-driven index pages this codebase now builds repeatably. The expensive
+halves are the public site — new architecture, since every route today sits behind `middleware.ts` —
+and the listing authoring form, which is the one screen the entire supply side depends on.
+
+**Thirteen entries are marked as proposed rather than inherited from the plan**, and marking them was
+the point. Legal pages, a 404, `sitemap.xml`, a supply-side landing page and a partner's own
+team-management screen are all things a public directory needs to *function*, and none of them
+appeared in the plan before today. They are flagged so they can be cut deliberately: if **decision 4,
+who owns buyer acquisition**, is never answered, the SEO-shaped rows are effort spent on traffic
+nobody will send — and they should be cut together with that decision, not one at a time.
+
+**A section on what is deliberately absent** closes it: quotes and the approval machine, a local
+catalog, payments, a search engine, buyer accounts. Each with the reason and the decision it waits on.
+Writing down the eight things we are *not* building is what stops them being rediscovered as good
+ideas in three weeks.
+
+## August 10, 2026 — Partner organisations exist, and suspending one now stops every login inside it
+
+**Phase 1 of the partner directory is built on the backend.** The plan puts the organisation layer
+first because every partner-owned table will carry `partner_id`, and retrofitting ownership afterwards
+means backfilling it on every table that already exists. Migration `a9f2c71e5b64` creates
+`partner_tiers` and `partners` and adds `users.partner_id` — nullable permanently, because **NULL is
+what "Leapswitch staff" means**. It round-trips: `downgrade` then `upgrade` runs clean, which is the
+part that proves the enum cleanup is right.
+
+**The organisation gates its logins, and that is the whole reason this table exists at the top.**
+`get_current_user` now performs a fourth check: a user inside a `PENDING` or `SUSPENDED` partner is
+refused with 403 whatever their own account status says. Suspending a partner is therefore one action
+instead of a hunt through its accounts — and the account you forget is the one that matters.
+Suspension also revokes the members' live sessions, so reinstating an organisation does not silently
+restore sessions opened before it was stopped. The relationship is `lazy="joined"` precisely because
+this runs on every authenticated request.
+
+**Two gates, deliberately not one column.** `status` decides who may sign in; `is_listed` decides who
+the public may see. A partner drafting their profile is `ACTIVE` and unlisted, which is the normal
+state — conflating the two would mean the only way to hide a partner is to lock them out of the tool
+they need to fix it. Publishing is refused unless the organisation is ACTIVE, so a published-but-
+suspended row cannot exist.
+
+**Three verbs that the obvious design would have folded into one.** `partner-approve` grants login to
+a whole organisation, `partner-verify` sets what Leapswitch publicly vouches for — the directory's
+entire trust proposition, ranked above any paid placement — and `partner-publish` is the only
+permission whose effect the anonymous internet can observe. They are separate permissions with
+separate endpoints, and `UpdatePartnerRequest` deliberately has no `status`, `verification_level` or
+`is_listed` field, so a general edit cannot become a superset of the three. `slug` is not editable
+either: it is the partner's permanent public URL, and slugs are never reused, because recycling one
+would redirect another company's inbound links and search ranking.
+
+**Tiers were repurposed rather than rebuilt.** `MARKETPLACE_DOMAIN_PLAN.md` specified
+`partner_tiers` with discount columns for the reseller product; the directory keeps the table and
+changes what the numbers mean — listing entitlement, not discount authority. The two discount columns
+were **not** carried over, and neither were `avg_rating` / `review_count` / `response_rate` /
+`avg_response_minutes` from § 6.1: nothing writes them until enquiries (phase 6) and reviews (phase 8)
+exist, and four columns that nothing reads is the exact anti-pattern `FASTAPI_STANDARDS.md` § 12 still
+lists as live on `users.profile_photo_path`. `partners` is a low-volume table where adding them later
+is a trivial ALTER.
+
+**The scoping rule is broken on purpose, and marked.** `list_partners` and `get_partner_for` filter on
+`actor.partner_id` by hand, which § Row-Level Scoping rule 1 forbids in as many words. The module it
+names does not exist yet (PM-5), and the alternative was an unscoped list showing every partner to
+every partner user. Both sites carry a `# PM-5` comment so phase 2 can find them. The filter does
+reach the SQL rather than post-filtering the page — post-filtering corrupts the count and hands the
+caller 12 rows after telling them there are 40. One case worth naming: a staff account with no admin
+access **and** no organisation gets `WHERE id IS NULL`, i.e. nothing. Scoping them on `partner_id`
+would have matched every row.
+
+**Verified, not assumed.** 31 service-layer assertions pass — status machine, both 409 refusals, the
+verification evidence being cleared when a partner is un-verified, the org gate in all three states,
+delete refused while members remain, and all three list-scoping branches. The existing suite still
+passes at **254 passed, 4 skipped**; `ruff` is clean; `openapi.json` regenerated to **80 operations
+across 63 paths** and `--check` matches; frontend types regenerated and `tsc --noEmit` is clean. The
+18 `npm run lint` errors are all in components this change never touched.
+
+> **The staff UI is not built.** Phase 1's stated end state is "staff can onboard a partner org and
+> its logins", and the API supports that today while nothing renders it. `AUTHORIZATION.md`'s
+> permission table was also re-measured while it was being extended — it had claimed "23 permissions
+> in 7 groups" and listed `categories` and `candidates`, both deleted on 2026-08-06. It now reads 43
+> in 12, counted from the database.
+
+## August 10, 2026 — The directory question was answered: it is the public marketplace, and 300+ partners makes ranking the hard part
+
+**The owner settled the three decisions the partner-directory plan had been blocked on since
+2026-08-07.** In their words: Leapswitch gives partners the whole frontend and backend as a platform;
+verified partners get a dedicated back office where they add their services and choose what detail is
+shown; the public visits the frontend and contacts partners based on their requirement; and because
+Leapswitch offers the platform, Leapswitch monitors everything.
+
+**Translated: the directory, not the reseller-quoting product. Reading A, the public. 300+ partners.**
+Recorded as § 0.1 of `PARTNER_DIRECTORY_PLAN.md` — the deliverable its own Phase 0 asked for.
+
+**The answer confirmed the existing recommendation without amendment**, which is the good news.
+`partners`, `partner_tiers`, `users.partner_id` and row-level scoping are kept from the parked
+`MARKETPLACE_DOMAIN_PLAN.md`; quotes and the nine-state approval machine are shelved; the Leapswitch
+catalog is replaced by partner-authored listings under a Leapswitch-owned taxonomy. The domain model in
+§ 6 needed no change at all — it was deliberately written to be identical under all three readings of
+the brief, and that held.
+
+**Three consequences make the build materially harder, and they are worth stating plainly.** 300+
+partners is the band the plan itself calls a *ranking problem* — roughly 600–1,500 listings competing
+for position, in front of 300 businesses who can all see where they placed, so publishing the ranking
+rule stops being good practice and becomes necessary. Choosing the public also means real requests with
+**no actor object at all**, which moves the `Principal` type decision from adjacent to critical path.
+And the public surface — indexable, cacheable, unauthenticated — is a shape this application has never
+produced; every route today sits behind `middleware.ts`.
+
+**The most important outcome is which question is now the dangerous one.** Deciding "the public" made
+buyer acquisition a commitment rather than an option, and nobody owns it. A directory of 300+ verified
+partners that no one visits fails on the demand side exactly as the plan predicted, and unlike a
+missing feature it fails after the supply side has done real work. It does not block the partner back
+office or the staff shell, which are worth building under any answer — it blocks the public surface
+being worth shipping. Moderation at 300+ partners is the second unowned item.
+
+**One stale gate was lifted, by measurement.** § 13 said nothing in the plan should start before the
+90-path uncommitted tree was shipped. `git status --porcelain | wc -l` returns **8** today, all but one
+of them documentation edits from this session. That tree went out. Two things the check surfaced:
+`PLANNING.md` § 2 still reports 90 and is now stale, and `data_access_service.py` is still untracked —
+the same file § 7.1 warns will be copied when someone builds the real scoping module.
+
+> **Still nothing built.** Six of the ten decisions remain open. Phase 1 — `partners`, `partner_tiers`,
+> `users.partner_id` and staff onboarding — is now unblocked, but phase 2 must still precede the first
+> partner-owned table, and PM-27 (email) remains a hard blocker on the core value loop at phase 6.
+
+## August 10, 2026 — The directory R&D was re-measured, and its central safety recommendation turned out to be the weakest of three
+
+**`PARTNER_DIRECTORY_PLAN.md` was written on 2026-08-07 against a system that has since moved.**
+Re-measured today rather than assumed: the database now has **12 tables, not 11** — `data_access_grants`
+landed — while everything else § 1 claimed still holds. There are still zero marketplace tables, still
+34 permissions with none of them partner- or listing-related, still no `partner_id` anywhere, and
+`scoping.py` still does not exist. The domain remains entirely greenfield.
+
+**The finding worth the re-measurement is about the actor type, and three registers now disagree.**
+§ 7 said to design `apply_scope` around `Optional[User]`, with the anonymous visitor as the `None`
+branch. The LeapDesk Module 10 research from earlier today says something better — introduce a
+**`Principal` union once, before** any of its callers — because the anonymous visitor is not a special
+case but the third known caller that is not a `User`, after the machine consumer and the tenant
+boundary in PM-5. And the code says a third thing: `actor: User`, hard-typed, **75 times across 12
+files**, with zero occurrences of `Principal`.
+
+**The risk is concrete rather than theoretical.** `data_access_service.py` — written the same day as
+the plan, still uncommitted — contains `narrow_to_creators`, which is already `apply_scope`-shaped: it
+takes a statement and an actor and returns the statement filtered. It is the nearest thing in the tree
+and therefore what someone will copy when they build the real scoping module. Copying it also copies
+the signature § 7 warned against, in the one place whose failure mode is public disclosure rather than
+a bug. Worth noting the codebase already carries both habits — `activity_service.py` types
+`actor: User | None` and branches on it explicitly.
+
+**Recorded as § 7.1, which supersedes § 7's recommendation without touching its requirement.** The test
+that a non-user actor cannot see a `DRAFT` listing, written before the first listing exists, is still
+the requirement; the union is just what makes it cheap to keep passing. **And it is explicitly a
+core-platform decision, not a directory one** — it belongs in `CORE_HARDENING_PLAN.md` and should only
+be consumed here, because a decision recorded solely in a document the directory author reads is a
+decision that gets taken three separate times.
+
+> **Nothing was built and no decision was taken.** The ten open decisions in § 12 are unchanged and
+> remain the next action; decisions 1–4 are not technical and no amount of engineering resolves them.
+
+## August 10, 2026 — The README now names every document, because thirty-one of them had become impossible to see at once
+
+**The documentation folder has grown to 31 files, and the README listed seven.** It pointed at
+`INDEX.md` and deferred everything else to it, which is the right instinct — one detailed map beats two
+competing ones — but it left anyone arriving at the repo unable to answer "what is actually documented
+here?" without opening the index and reading it in full. Seven task-shaped shortcuts are not an
+inventory.
+
+**The README now carries the complete list**, grouped the way the folder is: tracking and process, then
+`core/`, `system-design/`, `design/`, `planning/`, and the four inherited files last under an explicit
+warning. Every file gets one line saying what it is for. The task-oriented "I want to…" table stays
+where it was, because knowing *which* file to open for a job is a different question from knowing what
+exists.
+
+**The division of labour is stated rather than assumed.** `INDEX.md` stays the detailed map — statuses,
+cross-references, the "Start Here" column — and the README is deliberately one line per file. Both files
+now say so in text, so the next person adding a document knows they are updating two places on purpose,
+not duplicating by accident.
+
+**Cataloguing the folder found a claim that was wrong.** `INDEX.md` stated there was "exactly one README
+in the project"; there are two, the second being `design/assets/screenshots/README.md`, which carries
+that folder's public-repo rules and is the reason those screenshots can sit in a public repo at all. The
+index also omitted `design/LOGO_BRIEF.md` from its folder tree. Both are corrected, and the count of 31
+is now recorded in the index so the next drift is visible rather than silent.
+
+**Verified, not assumed:** every purpose line was read from the file's own opening rather than copied
+from the old index prose, and all 34 links in the README were resolved against the filesystem — none
+broken, and all 31 documentation files are linked. The lint warnings the editor raises on the new tables
+are its own defaults; the repo commits no markdownlint config, and the table style used matches every
+other document in the folder.
+
+## August 10, 2026 — The reference's DataTable was vendored in, and I was wrong that it couldn't be
+
+**I told the owner three times that LeapDesk's DataTable could not be copied. One of my four reasons
+was wrong, and it was the load-bearing one.** I claimed React 19 blocked it. Checked properly, after
+the owner copied the project into `references/`: its DataTable and all five shadcn components it needs
+use `useState` / `useEffect` / `useRef` and **no React 19 API at all**. I had asserted a version
+incompatibility without verifying these files used any 19-only feature. Recorded because it changed
+the owner's options and they were right to keep pushing.
+
+**What actually shipped.** Nine dependencies installed (4 Radix packages, `lucide-react`,
+`class-variance-authority`, `tailwind-merge`, `clsx`), `components/ui/*` and the DataTable copied to
+`components/vendor-datatable/`, and `components/common/VendorDataTable.tsx` adapting our props to
+theirs. `ResourceIndex` swapped one import, so **all four index pages moved at once**.
+
+**The theme is aliased, not duplicated.** Their files are written against shadcn's semantic names
+(`bg-muted`, `text-muted-foreground`, `border-input`, …) which this project never had. Rather than
+carry two palettes, 15 CSS variables in `globals.css` map each shadcn name onto an existing Viho
+value — `--primary: var(--brand)`, `--muted: surface.tile`, `--muted-foreground: ink.label`. One
+colour system, two vocabularies. `tailwind.config.ts` — a Protected File — was edited with the
+owner's explicit approval.
+
+> **`accent` is deliberately absent from that mapping.** Viho already owns the name: it is the tan
+> `#ba895d`, live in `StatCard` and `QuickActionsCard`. shadcn uses `accent` for menu-item hover, so
+> redefining it would have silently repainted both dashboard cards. The copied files have those two
+> classes rewritten to the documented house hover instead (`bg-brand/10` + `text-brand`).
+
+**Three patches to the vendor code, each marked `// PATCHED:`:**
+
+| Patch | Why |
+|---|---|
+| Row ids widened `number` → `string \| number` | Their models use bigint PKs; `users.id` here is `String(36)`. Roles and Activity *are* numeric, which is why the union rather than a swap |
+| `bg-blue-50 dark:bg-blue-950/50` on the header row → `bg-muted` | The one palette colour in the copy. It **failed the brand-colour guard** — exactly the call-site colour the 2026-08-05 migration removed from 37 files |
+| Laravel pagination | Their pager reads `links: [prev, 1…n, next]` and calls `onPageChange(url)`. The adapter synthesises that array from `{page, pages}` and parses the number back, so their sliding-window pager (`1 … 4 5 [6] 7 8 … 20`) works untouched |
+
+**Nothing regressed.** Their table has no loading, error or retry state and cannot tell "no data" from
+"filters hid everything" — the three things `CORE_COMPLETION_PLAN.md` § 4.1 measured as ours being
+ahead. All four are handled in the adapter, before the vendor renders, so the swap adds their pager
+without losing our states.
+
+**Lint carries an exemption, and it is narrow.** `components/vendor-datatable/**` and
+`components/ui/**` are ignored by ESLint — vendored source is kept close to upstream so re-copying
+stays a file copy rather than a merge, and it is not edited to satisfy our rules. **They remain
+covered by `tsc --noEmit` and by the brand-colour guard**, which is what caught the `bg-blue-50`.
+
+**Scoped to Users, opt-in per module.** The first cut swapped `ResourceIndex` outright, which moved
+all four index pages at once — more than was asked for, and the wrong shape for a component nobody has
+looked at yet. `ResourceIndex` now takes `table?: "default" | "vendor"` and defaults to ours; only
+`UsersModule` passes `"vendor"`. Roles, Invitations and Activity are untouched and stay on our table
+until the Users screen has been seen in a browser and signed off.
+
+**Verified:** typecheck passes · lint **18 — unchanged from baseline** (27 before the exemption) ·
+brand-colour guard **clean** · `/dashboard/{users,roles,invitations,activity}` all compile and serve
+200, with only Users on the vendor table.
+
+> **Not rendered.** This is the largest visual change of the day — a different table component on four
+> screens — and none of it has been looked at. The pager, the row density, the checkbox column and the
+> dark-mode mapping of those 15 new variables are all unverified. **This is the one to open first.**
+
+---
+
+## August 10, 2026 — The Index / Form / Show shells are settled, and written down as a contract
+
+**The owner's instruction: fix the UI/UX of the three page types once, then follow it everywhere.**
+So this closes the shells rather than another module. All three now live in `components/common/`, and
+`UI_PATTERNS.md` carries a new § *The three-page contract* stating the rule that matters: **a module
+supplies columns, fields and handlers, and no layout.** If a module needs a shape the shell does not
+offer, the shell gets extended so all eight modules gain it — it is not forked locally.
+
+**Form had the real gap: no concept of a section.** The reference splits its Users form into five
+titled cards (Basic Information, Organization, …); ours rendered a flat column of fields with
+`gap-4`. Flat is both unlike the reference and simply hard to read at fifteen fields — and with no
+primitive, each of the seven remaining modules would have invented its own grouping. `ResourceForm`
+now exports **`FormSection`** (titled card, optional description and icon) and **`FormGrid`** (two
+fields per row above `sm`). Users is the worked example, split into Basic Information / Organization /
+Access.
+
+**The Form heading now names the record.** `Edit User: Ayush Mishra` rather than `Edit User`, matching
+the reference — the difference between a heading and one that tells you what you are about to change,
+which matters most on the screen where you can do damage. Submit reads `Update User` / `Create User`,
+busy `Updating…` / `Creating…`. Cancel wears `buttonClasses("outline")` instead of a hand-copied class
+string, so it cannot drift from the Save beside it.
+
+**Show gained two things from reading the reference's `show-page.tsx`:**
+
+- **A 2:1 grid instead of a fixed sidebar.** Ours was a flex row with `lg:w-80`. A fixed 320px column
+  is a third of a 960px window and a fifth of a 1600px one, so the balance the design was drawn at
+  only held at one width. Now `lg:grid-cols-3` with the main column spanning two.
+- **A sticky sidebar** (`lg:sticky lg:self-start`). It holds status, security and audit metadata —
+  context for the main column rather than something to scroll away from. `self-start` is load-bearing:
+  without it the grid item stretches to the row height and `sticky` does nothing at all.
+
+`InfoCard` also takes a `description` now, which the reference has and we did not.
+
+**Verified:** `npm run typecheck` passes; `npm run lint` is **18 — unchanged**; `/dashboard/users`,
+`/users/new`, `/roles`, `/roles/new`, `/invitations` and `/activity` all compile and serve 200.
+
+> **Not finished, and worth being plain about it.** Only `UserForm` has been split into sections. The
+> other forms — `RoleForm`, `InvitationForm`, `ProfileForm` — pick up the new heading, submit labels
+> and Cancel automatically, because those live in the shell, but their fields are still a flat column.
+> That is the next mechanical pass, and it is exactly the "apply it to all modules" the contract
+> exists to make cheap.
+>
+> **Still not rendered.** The sticky sidebar and the section cards were reasoned about, not looked at.
+> Sticky positioning inside a scroll container is the single thing here most likely to be subtly wrong
+> on screen and completely invisible from the source.
+
+---
+
+## August 10, 2026 — The Users index was audited against LeapDesk screen-by-screen, and now matches it
+
+**The owner asked for the reference's Users index exactly — heading, filters, table.** That is the
+standard `CORE_COMPLETION_PLAN.md` § 1.1 already sets: everything the user sees is 🔒 exact parity,
+everything about how it is built is ours. So this was the § 8.1 audit, done properly, with
+`resources/js/pages/Users/Index.tsx` open beside our screen.
+
+**Brought to parity:** the heading is now `Users Management` with a users glyph and the description
+*"Manage users and their permissions"*; the button is `Add User`; search reads `Search users...` behind
+a magnifier; the filter placeholders are `All Status`, `All Roles`, `All Types`; the roles column
+header is singular `Role`; the row menu is View → Edit → **Approve User** → **Send Email** → … →
+Delete, in that order and with those labels; the bulk bar says `Set Active` / `Set Inactive` /
+`Delete Selected`; the counter reads `3 of 137 user(s) selected`; and the empty state is
+`No users found` with a `Create First User` button, or `No users match your filters` when filters are
+on.
+
+**One finding was a pleasant surprise: the reference already puts its filters, `Cols` and `Reset` on a
+single row** — `mb-6 flex flex-wrap items-center gap-3`, with both buttons `h-9 shrink-0`. Ours had
+them stacked and had been merged earlier the same day for space reasons. The two arrived at the same
+layout independently, which is the useful kind of confirmation.
+
+**What deliberately still differs is now written down** rather than left as drift — six entries in
+§ 1.1's divergence register. Three are data-model facts (we have `SUSPENDED`, `account_type`,
+`company_name`; they have `level`, `department`), one is a better label kept on purpose (`INACTIVE`
+renders as *"Pending approval"*, which says what the state means), one is the sanctioned visual theme,
+and one is a **genuine gap, recorded as a to-do rather than a decision**: their row-menu items each
+carry an icon and ours do not, because `RowActions` has no icon slot.
+
+> **Their `Updated At` column renders `created_at`** — header and accessor disagree in the source.
+> Not copied. This is only the **second** entry in § 1.1's *"where LeapDesk's behaviour is a defect"*
+> category, after the unrestricted sort column, and that category requires writing the divergence down
+> before diverging — which is what this is.
+
+**Two shared props came out of it**, so the other seven modules inherit the shape rather than
+re-deriving it: `ResourceIndex` now takes `icon` for the header glyph, and `rowNoun` for the selection
+counter (`"user"` → *"3 of 137 user(s) selected"*, defaulting to `"record"`). `FilterBar`'s text
+filters accept an `addon`, which is how the search magnifier arrives — Viho's `.input-group-text`
+tile rather than the reference's absolutely-positioned icon, per sanctioned divergence #1.
+
+**Verified:** `npm run typecheck` passes, `/dashboard/users` compiles and serves 200, `npm run lint` is
+**18 — unchanged**. Still not rendered in a browser; the labels and order were read off the source, not
+seen on screen.
+
+### The filters still did not match, because the control was wrong
+
+**The first pass matched every label and missed the thing that actually differs.** The reference's
+filters are not dropdowns — they are `FilterCombobox`, which its own docblock calls *"a Select2-like
+searchable dropdown"*: a button that opens a popover containing a **search box**, a list with a tick
+beside the current value, and an inline ✕ to clear. Ours were native `<select>` elements. Matching
+"All Status" as a placeholder while leaving a plain select underneath changed the words and none of
+the interaction, which is why it still read as wrong on screen.
+
+**`components/common/FilterCombobox.tsx` reproduces it feature for feature** — filter-as-you-type
+(matching the option's value as well as its label, mirroring the reference's `keywords`), a first row
+that clears back to "All …", ticks, the ✕, an empty-results message, and the popover matched to the
+trigger's width. Keyboard: ↑/↓ move, Enter picks, Escape closes and returns focus to the trigger.
+
+**The Role filter is the case that forces it**, and it is worth stating because it justifies the whole
+component: a native select has no search, so choosing one of forty roles means scrolling a list you
+cannot filter. `<select>` is still right in **forms**, and `Select` stays there — this is a filter-bar
+control only.
+
+**None of it could be copied.** Theirs is Radix `Popover` + `cmdk` `Command`; we have neither, so the
+popover, the filtering, the roving focus and the outside-click handling are written here in ~270 lines.
+
+**The search field's icon moved inside the field.** The first pass used `Input`'s `addon` — Viho's
+bordered `.input-group-text` tile — which reads as a *second control* sitting in a row of single
+controls. `Input` now takes `leadingIcon` for an icon on the field's own background, which is the
+reference's treatment and what a filter bar wants.
+
+> **Two lint errors were introduced and fixed before finishing**, both in the new component: a
+> `mounted` state guard before `createPortal` (unnecessary here — the popover only renders while open,
+> and open is only ever set by a click, so the guard was an effect setting state for no reason), and
+> `role="combobox"` without `aria-controls`, which `jsx-a11y/role-has-required-aria-props` catches.
+> Count went 18 → 20 → **18**. Measured, not assumed.
+
+---
+
+## August 10, 2026 — The Users module gets the component system the rest of the app will copy
+
+**Users is module 1 — the reference implementation the other seven copy — so before building any more
+of them, the shared pieces it improvises were pulled out and made real.** The shape was already right:
+`ResourceIndex`, `ResourceForm` and the `ShowPage` primitives landed on 2026-08-07 and Users, Roles and
+Invitations already sit on them. What was missing was the layer below — the small things every module
+needs and every module had therefore written for itself.
+
+**The same error formatter existed seven times, in four different versions, and two of them were
+losing information.** `InvitationsModule` and `UserShow` had no branch for a 422 `detail[]` array at
+all, so **every Pydantic validation failure in those screens was swallowed** and shown as the generic
+fallback — the user was told "Could not load invitations." when the API had said exactly which field
+was wrong. A fifth version dropped Pydantic's `"Value error, "` prefix; a sixth kept it. The sharper
+finding is that **`lib/utils/apiError.ts` already existed and was better than all seven** — it prefixes
+the field name, which none of the copies did — and nine other files were already using it. Two camps in
+one codebase. The copies existed because the shared one lacked the "no response at all" branch, so that
+branch was added and the seven were deleted.
+
+**One date rendered six different ways.** An account created on 7 August 2026 appeared as "7 Aug 2026"
+in the Users table, "August 7, 2026" on the profile card, "8/7/2026" in the Activity log and "Aug 7,
+2026" on invitations — four of those from a bare `toLocaleString()`, which inherits the *browser's*
+locale, so the same build rendered differently for different people. `lib/utils/format.ts` now has
+`formatDate` and `formatDateTime`. **The locale is pinned and the timezone deliberately is not**: a
+pinned locale makes output deterministic (and removes a hydration-mismatch risk the moment anything is
+server-rendered), while pinning IST would show a partner abroad a time that never happened for them.
+Fourteen call sites moved; one survives, `WelcomeBanner`'s "Member since August 2026", because a
+month-and-year formatter used once is worse than the inline call.
+
+**Four primitives, each of which `UI_PATTERNS.md` had already predicted would be needed.** That file's
+§ Pending listed *"no `danger` variant, so each destructive action invents its own red"*, *"no `cn()`
+helper"* and *"no toast/confirm convention for destructive actions — improvised per screen"*. Every one
+of those had come true in code:
+
+| Added | What it replaced |
+|---|---|
+| `Button` `danger` variant + `size` prop | Two hand-rolled red buttons in Users and Roles, with different padding and different disabled opacity |
+| `ConfirmDialog` | Two near-identical delete modals, each re-implementing the busy flag and error banner |
+| `Avatar` | Four hand-drawn initials discs at four sizes |
+| `cn()` | Template-literal class concatenation |
+
+**The most telling detail:** both hand-rolled red buttons carried `hover:bg-tone-danger` on a
+`bg-tone-danger` background — the same colour, so **the two most dangerous controls in the app were the
+only ones with no hover state at all.** Nobody wrote that on purpose; it is what copy-paste does.
+
+**`getInitials()` was already in `lib/utils/user.ts` and used by nothing.** All four discs had either
+inlined the fallback or read the server field with no fallback at all. It has a consumer now.
+
+**Three fixes that were on the register rather than found today:**
+
+- **The sticky table header was translucent** (`bg-brand/10`), so rows scrolled visibly *through* it —
+  flagged in both `PLANNING.md` § 3.3 and `CORE_COMPLETION_PLAN.md` § 4.1, and a direct violation of
+  this file's own mandate of *"sticky thead (top-0 z-10, **opaque bg**)"*. The fill also moved from
+  `<thead>` to the `<th>` cells, because several engines do not paint a table section's own background
+  for a stuck row. ⚠️ **The shade is approximate**: over the green card the old fill composited to
+  ≈`#d6e2e0` and no token holds that value, so it uses `surface-tile` and leans on a hairline. The
+  exact fix needs a new token in `tailwind.config.ts`, which is a Protected File — the same shape as the
+  `surface-border` retint already waiting on the owner.
+- **Every button's focus ring was `focus:ring-brand`**, which on a red button is a teal halo, and
+  `focus:ring-offset-2` was set with **no offset colour** — so Tailwind's default white drew a halo
+  around every focused button on the green chrome. Both now correct, and the second was a live
+  violation of this file's § The Signed-In Chrome Is Green.
+- **The Users detail page's Edit control was a `<Link>` styled by hand** at `h-9 … text-xs` while every
+  other primary button beside it was `py-1.5 … text-sm` — visibly a different size for no reason
+  anyone chose. `Button` now exports `buttonClasses()` for the case a `<button>` genuinely cannot
+  serve. **Navigation gets an anchor wearing those classes; actions get `<Button>`** — because
+  `<Button onClick={router.push}>` looks identical but loses middle-click, open-in-new-tab and the
+  status-bar URL.
+
+**Verified in the container, not asserted:**
+
+| Check | Result |
+|---|---|
+| `npm run typecheck` | **Passes** |
+| `npm run build` | **Passes** — all 25 routes compiled |
+| `npm run lint` | **18 errors — unchanged.** Measured against a stashed baseline rather than assumed; zero added. All 18 are pre-existing `react-hooks` errors, none in the new files |
+| Brand-colour guard | **Clean** |
+| Routes serve | `/dashboard/users` and `/dashboard/users/new` → 307 to sign-in (middleware), `/sign-in` → 200 |
+
+> ### ⚠️ The verification broke the dev server, and the failure is worth knowing
+>
+> **`npm run build` must not be run inside the frontend dev container.** `.next` is the named volume
+> `frontend_next`, shared by `next build` and the running `next dev`, so the build replaced the dev
+> output with a production one. Every `_next/static` request then 404'd — and because Next answers a
+> 404 with its HTML error page, the browser reported it as a **MIME type** problem:
+>
+> ```
+> Refused to apply style from '…/_next/static/css/app/layout.css' because its MIME
+> type ('text/html') is not a supported stylesheet MIME type
+> GET …/_next/static/chunks/main-app.js  404 (Not Found)
+> ```
+>
+> `next dev` asks for `main-app.js`, `app-pages-internals.js`, `app/(auth)/sign-in/page.js`; a
+> production build contains hashed chunks (`2117-cf6ac3a12ac767f1.js`) instead. **Nothing was wrong
+> with the code** — the build genuinely passed, and passing is what broke it. Tell it apart from the
+> two neighbouring failure modes by looking for `BUILD_ID`, `prerender-manifest.json` and
+> `required-server-files.json` in the container's `/app/.next`: those exist only in a production build.
+>
+> Recovery, ~1 second to Ready:
+>
+> ```bash
+> docker compose stop frontend
+> docker compose run --rm --no-deps -T frontend sh -c 'rm -rf /app/.next/* /app/.next/.[!.]*'
+> docker compose start frontend
+> ```
+>
+> **Verify with `npm run typecheck` and `npm run lint`, which write nothing.** After the reset, checked
+> live: `/sign-in` 200 with `main-app.js`, `app-pages-internals.js` and `app/(auth)/sign-in/page.js`
+> all 200 `application/javascript`, `layout.css` 200 `text/css`, and `/dashboard/users` compiled in
+> 992ms and served 200.
+
+> **Not verified: any of it rendered.** The sticky header, the red confirm button and the avatar sizes
+> were changed by reasoning about classes and contrast, **not by looking at them**, and one of the three
+> is a deliberate approximation. `UI_PATTERNS.md` § Pending has said since 2026-08-06 that no component
+> has been checked in a browser since the Viho migration; this work does not close that and makes it
+> more pressing. **The Users index in both themes is the screen to open first.**
+>
+> **Side finding:** `PLANNING.md` § 1 records the lint count as **17**, and `TECH_DEBT.md` PM-30 and the
+> comment in `ci.yml` both say 20. Measured today on a clean tree: **18**. All three registers are wrong,
+> in two directions.
+
+---
+
+## August 10, 2026 — The reference grew a tenth module, and researching it surfaced a design decision we keep deferring
+
+**The owner pointed at a screen in LeapDesk that did not exist when the parity plan was written —
+`/settings/api/consumers`, shipped there on 2026-08-09.** It is the admin surface for *machine*
+identities: a consumer (a system, never a person) holds API tokens, each carrying a set of abilities and
+an optional expiry, so that who holds standing access to the data is readable without SSHing into
+production. Before it, tokens were minted from a CLI and nobody could answer that question.
+
+**Researched from source and added as Module 10** to `LEAPDESK_PARITY_PLAN.md`. The reference turned out
+to document itself unusually well — `documentation/planning/LEAPDESK_PLATFORM_API.md`, 584 lines, is the
+only one of the ten modules that records its own code review and its own mistakes, and it is worth
+reading directly rather than through our summary.
+
+**The most important thing this is *not*: it is not the API Credentials module already in the queue.**
+That one stores credentials *we* hold to call out to third parties, decryptable because we have to send
+them. This one governs who may call *in*, and its secrets are hashed and never recoverable. They sit
+side by side in the sidebar, both say "API", and merging them would blur an access-control boundary for
+a superficial resemblance. LeapDesk refused that explicitly; the plan now says so too.
+
+**One finding outlives the module, and it is the reason this R&D was worth doing.** A machine consumer
+has no user row — and that makes it the **third** caller in four days that is not a `User`, after the
+anonymous visitor in the partner-directory research and the tenant boundary in PM-5. Everything we have
+is typed `actor: User`, including every function in the `data_access_service` written on 2026-08-07. The
+recommendation is to introduce a `Principal` union **once, before** any of the three, with anonymous as
+the most restrictive branch by construction. The tempting shortcut — a hidden service `User` per
+consumer — has to be refused: it would put machine identities into user lists, RBAC screens and every
+`SELECT * FROM users`, where one forgotten filter turns an integration into a login.
+
+**Two smaller findings.** Sanctum does the token work for LeapDesk and has no equivalent here, so the
+port needs its own `api_consumer_tokens` table — and it must hash with **SHA-256, not bcrypt**, which is
+the trap, since `security.py` offers `hash_password` right there. Bcrypt salts every hash, so an
+incoming bearer token could not be looked up without scanning and comparing every row; its slowness buys
+nothing against 256 bits of entropy; and it truncates at 72 bytes. Separately, PM-26's per-process rate
+limiter turns out to be a second, independent argument for PM-44 (Redis): per-IP counters in one
+process's memory are an honest speed bump for a login form, but for an API whose rate limit is an
+advertised contract they are a control that does not hold.
+
+**We recommend skipping the half of it that looks most impressive.** LeapDesk's registry-driven engine
+exposes arbitrary models over HTTP, and its own code review found **100 of 105 registered resources
+returning every column of their table** — one of them the entire 81-column internal cost and margin
+model, behind the ability you would hand out most freely. We have no data to expose and no consumer
+asking for it. That decision reopens only if the partner-directory product is chosen.
+
+**Two registers were stale and are now corrected, both verified rather than assumed.** Re-measured
+against the running database today: **34 permissions, 16 of them the parity set**, all in this project's
+`{resource}-{action}` convention. So `PLANNING.md`'s "Permissions: 0 of 14" was wrong, and the parity
+plan's still-open "adopt LeapDesk's dotted names verbatim" question **was settled by the code on
+2026-08-07** — the seeded names are `data-access-view`, `api-credential-view`, `search-entity-manage`.
+Both documents now say so, and the parity plan's own self-contradiction on that point is resolved.
+
+> **Nothing was built and no decision was taken.** Four new questions are recorded for the owner: whether
+> Module 10 is in scope now at all, the `Principal` type, the resource engine, and whether tokens should
+> default to expiring (we recommend yes — the opposite of LeapDesk's default, because a token nobody
+> remembers issuing is the failure mode here).
+>
+> **Side finding, unrelated:** `README.md:155` still says passwords are *"stored and compared in
+> plaintext"* as a deploy blocker. That is no longer true — `security.py` hashes with bcrypt,
+> `verify_password` is the only comparison, and `is_bcrypt_digest` records that pre-existing plaintext
+> rows were hashed in place by the migration that introduced hashing. The README needs correcting, and
+> it is the kind of stale claim that matters more than most: it is the first thing a reader is told
+> about deploying.
+
+---
+
 ## August 7, 2026 — A second product was described, and it contradicts the one already planned
 
 **The owner asked for "a Justdial, but only for our partners" — a directory where each partner lists

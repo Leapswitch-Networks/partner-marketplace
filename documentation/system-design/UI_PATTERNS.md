@@ -199,6 +199,143 @@ are the tightest thing we render, and `useAutoPerPage()` assumes a 38px row.
 
 ---
 
+## The three-page contract (MANDATORY for every module)
+
+Settled 2026-08-10. Every module is **Index / Form / Show**, and all three shells
+live in `components/common/`. A module supplies columns, fields and handlers — it
+supplies **no layout**. If a module needs a shape these do not offer, extend the
+shell so all eight modules get it; do not fork it locally.
+
+| Page | Shell | Module provides |
+|---|---|---|
+| Index | `ResourceIndex` | `icon`, `title`, `description`, `filters[]`, `columns[]`, `rowNoun`, bulk actions, empty state |
+| Form (create **and** edit) | `ResourceForm` + `FormSection` + `FormGrid` | `recordLabel`, sections, fields |
+| Show | `ShowPageHeader` / `Grid` / `Main` / `Sidebar` + `InfoCard` / `MetaCard` / `Field` / `AuditCard` | sections and fields |
+
+**One Form component, two modes.** `record` present means edit, absent means
+create; heading, submit label and target all derive from that one boolean, so the
+modes cannot drift. Heading is `Edit User: Ayush Mishra` / `Create New User` —
+the record's name is *in* the title, because that is the difference between a
+heading and one that tells you what you are about to change. Submit reads
+`Update User` / `Create User`, busy `Updating…` / `Creating…`.
+
+**Fields are grouped, never a flat column.** `FormSection` is a titled card;
+`FormGrid` puts two fields per row above `sm`. A field that must own its row sits
+outside the grid. Users is the worked example: Basic Information / Organization /
+Access.
+
+**Show is 2:1 with a sticky sidebar.** `ShowPageGrid` is `lg:grid-cols-3` and
+`ShowPageMain` spans two. The sidebar is `lg:sticky lg:self-start` — it holds
+status and audit metadata, which is context for the main column rather than
+something to scroll away from. `self-start` is load-bearing: without it the grid
+item stretches to the row height and `sticky` does nothing.
+
+**Navigation is an anchor, actions are buttons.** Cancel, Edit and Back are
+`<Link className={buttonClasses(…)}>`; anything that mutates is `<Button>`.
+
+---
+
+## The module CRUD contract (MANDATORY for every module)
+
+Settled 2026-08-11, on the owner's instruction: *"every module CRUD should follow the exact structure
+and UI/UX of the Users index."* **`components/admin/UsersModule.tsx` is the worked example.** Read it
+before writing a new module; everything in it that is not about users is a shared piece, and this is
+the list.
+
+> **Why this is a contract and not a style guide.** Bringing four modules onto these pieces on
+> 2026-08-11 uncovered **seven live bugs**, every one of them in code that had been copied between
+> modules and then quietly diverged: a `#` column wrong in two opposite directions, dead bulk-action
+> buttons, a sort control wired to nothing, a delete button with no hover state, a dead permission
+> rule. **None was visible without clicking to page 2 or selecting a row.** Four careful copies are
+> four chances to get it wrong; one shared piece is one.
+
+### The pieces, and what each one owns
+
+| Concern | Piece | Never do this instead |
+|---|---|---|
+| Page shell — header, filters, table, paging | `ResourceIndex` | Compose `Card` + `FilterBar` + `DataTable` by hand |
+| Filter / sort / page / selection state + URL | `useResourceQuery` | Local `useState` per filter |
+| Fetch, loading, error, refetch, row patching | `useResourceList` | A hand-written `load()` + five `useState`s |
+| Per-row write — busy row, toast, apply result | `useRowAction` | `setBusy(id)` / try / catch / `finally` |
+| Bulk write — skipped reasons, clear selection | `useBulkAction` | Anything that drops `skipped_reasons` |
+| Which dialog is open, on which row | `useModalState` | Separate `modal` and `target` state |
+| `#`, Actions, badge, date, two-line cells | `columns.tsx` factories | Open-coding any of them |
+| Delete confirmation and its wording | `DeleteDialog` | A bespoke modal, or a bare `<button>` |
+| Any other destructive confirm | `ConfirmDialog` | Ditto |
+| Create / edit / view dialogs | `FormModal` via `asModal` | A second component per mode |
+| Notifications | `Toast` (`toasts`, `dismiss(id)`) | A local banner |
+
+**The selection lives in `useResourceQuery`, and only there.** A module keeping its own selection state
+is the bug that made every bulk button on the Users page a no-op for as long as they existed — the
+table wrote to one Set and the handler read another. Bulk actions read `q.selected`.
+
+### Create, edit and view are modals
+
+**From the index, they open as dialogs** — `FormModal` via each component's `asModal` / `onDone` prop.
+One component, two shells: the schema, the fetch and the payload are shared and only the chrome
+differs. **A second component per mode is not allowed**; that is how two spellings of one form appear.
+
+**The routes stay.** `/dashboard/{module}/new`, `/{id}` and `/{id}/edit` still exist and still render
+the full-page shells. They are the deep-linkable, bookmarkable version and the target of links from
+elsewhere in the app. The modal is the path *from the table*, where losing your filters and scroll
+position to change one field is the thing being fixed.
+
+A modal that is still loading renders its skeleton **inside** the modal. Returned bare it lands
+wherever the module mounts its children — under the table, not in a dialog.
+
+### The index, feature by feature
+
+1. Header carries an **icon**, a title, and a description that says what the page is *for*. **The row
+   count belongs in the pager**, which already reads `1–25 of 137` and does not go stale between
+   fetches.
+2. Filters, `Cols` and `Reset` share **one row**. The table's scroll box is viewport-measured, so every
+   row of chrome above it costs visible records.
+3. Select filters are `FilterCombobox`. Text filters get the **magnifier by default** — do not declare
+   an icon.
+4. Column order is fixed: `#`, `Actions`, `Status`, then data.
+5. **A `sortKey` on every column the API can sort, and none that it cannot.** Read the service's
+   `ListSpec.sortable` and match it. A `sortKey` the API does not accept renders an arrow that takes a
+   click and does nothing.
+6. Empty state distinguishes "nothing yet" from "filters hid everything", and offers a first-record
+   button.
+7. `rowNoun` set, so the counter reads `3 of 137 user(s) selected`.
+
+### Ink and size
+
+**No bare `text-gray-*` in module code.** Use `text-ink`, `text-ink-label`, and `dark:text-night-muted`.
+A grey on the green chrome reads as a smudge. *(Exception, and it is temporary:
+`dark:text-gray-300` is still the dark-mode body ink because no `night` token holds that value. Fixing
+it needs a new token in `tailwind.config.ts`, a Protected File.)*
+
+**No cell sets its own font size.** The table owns it (`text-xs 2xl:text-sm`). Rank a row's contents
+with **weight and colour** — that is what `stackedCell()` does. A cell one pixel smaller than the one
+beside it reads as a rendering fault, not a hierarchy.
+
+### Parity means the same vocabulary, not the same feature list
+
+The single most important line in this contract, and the one most likely to be applied wrongly.
+
+Every module gets the same **table, filter row, column factories, modal shells, toast and tokens**.
+What varies is which **actions** exist, and that is decided by the domain and the API — not by
+symmetry with Users:
+
+- **Activity Log** has no Actions column, no selection and no bulk bar. There is no write route. An
+  empty three-dot menu is worse than no column, and a delete affordance on an audit trail would be the
+  most damaging button in the product.
+- **Roles** keeps client-side filtering and paging. Its endpoint returns six rows unpaged; putting it
+  on `useResourceList` would mean a network round trip per keystroke.
+- **Invitations** cancel is *not* `DeleteDialog`. Cancelling is not deleting — the row stays and stops
+  working, and "delete" would imply it leaves the table.
+
+**Where a module deviates, the reason goes in a comment at the deviation**, not in a plan file someone
+has to find. Each of the three above carries one.
+
+**See [`../planning/MODULE_PARITY_PLAN.md`](../planning/MODULE_PARITY_PLAN.md)** for the full 57-item
+checklist, the per-module compliance matrix, and which surfaces in the operations tier (Configuration,
+Security, Queue Monitor, System Health, Recycle Bin …) are **not** CRUD at all.
+
+---
+
 ## Full-Page Index Layout (MANDATORY for every list page)
 
 Ported from LeapDesk. The class combinations are load-bearing, not cosmetic — get one wrong and the
@@ -209,14 +346,25 @@ Outer      flex h-full min-h-0 flex-col
   Card         flex min-h-0 flex-1 flex-col overflow-hidden
     CardHeader   shrink-0                 (title + create button — never scrolls)
     CardContent  flex min-h-0 flex-1 flex-col
-      FilterRow    shrink-0               (filters — never scrolls)
       DataTable    min-h-0 flex-1
-        Cols menu    shrink-0
+        toolbar row  shrink-0             ← FilterRow (flex-1) + Cols button, ONE row
         top pager    shrink-0
         scroll box   flex-1 overflow-auto  ← ONLY this scrolls, maxHeight measured
           sticky thead (top-0 z-10, opaque bg)
         bottom pager shrink-0
 ```
+
+**Filters and the column picker share one row** as of 2026-08-10. They were stacked
+— filters above, a lone right-aligned `Cols` button below — and merging them is not
+just tidier: the scroll box is **viewport-measured**, so every row of chrome above
+it comes out of the record count. `useAutoPerPage()` divides by a 38px row, so the
+reclaimed row is worth roughly one more visible record at every window size.
+
+The filters reach that row through `DataTable`'s **`toolbar` slot**, not by
+`ResourceIndex` rendering them above the table, because the column picker's state
+lives inside `DataTable`. Lifting `hidden` into `useResourceQuery` is the
+alternative — worth doing when column visibility should persist in the URL like the
+rest of the query state, and not before.
 
 `min-h-0` is what allows a flex child to shrink below its content height. Without it the table cannot
 scroll internally and the page scrolls instead — the exact failure this layout prevents.
@@ -288,23 +436,86 @@ All in `components/common/`. Hand-written, no library. Keep them dumb — no dat
 
 | Component | Purpose |
 |---|---|
-| `Button` | `primary` / `outline`, `loading`, `fullWidth` |
+| `Button` | `primary` / `outline` / `light` / **`danger`**, `size` (`md`/`sm`), `loading`, `fullWidth`. Also exports **`buttonClasses()`** for links |
 | `Input` | Required `label` (pass `""` to opt out in filter bars), `error`, `hint` |
-| `Select` | Native `<select>` — keyboard and mobile support for free |
+| `Select` | Native `<select>` — keyboard and mobile support for free. **Forms only**; filter bars use `FilterCombobox` |
+| **`FilterCombobox`** | Searchable single-select for filter bars — popover + search box + tick + inline ✕ clear. See below |
 | `Badge` | 6 tones, all with dark variants. `onClick` makes it a real `<button>`, so it stays keyboard reachable |
+| **`Avatar`** | The initials disc. `sm`/`md`/`lg`, derives initials from a user via `getInitials()`. Decorative unless given `label` |
 | `Card` / `CardHeader` / `CardContent` / `FilterRow` | The viewport-locked frame above |
 | `DataTable` | Sticky head, measured scroll box, dual pagination, sorting, selection, column visibility |
 | `Modal` | Portalled to `body` so the dashboard's `overflow-hidden` panel can't clip it; Escape + backdrop close, scroll lock |
+| **`ConfirmDialog`** | **The convention for every destructive action** — see below. Owns the in-flight flag, the error message and the disabled state |
 | `RowActions` | Three-dot menu, portalled and positioned from the trigger rect because the table clips. Actions with `visible: false` are dropped |
 | `Toast` + `useToast` | Auto-dismisses in 3.5s **unless** it carries `details` |
 | `Skeleton` | Loading placeholder |
 | `ThemeToggle` | Light/dark switch |
 
+Two shared helpers sit beside them and are **not optional**, because each replaced a
+set of drifting copies:
+
+| Helper | Rule |
+|---|---|
+| `lib/utils/apiError.ts` → `extractApiError(err, fallback)` | **The only error formatter.** Handles the string `detail`, the 422 `detail[]` array (with field-name prefixes), and the no-response case |
+| `lib/utils/format.ts` → `formatDate` / `formatDateTime` | **The only date rendering.** Locale pinned `en-IN`, timezone left local |
+| `lib/utils/cn.ts` → `cn(...)` | Joins classes, drops falsy. Not `clsx`, not `tailwind-merge` — no conflict resolution |
+
+### FilterCombobox — filter bars only
+
+Added 2026-08-10, replacing the native `<select>` in every `FilterBar` dropdown.
+Reproduces the reference's `FilterCombobox` — its own docblock calls it *"a
+Select2-like searchable dropdown"* — feature for feature: a search box that filters
+as you type, a first row that clears back to "All …", a tick beside the current
+value, an inline ✕ to clear without opening, an empty-results message, and a
+popover matched to the trigger's width.
+
+**The Role filter is the case that forces it.** A native select has no search, so
+choosing one of forty roles means scrolling a list you cannot filter. `<select>` is
+still correct in **forms** — free mobile pickers, free keyboard — and `Select`
+stays for those.
+
+Two implementation notes, both load-bearing:
+
+- **Portalled to `document.body`**, like `RowActions` and for the same reason:
+  `Card` is `overflow-hidden`, so a popover rendered in place is clipped at the
+  card's edge. Any scroll closes it rather than letting it drift off its trigger.
+- **No `mounted` guard before `createPortal`.** `Modal` and `RowActions` both need
+  one because they can render on mount; this popover renders only while open, and
+  open is only ever set by a click. Adding the guard would mean an effect that sets
+  state for no reason — the `react-hooks/set-state-in-effect` error those two
+  already trip.
+
+`role="combobox"` requires **both** `aria-expanded` and `aria-controls`; the id
+comes from `useId()` so it survives hydration. The lint rule
+`jsx-a11y/role-has-required-aria-props` catches a missing one.
+
+### ConfirmDialog — destructive actions
+
+```tsx
+<ConfirmDialog
+  title="Delete user" subtitle={user.email}
+  confirmLabel="Delete user" busyLabel="Deleting…"
+  onConfirm={() => adminApi.deleteUser(user.id)}
+  onConfirmed={() => { show(`${user.full_name} deleted.`); refresh(); }}
+  onClose={close}
+>
+  Permanently delete <strong>{user.full_name}</strong>? This cannot be undone.
+</ConfirmDialog>
+```
+
+`onConfirm` is **awaited, and a rejection keeps the dialog open** with the error
+rendered in place. That is the behaviour worth standardising: a failed delete that
+closed its own dialog looks exactly like a successful one, and the row is still
+there after the refresh with no explanation. Use `confirmDisabled` for a blocked
+precondition, and say why in the body — a disabled button with no reason is
+indistinguishable from a broken one.
+
 ### Button — `components/common/Button.tsx`
 
 ```tsx
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: "primary" | "outline" | "light";
+  variant?: "primary" | "outline" | "light" | "danger";
+  size?: "sm" | "md";
   loading?: boolean;
   fullWidth?: boolean;
 }
@@ -312,18 +523,42 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 | Prop | Default | Behaviour |
 |------|---------|-----------|
-| `variant` | `"primary"` | `primary` = filled brand, no shadow; `outline` = brand border, transparent fill; `light` = Viho's `.btn-primary-light`, brand@10% fill that inverts to solid brand on hover |
+| `variant` | `"primary"` | `primary` = filled brand, no shadow; `outline` = brand border, transparent fill; `light` = Viho's `.btn-primary-light`, brand@10% fill that inverts to solid brand on hover; **`danger`** = filled `tone-danger` |
+| `size` | `"md"` | `md` = `px-7 py-1.5 text-sm`; `sm` = `px-3 py-1 text-[11px]`, for dense rows such as the bulk-action bar. **Size is not importance** — that is `variant`'s job |
 | `loading` | `false` | Renders a spinner **and** sets `disabled` |
 | `fullWidth` | `false` | Adds `w-full` |
 
 Base classes (shared by all variants):
 
 ```
-inline-flex items-center justify-center gap-2 rounded-[5px] px-7 py-1.5
-text-sm font-semibold transition-colors
-focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand
+inline-flex items-center justify-center gap-2 rounded-[5px] font-semibold
+transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2
+ring-offset-surface-wash dark:ring-offset-night-card
 disabled:cursor-not-allowed disabled:opacity-60
 ```
+
+**The focus ring carries the variant's colour**, and the **offset colour is set**.
+Both were fixed on 2026-08-10: every variant previously drew `focus:ring-brand`,
+which on a red button is a teal halo, and `focus:ring-offset-2` with no
+`ring-offset-*` colour defaults to white — which on the green chrome drew a white
+halo around every focused button, in violation of § The Signed-In Chrome Is Green's
+own rule.
+
+### `buttonClasses()` — for links, and only links
+
+A navigation that must be a real anchor cannot be a `<button>`, and hand-styling a
+`<Link>` is how the Users detail page ended up with an Edit control at `h-9 …
+text-xs` while every other primary button beside it was `py-1.5 … text-sm`.
+`<Button onClick={() => router.push(…)}>` looks identical but is not a link — no
+middle-click, no open-in-new-tab, no status-bar URL, nothing for a screen reader to
+announce as a destination.
+
+```tsx
+<Link href={`/dashboard/users/${id}/edit`} className={buttonClasses()}>Edit</Link>
+```
+
+**Navigation gets an anchor wearing these classes; actions get `<Button>`.** Do not
+reach for it for anything else.
 
 **No shadow.** `app.css` declares a brand-tinted `box-shadow` for `.btn-primary`, and it was applied
 here at first — but it does not render. Pixels directly below and beside real Viho buttons are pure
@@ -338,8 +573,10 @@ Rules:
 - **`loading` is the only busy indicator** — never add a second boolean
 - Wrap in `forwardRef` and set `displayName` (already done)
 - Spread `...props` last so callers can override
-- Still **no `danger` variant**. Need a destructive action? **Add one here** using `tone-danger`, don't
-  write one-off red classes at the call site.
+- ✅ **`danger` exists as of 2026-08-10.** Use it; do **not** write one-off red classes at the call
+  site. Two screens had already done so before it landed, and both shipped `hover:bg-tone-danger` on a
+  `bg-tone-danger` button — i.e. the most dangerous control in the app was the only one with no hover
+  state at all.
 
 ### Input — `components/common/Input.tsx`
 
@@ -594,8 +831,9 @@ Rules:
 | No privacy-policy route | Sign-up's required "Agree With Privacy Policy" renders "Privacy Policy" as **plain text, not a link**, because the page does not exist. Make it a `<Link>` when it does |
 | Mixed radii | § Layout Conventions mandates `rounded-lg` and says "don't mix radii"; the code uses five — `rounded-lg` ×92, `rounded-xl` ×49, `rounded-full` ×31, `rounded-2xl` ×23, `rounded-md` ×7 |
 | No semantic colour tokens | Grey scale used directly; a rebrand means touching every component |
-| No `cn()` helper | Class strings are template literals; conditional classes get unwieldy. A 3-line `cn()` would help |
-| Only two Button variants | No `danger` variant, so destructive actions have nowhere consistent to live |
+| ~~No `cn()` helper~~ | ✅ **Resolved 2026-08-10** — `lib/utils/cn.ts` |
+| ~~Only two Button variants~~ | ✅ **Resolved 2026-08-10** — `danger` added, plus a `size` prop and `buttonClasses()` |
+| **The sticky table header has no exact token** | The old `bg-brand/10` composited over the green card to ≈`#d6e2e0`; no token holds it, so `DataTable` uses `surface-tile` and leans on a hairline. Minting the exact value means editing `tailwind.config.ts`, a Protected File — same shape as the `surface-border` retint in `PLANNING.md` § 3.1 |
 | `Skeleton` is generic | Most pages have no matching skeleton shape |
 | `@tailwindcss/postcss ^4` unused | Dead dependency — see § Tech Stack Reality Check |
 | No focus-visible distinction | `focus:` fires on mouse click too; `focus-visible:` would be tidier |
@@ -633,11 +871,16 @@ Rules:
 
 ### 🟡 Primitives that are missing and get improvised
 
-- [ ] **Only two Button variants — no `danger`.** Destructive actions have nowhere consistent to live, so
-      each one invents its own red. This matters more now than when it was written: the app has
-      delete, bulk-delete, suspend, revoke-session and reset-2FA actions.
-- [ ] **No `cn()` helper.** Class strings are template literals; conditional classes get unwieldy. Three
-      lines. Also tracked in [`NEXTJS_STANDARDS.md`](./NEXTJS_STANDARDS.md).
+- [x] ~~**Only two Button variants — no `danger`.**~~ ✅ **Done 2026-08-10.** The prediction held exactly:
+      by the time it landed, the delete-user and delete-role confirms had each invented their own red,
+      with different padding, different disabled opacity and a `hover:` that was a no-op.
+- [x] ~~**No `cn()` helper.**~~ ✅ **Done 2026-08-10** — `lib/utils/cn.ts`.
+- [x] ~~**No toast/confirm convention for destructive actions.**~~ ✅ **Done 2026-08-10** —
+      `ConfirmDialog`. See § Component Primitives for the contract and why a failed confirm must not
+      close its own dialog.
+- [x] ~~**The initials disc was improvised four times.**~~ ✅ **Done 2026-08-10** — `Avatar`. Found
+      while doing the above: four screens drew it by hand at four sizes, and `getInitials()` had been
+      sitting in `lib/utils/user.ts` **unused by every one of them**.
 - [ ] **`Skeleton` is generic and most pages have no matching shape.** Worth pairing with PM-41 rather
       than doing alone — today `loading.tsx` barely renders because every page fetches client-side, so a
       shaped skeleton has almost nowhere to appear. **Do the data layer first, then the skeletons have a
@@ -645,9 +888,9 @@ Rules:
 - [ ] **No `focus-visible` distinction.** `focus:` fires on mouse click too. A tidy-up, but it is the
       difference between a keyboard user seeing a ring where they need it and every user seeing one where
       they do not.
-- [ ] **No toast/confirm convention for destructive actions.** `Toast.tsx` and `Modal.tsx` exist; nothing
-      in this file says which destructive actions must confirm, or what the copy should be. Improvised
-      per screen today.
+- [ ] **Which actions must confirm is still unwritten.** `ConfirmDialog` now exists and settles *how* a
+      destructive action confirms, but not *which* ones have to. Delete and bulk-delete do; suspend,
+      revoke-session and reset-2FA are each decided per screen. Worth one line here naming the rule.
 
 ### 🟡 Product gaps that surface as UI defects
 

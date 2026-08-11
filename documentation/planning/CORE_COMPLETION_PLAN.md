@@ -72,6 +72,32 @@ decision — not drift.
 | Users | **Per-page offers 15 as well as 10/25/50/100** | Ours is a superset; 15 is the reference's default but not one of its options, which means its own default is unselectable. Keeping it selectable is strictly better |
 | Users | **Extra row actions: Clear lockout, Reset 2FA** | Ours has account lockout and 2FA; the reference does not. Additive, so no behaviour of theirs is lost |
 
+#### Users index — § 8.1 audit, 2026-08-10
+
+Read from `resources/js/pages/Users/Index.tsx` (936 lines) with our screen beside it.
+**Brought to parity:** heading (`Users Management` + a users glyph), description
+(*"Manage users and their permissions"*), `Add User`, search placeholder
+(`Search users...`) with a leading magnifier, filter placeholders (`All Status`,
+`All Roles`, `All Types`), the `Role` column header (singular), row-action labels
+and order (View → Edit → Approve User → Send Email → … → Delete), the bulk labels
+(`Set Active` / `Set Inactive` / `Delete Selected`), the selection counter
+(`3 of 137 user(s) selected`), and the empty state (`No users found` /
+`No users match your filters` + `Create First User`).
+
+Filters and the column picker already shared one row in the reference; ours were
+stacked and were merged the same day, so that now matches too.
+
+**What remains different, and why:**
+
+| Difference | Category | Reason |
+|---|---|---|
+| Status filter offers **three** options (Active / Pending approval / Suspended), theirs two (Active / Inactive) | Data model | `SUSPENDED` is a real state in our `users` table. Offering two would make a populated status unfilterable |
+| `INACTIVE` renders as **"Pending approval"**, theirs renders the raw enum `INACTIVE` | Better, kept | Ours names what the state *means* — the account is awaiting approval. Registered rather than reverted |
+| Data columns are **Type · Company · Sign-in · Last login · Created**; theirs are **Level · Department · Updated At** | Data model | Same reason as the filters above — those columns do not exist here, and ours do not exist there |
+| Their **`Updated At` column renders `created_at`** | 🔴 **Their defect, not copied** | Header and accessor disagree in the source. Ours is labelled `Created` and shows `created_at`, which is at least self-consistent. **Second entry in the § 1.1 defect category, after the sort-column allowlist** |
+| Role badges use our brand tone; theirs hardcodes red/purple/blue per role name | Sanctioned #1 | Visual theme is ours |
+| **Row-action items have no icons**; theirs has a lucide glyph per item | ⚠️ **Genuine gap** | `RowActions` has no icon slot and we have no icon library — these are inline SVGs. Additive work, not yet done. **Not a decision — a to-do** |
+
 ### 1.2 What we deliberately do NOT copy
 
 This matters as much as what we do copy. Each of these was measured today:

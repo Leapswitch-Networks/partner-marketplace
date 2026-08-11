@@ -75,7 +75,7 @@ This file follows the universal AGENTS.md template. These project rules **overri
 | Generic doc structure | Read `documentation/INDEX.md` and follow its "Start Here" column. |
 | Agent may commit when done | **Never.** Ask first, every time. See Commit Rules. |
 | Add AI co-authorship to commits | **Never.** No `Co-Authored-By`, no "Generated with". |
-| Framework knowledge from training data | **This is not the Next.js you know** — read `node_modules/next/dist/docs/` before writing Next.js code. Heed deprecation notices. |
+| Framework knowledge from training data | **This is not the Next.js you know** — installed is **14.2.35**, your training data likely assumes 15/16. Verify against the installed tree before writing Next.js code. ⚠️ This row used to say "read `node_modules/next/dist/docs/`"; that directory **does not exist** in 14.2.35 (PM-19 recorded the same finding). Corrected 2026-08-11 — see root `AGENTS.md`. |
 
 ---
 

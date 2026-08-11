@@ -196,6 +196,11 @@ docker compose run --rm backend alembic upgrade head
 # ROOT_PASSWORD is optional. Set it to choose the root password, or omit it and
 # the seeder generates one and prints it once — there is no default credential.
 docker compose run --rm -e ROOT_PASSWORD='choose-a-strong-one' backend python -m app.db.seed_rbac
+
+# Partner tier reference data. Also idempotent, and it takes no secrets.
+# Without it `partner_tiers` is empty — onboarding a partner still works
+# (tier_id is nullable) but every partner lands with no entitlement at all.
+docker compose run --rm backend python -m app.db.seed_partner_tiers
 ```
 
 The seeder is idempotent: it reconciles permissions, permission groups and system roles against
@@ -452,14 +457,49 @@ docker compose logs backend --since 15s | grep Reloading   # WatchFiles detected
 | Roll back one | `docker compose run --rm backend alembic downgrade -1` |
 | Current revision | `docker compose run --rm backend alembic current` |
 | Seed RBAC + root account | `docker compose run --rm -e ROOT_PASSWORD backend python -m app.db.seed_rbac` |
+| Seed partner tiers | `docker compose run --rm backend python -m app.db.seed_partner_tiers` |
 | **Backend tests + lint** | `docker compose run --rm --no-deps backend sh -c "pip install -q pytest ruff && python -m pytest -q && ruff check ."` |
 | Lint frontend | `docker compose exec frontend npm run lint` |
-| Production build | `docker compose exec frontend npm run build` |
+| Typecheck frontend | `docker compose exec frontend npm run typecheck` |
+| Production build | ⚠️ **breaks the dev server** — see § 4.4 |
 | Rebuild after a dependency change | `docker compose up -d --build backend` (or `frontend`) |
 | Reinstall node modules | `docker compose down && docker volume rm partnermarketplace_frontend_node_modules && docker compose up -d --build frontend` |
 
 `alembic` and `seed_rbac` use `run --rm` rather than `exec` for the reason in § 4.3. Everything else
 uses `exec` because it doesn't touch the database.
+
+### 4.4 ⚠️ Do not run `npm run build` in the frontend container
+
+This table used to list `docker compose exec frontend npm run build` as the production-build command.
+**It breaks the running dev server**, and it was corrected on 2026-08-10 after doing exactly that.
+
+`.next` is the named volume `frontend_next`, shared by `next build` and the `next dev` process already
+running in that container, so the build **replaces the dev output with a production one**. Every
+`_next/static` request then 404s — and because Next answers a 404 with its HTML error page, the browser
+reports it as a MIME-type fault rather than a missing file:
+
+```text
+Refused to apply style from '…/_next/static/css/app/layout.css' because its MIME
+type ('text/html') is not a supported stylesheet MIME type
+GET …/_next/static/chunks/main-app.js  404 (Not Found)
+```
+
+`next dev` requests `main-app.js`, `app-pages-internals.js` and `app/(auth)/<route>/page.js`; a
+production build contains hashed chunks such as `2117-cf6ac3a12ac767f1.js` instead. **The code is
+fine** — the build passes, and passing is what breaks it.
+
+Confirm it is this and not a source problem: `docker compose exec frontend ls /app/.next` shows
+`BUILD_ID`, `prerender-manifest.json` and `required-server-files.json`, which exist **only** in a
+production build.
+
+```bash
+docker compose stop frontend
+docker compose run --rm --no-deps -T frontend sh -c 'rm -rf /app/.next/* /app/.next/.[!.]*'
+docker compose start frontend      # Ready in ~1s; routes recompile on demand
+```
+
+**Use `npm run typecheck` and `npm run lint` to verify frontend changes** — neither writes to `.next`.
+CI runs the real build on its own checkout, where there is no dev server to disturb.
 
 **The test command installs its own tooling, and that is not an oversight.** `pytest` and `ruff` live in
 `requirements-dev.txt`, which the backend image deliberately does not install — a deployed image carries

@@ -1,21 +1,30 @@
 # Marketplace Domain Plan
 
-**Status: DESIGN — awaiting review.** No migrations written yet, deliberately.
+**Status: PARTLY SUPERSEDED 2026-08-10.** Its foundation is adopted and being built; its quoting half
+is shelved. No migrations were ever written, which is why this costs nothing.
 
-> ## ⚠️ Contested as of 2026-08-07 — read this before acting on anything below
+> ## ⚠️ Resolved 2026-08-10 — this is no longer the v1. Read this before acting on anything below.
 >
-> A brief given on 2026-08-07 describes a **different product**: a curated directory where partners
-> list **their own** services and buyers find them — *"a Justdial, but only for our partners"*. This
-> document models the opposite direction of trade: partners **reselling Leapswitch's** services at a
-> discount tier, via quotes.
+> This document models partners **reselling Leapswitch's** services at a discount tier, via quotes. On
+> **2026-08-10 the owner chose the opposite product**: a curated directory where verified partners
+> list **their own** services from a dedicated back office, and the **public** contacts them. The
+> decision and its consequences are in
+> [`PARTNER_DIRECTORY_PLAN.md`](./PARTNER_DIRECTORY_PLAN.md) § 0.1.
 >
-> **Both cannot be the v1.** The reconciliation, and a recommendation for which parts of this document
-> survive either way, are in [`PARTNER_DIRECTORY_PLAN.md`](./PARTNER_DIRECTORY_PLAN.md) § 0.
+> **What survives, and is now being built:**
 >
-> The short version: **§ Entities → `partners`, `users.partner_id`, `partner_tiers` and the whole of
-> § Row-Level Scoping are unaffected and still correct.** The catalog, `quotes`, `quote_items` and the
-> quote state machine are what is in question. **Nothing has been decided** — do not treat either
-> document as settled.
+> | Section | Verdict |
+> |---|---|
+> | § Entities → `partners`, `users.partner_id`, `partner_tiers` | **Adopted unchanged.** `partner_tiers` is repurposed from discount authority to listing entitlement — same table, different columns |
+> | § Row-Level Scoping | **Adopted, and more urgent than when written.** The directory adds an *anonymous* actor, which this spec does not cover — see `PARTNER_DIRECTORY_PLAN.md` § 7 and § 7.1 |
+> | "Organisation with multiple logins", below | **Still correct, and explicitly not revisited.** A directory listing belongs to a company, not to whoever signed up |
+>
+> **What is shelved:** the catalog (`catalog_categories`, `products`), `quotes`, `quote_items` and the
+> nine-state quote machine. Not wrong — **not what was asked for.** `customers` is shelved too; a
+> directory's buyer is a different thing from a CRM record the partner owns.
+>
+> Kept rather than deleted because the foundation above is live, and because reviving the reseller
+> channel later would start here. **Do not cite the quoting half as current plan.**
 
 > Scope was settled on 2026-07-31. This document is now the model to review, not a list of open
 > questions. Nothing here is built; the § Build Sequence at the end is the order to build it in.

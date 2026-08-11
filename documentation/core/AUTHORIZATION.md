@@ -75,17 +75,41 @@ PROTECTED_ROLES    = {RootUser, SuperAdmin, User}    # cannot be renamed or dele
 
 Naming, inherited from LeapDesk: **`{resource}-{action}`, resource singular, kebab-case.**
 
-23 permissions in 7 groups. Actions are `view` / `create` / `update` / `delete`, plus domain verbs
-where they earn their place (`user-approve`).
+**43 permissions in 12 groups**, counted from the running database on 2026-08-10. Actions are
+`view` / `create` / `update` / `delete`, plus domain verbs where they earn their place
+(`user-approve`, `partner-verify`).
 
-| Group | Permissions |
+| Group | Count | Permissions |
+|---|---|---|
+| `dashboard` | 1 | `dashboard-view` |
+| `users` | 6 | `user-view`, `user-create`, `user-update`, `user-delete`, `user-approve`, `user-email` |
+| `roles` | 5 | `role-view`, `role-create`, `role-update`, `role-permissions`, `role-delete` |
+| `permissions` | 1 | `permission-view` |
+| `invitations` | 4 | `invitation-view`, `invitation-create`, `invitation-resend`, `invitation-cancel` |
+| `activity` | 1 | `activity-view` |
+| `settings` | 3 | `settings-manage`, `settings-view`, `settings-update` |
+| `partners` | 9 | `partner-view`, `partner-create`, `partner-update`, `partner-delete`, `partner-approve`, `partner-verify`, `partner-publish`, `partner-tier-view`, `partner-tier-manage` |
+| `data-access` | 2 | `data-access-view`, `data-access-manage` |
+| `api-credentials` | 8 | `api-credential-*` (4), `api-provider-*` (4) |
+| `search` | 1 | `search-entity-manage` |
+| `ai-assistant` | 2 | `ai-assistant-use`, `ai-assistant-query-database` |
+
+> This table previously read "23 permissions in 7 groups" and listed `categories` and `candidates` —
+> groups whose **tables and permissions were deleted on 2026-08-06**. It had been wrong since then.
+> Re-measured rather than incremented, which is the only way a count like this stays true.
+
+**The `partners` group splits three verbs the obvious design would have merged into `partner-update`**,
+and the split is the point:
+
+| Permission | Grants |
 |---|---|
-| `dashboard` | `dashboard-view` |
-| `users` | `user-view`, `user-create`, `user-update`, `user-delete`, `user-approve` |
-| `roles` | `role-view`, `role-create`, `role-update`, `role-delete` |
-| `permissions` | `permission-view` |
-| `invitations` | `invitation-view`, `invitation-create`, `invitation-resend`, `invitation-cancel` |
-| `categories`, `candidates` | inherited domain, gated until removed |
+| `partner-approve` | Activate / suspend. **Gates login for every account in that organisation** |
+| `partner-verify` | Sets `verification_level` — what Leapswitch publicly vouches for. `PARTNER_DIRECTORY_PLAN.md` § 9 ranks it above any paid placement, so whoever holds it hands out the platform's credibility |
+| `partner-publish` | Flips `is_listed`. The only permission whose effect is visible to the **anonymous internet** |
+
+Four of the twelve groups (`data-access`, `api-credentials`, `search`, `ai-assistant`) are **seeded
+ahead of their code** — deliberately, so each module starts with its guards available. A permission
+with no route behind it is inert.
 
 **Permissions are reference data, not user-editable.** There is no write endpoint: a permission no
 route checks grants nothing, and one the code references must exist. The catalog lives in code; the
@@ -159,9 +183,39 @@ Applied in `user_service.list_users` and `invitation_service.list_invitations` (
 `GET /api/v1/users/{id}` returns **404**, not 403, for someone else's record — a 403 would confirm it
 exists.
 
-⚠️ **There is still no partner-scoped ownership model** (TECH_DEBT PM-5). The current rule is the
-conservative one: admin, or self. Before any partner-owned data exists, design row-level scoping
-centrally — see [`../planning/MARKETPLACE_DOMAIN_PLAN.md`](../planning/MARKETPLACE_DOMAIN_PLAN.md).
+⚠️ **There is still no central partner-scoped ownership model** (TECH_DEBT PM-5), and as of
+2026-08-10 the first table that needs one exists. `partner_service.list_partners` and
+`get_partner_for` filter on `actor.partner_id` **by hand**, which
+[`../planning/MARKETPLACE_DOMAIN_PLAN.md`](../planning/MARKETPLACE_DOMAIN_PLAN.md) § Row-Level Scoping
+rule 1 explicitly forbids — *"never write `where(partner_id == ...)` in a service"*. Both sites are
+marked `# PM-5` so they can be found and replaced when `app/services/scoping.py` lands.
+
+Two things that hand-rolled filter does get right, and any replacement must keep:
+
+- **It reaches the SQL.** Post-filtering a page corrupts the count — the caller is told there are 40
+  rows and handed 12.
+- **A staff account without admin access and without a `partner_id` sees `WHERE id IS NULL`, i.e.
+  nothing.** Scoping them on `partner_id` would have matched every row, which is the failure mode
+  worth naming: the conservative branch has to be the *default*, not the exception.
+
+The directory adds a second axis this section does not yet cover — **anonymous reads**. See
+[`../planning/PARTNER_DIRECTORY_PLAN.md`](../planning/PARTNER_DIRECTORY_PLAN.md) § 7 and § 7.1: every
+guard here resolves to a `User`, and a public route has no user at all.
+
+### The organisation gate
+
+Since 2026-08-10 `get_current_user` performs a **fourth** check, after the account's own status:
+
+```python
+# app/core/dependencies.py
+_assert_organisation_active(user)   # partner_id IS NULL (staff) falls straight through
+```
+
+A user whose `partners.status` is `PENDING` or `SUSPENDED` is refused with **403**, whatever their own
+`users.status` says. That is what makes suspending a partner **one action** rather than a hunt through
+every login that belongs to it — and the one you forget is the one that matters. Suspension also
+revokes the members' live sessions, so reinstating an organisation does not silently restore sessions
+opened before it was stopped.
 
 ---
 
@@ -185,7 +239,19 @@ centrally — see [`../planning/MARKETPLACE_DOMAIN_PLAN.md`](../planning/MARKETP
 | POST | `/api/v1/invitations/{id}/resend` | `invitation-resend` |
 | DELETE | `/api/v1/invitations/{id}` | `invitation-cancel` |
 | GET | `/api/v1/invitations/preview` | **none** — the invitee has no account yet |
-| GET/POST/PATCH/DELETE | `/api/categories*` · `/api/candidates*` | `category-*` / `candidate-*` |
+| GET | `/api/v1/partners` | `partner-view` (own organisation only without admin access) |
+| GET | `/api/v1/partners/{id}` | `partner-view` — **404**, not 403, for another organisation |
+| POST | `/api/v1/partners` | `partner-create` — always creates PENDING |
+| PATCH | `/api/v1/partners/{id}` | `partner-update` — cannot reach status, verification or listing |
+| DELETE | `/api/v1/partners/{id}` | `partner-delete` — 409 while the organisation still has users |
+| POST | `/api/v1/partners/{id}/status` | `partner-approve` — suspension revokes member sessions |
+| POST | `/api/v1/partners/{id}/verification` | `partner-verify` |
+| POST | `/api/v1/partners/{id}/listing` | `partner-publish` — 409 unless the partner is ACTIVE |
+| GET | `/api/v1/partners/tiers` | `partner-tier-view` |
+| PATCH | `/api/v1/partners/tiers/{id}` | `partner-tier-manage` |
+
+> The `categories` / `candidates` row that used to close this table has been removed: those routes and
+> their permissions were **deleted on 2026-08-06** with the inherited test-platform domain.
 
 `/api/v1/invitations/preview` is the only intentionally unauthenticated data route. It returns the
 invited email, role name, account type and expiry — nothing about the inviter or the wider system.
