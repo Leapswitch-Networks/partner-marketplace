@@ -4,10 +4,13 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import Button from "@/components/common/Button";
+import FormModal from "@/components/common/FormModal";
 import Input from "@/components/common/Input";
 import Select from "@/components/common/Select";
+import { navIcon } from "@/components/dashboard/navIcons";
 import { invitationApi, roleApi } from "@/lib/api/rbacApi";
 import type { AccountType, Role } from "@/types";
+import { extractApiError } from "@/lib/utils/apiError";
 
 /**
  * Invite one or more people — the reference's multi-row repeater, on our bulk
@@ -40,16 +43,21 @@ interface Row {
 let nextUid = 1;
 const blankRow = (): Row => ({ uid: nextUid++, email: "", role_id: "", account_type: "partner" });
 
-function apiMessage(err: unknown, fallback: string): string {
-  const response = (err as { response?: { data?: { detail?: unknown }; status?: number } })?.response;
-  const detail = response?.data?.detail;
-  if (Array.isArray(detail)) return (detail[0] as { msg?: string })?.msg ?? fallback;
-  if (typeof detail === "string" && detail) return detail;
-  if (!response) return "Network error — check your connection and try again.";
-  return `${fallback} (${response.status ?? "unknown"})`;
-}
+/** Links the modal footer's submit button to the form it sits outside of. */
+const FORM_ID = "invitation-form";
 
-export default function InvitationForm() {
+export default function InvitationForm({
+  /**
+   * Renders into `FormModal` instead of the bespoke full-page shell, and calls
+   * `onDone` instead of navigating. The rows, the duplicate detection and the
+   * submit are shared; only the chrome around them differs.
+   */
+  asModal = false,
+  onDone,
+}: {
+  asModal?: boolean;
+  onDone?: (action: "saved" | "cancelled") => void;
+} = {}) {
   const router = useRouter();
   const [rows, setRows] = useState<Row[]>([blankRow()]);
   const [roles, setRoles] = useState<Role[]>([]);
@@ -107,10 +115,13 @@ export default function InvitationForm() {
         .filter((i) => !i.email_sent && i.accept_url)
         .map((i) => ({ email: i.email, url: i.accept_url as string }));
 
+      // The link view is shown either way — it holds credentials that exist
+      // nowhere else, so closing straight to the table would lose them.
       if (undelivered.length > 0) setLinks(undelivered);
+      else if (asModal) onDone?.("saved");
       else router.push("/dashboard/invitations");
     } catch (err) {
-      setServerError(apiMessage(err, "Could not send the invitations."));
+      setServerError(extractApiError(err, "Could not send the invitations."));
     } finally {
       setSaving(false);
     }
@@ -119,25 +130,56 @@ export default function InvitationForm() {
   const roleOptions = roles.map((r) => ({ value: String(r.id), label: r.display_name }));
 
   if (links) {
+    const linkList = (
+      <div className="space-y-2">
+        {links.map((l) => (
+          <div
+            key={l.email}
+            className="rounded-[5px] border border-brand/20 p-3 dark:border-night-border"
+          >
+            <p className="mb-1 text-xs font-semibold text-ink dark:text-gray-200">{l.email}</p>
+            <code className="block break-all font-mono text-[11px] text-ink-label dark:text-night-muted">
+              {l.url}
+            </code>
+          </div>
+        ))}
+      </div>
+    );
+
+    const blurb = `No email was delivered for ${links.length} invitation${
+      links.length === 1 ? "" : "s"
+    }, so the links are shown here. Each expires in 7 days.`;
+
+    if (asModal) {
+      return (
+        <FormModal
+          open
+          // Not dismissible: these links exist nowhere else and are gone once
+          // this closes. A stray Escape or backdrop click must not be what
+          // destroys a credential the invitee has not received.
+          dismissible={false}
+          onClose={() => onDone?.("saved")}
+          icon={navIcon("invitations")}
+          title="Send these links"
+          subtitle={blurb}
+          footer={
+            <Button type="button" onClick={() => onDone?.("saved")}>
+              Done
+            </Button>
+          }
+        >
+          {linkList}
+        </FormModal>
+      );
+    }
+
     return (
       <div className="flex h-full min-h-0 flex-col">
         <div className="mb-3">
           <h1 className="text-sm font-bold text-ink dark:text-white">Send these links</h1>
-          <p className="mt-0.5 text-[11px] text-ink-label dark:text-night-muted">
-            No email was delivered for {links.length} invitation{links.length === 1 ? "" : "s"}, so
-            the links are shown here. Each expires in 7 days.
-          </p>
+          <p className="mt-0.5 text-[11px] text-ink-label dark:text-night-muted">{blurb}</p>
         </div>
-        <div className="scrollbar-thin min-h-0 flex-1 space-y-2 overflow-y-auto">
-          {links.map((l) => (
-            <div key={l.email} className="rounded-[5px] border border-brand/20 p-3 dark:border-night-border">
-              <p className="mb-1 text-xs font-semibold text-ink dark:text-gray-200">{l.email}</p>
-              <code className="block break-all font-mono text-[11px] text-ink-label dark:text-night-muted">
-                {l.url}
-              </code>
-            </div>
-          ))}
-        </div>
+        <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto">{linkList}</div>
         <div className="mt-3 flex justify-end">
           <Button onClick={() => router.push("/dashboard/invitations")}>Done</Button>
         </div>
@@ -145,22 +187,10 @@ export default function InvitationForm() {
     );
   }
 
-  return (
-    <div className="flex h-full min-h-0 flex-col">
-      <form
-        onSubmit={submit}
-        noValidate
-        className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-none border border-brand/20 bg-surface-wash dark:border-night-border dark:bg-night-card"
-      >
-        <div className="shrink-0 border-b border-brand/20 px-4 py-3 dark:border-night-border sm:px-5">
-          <h1 className="text-sm font-bold text-ink dark:text-white">Invite people</h1>
-          <p className="mt-0.5 text-[11px] text-ink-label dark:text-night-muted">
-            Each invitation grants its role when accepted. Add a row per person — up to 50.
-          </p>
-        </div>
-
-        <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">
-          {serverError && (
+  /** The rows and the note — everything between the header and the footer. */
+  const body = (
+    <>
+      {serverError && (
             <div
               role="alert"
               className="mb-4 rounded-[5px] border border-tone-danger/40 bg-tone-danger/10 px-3 py-2 text-xs text-tone-danger"
@@ -236,21 +266,68 @@ export default function InvitationForm() {
               hint="Stored against every invitation in this batch. Not shown to the invitee."
             />
           </div>
+    </>
+  );
+
+  /** The count and the two buttons — the footer, in both shells. */
+  const footer = (cancel: () => void) => (
+    <>
+      {/* The running count sits *inside* the footer rather than above the button,
+          because "fix the duplicates first" explains why Send is disabled and
+          needs to be next to it. */}
+      <p className="mr-auto text-[11px] text-ink-label dark:text-night-muted">
+        {filled.length} to send
+        {duplicates.size > 0 && " · fix the duplicates first"}
+      </p>
+      <Button variant="outline" type="button" onClick={cancel}>
+        Cancel
+      </Button>
+      <Button type="submit" form={FORM_ID} loading={saving} disabled={!canSubmit}>
+        Send {filled.length > 1 ? `${filled.length} invitations` : "invitation"}
+      </Button>
+    </>
+  );
+
+  if (asModal) {
+    return (
+      <FormModal
+        open
+        onClose={() => onDone?.("cancelled")}
+        icon={navIcon("invitations")}
+        title="Invite people"
+        subtitle="Each invitation grants its role when accepted. Add a row per person — up to 50."
+        // `xl`: a row is email + role + type + Remove on one line, and at the
+        // default 672px they wrap to two lines per invitee, which turns a
+        // five-person batch into a very tall scroll.
+        size="xl"
+        footer={footer(() => onDone?.("cancelled"))}
+      >
+        <form id={FORM_ID} onSubmit={submit} noValidate>
+          {body}
+        </form>
+      </FormModal>
+    );
+  }
+
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <form
+        id={FORM_ID}
+        onSubmit={submit}
+        noValidate
+        className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-none border border-brand/20 bg-surface-wash dark:border-night-border dark:bg-night-card"
+      >
+        <div className="shrink-0 border-b border-brand/20 px-4 py-3 dark:border-night-border sm:px-5">
+          <h1 className="text-sm font-bold text-ink dark:text-white">Invite people</h1>
+          <p className="mt-0.5 text-[11px] text-ink-label dark:text-night-muted">
+            Each invitation grants its role when accepted. Add a row per person — up to 50.
+          </p>
         </div>
 
-        <div className="flex shrink-0 items-center justify-between gap-2 border-t border-brand/20 px-4 py-3 dark:border-night-border sm:px-5">
-          <p className="text-[11px] text-ink-label dark:text-night-muted">
-            {filled.length} to send
-            {duplicates.size > 0 && " · fix the duplicates first"}
-          </p>
-          <div className="flex items-center gap-2">
-            <Button variant="outline" type="button" onClick={() => router.push("/dashboard/invitations")}>
-              Cancel
-            </Button>
-            <Button type="submit" loading={saving} disabled={!canSubmit}>
-              Send {filled.length > 1 ? `${filled.length} invitations` : "invitation"}
-            </Button>
-          </div>
+        <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-5">{body}</div>
+
+        <div className="flex shrink-0 items-center gap-2 border-t border-brand/20 px-4 py-3 dark:border-night-border sm:px-5">
+          {footer(() => router.push("/dashboard/invitations"))}
         </div>
       </form>
     </div>

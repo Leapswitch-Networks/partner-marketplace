@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { cn } from "@/lib/utils/cn";
 
 /**
  * Viewport-locked card, per LeapDesk's mandatory index-page layout.
@@ -35,14 +36,30 @@ import type { ReactNode } from "react";
 
 export function Card({
   children,
+  bordered = true,
   className = "",
 }: {
   children: ReactNode;
+  /**
+   * The brand hairline around the card. Off on index pages since 2026-08-10 —
+   * the table already draws its own frame, so the outer border read as a second
+   * box around the first.
+   *
+   * It is a prop rather than a `className` override because the border here is
+   * a **width**, and `border-0` passed in would fight `border` on CSS source
+   * order rather than on the caller's intent — the same trap `cn()`'s docblock
+   * describes. A boolean cannot lose that argument.
+   */
+  bordered?: boolean;
   className?: string;
 }) {
   return (
     <div
-      className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-none border border-brand/20 bg-surface-wash dark:border-night-border dark:bg-night-card ${className}`}
+      className={cn(
+        "flex min-h-0 flex-1 flex-col overflow-hidden rounded-none bg-surface-wash dark:bg-night-card",
+        bordered && "border border-brand/20 dark:border-night-border",
+        className
+      )}
     >
       {children}
     </div>
@@ -61,7 +78,15 @@ export function CardHeader({
   actions?: ReactNode;
 }) {
   return (
-    <div className="shrink-0 border-b border-brand/20 px-4 py-3 dark:border-night-border sm:px-5">
+    /*
+      No bottom rule under the heading, since 2026-08-10. It rendered as a line
+      across the top of `CardContent`, and with the card's own border already
+      gone it was the last hairline boxing the header in. The heading's weight
+      and the padding separate it from the filters well enough — this design
+      leans on borders, but three concentric ones around the same table is what
+      that turns into if nobody stops it.
+    */
+    <div className="shrink-0 px-2 py-2 sm:px-2">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <h2 className="flex items-center gap-2 text-sm font-bold text-ink dark:text-white">
@@ -92,11 +117,19 @@ export function CardContent({
   className?: string;
 }) {
   return (
-    <div className={`flex min-h-0 flex-1 flex-col px-4 py-3 sm:px-5 ${className}`}>{children}</div>
+    <div className={`flex min-h-0 flex-1 flex-col px-2 py-2 sm:px-2 ${className}`}>{children}</div>
   );
 }
 
-/** Filter row: every filter `flex-1`, trailing controls `shrink-0`. */
+/**
+ * Filter row: every filter `flex-1`, trailing controls `shrink-0`.
+ *
+ * Since 2026-08-10 this is **nested inside `DataTable`'s toolbar row**, sharing a
+ * line with the column picker rather than sitting on its own above it. Hence
+ * `min-w-0 flex-1` (it claims the leading space and lets its children wrap) and
+ * no bottom margin — the toolbar row owns the spacing now. It renders nowhere
+ * else, so this is the only shape it has to serve.
+ */
 export function FilterRow({ children }: { children: ReactNode }) {
-  return <div className="mb-3 flex shrink-0 flex-wrap items-center gap-2">{children}</div>;
+  return <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">{children}</div>;
 }

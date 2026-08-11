@@ -1,21 +1,31 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import Badge, { type BadgeTone } from "@/components/common/Badge";
+import { useEffect, useMemo, useState } from "react";
+import { type BadgeTone } from "@/components/common/Badge";
 import ResourceIndex from "@/components/common/ResourceIndex";
+import { badgeColumn, dateColumn, numberColumn } from "@/components/common/columns";
 import { type Column } from "@/components/common/DataTable";
 import Modal from "@/components/common/Modal";
+import { navIcon } from "@/components/dashboard/navIcons";
 import useAutoPerPage from "@/lib/hooks/useAutoPerPage";
+import useModalState from "@/lib/hooks/useModalState";
+import useResourceList from "@/lib/hooks/useResourceList";
 import useResourceQuery from "@/lib/hooks/useResourceQuery";
 import { activityApi, type ActivityEntry } from "@/lib/api/rbacApi";
+import { formatDateTime } from "@/lib/utils/format";
 
 /**
  * The Activity Log index — the read surface for the audit trail (PM-32).
  *
- * Built on the mandatory index-page layout, same as Users and Roles. **No row
- * actions and no bulk actions**, because there is nothing to do to an audit entry:
- * the API has no write route and neither does this. A "delete" affordance on an
- * audit trail would be the single most damaging button in the product.
+ * On the same shells and the same shared pieces as Users — see
+ * `MODULE_PARITY_PLAN.md`. **Where it deliberately differs from Users, and why:**
+ *
+ * * **No row actions, no bulk actions, no selection.** There is nothing to do to
+ *   an audit entry: the API has no write route and neither does this. A "delete"
+ *   affordance on an audit trail would be the single most damaging button in the
+ *   product. Parity means the same vocabulary, not the same feature list.
+ * * **No `Actions` column**, for the same reason — an empty three-dot menu is
+ *   worse than no column.
  *
  * The one interaction is opening a row to read its `properties` — the before/after
  * diff, the IP, the reason a login failed. That detail is the whole value of the
@@ -53,15 +63,11 @@ function humanise(event: string | null): string {
 }
 
 export default function ActivityModule() {
-  const [rows, setRows] = useState<ActivityEntry[]>([]);
-  const [total, setTotal] = useState(0);
-  const [pages, setPages] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
   const autoPerPage = useAutoPerPage();
   const [events, setEvents] = useState<string[]>([]);
-  const [detail, setDetail] = useState<ActivityEntry | null>(null);
+
+  /** One mode. Same hook as the others so all four modules read the same way. */
+  const modal = useModalState<"detail", ActivityEntry>();
 
   // Four filters the API already supported and the UI never exposed —
   // subject_type, the date range and hide_system — plus the three it did.
@@ -81,12 +87,28 @@ export default function ActivityModule() {
     autoPerPage,
   });
 
-  const load = useCallback(
-    async (isLive: () => boolean = () => true) => {
-      setLoading(true);
-      setError(null);
-      try {
-        const res = await activityApi.list({
+  /*
+    No `sort_by` / `sort_order` in this call, and **no `sortKey` on any column
+    below** — both deliberate, and the second was wrong until 2026-08-11.
+
+    The trail is newest-first and that is a design decision, not an omission:
+    `activity_service.list_entries` says so in as many words, because rows written
+    inside one transaction share a timestamp and only `id` gives a stable order.
+    The endpoint exposes no sort parameter at all.
+
+    The `When` column nonetheless declared `sortKey: "created_at"`, which rendered
+    a sort arrow, took a click, and sent a parameter the route does not read —
+    **a control that could not do anything.** Removed rather than papered over.
+    Giving the audit trail a real oldest-first toggle is a product change to the
+    API, tracked in `MODULE_PARITY_PLAN.md` § 3, not something to fake here.
+  */
+  const list = useResourceList<ActivityEntry>({
+    ready: q.ready,
+    deps: [q.applied, q.page, q.perPage],
+    errorMessage: "Could not load the activity log.",
+    fetch: () =>
+      activityApi
+        .list({
           page: q.page,
           per_page: q.perPage,
           ...(q.applied.search ? { search: q.applied.search } : {}),
@@ -96,30 +118,9 @@ export default function ActivityModule() {
           ...(q.applied.date_from ? { date_from: q.applied.date_from } : {}),
           ...(q.applied.date_to ? { date_to: q.applied.date_to } : {}),
           ...(q.applied.hide_system === "1" ? { hide_system: true } : {}),
-        });
-        if (!isLive()) return;
-        setRows(res.data.items);
-        setTotal(res.data.total);
-        setPages(res.data.pages);
-      } catch {
-        if (isLive()) setError("Could not load the activity log.");
-      } finally {
-        if (isLive()) setLoading(false);
-      }
-    },
-    [q.page, q.perPage, q.applied]
-  );
-
-  useEffect(() => {
-    // `ready` is false until the query string has been applied; fetching before
-    // then issues a throwaway request with default filters.
-    if (!q.ready) return;
-    let live = true;
-    void load(() => live);
-    return () => {
-      live = false;
-    };
-  }, [load, q.ready]);
+        })
+        .then((res) => res.data),
+  });
 
   // Loaded once: the event list changes only when a new kind of action first
   // occurs, so refetching it alongside every filter change would be waste.
@@ -146,32 +147,46 @@ export default function ActivityModule() {
 
   const columns = useMemo<Column<ActivityEntry>[]>(
     () => [
+      // Was `(q.page - 1) * q.perPage + i + 1` on top of an index that already
+      // carries the page offset — page 2 started at 51. See `columns.tsx`.
+      numberColumn<ActivityEntry>(),
       {
-        id: "index",
-        header: "#",
-        cell: (_row, i) => (q.page - 1) * q.perPage + i + 1,
-        className: "w-10 text-center px-0.5 text-gray-400",
-        headerClassName: "w-10 text-center px-0.5",
+        // Sits where `Actions` does on every other module, and holds the only
+        // thing you can do to an audit row: read it.
+        id: "detail",
+        header: "Details",
+        cell: (row) =>
+          row.properties ? (
+            <div className="flex justify-center">
+              <button
+                type="button"
+                onClick={() => modal.open("detail", row)}
+                className="font-semibold text-brand hover:underline dark:text-brand-on-dark"
+              >
+                View
+              </button>
+            </div>
+          ) : null,
+        className: "text-center",
+        headerClassName: "w-[80px] text-center",
         hideable: false,
       },
-      {
-        id: "when",
-        header: "When",
-        sortKey: "created_at",
-        cell: (row) => (
-          <span
-            className="whitespace-nowrap text-gray-500 dark:text-gray-400"
-            title={new Date(row.created_at).toISOString()}
-          >
-            {new Date(row.created_at).toLocaleString()}
-          </span>
-        ),
-      },
-      {
+      badgeColumn<ActivityEntry>({
         id: "event",
         header: "Event",
-        cell: (row) => <Badge tone={toneFor(row.event)}>{humanise(row.event)}</Badge>,
-      },
+        tone: (row) => toneFor(row.event),
+        label: (row) => humanise(row.event),
+        width: "w-[170px]",
+      }),
+      dateColumn<ActivityEntry>({
+        id: "when",
+        header: "When",
+        value: (row) => row.created_at,
+        withTime: true,
+        // The exact instant, on hover. The formatted value drops seconds and the
+        // offset, which are the two things you want reconstructing an incident.
+        title: (row) => new Date(row.created_at).toISOString(),
+      }),
       {
         id: "who",
         header: "Who",
@@ -179,7 +194,7 @@ export default function ActivityModule() {
           row.causer_name ?? (
             // An unauthenticated actor is the normal case for a failed login, not
             // missing data — saying so beats an empty cell that reads as a bug.
-            <span className="text-gray-400 dark:text-gray-500" title="No authenticated actor">
+            <span className="text-ink-label dark:text-night-muted" title="No authenticated actor">
               Not signed in
             </span>
           ),
@@ -187,32 +202,24 @@ export default function ActivityModule() {
       {
         id: "description",
         header: "What happened",
-        cell: (row) => <span className="text-gray-700 dark:text-gray-300">{row.description}</span>,
-      },
-      {
-        id: "detail",
-        header: "",
-        cell: (row) =>
-          row.properties ? (
-            <button
-              type="button"
-              onClick={() => setDetail(row)}
-              className="text-brand dark:text-brand-on-dark hover:underline"
-            >
-              Details
-            </button>
-          ) : null,
-        className: "text-right",
-        hideable: false,
+        cell: (row) => <span className="text-ink dark:text-gray-300">{row.description}</span>,
       },
     ],
-    [q.page, q.perPage]
+    // `modal.open` is the stable `useCallback`; the rule wants the whole `modal`
+    // object, which is rebuilt every render and would defeat this memo entirely.
+    // Same disable as the other three modules.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [modal.open]
   );
 
   return (
     <ResourceIndex<ActivityEntry, typeof q.filters>
+      icon={navIcon("activity")}
       title="Activity Log"
-      description={`${total} recorded action${total === 1 ? "" : "s"} — read-only`}
+      // The count moved out of here to the pager, which already says
+      // "1–25 of 137" and does not go stale between fetches — same change Users
+      // made. What is left is the sentence that says what the page is *for*.
+      description="Every recorded action — read-only"
       query={q}
       filters={[
         { type: "text", key: "search", placeholder: "Search description, subject or log…", label: "Search activity" },
@@ -250,63 +257,66 @@ export default function ActivityModule() {
         { type: "check", key: "hide_system", label: "Hide automation" },
       ]}
       columns={columns}
-      rows={rows}
+      rows={list.rows}
       rowKey={(r) => String(r.id)}
-      loading={loading}
-      error={error}
-      onRetry={() => void load()}
-      total={total}
-      pages={pages}
-      emptyTitle={q.filtersActive ? "No matching activity" : "Nothing recorded yet"}
-      emptyHint={
-        q.filtersActive ? "Try a different filter." : "Actions appear here as they happen."
-      }
+      loading={list.loading}
+      error={list.error}
+      onRetry={list.refetch}
+      total={list.total}
+      pages={list.pages}
+      table="vendor"
+      rowNoun="entry"
+      // No `filtersActive` branch here: `ResourceIndex` passes it down and the
+      // table already picks the "filters hid everything" copy itself. Deciding it
+      // twice is how the two messages drift apart.
+      emptyTitle="Nothing recorded yet"
+      emptyHint="Actions appear here as they happen."
     >
 
-      {detail && (
+      {modal.is("detail") && modal.target && (
         <Modal
-          onClose={() => setDetail(null)}
-          title={humanise(detail.event)}
-          subtitle={new Date(detail.created_at).toLocaleString()}
+          onClose={modal.close}
+          title={humanise(modal.target.event)}
+          subtitle={formatDateTime(modal.target.created_at)}
         >
           <div className="flex flex-col gap-3 text-sm">
-            <p className="text-gray-700 dark:text-gray-300">{detail.description}</p>
+            <p className="text-ink dark:text-gray-300">{modal.target.description}</p>
             <dl className="grid grid-cols-[auto,1fr] gap-x-4 gap-y-1 text-xs">
-              <dt className="text-gray-400 dark:text-gray-500">Actor</dt>
-              <dd className="text-gray-700 dark:text-gray-300">
-                {detail.causer_name ?? "Not signed in"}
+              <dt className="text-ink-label dark:text-night-muted">Actor</dt>
+              <dd className="text-ink dark:text-gray-300">
+                {modal.target.causer_name ?? "Not signed in"}
               </dd>
-              {detail.subject_type && (
+              {modal.target.subject_type && (
                 <>
-                  <dt className="text-gray-400 dark:text-gray-500">Subject</dt>
-                  <dd className="font-mono text-gray-700 dark:text-gray-300">
-                    {detail.subject_type} {detail.subject_id?.slice(0, 8)}
+                  <dt className="text-ink-label dark:text-night-muted">Subject</dt>
+                  <dd className="font-mono text-ink dark:text-gray-300">
+                    {modal.target.subject_type} {modal.target.subject_id?.slice(0, 8)}
                   </dd>
                 </>
               )}
-              {detail.batch_uuid && (
+              {modal.target.batch_uuid && (
                 <>
-                  <dt className="text-gray-400 dark:text-gray-500">Batch</dt>
+                  <dt className="text-ink-label dark:text-night-muted">Batch</dt>
                   <dd
-                    className="font-mono text-gray-700 dark:text-gray-300"
+                    className="font-mono text-ink dark:text-gray-300"
                     title="Part of one bulk operation"
                   >
-                    {detail.batch_uuid.slice(0, 8)}
+                    {modal.target.batch_uuid.slice(0, 8)}
                   </dd>
                 </>
               )}
             </dl>
-            {detail.properties && (
+            {modal.target.properties && (
               <div>
-                <p className="mb-1 text-xs font-semibold text-gray-500 dark:text-gray-400">
+                <p className="mb-1 text-xs font-semibold text-ink-label dark:text-night-muted">
                   Detail
                 </p>
                 {/* Raw JSON on purpose. `properties` holds arbitrary shapes —
                     before/after diffs, IPs, skip reasons — and inventing a
                     renderer per shape would go stale the moment a call site adds
                     a key. Passwords and tokens are stripped server-side. */}
-                <pre className="max-h-64 overflow-auto rounded-[5px] bg-gray-50 p-3 font-mono text-[11px] text-gray-700 dark:bg-night-card dark:text-gray-300">
-                  {JSON.stringify(detail.properties, null, 2)}
+                <pre className="max-h-64 overflow-auto rounded-[5px] bg-surface-tile p-3 font-mono text-[11px] text-ink dark:bg-night-body dark:text-gray-300">
+                  {JSON.stringify(modal.target.properties, null, 2)}
                 </pre>
               </div>
             )}

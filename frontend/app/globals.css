@@ -32,6 +32,60 @@
   --accent-light: 209 176 147; /* #d1b093 */
 }
 
+/* ── shadcn semantic scale, mapped onto Viho ──────────────────────────────────
+ *
+ * Added 2026-08-10 so the reference implementation's `components/ui/*` and its
+ * DataTable can be used verbatim. Those files are written against shadcn's
+ * semantic names (`bg-muted`, `text-muted-foreground`, `border-input`, …), which
+ * this project had never defined.
+ *
+ * **These are aliases, not a second palette.** Every value below resolves to a
+ * Viho token, so a copied component renders in our brand rather than shadcn's
+ * neutral grey. One colour system, two vocabularies — which is the only way to
+ * adopt the components without the app going two-tone again (see § Historical
+ * note in UI_PATTERNS.md for what that cost last time).
+ *
+ * ⚠️ `accent` is deliberately ABSENT. Viho already owns that name — it is the tan
+ * `#ba895d`, live in `StatCard` and `QuickActionsCard`. shadcn uses `accent` for
+ * menu-item hover, so the copied files have those two classes rewritten to the
+ * documented house hover (`bg-brand/10` + `text-brand`) instead. Redefining
+ * `accent` here would silently repaint both dashboard cards.
+ *
+ * Same rule as above: SPACE-SEPARATED RGB CHANNELS ONLY.
+ */
+:root {
+  --background: 255 255 255; /* surface.card */
+  --foreground: 36 41 52; /* ink */
+  --muted: 239 243 242; /* surface.tile — table head, bulk bar */
+  --muted-foreground: 89 102 122; /* ink.label, NOT ink.muted: 5.05:1 vs 4.19:1 on the green card */
+  --popover: 255 255 255;
+  --popover-foreground: 36 41 52;
+  --primary: var(--brand);
+  --primary-foreground: 255 255 255;
+  --secondary: 239 243 242;
+  --secondary-foreground: 36 41 52;
+  --destructive: 210 45 61; /* tone.danger */
+  --destructive-foreground: 255 255 255;
+  --border: 230 237 239; /* surface.border */
+  --input: 230 237 239;
+  --ring: var(--brand);
+}
+
+.dark {
+  --background: 17 23 39; /* night.card */
+  --foreground: 255 255 255;
+  --muted: 20 40 49; /* night.border */
+  --muted-foreground: 152 166 173; /* night.muted */
+  --popover: 17 23 39;
+  --popover-foreground: 255 255 255;
+  --primary-foreground: 255 255 255;
+  --secondary: 20 40 49;
+  --secondary-foreground: 255 255 255;
+  --border: 20 40 49;
+  --input: 20 40 49;
+  --ring: var(--brand-on-dark);
+}
+
 /* ── Background texture ──────────────────────────────────────────────────── */
 /* CSS-only dot-grid, rendered once by the browser, zero JS, zero extra files */
 :root {

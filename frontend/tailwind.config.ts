@@ -81,6 +81,43 @@ const config: Config = {
           light: "#e6edef",
           dark: "#2c323f",
         },
+
+        // ── shadcn semantic aliases ─────────────────────────────────────────
+        //
+        // Added 2026-08-10 with the owner's approval, so the reference
+        // implementation's `components/ui/*` and its DataTable can be used as
+        // written. Those files reference shadcn's names, which did not exist here.
+        //
+        // **Aliases, not a second palette.** Every variable resolves to a Viho
+        // value in `app/globals.css` — a copied component renders in our brand,
+        // not shadcn's neutral grey. See that file for the mapping and for why
+        // `accent` is deliberately missing from this block (Viho already owns
+        // that name; redefining it would repaint StatCard and QuickActionsCard).
+        background: "rgb(var(--background) / <alpha-value>)",
+        foreground: "rgb(var(--foreground) / <alpha-value>)",
+        muted: {
+          DEFAULT: "rgb(var(--muted) / <alpha-value>)",
+          foreground: "rgb(var(--muted-foreground) / <alpha-value>)",
+        },
+        popover: {
+          DEFAULT: "rgb(var(--popover) / <alpha-value>)",
+          foreground: "rgb(var(--popover-foreground) / <alpha-value>)",
+        },
+        primary: {
+          DEFAULT: "rgb(var(--primary) / <alpha-value>)",
+          foreground: "rgb(var(--primary-foreground) / <alpha-value>)",
+        },
+        secondary: {
+          DEFAULT: "rgb(var(--secondary) / <alpha-value>)",
+          foreground: "rgb(var(--secondary-foreground) / <alpha-value>)",
+        },
+        destructive: {
+          DEFAULT: "rgb(var(--destructive) / <alpha-value>)",
+          foreground: "rgb(var(--destructive-foreground) / <alpha-value>)",
+        },
+        border: "rgb(var(--border) / <alpha-value>)",
+        input: "rgb(var(--input) / <alpha-value>)",
+        ring: "rgb(var(--ring) / <alpha-value>)",
       },
       // NOTE: no `boxShadow.brand` token. `app.css` declares a brand-tinted
       // shadow for `.btn-primary`, but it never renders — the pixels below a real

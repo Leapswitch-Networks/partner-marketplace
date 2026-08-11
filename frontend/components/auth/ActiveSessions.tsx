@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Badge from "@/components/common/Badge";
 import Button from "@/components/common/Button";
 import { authApi, type SessionInfo } from "@/lib/api/authApi";
+import { formatDate } from "@/lib/utils/format";
 
 /**
  * "Where am I signed in" — the user's own live sessions, with a way to end them.
@@ -150,7 +151,7 @@ export default function ActiveSessions() {
               <p className="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">
                 {session.ip_address ?? "unknown address"} · active{" "}
                 {relative(session.last_seen_at)} · signed in{" "}
-                {new Date(session.created_at).toLocaleDateString()}
+                {formatDate(session.created_at)}
               </p>
             </div>
 

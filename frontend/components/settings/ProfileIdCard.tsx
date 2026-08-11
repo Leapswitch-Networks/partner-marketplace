@@ -1,6 +1,7 @@
 "use client";
 
 import useAppSelector from "@/lib/hooks/useAppSelector";
+import { formatDate } from "@/lib/utils/format";
 
 /**
  * The read-only identity card at the top of the profile page.
@@ -16,13 +17,6 @@ export default function ProfileIdCard() {
 
   const isPartner = user.roles?.some((r) => r.name === "Partner") ?? false;
   const isActive = user.status === "ACTIVE";
-
-  const formatDate = (value: string) =>
-    new Date(value).toLocaleDateString("en-US", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
 
   const infoItems: { label: string; value: string; mono: boolean }[] = [
     ...(user.employee_id

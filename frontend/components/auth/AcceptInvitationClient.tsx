@@ -11,6 +11,7 @@ import { invitationApi } from "@/lib/api/rbacApi";
 import { setUser } from "@/lib/store/authSlice";
 import useAppDispatch from "@/lib/hooks/useAppDispatch";
 import { extractApiError } from "@/lib/utils/apiError";
+import { formatDateTime } from "@/lib/utils/format";
 
 /**
  * Mirrors `InvitationPreviewResponse`. `expires_at` and `requires_google` were
@@ -163,10 +164,7 @@ export default function AcceptInvitationClient({ token }: { token: string | null
           )}
           This link expires on{" "}
           <span className="font-semibold">
-            {new Date(preview.expires_at).toLocaleString(undefined, {
-              dateStyle: "medium",
-              timeStyle: "short",
-            })}
+            {formatDateTime(preview.expires_at)}
           </span>
           .
         </p>

@@ -9,6 +9,7 @@ import { logoutUser } from "@/lib/store/authSlice";
 import { getRoleLabel, getUserDisplayName } from "@/lib/utils/user";
 import { useBranding } from "@/components/common/BrandingProvider";
 import BrandMark from "@/components/common/BrandMark";
+import Avatar from "@/components/common/Avatar";
 
 export default function Navbar() {
   const branding = useBranding();
@@ -58,9 +59,7 @@ export default function Navbar() {
         {/* Desktop user menu */}
         <div className="hidden items-center gap-3 md:flex">
           <div className="flex items-center gap-2.5 rounded-[5px] border border-surface-border px-3 py-1.5 dark:border-night-border">
-            <span className="flex h-7 w-7 items-center justify-center rounded-full bg-brand text-xs font-bold text-white">
-              {initials}
-            </span>
+            <Avatar initials={initials} size="sm" />
             <div className="text-left">
               <p className="text-xs font-semibold text-gray-900 leading-tight dark:text-gray-100">{displayName}</p>
               <p className="text-[10px] text-gray-400 leading-tight dark:text-gray-500">{user?.email ?? ""}</p>
@@ -85,9 +84,7 @@ export default function Navbar() {
           aria-label="Toggle menu"
           aria-expanded={menuOpen}
         >
-          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-brand text-sm font-bold text-white">
-            {initials}
-          </span>
+          <Avatar initials={initials} size="md" />
         </button>
       </div>
 

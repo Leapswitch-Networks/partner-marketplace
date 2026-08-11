@@ -1,20 +1,29 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import Badge from "@/components/common/Badge";
 import Button from "@/components/common/Button";
 import { type Column } from "@/components/common/DataTable";
+import {
+  actionsColumn,
+  badgeColumn,
+  dateColumn,
+  numberColumn,
+} from "@/components/common/columns";
+import InvitationForm from "@/components/admin/InvitationForm";
 import Modal from "@/components/common/Modal";
 import ResourceIndex from "@/components/common/ResourceIndex";
-import RowActions from "@/components/common/RowActions";
 import Toast, { useToast } from "@/components/common/Toast";
+import { navIcon } from "@/components/dashboard/navIcons";
 import { invitationApi } from "@/lib/api/rbacApi";
 import useAutoPerPage from "@/lib/hooks/useAutoPerPage";
+import useModalState from "@/lib/hooks/useModalState";
 import usePermissions from "@/lib/hooks/usePermissions";
+import useResourceList from "@/lib/hooks/useResourceList";
 import useResourceQuery from "@/lib/hooks/useResourceQuery";
 import type { Invitation } from "@/types";
+import { extractApiError } from "@/lib/utils/apiError";
 
 /**
  * Invitations index.
@@ -34,6 +43,18 @@ const STATUS_TONE: Record<Invitation["status"], "success" | "warning" | "danger"
   cancelled: "danger",
 };
 
+/**
+ * The badge rendered `row.status` raw, so the column read `pending` / `accepted`
+ * in lower case while every other badge in the app is sentence case. The wire
+ * value is lower case and stays that way; only the label changes.
+ */
+const STATUS_LABEL: Record<Invitation["status"], string> = {
+  pending: "Pending",
+  accepted: "Accepted",
+  expired: "Expired",
+  cancelled: "Cancelled",
+};
+
 const STATUS_OPTIONS = [
   { value: "pending", label: "Pending" },
   { value: "accepted", label: "Accepted" },
@@ -46,14 +67,6 @@ const ACCOUNT_TYPE_OPTIONS = [
   { value: "staff", label: "Staff" },
 ];
 
-function apiMessage(err: unknown, fallback: string): string {
-  const response = (err as { response?: { data?: { detail?: unknown }; status?: number } })?.response;
-  const detail = response?.data?.detail;
-  if (typeof detail === "string" && detail) return detail;
-  if (!response) return "Network error — check your connection and try again.";
-  return `${fallback} (${response.status ?? "unknown"})`;
-}
-
 /** Summary card. Counts come from their own endpoint — see `stats`. */
 function StatCard({ label, value, tone }: { label: string; value: number; tone: string }) {
   return (
@@ -65,19 +78,12 @@ function StatCard({ label, value, tone }: { label: string; value: number; tone: 
 }
 
 export default function InvitationsModule() {
-  const router = useRouter();
   const { can } = usePermissions();
-  const { toast, show, dismiss } = useToast();
+  const { toasts, show, dismiss } = useToast();
   const autoPerPage = useAutoPerPage();
 
-  const [rows, setRows] = useState<Invitation[]>([]);
-  const [total, setTotal] = useState(0);
-  const [pages, setPages] = useState(0);
   const [stats, setStats] = useState<Record<string, number> | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [target, setTarget] = useState<Invitation | null>(null);
   const [link, setLink] = useState<{ email: string; url: string } | null>(null);
 
   const q = useResourceQuery({
@@ -88,33 +94,33 @@ export default function InvitationsModule() {
     autoPerPage,
   });
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await invitationApi.list({
-        search: q.applied.search || undefined,
-        status: (q.applied.status as Invitation["status"]) || undefined,
-        account_type: (q.applied.account_type as "staff" | "partner") || undefined,
-        sort_by: q.sortBy,
-        sort_order: q.sortOrder,
-        page: q.page,
-        per_page: q.perPage,
-      });
-      setRows(res.data.items);
-      setTotal(res.data.total);
-      setPages(res.data.pages);
-    } catch (err) {
-      setError(apiMessage(err, "Could not load invitations."));
-    } finally {
-      setLoading(false);
-    }
-  }, [q.applied, q.sortBy, q.sortOrder, q.page, q.perPage]);
+  const list = useResourceList<Invitation>({
+    ready: q.ready,
+    deps: [q.applied, q.sortBy, q.sortOrder, q.page, q.perPage],
+    errorMessage: "Could not load invitations.",
+    fetch: () =>
+      invitationApi
+        .list({
+          search: q.applied.search || undefined,
+          status: (q.applied.status as Invitation["status"]) || undefined,
+          account_type: (q.applied.account_type as "staff" | "partner") || undefined,
+          sort_by: q.sortBy,
+          sort_order: q.sortOrder,
+          page: q.page,
+          per_page: q.perPage,
+        })
+        .then((res) => res.data),
+  });
 
-  useEffect(() => {
-    if (!q.ready) return;
-    load();
-  }, [load, q.ready]);
+  /**
+   * `create` opens the invite form as a modal, matching Users — owner's call,
+   * 2026-08-11. `/dashboard/invitations/new` still exists and still renders the
+   * full-page shell; it is the deep-linkable version.
+   *
+   * The resend link dialog is not in here: it is not opened *on* a row, it is
+   * raised by a response, and it carries a credential rather than a record.
+   */
+  const modal = useModalState<"create" | "cancel", Invitation>();
 
   /** Refetched after every write: a resend or cancel moves a row between cards. */
   const loadStats = useCallback(() => {
@@ -137,26 +143,27 @@ export default function InvitationsModule() {
       // between "we emailed them" and "copy this and send it yourself".
       if (res.data.accept_url) setLink({ email: invitation.email, url: res.data.accept_url });
       else show(`Invitation resent to ${invitation.email}.`);
-      await load();
+      await list.refetch();
       loadStats();
     } catch (err) {
-      show(apiMessage(err, "Could not resend."), "error");
+      show(extractApiError(err, "Could not resend."), "error");
     } finally {
       setBusy(null);
     }
   };
 
   const handleCancel = async () => {
+    const target = modal.target;
     if (!target) return;
     setBusy(target.id);
     try {
       await invitationApi.cancel(target.id);
       show(`Invitation to ${target.email} cancelled.`);
-      setTarget(null);
-      await load();
+      modal.close();
+      await list.refetch();
       loadStats();
     } catch (err) {
-      show(apiMessage(err, "Could not cancel."), "error");
+      show(extractApiError(err, "Could not cancel."), "error");
     } finally {
       setBusy(null);
     }
@@ -164,101 +171,112 @@ export default function InvitationsModule() {
 
   const columns = useMemo<Column<Invitation>[]>(
     () => [
-      {
-        id: "number",
-        header: "#",
-        cell: (_row, i) => (
-          <span className="tabular-nums text-ink-label">{(q.page - 1) * q.perPage + i + 1}</span>
-        ),
-        className: "text-center px-0.5",
-        headerClassName: "w-10 text-center px-0.5",
-        hideable: false,
-      },
-      {
-        id: "actions",
-        header: "Actions",
-        cell: (row) => (
-          <div className="flex justify-center">
-            <RowActions
-              actions={[
-                {
-                  label: "Resend",
-                  // Only a pending invitation can be resent. An accepted or
-                  // cancelled one refuses server-side, so offering it would put
-                  // an action on screen that can only ever return an error.
-                  visible: can("invitation-resend") && row.status === "pending",
-                  disabled: busy === row.id,
-                  hint: "Issues a new link and invalidates the old one",
-                  onSelect: () => handleResend(row),
-                },
-                {
-                  label: "Cancel",
-                  destructive: true,
-                  visible: can("invitation-cancel") && row.status === "pending",
-                  disabled: busy === row.id,
-                  onSelect: () => setTarget(row),
-                },
-              ]}
-            />
-          </div>
-        ),
-        className: "!px-0 w-0",
-        headerClassName: "!px-0 w-0 text-center",
-        hideable: false,
-      },
-      {
+      // Was open-coded as `(q.page - 1) * q.perPage + i + 1`, on top of an index
+      // that already carries the page offset — so page 2 started at 51 instead of
+      // 26. See the table in `columns.tsx`.
+      numberColumn<Invitation>(),
+      actionsColumn<Invitation>((row) => [
+        {
+          label: "Resend",
+          // Only a pending invitation can be resent. An accepted or cancelled one
+          // refuses server-side, so offering it would put an action on screen
+          // that can only ever return an error.
+          visible: can("invitation-resend") && row.status === "pending",
+          disabled: busy === row.id,
+          hint: "Issues a new link and invalidates the old one",
+          onSelect: () => handleResend(row),
+        },
+        {
+          label: "Cancel",
+          destructive: true,
+          visible: can("invitation-cancel") && row.status === "pending",
+          disabled: busy === row.id,
+          onSelect: () => modal.open("cancel", row),
+        },
+      ]),
+      badgeColumn<Invitation>({
         id: "status",
         header: "Status",
-        cell: (row) => <Badge tone={STATUS_TONE[row.status]}>{row.status}</Badge>,
         sortKey: "status",
-        className: "text-center",
-        headerClassName: "text-center",
-      },
+        tone: (row) => STATUS_TONE[row.status],
+        label: (row) => STATUS_LABEL[row.status],
+        width: "w-[110px]",
+      }),
       { id: "email", header: "Email", cell: (row) => row.email, sortKey: "email" },
       {
         id: "role",
         header: "Role",
         cell: (row) =>
-          row.role ? <Badge tone="brand">{row.role.display_name}</Badge> : <span className="text-ink-label">—</span>,
+          row.role ? (
+            <Badge tone="brand">{row.role.display_name}</Badge>
+          ) : (
+            <span className="text-ink-label dark:text-night-muted">—</span>
+          ),
       },
-      {
+      badgeColumn<Invitation>({
         id: "account_type",
         header: "Type",
-        cell: (row) => (row.account_type === "staff" ? "Staff" : "Partner"),
-      },
+        tone: (row) => (row.account_type === "staff" ? "info" : "neutral"),
+        label: (row) => (row.account_type === "staff" ? "Staff" : "Partner"),
+        width: "w-[90px]",
+      }),
       {
         id: "invited_by",
         header: "Invited by",
-        cell: (row) => row.invited_by_name ?? <span className="text-ink-label">—</span>,
+        cell: (row) =>
+          row.invited_by_name ?? (
+            <span className="text-ink-label dark:text-night-muted">—</span>
+          ),
       },
-      {
+      dateColumn<Invitation>({
         id: "expires_at",
         header: "Expires",
-        cell: (row) => new Date(row.expires_at).toLocaleDateString(undefined, { dateStyle: "medium" }),
         sortKey: "expires_at",
-      },
+        value: (row) => row.expires_at,
+      }),
+      dateColumn<Invitation>({
+        id: "last_sent_at",
+        header: "Last sent",
+        // Newly exposed. The API has sorted on it since the list endpoint landed
+        // and the table never showed it — and it is the column you want when
+        // deciding whether to chase someone again.
+        sortKey: "last_sent_at",
+        value: (row) => row.last_sent_at,
+        fallback: "Not sent",
+        withTime: true,
+      }),
       {
         id: "resent",
         header: "Resent",
         // The reference has no such column. A repeatedly resent invitation is
         // either a delivery problem or someone being chased, and both are worth
         // seeing before you resend it again.
-        cell: (row) => <span className="tabular-nums">{row.resent_count}</span>,
+        cell: (row) => (
+          <span className="tabular-nums text-ink-label dark:text-night-muted">
+            {row.resent_count}
+          </span>
+        ),
         className: "text-center",
-        headerClassName: "text-center",
+        headerClassName: "w-[80px] text-center",
       },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [can, busy, q.page, q.perPage]
+    [can, busy, modal.open]
   );
 
   return (
     <ResourceIndex<Invitation, typeof q.filters>
+      icon={navIcon("invitations")}
       title="Invitations"
-      description={`${total} invitation${total === 1 ? "" : "s"} · an invitation is a role grant with a delay on it`}
+      // The count moved to the pager, which says "1–25 of 137" and does not go
+      // stale between fetches. What stays is the sentence explaining the concept.
+      description="An invitation is a role grant with a delay on it"
       actions={
         can("invitation-create") ? (
-          <Button onClick={() => router.push("/dashboard/invitations/new")}>Invite</Button>
+          <Button onClick={() => modal.open("create")}>
+            {navIcon("userAdd")}
+            Invite
+          </Button>
         ) : undefined
       }
       query={q}
@@ -278,33 +296,58 @@ export default function InvitationsModule() {
         ) : undefined
       }
       columns={columns}
-      rows={rows}
+      rows={list.rows}
       rowKey={(r) => r.id}
-      loading={loading}
-      error={error}
-      onRetry={load}
-      total={total}
-      pages={pages}
+      loading={list.loading}
+      error={list.error}
+      onRetry={list.refetch}
+      total={list.total}
+      pages={list.pages}
+      table="vendor"
+      rowNoun="invitation"
       emptyTitle="No invitations"
-      emptyHint={can("invitation-create") ? "Use “Invite” to send the first one." : undefined}
+      emptyHint={
+        can("invitation-create") ? (
+          <Button size="sm" onClick={() => modal.open("create")}>
+            Send First Invitation
+          </Button>
+        ) : undefined
+      }
     >
-      {target && (
+      {modal.is("create") && (
+        <InvitationForm
+          asModal
+          onDone={(action) => {
+            modal.close();
+            if (action === "saved") {
+              show("Invitations sent.");
+              list.refetch();
+              loadStats();
+            }
+          }}
+        />
+      )}
+
+      {modal.is("cancel") && modal.target && (
+        // Not `DeleteDialog`: cancelling is not deleting. The record stays, it
+        // stops working — and the copy has to say which, because "delete" would
+        // imply the row disappears from this table and it does not.
         <Modal
-          onClose={() => setTarget(null)}
+          onClose={modal.close}
           title="Cancel this invitation?"
-          subtitle={target.email}
+          subtitle={modal.target.email}
           footer={
             <>
-              <Button variant="outline" type="button" onClick={() => setTarget(null)}>
+              <Button variant="outline" type="button" onClick={modal.close}>
                 Keep it
               </Button>
-              <Button onClick={handleCancel} loading={busy === target.id}>
+              <Button variant="danger" onClick={handleCancel} loading={busy === modal.target.id}>
                 Cancel invitation
               </Button>
             </>
           }
         >
-          <p className="text-xs text-ink dark:text-gray-300">
+          <p className="text-sm text-ink dark:text-gray-300">
             The link stops working immediately. Cancelling is final — send a new invitation rather
             than trying to restore this one.
           </p>
@@ -332,7 +375,7 @@ export default function InvitationsModule() {
         </Modal>
       )}
 
-      <Toast toast={toast} onDismiss={dismiss} />
+      <Toast toasts={toasts} onDismiss={dismiss} />
     </ResourceIndex>
   );
 }

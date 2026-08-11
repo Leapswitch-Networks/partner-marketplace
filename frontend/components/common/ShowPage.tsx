@@ -4,6 +4,7 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 
 import Badge, { type BadgeTone } from "@/components/common/Badge";
+import { formatDateTime } from "@/lib/utils/format";
 
 /**
  * Detail-page primitives — the third page of the Index / Form / Show contract.
@@ -128,38 +129,66 @@ export function ShowPageHeader({
  * The sidebar is `lg:w-80` rather than a fraction: metadata is short and
  * predictable, so a percentage makes it grow with the viewport for no reason.
  */
+/**
+ * Two-thirds main, one-third sidebar — the reference's `grid lg:grid-cols-3`
+ * with the main column spanning two.
+ *
+ * It was a flex row with a fixed `lg:w-80` sidebar until 2026-08-10. A fixed
+ * 320px column is a third of a 960px window and a fifth of a 1600px one, so the
+ * balance the design was drawn at only held at one width. The grid keeps the
+ * proportion at every size.
+ */
 export function ShowPageGrid({ children }: { children: ReactNode }) {
-  return <div className="flex min-h-0 flex-1 flex-col gap-4 lg:flex-row">{children}</div>;
+  return <div className="grid gap-4 lg:grid-cols-3">{children}</div>;
 }
 
 export function ShowPageMain({ children }: { children: ReactNode }) {
-  return <div className="flex min-w-0 flex-1 flex-col gap-4">{children}</div>;
+  return <div className="flex min-w-0 flex-col gap-4 lg:col-span-2">{children}</div>;
 }
 
+/**
+ * **Sticky on desktop**, matching the reference's `lg:sticky lg:top-4
+ * lg:self-start`. The sidebar holds status, security and audit metadata — the
+ * context you want while reading the main column, not something to scroll away
+ * from. `self-start` is what stops a grid item stretching to the row height,
+ * which would make `sticky` do nothing at all.
+ */
 export function ShowPageSidebar({ children }: { children: ReactNode }) {
-  return <div className="flex w-full shrink-0 flex-col gap-4 lg:w-80">{children}</div>;
+  return (
+    <aside className="flex w-full flex-col gap-4 lg:sticky lg:top-0 lg:self-start">
+      {children}
+    </aside>
+  );
 }
 
 // ── Cards ────────────────────────────────────────────────────────────────────
 
 export function InfoCard({
   title,
+  description,
   icon,
   actions,
   children,
 }: {
   title: string;
+  /** One line under the heading, for a section whose contents need framing. */
+  description?: ReactNode;
   icon?: ReactNode;
   actions?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <section className="rounded-none border border-brand/20 bg-surface-wash dark:border-night-border dark:bg-night-card">
-      <div className="flex items-center justify-between gap-3 border-b border-brand/20 px-4 py-3 dark:border-night-border sm:px-5">
-        <h2 className="flex items-center gap-2 text-sm font-bold text-ink dark:text-white">
-          {icon}
-          {title}
-        </h2>
+      <div className="flex items-start justify-between gap-3 border-b border-brand/20 px-4 py-3 dark:border-night-border sm:px-5">
+        <div className="min-w-0 flex-1">
+          <h2 className="flex items-center gap-2 text-sm font-bold text-ink dark:text-white">
+            {icon}
+            {title}
+          </h2>
+          {description && (
+            <p className="mt-0.5 text-[11px] text-ink-label dark:text-night-muted">{description}</p>
+          )}
+        </div>
         {actions && <div className="shrink-0">{actions}</div>}
       </div>
       <dl className="divide-y divide-brand/20 px-4 dark:divide-night-border sm:px-5">{children}</dl>
@@ -230,13 +259,13 @@ export function AuditCard({
   updatedAt?: string | null;
   extra?: ReactNode;
 }) {
-  const format = (value?: string | null) =>
-    value ? new Date(value).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "";
-
+  // An empty string rather than the formatter's em dash: `Field` already renders
+  // its own "not set" treatment for an empty value, and two fallbacks would show
+  // one inside the other.
   return (
     <MetaCard>
-      <Field label="Created" value={format(createdAt)} />
-      <Field label="Last updated" value={format(updatedAt)} />
+      <Field label="Created" value={formatDateTime(createdAt, "")} />
+      <Field label="Last updated" value={formatDateTime(updatedAt, "")} />
       {extra}
     </MetaCard>
   );

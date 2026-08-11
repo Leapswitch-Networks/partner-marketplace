@@ -7,15 +7,20 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 
 import Badge from "@/components/common/Badge";
+import Button from "@/components/common/Button";
+import FormModal from "@/components/common/FormModal";
 import Input from "@/components/common/Input";
-import ResourceForm from "@/components/common/ResourceForm";
+import ResourceForm, { FormGrid, FormSection } from "@/components/common/ResourceForm";
 import Skeleton from "@/components/common/Skeleton";
 import PermissionPicker from "@/components/admin/PermissionPicker";
+import { navIcon } from "@/components/dashboard/navIcons";
 import { permissionApi, roleApi, type NavSectionOption } from "@/lib/api/rbacApi";
 import type { PermissionGroup, Role } from "@/types";
+import { extractApiError } from "@/lib/utils/apiError";
 
 /**
- * Create and edit a role. Same `record?` contract as `UserForm`.
+ * Create and edit a role. Same `record?` contract as `UserForm`, and since
+ * 2026-08-11 the same `asModal` contract too.
  *
  * The permission grid is not part of the RHF form. Its state is a `Set<number>`
  * held alongside, because a checkbox grid over a variable, server-supplied group
@@ -36,16 +41,24 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 
-function apiMessage(err: unknown, fallback: string): string {
-  const response = (err as { response?: { data?: { detail?: unknown }; status?: number } })?.response;
-  const detail = response?.data?.detail;
-  if (Array.isArray(detail)) return (detail[0] as { msg?: string })?.msg ?? fallback;
-  if (typeof detail === "string" && detail) return detail;
-  if (!response) return "Network error — check your connection and try again.";
-  return `${fallback} (${response.status ?? "unknown"})`;
-}
+/** Links the modal footer's submit button to the form it sits outside of. */
+const FORM_ID = "role-form";
 
-export default function RoleForm({ roleId }: { roleId?: number }) {
+export default function RoleForm({
+  roleId,
+  /**
+   * Renders into `FormModal` instead of the full-page `ResourceForm`, and calls
+   * `onDone` instead of navigating. Everything else — schema, fetch, the
+   * permission set, the payload — is shared, which is the whole reason this is a
+   * prop rather than a second component. Same shape as `UserForm`.
+   */
+  asModal = false,
+  onDone,
+}: {
+  roleId?: number;
+  asModal?: boolean;
+  onDone?: (action: "saved" | "cancelled") => void;
+}) {
   const router = useRouter();
 
   const [record, setRecord] = useState<Role | null>(null);
@@ -91,7 +104,7 @@ export default function RoleForm({ roleId }: { roleId?: number }) {
       })
       .then(() => roleApi.navPreferences(roleId))
       .then((res) => !cancelled && setNavSections(res.data.sections))
-      .catch((err) => !cancelled && setServerError(apiMessage(err, "Could not load this role.")))
+      .catch((err) => !cancelled && setServerError(extractApiError(err, "Could not load this role.")))
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
@@ -151,62 +164,77 @@ export default function RoleForm({ roleId }: { roleId?: number }) {
           )
         );
       }
+      // Set before navigating so the dirty guard does not prompt on the way out.
       setSaved(true);
-      router.push("/dashboard/roles");
+      if (asModal) onDone?.("saved");
+      else router.push("/dashboard/roles");
     } catch (err) {
-      setServerError(apiMessage(err, record ? "Could not update role." : "Could not create role."));
+      setServerError(extractApiError(err, record ? "Could not update role." : "Could not create role."));
     }
   };
 
+  const isEditMode = Boolean(record);
+
   if (loading) {
-    return (
+    const skeleton = (
       <div className="flex flex-col gap-3">
         <Skeleton className="h-8 w-48" />
         <Skeleton className="h-64 w-full" />
       </div>
     );
+    // In modal mode the skeleton has to be *in the modal*. Returned bare, it
+    // renders wherever the module happens to mount its children — at the bottom
+    // of the index page, under the table — which is what `UserForm` still does
+    // and is worth not copying.
+    return asModal ? (
+      <FormModal open onClose={() => onDone?.("cancelled")} title="Edit Role" icon={navIcon("roles")}>
+        {skeleton}
+      </FormModal>
+    ) : (
+      skeleton
+    );
   }
 
-  return (
-    <ResourceForm
-      form={form}
-      record={record}
-      resourceName="Role"
-      backHref="/dashboard/roles"
-      serverError={serverError}
-      onSubmit={onSubmit}
-      skipDirtyGuard={saved}
-    >
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Input
-          label="Name"
-          hint={nameLocked ? "System roles cannot be renamed." : "Letters and numbers, no spaces."}
-          disabled={nameLocked}
-          error={formState.errors.name?.message}
-          {...register("name")}
-        />
-        <Input
-          label="Display name"
-          hint="Shown in the UI. Defaults to the name."
-          error={formState.errors.display_name?.message}
-          {...register("display_name")}
-        />
-      </div>
+  /**
+   * The fields, declared once and rendered by whichever shell is active.
+   *
+   * Grouped into sections as of 2026-08-11 — this was the flat column
+   * `DAILY_CHANGES.md` promised to split on 2026-08-10 and did not. Three cards,
+   * matching how the form is actually read: what the role *is*, what it *sees*,
+   * what it *may do*.
+   */
+  const fields = (
+    <>
+      <FormSection title="Role Identity">
+        <FormGrid>
+          <Input
+            label="Name"
+            hint={nameLocked ? "System roles cannot be renamed." : "Letters and numbers, no spaces."}
+            disabled={nameLocked}
+            error={formState.errors.name?.message}
+            {...register("name")}
+          />
+          <Input
+            label="Display name"
+            hint="Shown in the UI. Defaults to the name."
+            error={formState.errors.display_name?.message}
+            {...register("display_name")}
+          />
+        </FormGrid>
 
-      <Input
-        label="Description"
-        placeholder="What is this role for?"
-        error={formState.errors.description?.message}
-        {...register("description")}
-      />
+        <Input
+          label="Description"
+          placeholder="What is this role for?"
+          error={formState.errors.description?.message}
+          {...register("description")}
+        />
+      </FormSection>
 
       {navSections && navSections.length > 0 && (
-        <div>
-          <p className="mb-1 text-xs font-semibold text-ink dark:text-gray-300">Sidebar</p>
-          <p className="mb-2 text-[11px] text-ink-label dark:text-night-muted">
-            Which sections start collapsed for someone holding this role. Affects the sidebar only —
-            it hides nothing they have permission to reach.
-          </p>
+        <FormSection
+          title="Sidebar"
+          description="Which sections start collapsed for someone holding this role. Affects the sidebar only — it hides nothing they have permission to reach."
+        >
           <div className="flex flex-col gap-1.5 rounded-[5px] border border-brand/20 px-3 py-2.5 dark:border-night-border">
             {navSections.map((section) => (
               <label
@@ -229,12 +257,14 @@ export default function RoleForm({ roleId }: { roleId?: number }) {
               </label>
             ))}
           </div>
-        </div>
+        </FormSection>
       )}
 
-      <div>
-        <div className="mb-2 flex items-center justify-between">
-          <p className="text-xs font-semibold text-ink dark:text-gray-300">Permissions</p>
+      <FormSection
+        title="Permissions"
+        description="What someone holding this role may do. Everything is denied unless it is ticked here."
+      >
+        <div className="flex items-center justify-end">
           <Badge tone="brand">{checked.size} selected</Badge>
         </div>
         <PermissionPicker
@@ -243,7 +273,71 @@ export default function RoleForm({ roleId }: { roleId?: number }) {
           onToggle={toggle}
           onToggleGroup={toggleGroup}
         />
-      </div>
+      </FormSection>
+    </>
+  );
+
+  if (asModal) {
+    return (
+      <FormModal
+        open
+        onClose={() => onDone?.("cancelled")}
+        icon={navIcon("roles")}
+        title={isEditMode ? `Edit Role: ${record?.display_name ?? ""}` : "Create New Role"}
+        subtitle={
+          isEditMode
+            ? "Update the role and what it grants"
+            : "Define a role and the permissions it carries"
+        }
+        // `xl`, not the default `lg`: the permission picker is a multi-column
+        // checkbox grid, and at 672px it wraps to one column and becomes a very
+        // long scroll inside a 60vh box.
+        size="xl"
+        footer={
+          <>
+            <Button variant="outline" type="button" onClick={() => onDone?.("cancelled")}>
+              Cancel
+            </Button>
+            <Button type="submit" form={FORM_ID} loading={form.formState.isSubmitting}>
+              {form.formState.isSubmitting
+                ? isEditMode
+                  ? "Updating…"
+                  : "Creating…"
+                : isEditMode
+                  ? "Update Role"
+                  : "Create Role"}
+            </Button>
+          </>
+        }
+      >
+        {/* Submit lives in the footer, outside this element, so it is wired by
+            `form=` rather than by nesting. */}
+        <form id={FORM_ID} onSubmit={form.handleSubmit(onSubmit)} noValidate>
+          {serverError && (
+            <div
+              role="alert"
+              className="mb-4 rounded-[5px] border border-tone-danger/40 bg-tone-danger/10 px-3 py-2 text-xs text-tone-danger"
+            >
+              {serverError}
+            </div>
+          )}
+          <div className="flex flex-col gap-5">{fields}</div>
+        </form>
+      </FormModal>
+    );
+  }
+
+  return (
+    <ResourceForm
+      form={form}
+      record={record}
+      resourceName="Role"
+      backHref="/dashboard/roles"
+      serverError={serverError}
+      onSubmit={onSubmit}
+      skipDirtyGuard={saved}
+    >
+      {fields}
     </ResourceForm>
   );
 }

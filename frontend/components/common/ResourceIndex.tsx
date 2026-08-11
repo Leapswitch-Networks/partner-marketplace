@@ -4,6 +4,8 @@ import type { ReactNode } from "react";
 
 import { Card, CardContent, CardHeader } from "@/components/common/Card";
 import DataTable, { type Column } from "@/components/common/DataTable";
+import type { RowId } from "@/components/vendor-datatable/types";
+import VendorDataTable from "@/components/common/VendorDataTable";
 import FilterBar, { type FilterDef } from "@/components/common/FilterBar";
 import type { FilterValues, ResourceQuery } from "@/lib/hooks/useResourceQuery";
 
@@ -26,7 +28,7 @@ import type { FilterValues, ResourceQuery } from "@/lib/hooks/useResourceQuery";
  * fetches, and passes the result down.
  */
 
-export interface ResourceIndexProps<T, F extends FilterValues> {
+export interface ResourceIndexProps<T extends { id: RowId }, F extends FilterValues> {
   /** Card heading — the resource's plural name. */
   title: string;
   /**
@@ -34,6 +36,8 @@ export interface ResourceIndexProps<T, F extends FilterValues> {
    * the resource is for; a bare count wastes the line.
    */
   description?: string;
+  /** Glyph before the title. `navIcon("users")` and friends. */
+  icon?: ReactNode;
   /** Header-right actions — normally the create button, permission-gated. */
   actions?: ReactNode;
 
@@ -64,14 +68,26 @@ export interface ResourceIndexProps<T, F extends FilterValues> {
 
   emptyTitle?: string;
   emptyHint?: ReactNode;
+  /** Singular noun for the selection count — "user", "role". */
+  rowNoun?: string;
+  /**
+   * Which table renders the rows.
+   *
+   * `"default"` is ours. `"vendor"` is the reference implementation's, copied in
+   * on 2026-08-10 and adapted by `VendorDataTable` — **opt-in per module, on
+   * purpose.** It is proven on Users only; the other modules stay on ours until
+   * that one has been looked at in a browser and signed off.
+   */
+  table?: "default" | "vendor";
 
   /** Modals and toasts. Rendered after the card so they layer above it. */
   children?: ReactNode;
 }
 
-export default function ResourceIndex<T, F extends FilterValues>({
+export default function ResourceIndex<T extends { id: RowId }, F extends FilterValues>({
   title,
   description,
+  icon,
   actions,
   query,
   filters,
@@ -88,19 +104,32 @@ export default function ResourceIndex<T, F extends FilterValues>({
   bulkActions,
   emptyTitle,
   emptyHint,
+  rowNoun,
+  table = "default",
   children,
 }: ResourceIndexProps<T, F>) {
+  const Table = table === "vendor" ? VendorDataTable : DataTable;
+
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <Card>
-        <CardHeader title={title} description={description} actions={actions} />
+      {/* No outer hairline: the table draws its own frame, and the two
+          together read as a box inside a box. */}
+      <Card bordered={false}>
+        <CardHeader title={title} description={description} icon={icon} actions={actions} />
 
         <CardContent>
-          <FilterBar query={query} filters={filters}>
-            {filterExtras}
-          </FilterBar>
-
-          <DataTable<T>
+          {/*
+            The filters go *into* the table's toolbar row rather than above it, so
+            they share the line with the column picker. See the note in
+            `DataTable` for why that row is worth reclaiming — the scroll box is
+            viewport-measured, so chrome above it costs visible records.
+          */}
+          <Table<T>
+            toolbar={
+              <FilterBar query={query} filters={filters}>
+                {filterExtras}
+              </FilterBar>
+            }
             columns={columns}
             rows={rows}
             rowKey={rowKey}
@@ -122,6 +151,7 @@ export default function ResourceIndex<T, F extends FilterValues>({
             bulkActions={bulkActions}
             emptyTitle={emptyTitle}
             emptyHint={emptyHint}
+            rowNoun={rowNoun}
             // Lets the table distinguish "nothing exists yet" from "your filters
             // hid everything", which are different problems with different fixes.
             filtersActive={query.filtersActive}

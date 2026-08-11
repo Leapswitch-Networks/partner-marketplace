@@ -9,6 +9,13 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   /** Leading icon in a brand-tinted tile — Viho's `.input-group-text`. Pass an
    *  SVG sized `h-4 w-4`; the tile handles fill and centring. */
   addon?: ReactNode;
+  /**
+   * Leading icon **inside** the field, on its own background — no tile, no
+   * divider. For filter bars, where a bordered `addon` tile reads as a second
+   * control sitting next to a row of single controls. The reference's search
+   * field uses exactly this. Ignored when `addon` is also passed.
+   */
+  leadingIcon?: ReactNode;
   /** Trailing control inside the field, e.g. the password `Show` toggle. Keep it
    *  to text or a small button — it sits on the input's own background. */
   trailing?: ReactNode;
@@ -29,7 +36,7 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
  * the addon tile is enclosed by it.
  */
 const Input = forwardRef<HTMLInputElement, InputProps>(
-  ({ label, error, hint, addon, trailing, id, className = "", ...props }, ref) => {
+  ({ label, error, hint, addon, leadingIcon, trailing, id, className = "", ...props }, ref) => {
     const inputId = id ?? label.toLowerCase().replace(/\s+/g, "-");
 
     return (
@@ -63,11 +70,21 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
             </span>
           )}
 
+          {!addon && leadingIcon && (
+            <span
+              aria-hidden="true"
+              className="flex shrink-0 items-center pl-3 text-ink-muted dark:text-night-muted"
+            >
+              {leadingIcon}
+            </span>
+          )}
+
           <input
             ref={ref}
             id={inputId}
             aria-invalid={error ? true : undefined}
-            className={`w-full min-w-0 border-0 bg-transparent px-3.5 py-2.5 text-sm text-ink outline-none
+            className={`w-full min-w-0 border-0 bg-transparent py-2.5 pr-3.5 text-sm text-ink outline-none
+              ${!addon && leadingIcon ? "pl-2" : "pl-3.5"}
               placeholder:text-ink-muted focus:ring-0
               dark:text-white dark:placeholder:text-night-muted
               ${className}`}

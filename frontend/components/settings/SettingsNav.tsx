@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import usePermissions from "@/lib/hooks/usePermissions";
 
 /**
  * The settings sub-navigation.
@@ -43,31 +42,26 @@ const TABS: { title: string; href: string; icon: React.ReactNode }[] = [
   },
 ];
 
-/**
- * Installation-scope settings, kept visually apart from the three personal tabs.
+/*
+ * `INSTALLATION_TABS` lived here and held Branding. Removed 2026-08-11.
  *
- * The separation is deliberate rather than decorative. `Profile`, `Password` and
- * `Appearance` change a row about *you*; branding changes what every user of the
- * installation sees. Same URL space, very different blast radius — so they do not
- * sit in one undifferentiated list.
+ * This nav belongs to `/settings/*`, which is the **profile** area — its heading
+ * says "Manage your profile and account settings" and its shell is a 5xl column
+ * with this sidebar. Branding is not that: it changes what every user of the
+ * installation sees, and it is listed under System Settings in the main sidebar
+ * alongside Configuration, Security and the rest.
+ *
+ * Keeping it here meant one admin screen rendered inside the profile shell while
+ * its seven siblings rendered as full-page modules — the same screen reachable
+ * from two navigations that disagreed about what kind of thing it was. It now
+ * lives at `/dashboard/branding` with the others.
+ *
+ * **Three tabs, and only three.** Anything installation-scoped belongs in the
+ * main sidebar, not here.
  */
-const INSTALLATION_TABS: typeof TABS = [
-  {
-    title: "Branding",
-    href: "/settings/branding",
-    icon: (
-      <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
-      </svg>
-    ),
-  },
-];
 
 export default function SettingsNav() {
   const pathname = usePathname();
-  // Rendering-only. The route and the API are both guarded server-side; this just
-  // avoids showing a link that would answer 403.
-  const { isSuperAdmin } = usePermissions();
 
   const linkClasses = (active: boolean) =>
     `flex items-center gap-2.5 rounded-[5px] px-3 py-2 text-sm font-medium transition-colors ${
@@ -85,36 +79,16 @@ export default function SettingsNav() {
             key={tab.href}
             href={tab.href}
             aria-current={active ? "page" : undefined}
-            className={`flex items-center gap-2.5 rounded-[5px] px-3 py-2 text-sm font-medium transition-colors ${
-              active
-                ? "bg-brand/10 text-brand dark:text-brand-on-dark dark:bg-brand/20 dark:text-brand-on-dark"
-                : "text-gray-600 hover:bg-gray-100 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-800 dark:hover:text-gray-100"
-            }`}
+            // `linkClasses`, not a second inline copy. The two had already
+            // drifted — the inline version carried `dark:text-brand-on-dark`
+            // twice — which is what a duplicated class string does given time.
+            className={linkClasses(active)}
           >
             <span className="shrink-0">{tab.icon}</span>
             {tab.title}
           </Link>
         );
       })}
-
-      {isSuperAdmin && (
-        <>
-          <p className="mt-4 px-3 pb-1 text-[10px] font-semibold uppercase tracking-widest text-gray-400 dark:text-gray-500">
-            Installation
-          </p>
-          {INSTALLATION_TABS.map((tab) => (
-            <Link
-              key={tab.href}
-              href={tab.href}
-              aria-current={pathname === tab.href ? "page" : undefined}
-              className={linkClasses(pathname === tab.href)}
-            >
-              <span className="shrink-0">{tab.icon}</span>
-              {tab.title}
-            </Link>
-          ))}
-        </>
-      )}
     </nav>
   );
 }

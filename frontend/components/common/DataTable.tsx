@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import Badge from "./Badge";
+import ColumnPicker, { useHiddenColumns } from "./ColumnPicker";
 import Select from "./Select";
 
 /**
@@ -24,6 +25,14 @@ import Select from "./Select";
 export interface Column<T> {
   id: string;
   header: ReactNode;
+  /**
+   * Renders one cell.
+   *
+   * `index` is the row's **absolute 0-based position in the whole result set**,
+   * not its position within the page — so row 1 of page 2 at 25/page is `25`.
+   * Both tables guarantee this; `VendorDataTable` rebases the vendor's
+   * page-local index to match. Use `numberColumn()` rather than open-coding it.
+   */
   cell: (row: T, index: number) => ReactNode;
   /** Column key the server sorts by. Omit to make the column unsortable. */
   sortKey?: string;
@@ -65,6 +74,13 @@ export interface DataTableProps<T> {
   /** Distinguishes "no data at all" from "filters hid everything". */
   filtersActive?: boolean;
   onResetFilters?: () => void;
+  /** Singular noun for the selection count — "user", "role". Defaults to "record". */
+  rowNoun?: string;
+  /**
+   * Controls sharing the column picker's row — in practice the `FilterBar`.
+   * Takes the leading space; the `Cols` button stays hard right.
+   */
+  toolbar?: ReactNode;
   className?: string;
 }
 
@@ -100,12 +116,13 @@ export default function DataTable<T>({
   emptyHint,
   filtersActive,
   onResetFilters,
+  rowNoun = "record",
+  toolbar,
   className = "",
 }: DataTableProps<T>) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const [maxHeight, setMaxHeight] = useState<number | undefined>(undefined);
-  const [hidden, setHidden] = useState<Set<string>>(new Set());
-  const [colsOpen, setColsOpen] = useState(false);
+  const { hidden, toggle: toggleHidden } = useHiddenColumns();
 
   // Measure available height so ONLY this container scrolls.
   useEffect(() => {
@@ -121,14 +138,6 @@ export default function DataTable<T>({
   }, [rows.length]);
 
   const visible = columns.filter((c) => !hidden.has(c.id));
-
-  const toggleHidden = (id: string) =>
-    setHidden((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
 
   const handleSort = (column: Column<T>) => {
     if (!column.sortKey || !onSortChange) return;
@@ -164,8 +173,12 @@ export default function DataTable<T>({
         <span className="text-[11px] text-gray-500 dark:text-gray-400">
           {total === 0 ? "No records" : `${from}–${to} of ${total}`}
         </span>
+        {/* Reference wording: "3 of 137 user(s) selected". The denominator is
+            the point — it says how much of the result set is still unpicked. */}
         {selectable && (selected?.size ?? 0) > 0 && (
-          <Badge tone="brand">{selected?.size} selected</Badge>
+          <Badge tone="brand">
+            {selected?.size} of {total} {rowNoun}(s) selected
+          </Badge>
         )}
         {bulkActions && (selected?.size ?? 0) > 0 && (
           <div className="flex items-center gap-1.5">{bulkActions}</div>
@@ -186,7 +199,9 @@ export default function DataTable<T>({
         <PagerButton onClick={() => onPageChange(page - 1)} disabled={page <= 1} label="Previous">
           ‹
         </PagerButton>
-        <span className="px-1 text-[11px] tabular-nums text-gray-500 dark:text-gray-400">
+        {/* The current page sits between the arrows and carries the brand
+            colour, matching the active page number in the vendor pager. */}
+        <span className="px-1 text-[11px] font-bold tabular-nums text-brand dark:text-brand-on-dark">
           {pages === 0 ? 0 : page} / {pages}
         </span>
         <PagerButton
@@ -205,53 +220,25 @@ export default function DataTable<T>({
 
   return (
     <div className={`flex min-h-0 flex-col ${className}`}>
-      {/* Column visibility — trailing control, shrink-0 */}
-      <div className="flex shrink-0 items-center justify-end pb-1">
-        <div className="relative">
-          <button
-            type="button"
-            onClick={() => setColsOpen((o) => !o)}
-            aria-expanded={colsOpen}
-            className="flex h-7 items-center gap-1 rounded-[5px] border border-brand/20 px-2 text-[11px] font-medium text-gray-600 transition-colors hover:bg-gray-50 dark:border-night-border dark:text-gray-400 dark:hover:bg-gray-800"
-          >
-            Cols
-            <span className={`transition-transform ${colsOpen ? "rotate-180" : ""}`}>▾</span>
-          </button>
-          {colsOpen && (
-            <>
-              <button
-                type="button"
-                aria-label="Close column menu"
-                className="fixed inset-0 z-10 cursor-default"
-                onClick={() => setColsOpen(false)}
-              />
-              {/* Keeps `surface-border`: this popover is one of the few surfaces
-                  still white, and #e6edef reads correctly there. The green
-                  surfaces moved to `border-brand/20` because #e6edef on
-                  `surface-wash` is 1.02:1 — invisible. */}
-              <div className="absolute right-0 top-full z-20 mt-1 w-48 overflow-hidden rounded-[5px] border border-surface-border bg-white py-1 shadow-lg dark:border-night-border dark:bg-night-card">
-                {columns
-                  .filter((c) => c.hideable !== false)
-                  .map((c) => (
-                    <label
-                      key={c.id}
-                      className="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-xs text-gray-700 hover:bg-gray-50 dark:text-gray-300 dark:hover:bg-gray-800"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={!hidden.has(c.id)}
-                        onChange={() => toggleHidden(c.id)}
-                        className="h-3.5 w-3.5 accent-brand"
-                      />
-                      <span className="truncate">
-                        {typeof c.header === "string" ? c.header : c.id}
-                      </span>
-                    </label>
-                  ))}
-              </div>
-            </>
-          )}
-        </div>
+      {/*
+        Filters and the column picker share one row.
+
+        They were two stacked rows until 2026-08-10 — filters above, a lone `Cols`
+        button right-aligned below it. Merging them is not only tidier: the table's
+        scroll box is **viewport-measured**, so every row of chrome above it comes
+        straight out of the number of records on screen. `useAutoPerPage()` divides
+        by a 38px row, so one reclaimed ~40px row is roughly one more visible
+        record at every window size.
+
+        The filters arrive through `toolbar` rather than being rendered by
+        `ResourceIndex` above the table, because the column picker's state lives in
+        this component. Lifting `hidden` into `useResourceQuery` would be the
+        alternative — worth doing when column visibility should persist in the URL
+        like the other query state, and not before.
+      */}
+      <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 pb-2">
+        {toolbar}
+        <ColumnPicker columns={columns} hidden={hidden} onToggle={toggleHidden} />
       </div>
 
       {pager}
@@ -262,10 +249,33 @@ export default function DataTable<T>({
         className="min-h-0 flex-1 overflow-auto rounded-[5px] border border-brand/20 scrollbar-thin dark:border-night-border"
       >
         <table className="w-full border-collapse text-left text-xs 2xl:text-sm">
-          <thead className="sticky top-0 z-10 bg-brand/10 dark:bg-night-card">
+          {/*
+            The fill lives on the `<th>` cells, not on `<thead>`, and it is opaque.
+            Both halves of that matter and both were wrong:
+
+            * It was `bg-brand/10` — **translucent**. `UI_PATTERNS.md` § Full-Page
+              Index Layout mandates "sticky thead (top-0 z-10, **opaque bg**)", and
+              without it rows scroll visibly *through* the header, which reads as a
+              rendering fault rather than a style choice.
+            * A background painted on `<thead>` is unreliable under `position:
+              sticky` — several engines do not paint a table section's own
+              background for a stuck row. Putting it on the cells is the portable
+              fix and is why the class moved down here.
+
+            ⚠️ The shade is approximate, and deliberately so. Over the green card
+            (`surface-wash`) the old translucent fill composited to ≈`#d6e2e0`, and
+            **no token holds that value** — the nearest are `surface-tile` (brand@8%
+            over white) and `surface-border`. Minting the exact one means editing
+            `tailwind.config.ts`, which is a Protected File. `surface-tile` keeps the
+            header brand-tinted and opaque using only existing tokens; the hairline
+            below carries the separation, which is what this design does everywhere
+            else. Same shape as the `surface-border` retint already waiting on the
+            owner in PLANNING.md § 3.1.
+          */}
+          <thead className="sticky top-0 z-10">
             <tr>
               {selectable && (
-                <th className="w-8 px-2 py-2">
+                <th className="w-8 border-b border-brand/20 bg-brand px-3 py-2.5 dark:border-night-border">
                   <input
                     type="checkbox"
                     aria-label="Select all on this page"
@@ -280,7 +290,7 @@ export default function DataTable<T>({
                 return (
                   <th
                     key={c.id}
-                    className={`whitespace-nowrap px-2 py-2 font-bold text-gray-900 dark:text-gray-100 ${
+                    className={`whitespace-nowrap border-b border-brand/20 bg-brand px-3 py-2.5 font-bold text-white dark:border-night-border ${
                       c.headerClassName ?? ""
                     }`}
                   >
@@ -288,10 +298,10 @@ export default function DataTable<T>({
                       <button
                         type="button"
                         onClick={() => handleSort(c)}
-                        className="inline-flex items-center gap-1 hover:text-brand dark:hover:text-brand-on-dark"
+                        className="inline-flex items-center gap-1 hover:text-white/80"
                       >
                         {c.header}
-                        <span className="text-[9px] text-gray-400">
+                        <span className="text-[9px] text-white/60">
                           {active ? (sortOrder === "desc" ? "▼" : "▲") : "↕"}
                         </span>
                       </button>
@@ -308,9 +318,11 @@ export default function DataTable<T>({
             {loading &&
               Array.from({ length: Math.min(perPage, 8) }).map((_, i) => (
                 <tr key={`sk-${i}`} className="border-t border-brand/20 dark:border-night-border">
-                  {selectable && <td className="px-2 py-2" />}
+                  {/* Same padding as a real row — a skeleton that is shorter than
+                      what replaces it makes the table jump on every fetch. */}
+                  {selectable && <td className="px-3 py-2" />}
                   {visible.map((c) => (
-                    <td key={c.id} className="px-2 py-2">
+                    <td key={c.id} className="px-3 py-2">
                       <span className="block h-3 w-full max-w-[160px] animate-pulse rounded bg-gray-200 dark:bg-gray-700" />
                     </td>
                   ))}
@@ -320,15 +332,29 @@ export default function DataTable<T>({
             {!loading &&
               rows.map((row, index) => {
                 const key = rowKey(row);
+                /*
+                  Two fixes on the row below, matching the vendor table so the
+                  four index pages agree:
+
+                  * The stripe was `bg-gray-50/50` — a **grey** over the green
+                    `surface-wash` card, which `UI_PATTERNS.md` § The Signed-In
+                    Chrome Is Green rules out. `bg-muted` is #eff3f2, the brand
+                    teal at 8%, so the alternate row is a lighter green than the
+                    one above rather than a grey smudge across it.
+                  * `hover:bg-brand/10/40` is not a class. Tailwind takes one
+                    opacity modifier; a second makes the whole token unparseable,
+                    so it emitted nothing and rows had no hover at all in light
+                    mode. Only the dark variant was ever working.
+                */
                 return (
                   <tr
                     key={key}
-                    className={`border-t border-brand/20 transition-colors hover:bg-brand/10/40 dark:border-night-border dark:hover:bg-brand/20 ${
-                      index % 2 === 0 ? "" : "bg-gray-50/50 dark:bg-night-card/20"
+                    className={`border-t border-brand/20 transition-colors hover:bg-brand/10 dark:border-night-border dark:hover:bg-brand/20 ${
+                      index % 2 === 0 ? "" : "bg-muted"
                     }`}
                   >
                     {selectable && (
-                      <td className="px-2 py-2">
+                      <td className="px-3 py-2">
                         <input
                           type="checkbox"
                           aria-label="Select row"
@@ -341,7 +367,7 @@ export default function DataTable<T>({
                     {visible.map((c) => (
                       <td
                         key={c.id}
-                        className={`px-2 py-2 text-gray-700 dark:text-gray-300 ${c.className ?? ""}`}
+                        className={`px-3 py-2 text-gray-700 dark:text-gray-300 ${c.className ?? ""}`}
                       >
                         {c.cell(row, (page - 1) * perPage + index)}
                       </td>
@@ -421,7 +447,7 @@ function PagerButton({
       onClick={onClick}
       disabled={disabled}
       aria-label={label}
-      className="flex h-7 w-7 items-center justify-center rounded-[5px] border border-brand/20 text-xs text-gray-600 transition-colors hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40 dark:border-night-border dark:text-gray-400 dark:hover:bg-gray-800"
+      className="flex h-7 w-7 items-center justify-center rounded-[5px] bg-brand/10 text-xs font-semibold text-brand transition-colors hover:bg-brand hover:text-white disabled:cursor-not-allowed disabled:opacity-40 dark:bg-brand/20 dark:text-brand-on-dark dark:hover:bg-brand dark:hover:text-white"
     >
       {children}
     </button>

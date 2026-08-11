@@ -2,8 +2,8 @@
 
 import type { ReactNode } from "react";
 
+import FilterCombobox from "@/components/common/FilterCombobox";
 import Input from "@/components/common/Input";
-import Select from "@/components/common/Select";
 import { FilterRow } from "@/components/common/Card";
 import type { FilterValues, ResourceQuery } from "@/lib/hooks/useResourceQuery";
 
@@ -40,7 +40,29 @@ export interface TextFilter<F extends FilterValues> {
   /** Accessible name. Falls back to the placeholder. */
   label?: string;
   minWidth?: number;
+  /**
+   * Leading icon inside the field, sized `h-4 w-4`.
+   *
+   * Omit it for the magnifier, which is what a text filter almost always wants.
+   * Pass `null` explicitly for a bare field.
+   */
+  icon?: ReactNode;
 }
+
+/**
+ * The reference's magnifier — in the field, on its own background, not in a
+ * bordered tile. A tile was tried first and read as a second control sitting in
+ * a row of single controls.
+ */
+export const SEARCH_ICON = (
+  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z"
+    />
+  </svg>
+);
 
 export interface DateFilter<F extends FilterValues> {
   type: "date";
@@ -53,11 +75,13 @@ export interface DateFilter<F extends FilterValues> {
 export interface SelectFilter<F extends FilterValues> {
   type: "select";
   key: keyof F;
-  /** Empty-valued first option — "All statuses". */
+  /** Shown when nothing is chosen, and as the first "clear" row — "All Status". */
   placeholder: string;
   label?: string;
   options: { value: string; label: string }[];
   minWidth?: number;
+  /** Placeholder inside the combobox's own search box — "Search status...". */
+  searchPlaceholder?: string;
   /**
    * Hide the control entirely. For a filter whose options are permission-gated
    * or still loading — an empty dropdown is worse than no dropdown.
@@ -142,17 +166,26 @@ export default function FilterBar<F extends FilterValues>({
                 id={`filter-${key}`}
                 aria-label={filter.label ?? filter.placeholder}
                 placeholder={filter.placeholder}
+                // Defaults to the magnifier. Every index page's first filter is a
+                // search box, and every module was declaring the same 4-line SVG
+                // to get one — a decoration that has no reason to be a decision.
+                // Pass `icon` for anything else; pass `null` for none.
+                leadingIcon={filter.icon === undefined ? SEARCH_ICON : filter.icon}
                 value={query.filters[filter.key]}
                 onChange={(e) => query.setFilter(filter.key, e.target.value)}
                 className="!h-9 !py-0 !text-xs"
               />
             ) : (
-              <Select
-                aria-label={filter.label ?? filter.placeholder}
-                placeholder={filter.placeholder}
+              // A searchable combobox, not a native `<select>` — see
+              // `FilterCombobox`'s docblock. The Role filter is the case that
+              // forces it: forty roles in an unsearchable list is not a filter.
+              <FilterCombobox
                 options={filter.options}
                 value={query.filters[filter.key]}
-                onChange={(e) => query.setFilter(filter.key, e.target.value)}
+                onChange={(next) => query.setFilter(filter.key, next)}
+                placeholder={filter.placeholder}
+                searchPlaceholder={filter.searchPlaceholder ?? "Search..."}
+                label={filter.label ?? filter.placeholder}
               />
             )}
           </div>

@@ -46,7 +46,21 @@ export default function Modal({
 
   if (!mounted) return null;
 
-  const widths = { md: "max-w-md", lg: "max-w-2xl", xl: "max-w-4xl" };
+  /**
+   * Same responsive caps as `FormModal`, and they must stay in step — a Send
+   * Email dialog and an Edit User dialog opened from the same table should not
+   * be different widths on the same screen. See the table in that file.
+   *
+   * `md` stays fixed at 448px, which matters more here than there: `md` is this
+   * shell's default and `ConfirmDialog` is its main caller. A delete
+   * confirmation is one sentence; widening it separates the question from the
+   * button that answers it.
+   */
+  const widths = {
+    md: "max-w-md",
+    lg: "max-w-2xl xl:max-w-3xl 2xl:max-w-4xl",
+    xl: "max-w-4xl xl:max-w-5xl 2xl:max-w-6xl",
+  };
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true">

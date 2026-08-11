@@ -39,8 +39,13 @@ export default function Badge({
   title?: string;
   className?: string;
 }) {
+  // `text-xs 2xl:text-sm` matches the table's own scale exactly. It was a
+  // hardcoded `text-[11px]`, so a Status, Role or Type cell rendered one pixel
+  // smaller than the Email and Last-login cells beside it — close enough to look
+  // like a rendering fault rather than a deliberate hierarchy. Emphasis inside a
+  // row is carried by `font-semibold` and by colour, never by size.
   const base =
-    "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-semibold whitespace-nowrap";
+    "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-semibold whitespace-nowrap 2xl:text-sm";
 
   if (!onClick) {
     return (

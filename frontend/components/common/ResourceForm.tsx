@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, type ReactNode } from "react";
 import type { FieldValues, UseFormReturn, Path } from "react-hook-form";
 
-import Button from "@/components/common/Button";
+import Button, { buttonClasses } from "@/components/common/Button";
 
 /**
  * The create/update form shell — one component, two modes.
@@ -43,6 +43,16 @@ export interface ResourceFormProps<T, V extends FieldValues> {
   record?: T | null;
   /** Singular resource name — "User". Drives the heading and submit label. */
   resourceName: string;
+  /**
+   * Names the record in the edit heading — "Edit User: Ayush Mishra".
+   * The reference puts the record's name in the title, which is the difference
+   * between a heading and a heading that tells you what you are about to change.
+   */
+  recordLabel?: string;
+  /** Glyph beside the heading, matching the index page's. */
+  icon?: ReactNode;
+  /** Overrides the default one-liner under the heading. */
+  description?: string;
   /** Where Cancel goes, and where a successful submit should return to. */
   backHref: string;
   /**
@@ -63,6 +73,9 @@ export default function ResourceForm<T, V extends FieldValues>({
   form,
   record,
   resourceName,
+  recordLabel,
+  icon,
+  description,
   backHref,
   serverError,
   onSubmit,
@@ -121,13 +134,23 @@ export default function ResourceForm<T, V extends FieldValues>({
         className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-none border border-brand/20 bg-surface-wash dark:border-night-border dark:bg-night-card"
       >
         <div className="shrink-0 border-b border-brand/20 px-4 py-3 dark:border-night-border sm:px-5">
-          <h1 className="text-sm font-bold text-ink dark:text-white">
-            {isEditMode ? `Edit ${resourceName}` : `New ${resourceName}`}
+          {/*
+            Heading copy follows the reference: the record's name is *in* the
+            edit title ("Edit User: Ayush Mishra"), which is the difference
+            between a heading and one that tells you what you are about to
+            change — it matters most on the screen where you can do damage.
+          */}
+          <h1 className="flex items-center gap-2 text-sm font-bold text-ink dark:text-white">
+            {icon}
+            {isEditMode
+              ? `Edit ${resourceName}${recordLabel ? `: ${recordLabel}` : ""}`
+              : `Create New ${resourceName}`}
           </h1>
           <p className="mt-0.5 text-[11px] text-ink-label dark:text-night-muted">
-            {isEditMode
-              ? "Changes take effect immediately once saved."
-              : `Create a new ${resourceName.toLowerCase()}.`}
+            {description ??
+              (isEditMode
+                ? `Update ${resourceName.toLowerCase()} information and organisational details`
+                : `Add a new ${resourceName.toLowerCase()} to the system`)}
           </p>
         </div>
 
@@ -140,25 +163,88 @@ export default function ResourceForm<T, V extends FieldValues>({
               {serverError}
             </div>
           )}
-          <div className="flex flex-col gap-4">{children}</div>
+          {/* `gap-5` between sections, matching the reference's `space-y-6`
+              rhythm at our tighter 14px baseline. */}
+          <div className="flex flex-col gap-5">{children}</div>
         </div>
 
         <div className="flex shrink-0 items-center justify-end gap-2 border-t border-brand/20 px-4 py-3 dark:border-night-border sm:px-5">
           {footerExtras}
           {/* A Link, not a Button — `Button` renders a `<button>` and takes no
               `href`. Cancel is navigation, so it should be a real anchor:
-              middle-click and "open in new tab" work, and it needs no handler. */}
-          <Link
-            href={backHref}
-            className="inline-flex h-9 items-center rounded-[5px] border border-brand/20 px-7 text-xs font-semibold text-ink-label transition-colors hover:bg-brand/10 hover:text-brand dark:border-night-border dark:text-gray-400 dark:hover:bg-brand/20 dark:hover:text-brand-on-dark"
-          >
+              middle-click and "open in new tab" work, and it needs no handler.
+              It wears `buttonClasses` so it cannot drift from the Save beside it. */}
+          <Link href={backHref} className={buttonClasses("outline")}>
             Cancel
           </Link>
           <Button type="submit" loading={isSubmitting}>
-            {isEditMode ? "Save changes" : `Create ${resourceName.toLowerCase()}`}
+            {isSubmitting
+              ? isEditMode
+                ? "Updating…"
+                : "Creating…"
+              : isEditMode
+                ? `Update ${resourceName}`
+                : `Create ${resourceName}`}
           </Button>
         </div>
       </form>
     </div>
   );
+}
+
+/**
+ * A titled group of fields — the reference's per-section `Card`.
+ *
+ * Its Users form is five of these ("Basic Information", "Organization", …), and
+ * without the primitive every module invents its own grouping: one uses a bare
+ * `<h3>`, the next a bordered div, the third nothing at all. A form of fifteen
+ * fields in one flat column is also simply hard to read, which is the reason the
+ * reference groups them in the first place.
+ *
+ * ```tsx
+ * <FormSection title="Basic Information" icon={navIcon("users")}>
+ *   <FormGrid>
+ *     <Input label="First name" … />
+ *     <Input label="Last name" … />
+ *   </FormGrid>
+ * </FormSection>
+ * ```
+ */
+export function FormSection({
+  title,
+  description,
+  icon,
+  children,
+}: {
+  title: string;
+  description?: string;
+  icon?: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <section className="rounded-[5px] border border-brand/20 bg-white dark:border-night-border dark:bg-night-card">
+      <div className="border-b border-brand/20 px-4 py-2.5 dark:border-night-border">
+        <h2 className="flex items-center gap-2 text-xs font-bold text-ink dark:text-white">
+          {icon}
+          {title}
+        </h2>
+        {description && (
+          <p className="mt-0.5 text-[11px] text-ink-label dark:text-night-muted">{description}</p>
+        )}
+      </div>
+      <div className="flex flex-col gap-4 px-4 py-4">{children}</div>
+    </section>
+  );
+}
+
+/**
+ * Two fields per row on anything wider than a phone, one below it.
+ *
+ * The breakpoint is `sm`, not the reference's `md`: our body text is 14px and
+ * the form sits inside a card rather than a full-width page, so fields pair up
+ * comfortably sooner. A field that must own its row — a long select, a textarea
+ * — simply sits outside the grid.
+ */
+export function FormGrid({ children }: { children: ReactNode }) {
+  return <div className="grid gap-4 sm:grid-cols-2">{children}</div>;
 }
