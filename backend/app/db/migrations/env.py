@@ -15,9 +15,20 @@ import app.models.app_settings  # noqa: F401
 # Core identity + RBAC
 import app.models.associations  # noqa: F401
 import app.models.data_access_grant  # noqa: F401
+import app.models.api_credential  # noqa: F401
+import app.models.error_group  # noqa: F401
+import app.models.feature_flag  # noqa: F401
+
+# Partner directory (PARTNER_DIRECTORY_PLAN.md phase 1)
+import app.models.partner  # noqa: F401
+import app.models.partner_tier  # noqa: F401
 import app.models.permission  # noqa: F401
 import app.models.permission_group  # noqa: F401
 import app.models.role  # noqa: F401
+import app.models.searchable_entity  # noqa: F401
+
+# LeapDesk parity — Module 11 (Configuration)
+import app.models.setting  # noqa: F401
 import app.models.user  # noqa: F401
 import app.models.user_invitation  # noqa: F401
 import app.models.user_session  # noqa: F401

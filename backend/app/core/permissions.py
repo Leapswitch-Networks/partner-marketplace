@@ -155,6 +155,67 @@ USER_EMAIL = "user-email"
 SETTINGS_VIEW = "settings-view"
 SETTINGS_UPDATE = "settings-update"
 
+#: Feature flags (LeapDesk parity, Module 13). LeapDesk has one permission,
+#: `feature-flags.manage`. Split into view/manage here for the same reason
+#: SETTINGS_VIEW and SETTINGS_UPDATE are split: the list is worth reading for
+#: anyone debugging why a feature is off for one role, and reading it grants
+#: nothing. Merging them would mean the only way to see which flags exist is to
+#: hold the permission that lets you switch them.
+FEATURE_FLAG_VIEW = "feature-flag-view"
+FEATURE_FLAG_MANAGE = "feature-flag-manage"
+
+#: Error tracking (LeapDesk parity, Module 17). Their split is
+#: `system.errors.view` / `system.errors.manage` and it is kept: reading which
+#: errors are happening is an on-call concern, and **deleting an error group
+#: destroys the evidence of a bug** — a different risk level, and the reason this
+#: is not one permission.
+ERROR_VIEW = "error-view"
+ERROR_MANAGE = "error-manage"
+
+#: System health (LeapDesk parity, Module 18). Read-only — there is nothing to
+#: manage on that screen, so unlike errors and feature flags it does not split.
+HEALTH_VIEW = "health-view"
+
+#: Recycle bin (LeapDesk parity). **One permission, not view/manage.** Seeing
+#: what was deleted is nearly as sensitive as restoring it — the list is a
+#: record of what somebody tried to remove, and reading it tells you a user
+#: existed, what they were called and when they went. LeapDesk makes the same
+#: call with a single `system.recycle-bin.manage`.
+RECYCLE_BIN_MANAGE = "recycle-bin-manage"
+
+
+# --- Partner directory (PARTNER_DIRECTORY_PLAN.md phase 1) -------------------
+#
+# Same `{resource}-{action}` convention, resource singular. The domain verbs are
+# split from PARTNER_UPDATE on purpose, and the split is the same one this
+# codebase already draws between USER_UPDATE and USER_APPROVE: editing a record
+# and changing what it is ALLOWED TO DO are different risk levels.
+#
+# Three separate verbs rather than one because they gate three different
+# consequences, and the plan's § 9 depends on them not collapsing:
+#
+#   PARTNER_APPROVE  PENDING -> ACTIVE, and suspend/reinstate. Gates LOGIN for
+#                    every user in the organisation.
+#   PARTNER_VERIFY   Sets verification_level. This is what Leapswitch VOUCHES
+#                    for, it is the directory's whole trust proposition (§ 9),
+#                    and it ranks above any paid placement. Whoever can grant it
+#                    can hand out the platform's credibility.
+#   PARTNER_PUBLISH  Flips is_listed. The only permission in this module whose
+#                    effect is visible to the anonymous internet.
+PARTNER_VIEW = "partner-view"
+PARTNER_CREATE = "partner-create"
+PARTNER_UPDATE = "partner-update"
+PARTNER_DELETE = "partner-delete"
+PARTNER_APPROVE = "partner-approve"
+PARTNER_VERIFY = "partner-verify"
+PARTNER_PUBLISH = "partner-publish"
+
+#: Tiers are reference data seeded from `core/partner_tiers.py`. Viewing them is
+#: needed by anyone who can edit a partner (the tier selector); changing what a
+#: tier grants is an administrative act of its own.
+PARTNER_TIER_VIEW = "partner-tier-view"
+PARTNER_TIER_MANAGE = "partner-tier-manage"
+
 
 #: Permission groups, in display order. The seeder creates these verbatim.
 #: Shape: group name -> (display name, display order, module, [(permission, label)])
@@ -227,6 +288,28 @@ PERMISSION_CATALOG: dict[str, tuple[str, int, str, list[tuple[str, str]]]] = {
             (SETTINGS_MANAGE, "Change the application's name, monogram and branding"),
             (SETTINGS_VIEW, "View the application settings"),
             (SETTINGS_UPDATE, "Change the application settings"),
+            (FEATURE_FLAG_VIEW, "View feature flags and who they are on for"),
+            (FEATURE_FLAG_MANAGE, "Create, change and switch feature flags"),
+            (ERROR_VIEW, "View recorded application errors"),
+            (ERROR_MANAGE, "Triage, resolve and delete recorded errors"),
+            (HEALTH_VIEW, "View system health"),
+            (RECYCLE_BIN_MANAGE, "Restore or permanently remove deleted records"),
+        ],
+    ),
+    "partners": (
+        "Partner Directory",
+        75,
+        "directory",
+        [
+            (PARTNER_VIEW, "View partner organisations"),
+            (PARTNER_CREATE, "Onboard a partner organisation"),
+            (PARTNER_UPDATE, "Update a partner's details"),
+            (PARTNER_DELETE, "Delete a partner organisation"),
+            (PARTNER_APPROVE, "Activate, suspend or reinstate a partner"),
+            (PARTNER_VERIFY, "Set a partner's verification level"),
+            (PARTNER_PUBLISH, "Publish or unpublish a partner in the directory"),
+            (PARTNER_TIER_VIEW, "View partner tiers"),
+            (PARTNER_TIER_MANAGE, "Change what a partner tier grants"),
         ],
     ),
     # --- The four modules still to be built --------------------------------
@@ -310,9 +393,21 @@ ROLE_PERMISSION_MATRIX: dict[str, list[str] | str] = {
         # nor AI_ASSISTANT_QUERY_DATABASE (that reads the database).
         DATA_ACCESS_VIEW,
         AI_ASSISTANT_USE,
+        # Read-only on the directory, matching Staff's posture everywhere else.
+        # Deliberately NOT approve/verify/publish: each of those either grants
+        # login to an organisation, hands out Leapswitch's credibility, or
+        # publishes to the anonymous internet.
+        PARTNER_VIEW,
+        PARTNER_TIER_VIEW,
     ],
     ROLE_PARTNER: [
         DASHBOARD_VIEW,
+        # A partner user may read their OWN organisation. This permission alone
+        # grants nothing across organisations — row scoping does that, and it
+        # does not exist yet (PM-5). Until it does, every partner-facing read
+        # path must filter on the actor's partner_id itself; see
+        # partner_service.list_partners.
+        PARTNER_VIEW,
     ],
     ROLE_USER: [
         DASHBOARD_VIEW,

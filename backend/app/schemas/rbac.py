@@ -8,7 +8,8 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 from app.schemas.auth import RoleSummary, validate_password_strength
 
 AccountType = Literal["staff", "partner"]
-UserStatus = Literal["INACTIVE", "ACTIVE", "SUSPENDED"]
+#: Must stay identical to `app.schemas.auth.UserStatus` — see the note there.
+UserStatus = Literal["INACTIVE", "ACTIVE"]
 
 
 # --- Permissions ------------------------------------------------------------

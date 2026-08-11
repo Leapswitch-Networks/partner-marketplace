@@ -5,6 +5,8 @@ import useAppSelector from "@/lib/hooks/useAppSelector";
 import useAppDispatch from "@/lib/hooks/useAppDispatch";
 import { updateUserProfile } from "@/lib/store/authSlice";
 import { getRoleLabel, getUserDisplayName } from "@/lib/utils/user";
+import Avatar from "@/components/common/Avatar";
+import { formatDate } from "@/lib/utils/format";
 
 export default function ProfileForm() {
   const dispatch = useAppDispatch();
@@ -27,13 +29,7 @@ export default function ProfileForm() {
 
   const isDirty = name !== storedName || email !== storedEmail;
 
-  const memberSince = user?.created_at
-    ? new Date(user.created_at).toLocaleDateString("en-US", {
-        day: "numeric",
-        month: "long",
-        year: "numeric",
-      })
-    : null;
+  const memberSince = user?.created_at ? formatDate(user.created_at) : null;
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -77,9 +73,7 @@ export default function ProfileForm() {
 
       {/* Avatar + meta */}
       <div className="mt-6 flex items-center gap-4">
-        <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-brand text-lg font-bold text-white">
-          {initials}
-        </span>
+        <Avatar initials={initials} size="lg" />
         <div>
           <p className="text-sm font-semibold text-gray-900 dark:text-gray-100">{storedName || "—"}</p>
           <p className="text-xs text-gray-400 dark:text-gray-500">{user?.email ?? "—"}</p>

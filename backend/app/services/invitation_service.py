@@ -120,7 +120,10 @@ def list_invitations(
     # doing it first is what makes it honest.
     _expire_elapsed(db, actor)
 
-    stmt: Select = select(UserInvitation).options(
+    # Binned invitations are not listed.
+    stmt: Select = select(UserInvitation).where(
+        UserInvitation.deleted_at.is_(None)
+    ).options(
         selectinload(UserInvitation.role), selectinload(UserInvitation.inviter)
     )
 
@@ -178,7 +181,15 @@ def stats(db: Session, actor: User) -> dict[str, int]:
 
 
 def get_by_token(db: Session, token: str) -> UserInvitation:
-    invitation = db.scalar(select(UserInvitation).where(UserInvitation.token == token))
+    # A binned invitation must not be acceptable. The token is still valid
+    # cryptographically and still in somebody's inbox — this filter is the
+    # only thing that stops a cancelled-then-deleted invite creating an
+    # account.
+    invitation = db.scalar(
+        select(UserInvitation).where(
+            UserInvitation.token == token, UserInvitation.deleted_at.is_(None)
+        )
+    )
     if invitation is None:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND, "This invitation link is not valid."
@@ -430,7 +441,15 @@ def apply_to_google_user(db: Session, token: str, user: User) -> bool:
     load-bearing one: holding the link is not enough, the Google account must be
     the invited address.
     """
-    invitation = db.scalar(select(UserInvitation).where(UserInvitation.token == token))
+    # A binned invitation must not be acceptable. The token is still valid
+    # cryptographically and still in somebody's inbox — this filter is the
+    # only thing that stops a cancelled-then-deleted invite creating an
+    # account.
+    invitation = db.scalar(
+        select(UserInvitation).where(
+            UserInvitation.token == token, UserInvitation.deleted_at.is_(None)
+        )
+    )
     if invitation is None or not invitation.is_usable:
         return False
 

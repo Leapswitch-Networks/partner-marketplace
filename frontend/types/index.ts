@@ -1,4 +1,10 @@
-export type UserStatus = "INACTIVE" | "ACTIVE" | "SUSPENDED";
+/**
+ * Two values, and only two — owner's call, 2026-08-11. The database enforces it
+ * (`user_status`, migration `b3d7e02f4c19`), so this is a mirror of a constraint
+ * rather than a frontend convention. A third value, SUSPENDED, was removed:
+ * nothing behaved differently for it.
+ */
+export type UserStatus = "INACTIVE" | "ACTIVE";
 export type AccountType = "staff" | "partner";
 export type AuthProvider = "password" | "google";
 

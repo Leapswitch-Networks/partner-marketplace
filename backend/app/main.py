@@ -12,16 +12,27 @@ from sqlalchemy.exc import SQLAlchemyError
 # `app.core.config.settings` (the config object) would otherwise collide here.
 from app.api import (
     activity,
+    api_credentials,
     auth,
+    configuration,
+    data_access,
     google,
     invitations,
     navigation,
+    partners,
     permissions,
+    errors,
+    recycle_bin,
+    feature_flags,
+    health_status,
     roles,
+    search,
+    security_settings,
     settings as settings_api,
     users,
 )
 from app.core.config import settings
+from app.core.dependencies import get_client_ip
 from app.core.headers import SecurityHeadersMiddleware
 from app.core.logging import RequestContextMiddleware, configure_logging, request_id_ctx
 from app.core.rate_limit import RateLimitMiddleware
@@ -139,7 +150,7 @@ async def database_exception_handler(request: Request, exc: SQLAlchemyError) -> 
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    """Last resort. Logs the traceback, returns a correlation id.
+    """Last resort. Logs the traceback, records it, returns a correlation id.
 
     Without this, FastAPI returns a bare 500 and the traceback goes to stdout
     unattributed — the state PM-10 described.
@@ -147,6 +158,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
     logger.exception(
         "unhandled exception", extra={"path": request.url.path, "method": request.method}
     )
+    _record_error(request, exc)
     return JSONResponse(
         status_code=500,
         content={
@@ -154,6 +166,52 @@ async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONR
             "request_id": request_id_ctx.get(),
         },
     )
+
+
+def _record_error(request: Request, exc: BaseException) -> None:
+    """Persist an unhandled exception to the error tracker (Module 17).
+
+    **Its own session, not the request's.** The request's session is in an
+    unknown state — that is often *why* we are here — and reusing it would mean
+    the recording fails for the same reason the request did. This one is opened,
+    used and closed inside the handler.
+
+    **Never raises.** `error_service.record` catches everything internally, and
+    this wrapper catches whatever is left, because a failure here would turn a 500
+    into a crash inside the handler that exists to prevent crashes. It is the one
+    place in the application where a second failure has nowhere to go.
+
+    Gated on `operations.errors.record_outside_production`, which is a real row in
+    the Module 11 registry — the first consumer of a setting that replaces a
+    constant, and the proof the registry does what it was built for.
+    """
+    try:
+        from app.core.config import settings as app_settings
+        from app.db.session import SessionLocal
+        from app.services import error_service, setting_service
+
+        with SessionLocal() as db:
+            # `is_production` is a real property on the config object; do not
+            # re-derive it from APP_ENV here, or the two spellings drift.
+            if not app_settings.is_production and not setting_service.get(
+                db, "operations.errors.record_outside_production", True
+            ):
+                return
+
+            user = getattr(request.state, "user", None)
+            error_service.record(
+                db,
+                exc,
+                request=request,
+                user_id=getattr(user, "id", None),
+                # `get_client_ip` and not `request.client.host` directly: it is
+                # the one function that knows whether X-Forwarded-For may be
+                # trusted, and reading the header here would reintroduce the
+                # spoofing hole PM-26 closed.
+                ip=get_client_ip(request),
+            )
+    except Exception:  # noqa: BLE001 - see the docstring
+        logger.warning("could not record error to the tracker", exc_info=True)
 
 
 # All routers mount under settings.API_PREFIX — `/api/v1` (PM-40). The health
@@ -168,6 +226,28 @@ app.include_router(permissions.router, prefix=settings.API_PREFIX)
 app.include_router(invitations.router, prefix=settings.API_PREFIX)
 app.include_router(activity.router, prefix=settings.API_PREFIX)
 app.include_router(settings_api.router, prefix=settings.API_PREFIX)
+# After `settings_api`, and it matters: that router owns `/settings/branding/*`
+# while this one owns `/settings/configuration`. Neither declares a wildcard
+# segment today, so the order is not load-bearing yet — but a future
+# `/settings/{key}` on either would swallow the other, and first-match-wins means
+# whichever is registered first would win silently.
+app.include_router(configuration.router, prefix=settings.API_PREFIX)
+# Same `/settings/*` namespace, its own sub-path. Reads the same table as
+# `configuration` but only the `security.` namespace of it — see its docstring.
+app.include_router(security_settings.router, prefix=settings.API_PREFIX)
+app.include_router(errors.router, prefix=settings.API_PREFIX)
+app.include_router(health_status.router, prefix=settings.API_PREFIX)
+
+# Merged from four parallel agents, 2026-08-11. Each was reviewed before
+# mounting rather than on trust — the two with security-critical contracts
+# (search's model allowlist, credentials' encryption at rest) were probed,
+# not just read. See DAILY_CHANGES.
+app.include_router(data_access.router, prefix=settings.API_PREFIX)
+app.include_router(feature_flags.router, prefix=settings.API_PREFIX)
+app.include_router(search.router, prefix=settings.API_PREFIX)
+app.include_router(api_credentials.router, prefix=settings.API_PREFIX)
+app.include_router(recycle_bin.router, prefix=settings.API_PREFIX)
+app.include_router(partners.router, prefix=settings.API_PREFIX)
 
 
 @app.get("/health", tags=["health"])

@@ -11,7 +11,20 @@ from app.models.associations import user_roles
 
 #: Only ACTIVE accounts may authenticate. Every new account starts INACTIVE and
 #: needs an admin to approve it — a valid Google login alone grants nothing.
-UserStatusEnum = Enum("INACTIVE", "ACTIVE", "SUSPENDED", name="user_status")
+#:
+#: **Two values, and only two** (owner's call, 2026-08-11; migration
+#: `b3d7e02f4c19`). There was a third, SUSPENDED, distinguished from INACTIVE by
+#: intent — "never approved" versus "approval withdrawn". Nothing in the product
+#: ever acted on that distinction: both refuse the login, both revoke the live
+#: sessions, and the only code that told them apart was the wording of a 403 and
+#: a guard that refused to toggle a suspended account. A state whose entire
+#: behaviour is another state's is a label, not a state, and it cost a
+#: three-armed conditional at every read.
+#:
+#: If withdrawn-approval ever needs its own audit trail, the activity log already
+#: records every status change with its `old` value — that is where the history
+#: belongs, not in a column that has to be branched on forever.
+UserStatusEnum = Enum("INACTIVE", "ACTIVE", name="user_status")
 
 #: Staff are domain-gated and may use Google SSO; partners self-register with
 #: credentials. The distinction drives the signup policy, not authorization —
@@ -82,7 +95,18 @@ class User(Base):
     )
     company_name: Mapped[str | None] = mapped_column(
         String(255), nullable=True,
-        comment="Partner's organisation; NULL for staff",
+        comment="Free-text organisation name. Superseded by partner_id — see below",
+    )
+    partner_id: Mapped[str | None] = mapped_column(
+        String(36),
+        # SET NULL, not CASCADE: deleting a partner organisation must not delete
+        # the people in it. They become unaffiliated and an administrator decides
+        # what happens next — silently removing accounts would destroy the audit
+        # trail that references them.
+        ForeignKey("partners.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Organisation membership. NULL means Leapswitch staff",
     )
 
     # --- Classification & status --------------------------------------------
@@ -91,7 +115,7 @@ class User(Base):
     )
     status: Mapped[str] = mapped_column(
         UserStatusEnum, nullable=False, default="INACTIVE", index=True,
-        comment="Only ACTIVE may sign in; re-checked on every request",
+        comment="ACTIVE or INACTIVE only. ACTIVE may sign in; re-checked every request",
     )
 
     # --- Preferences --------------------------------------------------------
@@ -179,6 +203,25 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
         passive_deletes=True,
+    )
+    # joined, because `get_current_user` reads `partner.status` on EVERY
+    # authenticated request to enforce the organisation gate. A lazy load there
+    # would be one extra query per request for every partner user.
+    #
+    # foreign_keys is required: this table points at `partners` once for
+    # membership, and `partners` points back at this one four times for audit
+    # (verified_by, onboarded_by, created_by, updated_by).
+    partner: Mapped["Partner | None"] = relationship(  # noqa: F821
+        back_populates="users",
+        foreign_keys=[partner_id],
+        lazy="joined",
+    )
+
+    #: Soft delete (Recycle Bin). NULL means live. See `recycle_bin_service` for
+    #: which queries filter on it and which deliberately do not.
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True,
+        comment="Soft delete. NULL means live; set means in the recycle bin",
     )
 
     # --- Derived values -----------------------------------------------------

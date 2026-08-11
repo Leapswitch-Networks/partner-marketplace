@@ -29,8 +29,16 @@ from app.core.permissions import (
     ACTIVITY_VIEW,
     DASHBOARD_VIEW,
     INVITATION_VIEW,
+    API_CREDENTIAL_VIEW,
+    DATA_ACCESS_VIEW,
+    ERROR_VIEW,
+    FEATURE_FLAG_VIEW,
+    HEALTH_VIEW,
+    RECYCLE_BIN_MANAGE,
     ROLE_VIEW,
+    SEARCH_ENTITY_MANAGE,
     SETTINGS_MANAGE,
+    SETTINGS_VIEW,
     USER_VIEW,
 )
 from app.models.user import User
@@ -46,6 +54,7 @@ from app.models.user import User
 COLLAPSIBLE_SECTION_CATALOG: dict[str, str] = {
     "user-management": "User Management",
     "system-settings": "System Settings",
+    "operations": "Operations",
 }
 
 
@@ -180,13 +189,14 @@ def build_sections(user: User) -> list[dict[str, Any]]:
                     ],
                 ),
                 _item("Roles & Permissions", "/dashboard/roles", "roles", ROLE_VIEW),
-                _item(
-                    "Invitations",
-                    "/dashboard/invitations",
-                    "invitations",
-                    INVITATION_VIEW,
-                    active_prefixes=["/dashboard/invitations"],
-                ),
+                # LeapDesk parity Module 6. Sits here rather than under System
+                # Settings because it is about who may see whose records —
+                # the same question the two items above answer.
+                _item("Data Access", "/dashboard/data-access", "dataAccess", DATA_ACCESS_VIEW),
+                # Invitations is NOT here. LeapDesk files it under System
+                # Settings, and on reflection that is the better reading: this
+                # section is about people who already exist and what they may
+                # see. An invitation is a pending grant, which is configuration.
                 _item("Activity Log", "/dashboard/activity", "activity", ACTIVITY_VIEW),
             ],
         },
@@ -204,7 +214,87 @@ def build_sections(user: User) -> list[dict[str, Any]]:
                 # wildcard, this permission alone would show the link to every
                 # Admin, and they would reach a 403. Both layers are needed: this
                 # one for the nav, that one for the authorisation.
-                _item("Branding", "/settings/branding", "settings", SETTINGS_MANAGE),
+                # Branding is ours, not LeapDesk's — its installation identity
+                # lives in config files. Filed here because it is the same kind of
+                # thing as the rest of this section: settings for the whole
+                # installation rather than for one person.
+                #
+                # Gated on SETTINGS_MANAGE so the entry is hidden from anyone who
+                # cannot use it. The route itself is guarded by
+                # `require_super_admin` — because ROLE_ADMIN holds the `"*"`
+                # wildcard, this permission alone would show the link to every
+                # Admin, and they would reach a 403. Both layers are needed.
+                _item("Branding", "/dashboard/branding", "branding", SETTINGS_MANAGE),
+                # LeapDesk parity Module 11. Gated on SETTINGS_VIEW, **not**
+                # SETTINGS_MANAGE: the Configuration screen is readable by anyone
+                # who may see settings, and the write is separately gated on
+                # SETTINGS_UPDATE at the endpoint. Branding above uses MANAGE
+                # because it has no read-only mode — the page *is* the editor.
+                #
+                # **Feature Flags is deliberately not a nav item of its own.**
+                # LeapDesk reaches it from a button in the Configuration header
+                # and lists `/settings/feature-flags` among Configuration's
+                # `activePrefixes`, so Configuration stays highlighted while you
+                # are on it. Two sibling entries for one settings surface is a
+                # longer sidebar that says less; this is the same call `_item`'s
+                # `active_prefixes` already makes for the four Users routes.
+                _item(
+                    "Configuration",
+                    "/dashboard/configuration",
+                    "configuration",
+                    SETTINGS_VIEW,
+                    active_prefixes=["/dashboard/configuration", "/dashboard/feature-flags"],
+                ),
+                # LeapDesk parity Module 12. Same gate as Configuration — it is a
+                # filtered view of the same rows, so anyone who may read settings
+                # may read these. The write is gated separately on
+                # SETTINGS_UPDATE, and the endpoint refuses anything outside the
+                # `security.` namespace whatever the permission says.
+                _item("Security", "/dashboard/security", "security", SETTINGS_VIEW),
+                _item(
+                    "API Credentials",
+                    "/dashboard/api-credentials",
+                    "apiCredentials",
+                    API_CREDENTIAL_VIEW,
+                    active_prefixes=["/dashboard/api-credentials"],
+                ),
+                # Moved here from User Management on 2026-08-11 to match LeapDesk.
+                # An invitation is a pending grant — configuration — rather than a
+                # person who already exists.
+                _item(
+                    "Invitations",
+                    "/dashboard/invitations",
+                    "invitations",
+                    INVITATION_VIEW,
+                    active_prefixes=["/dashboard/invitations"],
+                ),
+                # "Global Search", not "Search" — LeapDesk's label, and the more
+                # accurate one: this configures what the *global* search box looks
+                # in, which is a different thing from the search box on every index.
+                _item("Global Search", "/dashboard/search", "search", SEARCH_ENTITY_MANAGE),
+            ],
+        },
+        {
+            # LeapDesk's fourth section, added 2026-08-11. It groups the screens
+            # that watch the running system rather than configure it — you open
+            # these because something is wrong, not because you want to change a
+            # setting. Keeping them in System Settings had that distinction
+            # collapsed and made a nine-item section.
+            #
+            # Two of its four are not built: Queue Monitor is blocked (we run no
+            # worker) and Recycle Bin is not started. An empty section is dropped
+            # by `filter_sections`, so this appears only once something in it does.
+            "label": "Operations",
+            "key": "operations",
+            "collapsible": True,
+            "items": [
+                # LeapDesk parity Module 17.
+                _item("Error Tracking", "/dashboard/errors", "errors", ERROR_VIEW),
+                # LeapDesk parity Module 18.
+                _item("System Health", "/dashboard/health", "health", HEALTH_VIEW),
+                # LeapDesk parity. Operations, not System Settings: you open this
+                # because something was deleted by mistake.
+                _item("Recycle Bin", "/dashboard/recycle-bin", "recycleBin", RECYCLE_BIN_MANAGE),
             ],
         },
     ]

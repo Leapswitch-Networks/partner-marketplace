@@ -50,10 +50,29 @@ def normalise_email(email: str) -> str:
 
 
 def get_user_by_email(db: Session, email: str) -> User | None:
-    return db.scalar(select(User).where(User.email == normalise_email(email)))
+    # `deleted_at IS NULL` is load-bearing, not tidiness: without it a
+    # soft-deleted account keeps its password and keeps signing in, and
+    # "delete the user" would silently mean "hide the user from the list".
+    return db.scalar(
+        select(User).where(
+            User.email == normalise_email(email), User.deleted_at.is_(None)
+        )
+    )
 
 
 def email_exists(db: Session, email: str, exclude_user_id: str | None = None) -> bool:
+    """Is this address taken? **Counts soft-deleted accounts too, deliberately.**
+
+    `users.email` is UNIQUE at the database level, and a soft-deleted row still
+    occupies its address. Filtering `deleted_at IS NULL` here would let
+    registration accept an email that then fails on the constraint — a 500 where
+    a 409 belongs — and, worse, would make restoring that account from the
+    recycle bin impossible because the address had been taken in the meantime.
+
+    So a binned account still reserves its email. Freeing it is what **purge** is
+    for, and that is the honest trade: recoverable and reserved, or gone and
+    released. Not both.
+    """
     stmt = select(func.count()).select_from(User).where(User.email == normalise_email(email))
     if exclude_user_id:
         stmt = stmt.where(User.id != exclude_user_id)
@@ -147,14 +166,16 @@ def authenticate(db: Session, email: str, password: str, ip: str) -> User:
 
     # Credentials are good. Only now does account state matter.
     if user.status != "ACTIVE":
-        detail = (
-            "Your account is awaiting administrator approval."
-            if user.status == "INACTIVE"
-            else "Your account has been suspended. Contact an administrator."
-        )
+        # One message, because `status` holds two values and the other one is
+        # ACTIVE — see the note on `UserStatusEnum`. Deliberately does not say
+        # *why* the account is inactive beyond "awaiting approval": to an
+        # unauthenticated caller who has just proved the password, the difference
+        # between never-approved and approval-withdrawn is information about an
+        # account they may not own.
+        detail = "Your account is awaiting administrator approval."
         # Recorded as a failure rather than a login: the credentials were right,
         # but no session was created. Calling it a login would be wrong, and
-        # dropping it would hide someone repeatedly probing a suspended account.
+        # dropping it would hide someone repeatedly probing a disabled account.
         activity_service.record_failed_login(
             db, email, ip, reason=f"status_{user.status.lower()}"
         )

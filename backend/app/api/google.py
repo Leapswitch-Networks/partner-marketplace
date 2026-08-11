@@ -76,11 +76,11 @@ def callback(
 
         # Approval gate: SSO proves who you are, not that you may enter.
         if user.status != "ACTIVE":
-            message = (
-                "Your account has been created and is awaiting administrator approval."
-                if user.status == "INACTIVE"
-                else "Your account has been suspended. Contact an administrator."
-            )
+            # Single message since `status` lost SUSPENDED on 2026-08-11 — see
+            # the note on `UserStatusEnum`. Also true of a returning user whose
+            # account was deactivated, and the wording covers both without
+            # telling an unauthenticated caller which one applies.
+            message = "Your account is awaiting administrator approval."
             return _frontend_redirect("/sign-in", error=message)
 
         auth_service.record_login(db, user, get_client_ip(request))

@@ -661,6 +661,193 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/data-access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Data Access Grants
+         * @description Every grant, newest first.
+         *
+         *     `sort_by` outside `scope` / `access_level` / `created_at` falls back to
+         *     `created_at` rather than erroring — the allowlist lives in the service's
+         *     `ListSpec`, and `column_for` degrades instead of raising so a stale bookmark
+         *     still renders.
+         */
+        get: operations["list_data_access_grants_api_v1_data_access_get"];
+        put?: never;
+        /**
+         * Create Data Access Grants
+         * @description Grant one grantee access over many subjects.
+         *
+         *     ## Self-grant pairs are skipped, not fatal
+         *
+         *     The reference `continue`s past any `subject_id` equal to the `grantee_id`,
+         *     so submitting a grantee who is also in the subject list succeeds for the
+         *     others. Rejecting the whole batch would be the easier code and the worse
+         *     behaviour — a "select all" that happens to include the grantee would fail
+         *     entirely with nothing written.
+         *
+         *     The pairs it skipped are **reported** rather than dropped silently, which is
+         *     the one place this is more forthcoming than the original. `create_grant`
+         *     still raises on a self-grant reaching it directly; this loop simply never
+         *     hands it one.
+         *
+         *     `create_grant` also refuses `grantee_id == actor.id` with a 403 — the
+         *     self-elevation guard — and that propagates, because it is the whole batch's
+         *     problem and not one pair's.
+         */
+        post: operations["create_data_access_grants_api_v1_data_access_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/data-access/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Data Access Options
+         * @description Pickers for the create form: ACTIVE users, and the scope catalogue.
+         *
+         *     Declared before `/{grant_id}` would be. There is no such GET route today, but
+         *     the ordering rule that bit the reference applies to any literal segment under
+         *     a path parameter, and putting it in the right place now costs nothing.
+         */
+        get: operations["data_access_options_api_v1_data_access_options_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/data-access/{grant_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete Data Access Grant
+         * @description Revoke a grant. 404 if it is already gone.
+         */
+        delete: operations["delete_data_access_grant_api_v1_data_access__grant_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/errors": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Errors
+         * @description Distinct errors, newest sighting first.
+         *
+         *     Sorted by `last_seen_at` rather than `occurrence_count`, deliberately: the
+         *     question this page answers is *"is something broken right now"*, and an old
+         *     error with a huge count would otherwise sit permanently at the top pushing
+         *     today's regression off the first screen.
+         */
+        get: operations["list_errors_api_v1_errors_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/errors/counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Error Counts
+         * @description `{status: count}` for the summary cards.
+         *
+         *     Declared **before** `/{group_id}` — `counts` would otherwise be parsed as an
+         *     id and answer 422. FastAPI matches in declaration order, so this is ordering,
+         *     not preference.
+         */
+        get: operations["error_counts_api_v1_errors_counts_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/errors/{group_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Error
+         * @description One error group plus its most recent sightings.
+         */
+        get: operations["get_error_api_v1_errors__group_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Error
+         * @description Delete a group and every sighting of it.
+         *
+         *     `error-manage`, not `error-view`: **this destroys the evidence of a bug.**
+         *     Resolving is the normal way to make an error stop appearing; deleting is for
+         *     a group that should never have been recorded.
+         */
+        delete: operations["delete_error_api_v1_errors__group_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/errors/{group_id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Error Status
+         * @description Triage: open / resolved / ignored / muted, with optional notes.
+         */
+        patch: operations["update_error_status_api_v1_errors__group_id__status_patch"];
+        trace?: never;
+    };
     "/api/v1/invitations": {
         parameters: {
             query?: never;
@@ -811,6 +998,137 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/partners": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Partners Endpoint */
+        get: operations["list_partners_endpoint_api_v1_partners_get"];
+        put?: never;
+        /** Create Partner Endpoint */
+        post: operations["create_partner_endpoint_api_v1_partners_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/partners/tiers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Partner Tiers Endpoint */
+        get: operations["list_partner_tiers_endpoint_api_v1_partners_tiers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/partners/tiers/{tier_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Partner Tier Endpoint */
+        patch: operations["update_partner_tier_endpoint_api_v1_partners_tiers__tier_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/partners/{partner_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Partner Endpoint */
+        get: operations["get_partner_endpoint_api_v1_partners__partner_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Partner Endpoint */
+        delete: operations["delete_partner_endpoint_api_v1_partners__partner_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Partner Endpoint */
+        patch: operations["update_partner_endpoint_api_v1_partners__partner_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/partners/{partner_id}/listing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Publish Partner Endpoint
+         * @description Publish or unpublish in the directory. Requires an ACTIVE organisation.
+         */
+        post: operations["publish_partner_endpoint_api_v1_partners__partner_id__listing_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/partners/{partner_id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Change Partner Status Endpoint
+         * @description Activate, suspend or reinstate. Suspension revokes the members' sessions.
+         */
+        post: operations["change_partner_status_endpoint_api_v1_partners__partner_id__status_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/partners/{partner_id}/verification": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Verify Partner Endpoint
+         * @description Set what Leapswitch vouches for — the directory's trust signal (§ 9).
+         */
+        post: operations["verify_partner_endpoint_api_v1_partners__partner_id__verification_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/permissions": {
         parameters: {
             query?: never;
@@ -825,6 +1143,54 @@ export interface paths {
         get: operations["list_permissions_api_v1_permissions_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/recycle-bin": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Bin
+         * @description Everything recoverable, newest deletion first.
+         */
+        get: operations["list_bin_api_v1_recycle_bin_get"];
+        put?: never;
+        post?: never;
+        /**
+         * Purge
+         * @description Delete one record permanently.
+         *
+         *     **This is the only irreversible delete left in the core**, which is the point:
+         *     everything else is now recoverable, and the one operation that is not is
+         *     behind its own permission, its own screen and a confirmation.
+         */
+        delete: operations["purge_api_v1_recycle_bin_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/recycle-bin/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore
+         * @description Put one record back.
+         */
+        post: operations["restore_api_v1_recycle_bin_restore_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -984,6 +1350,181 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Global Search
+         * @description Grouped results across every entity the caller may search.
+         *
+         *     A query shorter than two characters returns no groups without touching the
+         *     database — the reference's rule, and a real one: one character matches most
+         *     of a table and the result is noise.
+         *
+         *     The IP comes from `get_client_ip`, which reads `X-Forwarded-For` **only**
+         *     when a proxy is configured to be in front. Reading that header here directly
+         *     would let a caller write any address they liked into `search_logs`.
+         */
+        get: operations["global_search_api_v1_search_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/api-credentials/credentials": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Credentials
+         * @description Credentials with every value **masked**. Never plaintext — see `/reveal`.
+         */
+        get: operations["list_credentials_api_v1_settings_api_credentials_credentials_get"];
+        put?: never;
+        /** Create Credential */
+        post: operations["create_credential_api_v1_settings_api_credentials_credentials_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/api-credentials/credentials/{credential_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Credential
+         * @description One credential, masked.
+         */
+        get: operations["get_credential_api_v1_settings_api_credentials_credentials__credential_id__get"];
+        /** Update Credential */
+        put: operations["update_credential_api_v1_settings_api_credentials_credentials__credential_id__put"];
+        post?: never;
+        /** Delete Credential */
+        delete: operations["delete_credential_api_v1_settings_api_credentials_credentials__credential_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/api-credentials/credentials/{credential_id}/form-values": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Credential Form Values
+         * @description Values safe to preload into the edit form.
+         *
+         *     **Encrypted fields come back empty**, not decrypted — the divergence from the
+         *     reference that the module exists for. Saving a blank encrypted field leaves
+         *     the stored value alone, so an operator can change a region without retyping a
+         *     token, and reading a secret stays an explicit, audited act.
+         */
+        get: operations["credential_form_values_api_v1_settings_api_credentials_credentials__credential_id__form_values_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/api-credentials/credentials/{credential_id}/reveal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reveal Credential Field
+         * @description Decrypt and return ONE field. Audited every time.
+         *
+         *     **Two gates, not one.** `api-credential-view` says the caller may work with
+         *     credentials at all; `require_password_confirmation` says this particular
+         *     person is at the keyboard right now. A stolen session passes the first and
+         *     fails the second, which is the whole reason the second exists — the same
+         *     reasoning that guards turning 2FA off.
+         *
+         *     A `403` with "Please confirm your password to continue." is the
+         *     re-authentication prompt, not a permission failure; the client must not treat
+         *     it as a sign-out.
+         *
+         *     The IP comes from `get_client_ip`, so `X-Forwarded-For` is honoured only
+         *     behind a configured proxy. Reading that header directly would let a caller
+         *     write any address they liked into the audit trail of a secret disclosure —
+         *     the one entry where the address most needs to be true.
+         */
+        post: operations["reveal_credential_field_api_v1_settings_api_credentials_credentials__credential_id__reveal_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/api-credentials/providers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Providers */
+        get: operations["list_providers_api_v1_settings_api_credentials_providers_get"];
+        put?: never;
+        /** Create Provider */
+        post: operations["create_provider_api_v1_settings_api_credentials_providers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/api-credentials/providers/{provider_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Provider */
+        get: operations["get_provider_api_v1_settings_api_credentials_providers__provider_id__get"];
+        /** Update Provider */
+        put: operations["update_provider_api_v1_settings_api_credentials_providers__provider_id__put"];
+        post?: never;
+        /**
+         * Delete Provider
+         * @description Delete a provider **and every credential stored against it.**
+         *
+         *     The cascade is the reason the UI's confirm names it: `api_credentials` and
+         *     `api_credential_values` both cascade from here, so this removes live secrets
+         *     for every environment, not just a catalogue entry.
+         */
+        delete: operations["delete_provider_api_v1_settings_api_credentials_providers__provider_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/settings/branding": {
         parameters: {
             query?: never;
@@ -1103,6 +1644,278 @@ export interface paths {
          *     thinks an asset exists finds out it does not.
          */
         delete: operations["delete_asset_api_v1_settings_branding__asset__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/configuration": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Configuration
+         * @description Every setting, ordered `module → group → label`.
+         *
+         *     Unpaged, matching LeapDesk. The registry is declared in code and is tens of
+         *     rows — it does not grow with usage — so the screen filters and pages in the
+         *     browser. `modules` is read from the data rather than hardcoded, so a new
+         *     module's settings appear in the filter the moment they are seeded.
+         */
+        get: operations["list_configuration_api_v1_settings_configuration_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/configuration/{setting_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update Configuration
+         * @description Change one setting's value.
+         *
+         *     Validation lives in the service and is derived from the row's **own declared
+         *     type** — an `int` setting rejects `"abc"`, a `bool` rejects `"maybe"` — so a
+         *     new setting needs no new validation rule anywhere. A rejected value answers
+         *     422 naming the setting, because this screen edits many rows and "invalid
+         *     input" would not say which.
+         *
+         *     No password confirmation, matching LeapDesk. The controls that *do* warrant
+         *     re-authentication live under `security.*` and are Module 12's business, which
+         *     is also where the setting deciding that will live.
+         */
+        put: operations["update_configuration_api_v1_settings_configuration__setting_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/feature-flags": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Feature Flags
+         * @description Flags, alphabetical by name — the reference's own ordering.
+         */
+        get: operations["list_feature_flags_api_v1_settings_feature_flags_get"];
+        put?: never;
+        /** Create Feature Flag */
+        post: operations["create_feature_flag_api_v1_settings_feature_flags_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/feature-flags/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Feature Flag Options
+         * @description Roles and ACTIVE users for the two targeting pickers.
+         *
+         *     Declared before `/{flag_id}` — see the module docstring.
+         */
+        get: operations["feature_flag_options_api_v1_settings_feature_flags_options_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/feature-flags/{flag_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Feature Flag */
+        get: operations["get_feature_flag_api_v1_settings_feature_flags__flag_id__get"];
+        /**
+         * Update Feature Flag
+         * @description Full replace. A PUT and not a PATCH — see `update_flag`'s docstring.
+         */
+        put: operations["update_feature_flag_api_v1_settings_feature_flags__flag_id__put"];
+        post?: never;
+        /** Delete Feature Flag */
+        delete: operations["delete_feature_flag_api_v1_settings_feature_flags__flag_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/feature-flags/{flag_id}/toggle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Toggle Feature Flag
+         * @description Flip `enabled` and return the updated record.
+         *
+         *     Returns the record rather than a message so the client can patch the row in
+         *     place — a refetch would only re-fetch what the response already holds.
+         */
+        post: operations["toggle_feature_flag_api_v1_settings_feature_flags__flag_id__toggle_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Searchable Entities */
+        get: operations["list_searchable_entities_api_v1_settings_search_get"];
+        put?: never;
+        /** Create Searchable Entity */
+        post: operations["create_searchable_entity_api_v1_settings_search_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/search/{entity_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Searchable Entity */
+        put: operations["update_searchable_entity_api_v1_settings_search__entity_id__put"];
+        post?: never;
+        /** Delete Searchable Entity */
+        delete: operations["delete_searchable_entity_api_v1_settings_search__entity_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/search/{entity_id}/toggle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Toggle Searchable Entity
+         * @description Include or exclude a type from every user's search results.
+         */
+        post: operations["toggle_searchable_entity_api_v1_settings_search__entity_id__toggle_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/security": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Security Overview
+         * @description Every `security.*` control, plus the recent audit.
+         *
+         *     Returned as a flat list with each row carrying its `group`, rather than
+         *     pre-grouped into a map. A JSON object does not guarantee key order, so
+         *     grouping server-side would hand the client a shape whose tab order is not
+         *     reliable — the list is already ordered `group → label`, and the client groups
+         *     it while preserving that order.
+         */
+        get: operations["security_overview_api_v1_settings_security_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/settings/security/{setting_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Update Security Setting
+         * @description Change one security control.
+         *
+         *     The namespace check is the reason this endpoint exists separately from
+         *     `PUT /settings/configuration/{id}` rather than being an alias for it — see
+         *     the module docstring.
+         */
+        put: operations["update_security_setting_api_v1_settings_security__setting_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/system/health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * System Health
+         * @description Database, storage, errors, queue and providers — summaries only.
+         *
+         *     Every panel degrades rather than raising: a health endpoint that 500s when the
+         *     thing it monitors is unwell is useless exactly when it is needed.
+         */
+        get: operations["system_health_api_v1_system_health_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1395,6 +2208,27 @@ export interface components {
             /** Subject Type */
             subject_type: string | null;
         };
+        /**
+         * BinnedItem
+         * @description One deleted record, described by its own type's rules.
+         */
+        BinnedItem: {
+            /**
+             * Deleted At
+             * Format: date-time
+             */
+            deleted_at: string;
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Subtitle */
+            subtitle: string | null;
+            /** Type */
+            type: string;
+            /** Type Label */
+            type_label: string;
+        };
         /** Body_upload_asset_api_v1_settings_branding__asset__post */
         Body_upload_asset_api_v1_settings_branding__asset__post: {
             /**
@@ -1481,7 +2315,7 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "INACTIVE" | "ACTIVE" | "SUSPENDED";
+            status: "INACTIVE" | "ACTIVE";
             /** User Ids */
             user_ids: string[];
         };
@@ -1489,6 +2323,24 @@ export interface components {
         BulkUserIdsRequest: {
             /** User Ids */
             user_ids: string[];
+        };
+        /**
+         * ChangePartnerStatusRequest
+         * @description Move a partner through PENDING → ACTIVE ↔ SUSPENDED.
+         *
+         *     An explicit endpoint rather than a `PATCH status`, matching the rule
+         *     `MARKETPLACE_DOMAIN_PLAN.md` § State Machines sets for quotes: a state machine
+         *     driven by a free-form status field is one that will be driven into an invalid
+         *     state.
+         */
+        ChangePartnerStatusRequest: {
+            /** Reason */
+            reason?: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "PENDING" | "ACTIVE" | "SUSPENDED";
         };
         /**
          * ChangePasswordRequest
@@ -1532,6 +2384,48 @@ export interface components {
             /** Password */
             password: string;
         };
+        /**
+         * CreateDataAccessRequest
+         * @description One grantee, many subjects — the reference's shape, verbatim.
+         *
+         *     `subject_ids` is a list because the screen's job is "give Priya access to
+         *     these five people", and issuing that as five requests would make a partial
+         *     failure look like a total one. Each pair is upserted on the unique triple, so
+         *     re-granting changes the level rather than erroring.
+         */
+        CreateDataAccessRequest: {
+            /** Access Level */
+            access_level: string;
+            /** Grantee Id */
+            grantee_id: string;
+            /** Scope */
+            scope: string;
+            /** Subject Ids */
+            subject_ids: string[];
+        };
+        /**
+         * CreateDataAccessResult
+         * @description What the batch did.
+         *
+         *     `created` counts pairs written **or updated** — the endpoint upserts, and the
+         *     reference's own flash message counts the same way ("Data access updated for N
+         *     user(s)"). `skipped` carries the self-grant pairs the reference silently
+         *     `continue`s past; saying so is the one place the message is more honest than
+         *     the original, and it costs nothing.
+         */
+        CreateDataAccessResult: {
+            /** Created */
+            created: number;
+            /** Message */
+            message: string;
+            /**
+             * Skipped
+             * @default 0
+             */
+            skipped: number;
+            /** Skipped Reasons */
+            skipped_reasons?: string[];
+        };
         /** CreateInvitationRequest */
         CreateInvitationRequest: {
             /**
@@ -1549,6 +2443,59 @@ export interface components {
             note?: string | null;
             /** Role Id */
             role_id?: number | null;
+        };
+        /**
+         * CreatePartnerRequest
+         * @description Onboard a partner organisation.
+         *
+         *     `status` is absent on purpose. A new partner is always PENDING — activating
+         *     it is a separate, permissioned act (`PARTNER_APPROVE`), and letting the
+         *     create call choose would mean whoever can onboard can also grant login to
+         *     every account in the organisation.
+         *
+         *     `slug` is absent for the same class of reason: it is derived from `name` and
+         *     is the partner's permanent public URL. Accepting it here invites a caller to
+         *     pick one that collides or reads as another partner.
+         */
+        CreatePartnerRequest: {
+            /** About */
+            about?: string | null;
+            /** Agreement Signed At */
+            agreement_signed_at?: string | null;
+            /** Billing Address */
+            billing_address?: string | null;
+            /** City */
+            city?: string | null;
+            /** Country */
+            country?: string | null;
+            /** Employee Range */
+            employee_range?: string | null;
+            /** Founded Year */
+            founded_year?: number | null;
+            /** Gst Number */
+            gst_number?: string | null;
+            /** Legal Name */
+            legal_name?: string | null;
+            /** Name */
+            name: string;
+            /** Notes */
+            notes?: string | null;
+            /** Pan Number */
+            pan_number?: string | null;
+            /** Postal Code */
+            postal_code?: string | null;
+            /** Public Email */
+            public_email?: string | null;
+            /** Public Phone */
+            public_phone?: string | null;
+            /** State */
+            state?: string | null;
+            /** Tagline */
+            tagline?: string | null;
+            /** Tier Id */
+            tier_id?: number | null;
+            /** Website */
+            website?: string | null;
         };
         /** CreateRoleRequest */
         CreateRoleRequest: {
@@ -1604,12 +2551,179 @@ export interface components {
              * @default INACTIVE
              * @enum {string}
              */
-            status: "INACTIVE" | "ACTIVE" | "SUSPENDED";
+            status: "INACTIVE" | "ACTIVE";
             /**
              * Timezone Preference
              * @default Asia/Kolkata
              */
             timezone_preference: string;
+        };
+        /**
+         * CredentialFieldSchema
+         * @description One declared field. This is what the credential form is generated from.
+         */
+        CredentialFieldSchema: {
+            /** Default Value */
+            default_value?: string | null;
+            /**
+             * Display Order
+             * @default 0
+             */
+            display_order: number;
+            /** Field Key */
+            field_key: string;
+            /** Field Label */
+            field_label: string;
+            /** Field Options */
+            field_options?: Record<string, never> | unknown[] | null;
+            /**
+             * Field Type
+             * @default text
+             */
+            field_type: string;
+            /** Help Text */
+            help_text?: string | null;
+            /** Id */
+            id?: number | null;
+            /**
+             * Is Encrypted
+             * @default true
+             */
+            is_encrypted: boolean;
+            /**
+             * Is Required
+             * @default true
+             */
+            is_required: boolean;
+            /** Placeholder */
+            placeholder?: string | null;
+            /** Validation Rules */
+            validation_rules?: Record<string, never> | null;
+        };
+        /**
+         * CredentialFieldWrite
+         * @description A field declaration as submitted. `display_order` comes from list position.
+         */
+        CredentialFieldWrite: {
+            /** Default Value */
+            default_value?: string | null;
+            /** Field Key */
+            field_key: string;
+            /** Field Label */
+            field_label: string;
+            /** Field Options */
+            field_options?: Record<string, never> | unknown[] | null;
+            /**
+             * Field Type
+             * @default text
+             */
+            field_type: string;
+            /** Help Text */
+            help_text?: string | null;
+            /**
+             * Is Encrypted
+             * @default true
+             */
+            is_encrypted: boolean;
+            /**
+             * Is Required
+             * @default true
+             */
+            is_required: boolean;
+            /** Placeholder */
+            placeholder?: string | null;
+            /** Validation Rules */
+            validation_rules?: Record<string, never> | null;
+        };
+        /** CredentialPage */
+        CredentialPage: {
+            /** Can Manage */
+            can_manage: boolean;
+            /** Can Reveal */
+            can_reveal: boolean;
+            /** Environments */
+            environments?: string[];
+            /** Items */
+            items: components["schemas"]["CredentialResponse"][];
+            /** Page */
+            page: number;
+            /** Pages */
+            pages: number;
+            /** Per Page */
+            per_page: number;
+            /** Total */
+            total: number;
+        };
+        /** CredentialResponse */
+        CredentialResponse: {
+            /**
+             * Configured Fields
+             * @default 0
+             */
+            configured_fields: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Environment */
+            environment: string;
+            /** Id */
+            id: number;
+            /** Is Active */
+            is_active: boolean;
+            /** Last Used At */
+            last_used_at: string | null;
+            /** Last Verified At */
+            last_verified_at: string | null;
+            /** Name */
+            name: string | null;
+            /** Notes */
+            notes: string | null;
+            provider: components["schemas"]["ProviderSummary"];
+            /**
+             * Total Fields
+             * @default 0
+             */
+            total_fields: number;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Values */
+            values?: components["schemas"]["MaskedFieldValue"][];
+            /** Verification Status */
+            verification_status: string | null;
+        };
+        /**
+         * CredentialWriteRequest
+         * @description Create and update take the same body.
+         *
+         *     `field_values` is `{field_key: value}`. On update, **a blank value for an
+         *     encrypted field means "leave it as it is"** — the edit form is never given
+         *     the secret, so it cannot send it back, so a save that did not touch it must
+         *     not wipe it.
+         */
+        CredentialWriteRequest: {
+            /**
+             * Environment
+             * @default production
+             */
+            environment: string;
+            /** Field Values */
+            field_values?: Record<string, never>;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /** Name */
+            name?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Provider Id */
+            provider_id: number;
         };
         /**
          * CurrentUserResponse
@@ -1680,6 +2794,286 @@ export interface components {
              */
             two_factor_enabled: boolean;
         };
+        /** DataAccessGrantResponse */
+        DataAccessGrantResponse: {
+            /** Access Level */
+            access_level: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Granted By */
+            granted_by?: string | null;
+            grantee: components["schemas"]["GrantParty"];
+            /** Id */
+            id: string;
+            /** Scope */
+            scope: string;
+            /** Scope Label */
+            scope_label: string;
+            subject: components["schemas"]["GrantParty"];
+        };
+        /**
+         * DataAccessListResponse
+         * @description The standard page envelope, plus the reference's `canManage`.
+         *
+         *     A subclass rather than a new shape: `Page[T]` stays the one envelope every
+         *     index returns, the frontend's `useResourceList` reads `items`/`total`/`pages`
+         *     unchanged, and `can_manage` rides along as an extra key it ignores.
+         *
+         *     **Why it is on the list response at all**, when the client already knows its
+         *     own permissions: the reference computes it server-side and the write controls
+         *     are gated on it. Keeping that means one authority for "may I write here"
+         *     rather than a client-side permission string that can drift from the router's
+         *     guard — the guard below and this flag read the same constant.
+         */
+        DataAccessListResponse: {
+            /** Can Manage */
+            can_manage: boolean;
+            /** Items */
+            items: components["schemas"]["DataAccessGrantResponse"][];
+            /** Page */
+            page: number;
+            /** Pages */
+            pages: number;
+            /** Per Page */
+            per_page: number;
+            /** Total */
+            total: number;
+        };
+        /**
+         * DataAccessOptionsResponse
+         * @description Everything the create form needs, in one request.
+         *
+         *     The reference ships `users` and `scopes` alongside the grants in a single
+         *     Inertia payload. We cannot: our index is a paged JSON endpoint that refetches
+         *     on every filter keystroke, and re-sending the whole ACTIVE user list with each
+         *     page would be the dominant cost of the screen. Split into its own route,
+         *     fetched once on mount — the same split the Users module already makes for
+         *     roles.
+         */
+        DataAccessOptionsResponse: {
+            /** Scopes */
+            scopes: components["schemas"]["ScopeOption"][];
+            /** Users */
+            users: components["schemas"]["GrantUserOption"][];
+        };
+        /**
+         * ErrorGroupDetailResponse
+         * @description The detail view — the group plus its most recent sightings.
+         */
+        ErrorGroupDetailResponse: {
+            /** Exception Class */
+            exception_class: string;
+            /** File */
+            file: string;
+            /** Fingerprint */
+            fingerprint: string;
+            /** First Seen At */
+            first_seen_at: string | null;
+            /** Id */
+            id: number;
+            /** Last Seen At */
+            last_seen_at: string | null;
+            /** Latest Message */
+            latest_message: string;
+            /** Line */
+            line: number;
+            /** Method */
+            method: string | null;
+            /** Module */
+            module: string;
+            /** Notes */
+            notes: string | null;
+            /** Occurrence Count */
+            occurrence_count: number;
+            /** Occurrence Total */
+            occurrence_total: number;
+            /** Occurrences */
+            occurrences: components["schemas"]["ErrorOccurrenceResponse"][];
+            /** Path */
+            path: string | null;
+            /** Resolved At */
+            resolved_at: string | null;
+            /** Resolved By */
+            resolved_by: string | null;
+            /** Route Name */
+            route_name: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "open" | "resolved" | "ignored" | "muted";
+        };
+        /**
+         * ErrorGroupResponse
+         * @description One distinct error, as the index renders it.
+         */
+        ErrorGroupResponse: {
+            /** Exception Class */
+            exception_class: string;
+            /** File */
+            file: string;
+            /** Fingerprint */
+            fingerprint: string;
+            /** First Seen At */
+            first_seen_at: string | null;
+            /** Id */
+            id: number;
+            /** Last Seen At */
+            last_seen_at: string | null;
+            /** Latest Message */
+            latest_message: string;
+            /** Line */
+            line: number;
+            /** Method */
+            method: string | null;
+            /** Module */
+            module: string;
+            /** Notes */
+            notes: string | null;
+            /** Occurrence Count */
+            occurrence_count: number;
+            /** Path */
+            path: string | null;
+            /** Resolved At */
+            resolved_at: string | null;
+            /** Resolved By */
+            resolved_by: string | null;
+            /** Route Name */
+            route_name: string | null;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "open" | "resolved" | "ignored" | "muted";
+        };
+        /**
+         * ErrorOccurrenceResponse
+         * @description One sighting.
+         *
+         *     `context` carries user agent and referer **only** — never request input. The
+         *     reason is on `ErrorOccurrence`; it is repeated wherever this shape crosses a
+         *     boundary because the temptation to "just add the body, it would help debug"
+         *     arrives at every one of them.
+         */
+        ErrorOccurrenceResponse: {
+            /** Context */
+            context: Record<string, never> | null;
+            /** Id */
+            id: number;
+            /** Ip */
+            ip: string | null;
+            /** Message */
+            message: string;
+            /** Method */
+            method: string | null;
+            /**
+             * Occurred At
+             * Format: date-time
+             */
+            occurred_at: string;
+            /** Stack Trace */
+            stack_trace: string | null;
+            /** Url */
+            url: string | null;
+            /** User Id */
+            user_id: string | null;
+        };
+        /**
+         * FeatureFlagOptionsResponse
+         * @description Both targeting pickers, in one request.
+         *
+         *     Split out of the index rather than shipped with it, unlike the reference's
+         *     Inertia payload: our index refetches on every filter keystroke, and resending
+         *     the whole role and ACTIVE-user list each time would be the dominant cost of
+         *     the screen.
+         */
+        FeatureFlagOptionsResponse: {
+            /** Roles */
+            roles: components["schemas"]["RoleOption"][];
+            /** Users */
+            users: components["schemas"]["UserOption"][];
+        };
+        /**
+         * FeatureFlagPage
+         * @description The standard page envelope plus the caller's write capability.
+         *
+         *     Same shape as the Data Access index: `can_manage` is computed from the
+         *     permission constant the write routes are guarded on, so the button and the
+         *     guard cannot drift apart.
+         */
+        FeatureFlagPage: {
+            /** Can Manage */
+            can_manage: boolean;
+            /** Items */
+            items: components["schemas"]["FeatureFlagResponse"][];
+            /** Page */
+            page: number;
+            /** Pages */
+            pages: number;
+            /** Per Page */
+            per_page: number;
+            /** Total */
+            total: number;
+        };
+        /** FeatureFlagResponse */
+        FeatureFlagResponse: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description: string | null;
+            /** Enabled */
+            enabled: boolean;
+            /** Id */
+            id: number;
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** Target Roles */
+            target_roles: string[] | null;
+            /** Target User Ids */
+            target_user_ids: string[] | null;
+            /** Targets Everyone */
+            targets_everyone: boolean;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Updated By */
+            updated_by: string | null;
+        };
+        /**
+         * FeatureFlagWriteRequest
+         * @description Create and update take the same body.
+         *
+         *     One schema, not `Create` + `Update`, because the write is a full replace in
+         *     both directions — see `update_flag`'s docstring on why a PATCH over a set has
+         *     no honest meaning.
+         */
+        FeatureFlagWriteRequest: {
+            /** Description */
+            description?: string | null;
+            /**
+             * Enabled
+             * @default false
+             */
+            enabled: boolean;
+            /** Key */
+            key: string;
+            /** Name */
+            name: string;
+            /** Target Roles */
+            target_roles?: string[] | null;
+            /** Target User Ids */
+            target_user_ids?: string[] | null;
+        };
         /** ForgotPasswordRequest */
         ForgotPasswordRequest: {
             /**
@@ -1695,6 +3089,32 @@ export interface components {
         GoogleAuthUrlResponse: {
             /** Authorization Url */
             authorization_url: string;
+        };
+        /**
+         * GrantParty
+         * @description One side of a grant, as the table renders it.
+         *
+         *     Mirrors the reference's `userLabel()` — `{id, name, email}` and nothing more.
+         */
+        GrantParty: {
+            /** Email */
+            email: string;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+        };
+        /**
+         * GrantUserOption
+         * @description An ACTIVE user, for the grantee and subject pickers.
+         */
+        GrantUserOption: {
+            /** Email */
+            email: string;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -1852,6 +3272,31 @@ export interface components {
             user: components["schemas"]["CurrentUserResponse"];
         };
         /**
+         * MaskedFieldValue
+         * @description One field of a credential, as the UI is allowed to see it.
+         *
+         *     `masked_value` is **never** plaintext for an encrypted or password field.
+         *     `is_set` exists separately because an empty mask is ambiguous on its own —
+         *     it could mean "not configured" or "configured to an empty string", and the
+         *     screen needs to tell an operator which.
+         */
+        MaskedFieldValue: {
+            /** Field Key */
+            field_key: string;
+            /** Field Label */
+            field_label: string;
+            /** Field Type */
+            field_type: string;
+            /** Is Encrypted */
+            is_encrypted: boolean;
+            /** Is Required */
+            is_required: boolean;
+            /** Is Set */
+            is_set: boolean;
+            /** Masked Value */
+            masked_value: string;
+        };
+        /**
          * MatrixCellRequest
          * @description Grant or revoke a whole group for one role, from the matrix.
          */
@@ -1965,10 +3410,36 @@ export interface components {
             /** Label */
             label?: string | null;
         };
+        /** Page[ErrorGroupResponse] */
+        Page_ErrorGroupResponse_: {
+            /** Items */
+            items: components["schemas"]["ErrorGroupResponse"][];
+            /** Page */
+            page: number;
+            /** Pages */
+            pages: number;
+            /** Per Page */
+            per_page: number;
+            /** Total */
+            total: number;
+        };
         /** Page[InvitationResponse] */
         Page_InvitationResponse_: {
             /** Items */
             items: components["schemas"]["InvitationResponse"][];
+            /** Page */
+            page: number;
+            /** Pages */
+            pages: number;
+            /** Per Page */
+            per_page: number;
+            /** Total */
+            total: number;
+        };
+        /** Page[PartnerListItem] */
+        Page_PartnerListItem_: {
+            /** Items */
+            items: components["schemas"]["PartnerListItem"][];
             /** Page */
             page: number;
             /** Pages */
@@ -2005,6 +3476,216 @@ export interface components {
             total: number;
         };
         /**
+         * PartnerDetailResponse
+         * @description The full staff-facing record.
+         *
+         *     Carries `notes`, `gst_number` and `pan_number`. **Never return this from a
+         *     public route** — use `PartnerPublicResponse`.
+         */
+        PartnerDetailResponse: {
+            /** About */
+            about: string | null;
+            /** Agreement Signed At */
+            agreement_signed_at: string | null;
+            /** Banner Path */
+            banner_path: string | null;
+            /** Billing Address */
+            billing_address: string | null;
+            /**
+             * Can Change Status
+             * @default false
+             */
+            can_change_status: boolean;
+            /**
+             * Can Delete
+             * @default false
+             */
+            can_delete: boolean;
+            /**
+             * Can Edit
+             * @default false
+             */
+            can_edit: boolean;
+            /**
+             * Can Publish
+             * @default false
+             */
+            can_publish: boolean;
+            /**
+             * Can Verify
+             * @default false
+             */
+            can_verify: boolean;
+            /** City */
+            city: string | null;
+            /** Country */
+            country: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Created By */
+            created_by: string | null;
+            /** Employee Range */
+            employee_range: string | null;
+            /** Founded Year */
+            founded_year: number | null;
+            /** Gst Number */
+            gst_number: string | null;
+            /** Id */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Is Listed */
+            is_listed: boolean;
+            /** Is Verified */
+            is_verified: boolean;
+            /** Legal Name */
+            legal_name: string | null;
+            /** Logo Path */
+            logo_path: string | null;
+            /** Name */
+            name: string;
+            /** Notes */
+            notes: string | null;
+            /** Onboarded By */
+            onboarded_by: string | null;
+            /** Pan Number */
+            pan_number: string | null;
+            /** Postal Code */
+            postal_code: string | null;
+            /** Public Email */
+            public_email: string | null;
+            /** Public Phone */
+            public_phone: string | null;
+            /** Publicly Visible */
+            publicly_visible: boolean;
+            /** Slug */
+            slug: string;
+            /** State */
+            state: string | null;
+            /** Status */
+            status: string;
+            /** Tagline */
+            tagline: string | null;
+            tier: components["schemas"]["PartnerTierResponse"] | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Updated By */
+            updated_by: string | null;
+            /**
+             * User Count
+             * @default 0
+             */
+            user_count: number;
+            /** Verification Level */
+            verification_level: string;
+            /** Verified At */
+            verified_at: string | null;
+            /** Verified By */
+            verified_by: string | null;
+            /** Website */
+            website: string | null;
+        };
+        /**
+         * PartnerListItem
+         * @description One row of the staff partners table.
+         *
+         *     `can_*` flags are computed per row against the *requesting* actor so the UI
+         *     never offers an action the API would reject. The API re-checks regardless —
+         *     these are for rendering, not for security. Same contract as `UserListItem`.
+         */
+        PartnerListItem: {
+            /**
+             * Can Change Status
+             * @default false
+             */
+            can_change_status: boolean;
+            /**
+             * Can Delete
+             * @default false
+             */
+            can_delete: boolean;
+            /**
+             * Can Edit
+             * @default false
+             */
+            can_edit: boolean;
+            /**
+             * Can Publish
+             * @default false
+             */
+            can_publish: boolean;
+            /**
+             * Can Verify
+             * @default false
+             */
+            can_verify: boolean;
+            /** City */
+            city: string | null;
+            /** Country */
+            country: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Is Listed */
+            is_listed: boolean;
+            /** Is Verified */
+            is_verified: boolean;
+            /** Name */
+            name: string;
+            /** Publicly Visible */
+            publicly_visible: boolean;
+            /** Slug */
+            slug: string;
+            /** Status */
+            status: string;
+            tier: components["schemas"]["PartnerTierResponse"] | null;
+            /**
+             * User Count
+             * @default 0
+             */
+            user_count: number;
+            /** Verification Level */
+            verification_level: string;
+        };
+        /**
+         * PartnerTierResponse
+         * @description A tier, as the tier selector and the partner detail page render it.
+         */
+        PartnerTierResponse: {
+            /** Can Feature */
+            can_feature: boolean;
+            /** Description */
+            description: string | null;
+            /** Display Name */
+            display_name: string;
+            /** Featured Slots */
+            featured_slots: number;
+            /** Id */
+            id: number;
+            /** Is Active */
+            is_active: boolean;
+            /** Is Unlimited */
+            is_unlimited: boolean;
+            /** Max Listings */
+            max_listings: number | null;
+            /** Name */
+            name: string;
+            /** Sort Order */
+            sort_order: number;
+        };
+        /**
          * PermissionGroupResponse
          * @description A group with its permissions, ready to render as a checkbox section.
          */
@@ -2031,6 +3712,121 @@ export interface components {
             /** Name */
             name: string;
         };
+        /** ProviderPage */
+        ProviderPage: {
+            /** Can Manage */
+            can_manage: boolean;
+            /** Categories */
+            categories?: string[];
+            /** Items */
+            items: components["schemas"]["ProviderResponse"][];
+            /** Page */
+            page: number;
+            /** Pages */
+            pages: number;
+            /** Per Page */
+            per_page: number;
+            /** Total */
+            total: number;
+        };
+        /** ProviderResponse */
+        ProviderResponse: {
+            /** Category */
+            category: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Credential Count
+             * @default 0
+             */
+            credential_count: number;
+            /** Description */
+            description: string | null;
+            /** Display Order */
+            display_order: number;
+            /** Documentation Url */
+            documentation_url: string | null;
+            /** Icon */
+            icon: string | null;
+            /** Id */
+            id: number;
+            /** Is Active */
+            is_active: boolean;
+            /** Is System */
+            is_system: boolean;
+            /** Name */
+            name: string;
+            /** Schemas */
+            schemas?: components["schemas"]["CredentialFieldSchema"][];
+            /** Setup Steps */
+            setup_steps: string[] | null;
+            /** Slug */
+            slug: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * ProviderSummary
+         * @description Just enough provider to render a credential row.
+         */
+        ProviderSummary: {
+            /** Category */
+            category: string;
+            /** Icon */
+            icon: string | null;
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Slug */
+            slug: string;
+        };
+        /** ProviderWriteRequest */
+        ProviderWriteRequest: {
+            /**
+             * Category
+             * @default general
+             */
+            category: string;
+            /** Description */
+            description?: string | null;
+            /**
+             * Display Order
+             * @default 0
+             */
+            display_order: number;
+            /** Documentation Url */
+            documentation_url?: string | null;
+            /** Icon */
+            icon?: string | null;
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /** Name */
+            name: string;
+            /** Schemas */
+            schemas?: components["schemas"]["CredentialFieldWrite"][] | null;
+            /** Setup Steps */
+            setup_steps?: string[] | null;
+            /** Slug */
+            slug: string;
+        };
+        /**
+         * PublishPartnerRequest
+         * @description Flip directory visibility. The only field here the public can observe.
+         */
+        PublishPartnerRequest: {
+            /** Is Listed */
+            is_listed: boolean;
+        };
         /** RecoveryCodesResponse */
         RecoveryCodesResponse: {
             /**
@@ -2040,6 +3836,36 @@ export interface components {
             message: string;
             /** Recovery Codes */
             recovery_codes: string[];
+        };
+        /**
+         * RecycleBinActionRequest
+         * @description Which record to act on.
+         *
+         *     `type` is validated against the service allowlist, never used to resolve a
+         *     class. See `recycle_bin_service` — this is the field that would otherwise be
+         *     an arbitrary-model-load primitive.
+         */
+        RecycleBinActionRequest: {
+            /** Id */
+            id: string;
+            /**
+             * Type
+             * @description Allowlist key from `types`
+             */
+            type: string;
+        };
+        /** RecycleBinResponse */
+        RecycleBinResponse: {
+            /** Counts */
+            counts: {
+                [key: string]: number;
+            };
+            /** Items */
+            items: components["schemas"]["BinnedItem"][];
+            /** Types */
+            types: {
+                [key: string]: string;
+            }[];
         };
         /**
          * RegisterRequest
@@ -2080,6 +3906,31 @@ export interface components {
             token: string;
         };
         /**
+         * RevealRequest
+         * @description Which single field to decrypt.
+         *
+         *     One field per call, deliberately: the audit entry then names the secret that
+         *     was read, and someone who needs the SMTP host does not also pull the token
+         *     into their browser.
+         */
+        RevealRequest: {
+            /** Field Key */
+            field_key: string;
+        };
+        /**
+         * RevealResponse
+         * @description **The only response model in this module carrying a plaintext secret.**
+         *
+         *     Reaching it requires `api-credential-view` *and* a password confirmation
+         *     within the re-auth window, and every call writes an activity-log entry.
+         */
+        RevealResponse: {
+            /** Field Key */
+            field_key: string;
+            /** Value */
+            value: string | null;
+        };
+        /**
          * RoleMatrixResponse
          * @description Roles down, permission groups across.
          */
@@ -2088,6 +3939,18 @@ export interface components {
             groups: components["schemas"]["PermissionGroupResponse"][];
             /** Rows */
             rows: components["schemas"]["MatrixRow"][];
+        };
+        /**
+         * RoleOption
+         * @description A role, for the targeting picker. Targeted by `name`, not `id`.
+         */
+        RoleOption: {
+            /** Display Name */
+            display_name: string;
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
         };
         /** RoleResponse */
         RoleResponse: {
@@ -2140,6 +4003,200 @@ export interface components {
             id: string;
             /** Status */
             status: string;
+        };
+        /**
+         * ScopeOption
+         * @description One entry in the scope catalogue, shaped for a `<Select>`.
+         */
+        ScopeOption: {
+            /** Label */
+            label: string;
+            /** Value */
+            value: string;
+        };
+        /** SearchGroup */
+        SearchGroup: {
+            /** Group */
+            group: string;
+            /** Icon */
+            icon?: string | null;
+            /** Items */
+            items: components["schemas"]["SearchHit"][];
+            /** Label */
+            label: string;
+        };
+        /**
+         * SearchHit
+         * @description One record, already rendered for display.
+         *
+         *     Templates are substituted server-side so the client never receives the raw
+         *     row — it gets a title, a subtitle and a URL, and no column it was not meant
+         *     to see rides along in an unused field.
+         */
+        SearchHit: {
+            /** Icon */
+            icon?: string | null;
+            /** Id */
+            id: string;
+            /** Subtitle */
+            subtitle?: string | null;
+            /** Title */
+            title: string;
+            /** Url */
+            url: string;
+        };
+        /** SearchResponse */
+        SearchResponse: {
+            /** Duration Ms */
+            duration_ms: number;
+            /** Groups */
+            groups: components["schemas"]["SearchGroup"][];
+            /** Q */
+            q: string;
+        };
+        /**
+         * SearchableEntityPage
+         * @description The standard envelope, plus what the screen needs to render its controls.
+         */
+        SearchableEntityPage: {
+            /** Available Models */
+            available_models?: string[];
+            /** Can Manage */
+            can_manage: boolean;
+            /** Groups */
+            groups?: string[];
+            /** Items */
+            items: components["schemas"]["SearchableEntityResponse"][];
+            /** Page */
+            page: number;
+            /** Pages */
+            pages: number;
+            /** Per Page */
+            per_page: number;
+            /** Total */
+            total: number;
+        };
+        /** SearchableEntityResponse */
+        SearchableEntityResponse: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Display Template */
+            display_template: string;
+            /** Enabled */
+            enabled: boolean;
+            /** Fields */
+            fields: string[];
+            /** Group */
+            group: string;
+            /** Health */
+            health: string;
+            /** Health Reasons */
+            health_reasons?: string[];
+            /** Icon */
+            icon: string | null;
+            /** Id */
+            id: number;
+            /** Label */
+            label: string;
+            /** Model Class */
+            model_class: string;
+            /** Permission */
+            permission: string | null;
+            /** Route Name */
+            route_name: string;
+            /** Route Param Field */
+            route_param_field: string;
+            /** Sort Order */
+            sort_order: number;
+            /** Subtitle Template */
+            subtitle_template: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /**
+         * SearchableEntityWriteRequest
+         * @description Create and update take the same body — the write is a full replace.
+         */
+        SearchableEntityWriteRequest: {
+            /** Display Template */
+            display_template: string;
+            /**
+             * Enabled
+             * @default true
+             */
+            enabled: boolean;
+            /** Fields */
+            fields: string[];
+            /** Group */
+            group: string;
+            /** Icon */
+            icon?: string | null;
+            /** Label */
+            label: string;
+            /** Model Class */
+            model_class: string;
+            /** Permission */
+            permission?: string | null;
+            /** Route Name */
+            route_name: string;
+            /**
+             * Route Param Field
+             * @default id
+             */
+            route_param_field: string;
+            /**
+             * Sort Order
+             * @default 0
+             */
+            sort_order: number;
+            /** Subtitle Template */
+            subtitle_template?: string | null;
+        };
+        /**
+         * SecurityAuditRow
+         * @description One line of the audit panel.
+         *
+         *     A flattened activity-log row, not the full `ActivityEntry`: this panel shows
+         *     what happened and who did it, and the `properties` blob — before/after diffs,
+         *     IPs, stack context — is what the Activity Log is for. Sending it here would
+         *     put a payload on screen with nothing to render it.
+         */
+        SecurityAuditRow: {
+            /** Causer */
+            causer: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description: string;
+            /** Event */
+            event: string | null;
+            /** Id */
+            id: number;
+            /** Log Name */
+            log_name: string;
+        };
+        /**
+         * SecurityOverviewResponse
+         * @description The whole screen in one request.
+         *
+         *     Controls and audit together rather than two endpoints, because the page is
+         *     useless with either half missing and two requests would let it render half a
+         *     screen while the other is still in flight.
+         */
+        SecurityOverviewResponse: {
+            /** Audit */
+            audit: components["schemas"]["SecurityAuditRow"][];
+            /** Items */
+            items: components["schemas"]["SettingResponse"][];
         };
         /**
          * SendUserEmailRequest
@@ -2197,6 +4254,62 @@ export interface components {
             user_agent: string | null;
         };
         /**
+         * SettingListResponse
+         * @description The whole registry, plus what the filters need.
+         *
+         *     **Not a `Page[T]`.** Every other list endpoint returns the paged envelope;
+         *     this one deliberately does not, because the registry is declared in code and
+         *     is tens of rows. Paging it server-side would add a round trip per page to a
+         *     list that fits on one screen, and the filter dropdowns need the full set of
+         *     modules anyway.
+         */
+        SettingListResponse: {
+            /** Items */
+            items: components["schemas"]["SettingResponse"][];
+            /** Modules */
+            modules: string[];
+            /** Types */
+            types: {
+                [key: string]: string;
+            }[];
+        };
+        /**
+         * SettingResponse
+         * @description One row of the Configuration screen.
+         *
+         *     `value` is `Any` on purpose — it is whatever the row's `type` says it is, and
+         *     narrowing it per type would need five response models and a discriminated
+         *     union to express something the `type` field already tells the client.
+         */
+        SettingResponse: {
+            /** Description */
+            description: string | null;
+            /** Group */
+            group: string;
+            /** Id */
+            id: number;
+            /** Key */
+            key: string;
+            /** Label */
+            label: string;
+            /** Module */
+            module: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "bool" | "int" | "string" | "text" | "json";
+            /** Type Label */
+            type_label: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Value */
+            value: unknown;
+        };
+        /**
          * SkippedInvitation
          * @description One address the batch could not invite, and why.
          */
@@ -2205,6 +4318,19 @@ export interface components {
             email: string;
             /** Reason */
             reason: string;
+        };
+        /** SystemHealthResponse */
+        SystemHealthResponse: {
+            /** Database */
+            database: Record<string, never>;
+            /** Errors */
+            errors: Record<string, never>;
+            /** Providers */
+            providers: Record<string, never>;
+            /** Queue */
+            queue: Record<string, never>;
+            /** Storage */
+            storage: Record<string, never>;
         };
         /**
          * ThemePresetOption
@@ -2337,6 +4463,25 @@ export interface components {
             theme_preset?: string | null;
         };
         /**
+         * UpdateErrorStatusRequest
+         * @description Triage one group.
+         *
+         *     `notes` is optional and independent of the status: recording *why* something
+         *     was ignored is the whole value of the field, and requiring a status change to
+         *     write one would mean the note only ever gets added at the moment you have
+         *     least to say.
+         */
+        UpdateErrorStatusRequest: {
+            /** Notes */
+            notes?: string | null;
+            /**
+             * Status
+             * @description One of open, resolved, ignored, muted
+             * @enum {string}
+             */
+            status: "open" | "resolved" | "ignored" | "muted";
+        };
+        /**
          * UpdateNavPreferencesRequest
          * @description Per-role sidebar preferences.
          *
@@ -2352,6 +4497,81 @@ export interface components {
                     [key: string]: boolean;
                 };
             };
+        };
+        /**
+         * UpdatePartnerRequest
+         * @description Partial update. Every field optional, applied with `exclude_unset=True`.
+         *
+         *     Deliberately excludes `status`, `verification_level` and `is_listed`. Each has
+         *     its own endpoint and its own permission, because each has a consequence a
+         *     general edit should not carry: login for the whole organisation, Leapswitch's
+         *     published endorsement, and visibility to the anonymous internet. A `PATCH`
+         *     that could set any of them would make `PARTNER_UPDATE` a superset of the
+         *     three permissions that exist to separate them.
+         */
+        UpdatePartnerRequest: {
+            /** About */
+            about?: string | null;
+            /** Agreement Signed At */
+            agreement_signed_at?: string | null;
+            /** Banner Path */
+            banner_path?: string | null;
+            /** Billing Address */
+            billing_address?: string | null;
+            /** City */
+            city?: string | null;
+            /** Country */
+            country?: string | null;
+            /** Employee Range */
+            employee_range?: string | null;
+            /** Founded Year */
+            founded_year?: number | null;
+            /** Gst Number */
+            gst_number?: string | null;
+            /** Legal Name */
+            legal_name?: string | null;
+            /** Logo Path */
+            logo_path?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Notes */
+            notes?: string | null;
+            /** Pan Number */
+            pan_number?: string | null;
+            /** Postal Code */
+            postal_code?: string | null;
+            /** Public Email */
+            public_email?: string | null;
+            /** Public Phone */
+            public_phone?: string | null;
+            /** State */
+            state?: string | null;
+            /** Tagline */
+            tagline?: string | null;
+            /** Tier Id */
+            tier_id?: number | null;
+            /** Website */
+            website?: string | null;
+        };
+        /**
+         * UpdatePartnerTierRequest
+         * @description Change what a tier grants. Name and display order are seeded, not edited.
+         *
+         *     `name` is deliberately absent: it is the key `core/partner_tiers.py` and
+         *     every future entitlement check reference, and renaming it here would make the
+         *     database disagree with the code until the next seed silently renamed it back.
+         */
+        UpdatePartnerTierRequest: {
+            /** Description */
+            description?: string | null;
+            /** Display Name */
+            display_name?: string | null;
+            /** Featured Slots */
+            featured_slots?: number | null;
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Max Listings */
+            max_listings?: number | null;
         };
         /**
          * UpdateProfileRequest
@@ -2392,6 +4612,22 @@ export interface components {
             permission_ids?: number[] | null;
         };
         /**
+         * UpdateSettingRequest
+         * @description Write one setting.
+         *
+         *     `value` is `Any` and validation happens in the service against the row's own
+         *     declared type. It cannot happen here: Pydantic would have to know which
+         *     setting is being written to know what shape to accept, and it does not — the
+         *     id is in the path.
+         */
+        UpdateSettingRequest: {
+            /**
+             * Value
+             * @description Cast against the setting's declared type; a mismatch is a 422
+             */
+            value?: unknown;
+        };
+        /**
          * UpdateUserRequest
          * @description Admin update. All fields optional; only what is sent is applied.
          *
@@ -2422,7 +4658,7 @@ export interface components {
             /** Role Ids */
             role_ids?: number[] | null;
             /** Status */
-            status?: ("INACTIVE" | "ACTIVE" | "SUSPENDED") | null;
+            status?: ("INACTIVE" | "ACTIVE") | null;
             /** Timezone Preference */
             timezone_preference?: string | null;
         };
@@ -2572,6 +4808,18 @@ export interface components {
              */
             two_factor_enabled: boolean;
         };
+        /**
+         * UserOption
+         * @description An ACTIVE user, for the targeting picker. Targeted by `id`.
+         */
+        UserOption: {
+            /** Email */
+            email: string;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+        };
         /** ValidationError */
         ValidationError: {
             /** Location */
@@ -2585,6 +4833,17 @@ export interface components {
         VerifyEmailRequest: {
             /** Token */
             token: string;
+        };
+        /**
+         * VerifyPartnerRequest
+         * @description Set what Leapswitch vouches for. See `permissions.PARTNER_VERIFY`.
+         */
+        VerifyPartnerRequest: {
+            /**
+             * Verification Level
+             * @enum {string}
+             */
+            verification_level: "UNVERIFIED" | "VERIFIED" | "PREMIER";
         };
         /**
          * VerifyPasswordOtpRequest
@@ -3601,6 +5860,321 @@ export interface operations {
             };
         };
     };
+    list_data_access_grants_api_v1_data_access_get: {
+        parameters: {
+            query?: {
+                /** @description Matches either party's first name, last name, email, or full name */
+                search?: string | null;
+                scope?: string | null;
+                access_level?: ("view" | "manage") | null;
+                sort_by?: string;
+                sort_order?: string;
+                page?: number;
+                per_page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataAccessListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_data_access_grants_api_v1_data_access_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateDataAccessRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreateDataAccessResult"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    data_access_options_api_v1_data_access_options_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DataAccessOptionsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_data_access_grant_api_v1_data_access__grant_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                grant_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_errors_api_v1_errors_get: {
+        parameters: {
+            query?: {
+                search?: string | null;
+                /** @description One of open, resolved, ignored, muted */
+                status?: string | null;
+                module?: string | null;
+                sort_by?: string | null;
+                sort_order?: string;
+                page?: number;
+                per_page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_ErrorGroupResponse_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    error_counts_api_v1_errors_counts_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: number;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_error_api_v1_errors__group_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: number;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorGroupDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_error_api_v1_errors__group_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: number;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_error_status_api_v1_errors__group_id__status_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: number;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateErrorStatusRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorGroupResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_invitations_api_v1_invitations_get: {
         parameters: {
             query?: {
@@ -3870,6 +6444,364 @@ export interface operations {
             };
         };
     };
+    list_partners_endpoint_api_v1_partners_get: {
+        parameters: {
+            query?: {
+                search?: string | null;
+                status?: string | null;
+                verification_level?: string | null;
+                tier_id?: number | null;
+                is_listed?: boolean | null;
+                sort_by?: string;
+                sort_order?: string;
+                page?: number;
+                per_page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_PartnerListItem_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_partner_endpoint_api_v1_partners_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePartnerRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartnerDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_partner_tiers_endpoint_api_v1_partners_tiers_get: {
+        parameters: {
+            query?: {
+                include_inactive?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartnerTierResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_partner_tier_endpoint_api_v1_partners_tiers__tier_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                tier_id: number;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdatePartnerTierRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartnerTierResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_partner_endpoint_api_v1_partners__partner_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                partner_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartnerDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_partner_endpoint_api_v1_partners__partner_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                partner_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_partner_endpoint_api_v1_partners__partner_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                partner_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdatePartnerRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartnerDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    publish_partner_endpoint_api_v1_partners__partner_id__listing_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                partner_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PublishPartnerRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartnerDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    change_partner_status_endpoint_api_v1_partners__partner_id__status_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                partner_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePartnerStatusRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartnerDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    verify_partner_endpoint_api_v1_partners__partner_id__verification_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                partner_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["VerifyPartnerRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartnerDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_permissions_api_v1_permissions_get: {
         parameters: {
             query?: never;
@@ -3888,6 +6820,110 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PermissionGroupResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_bin_api_v1_recycle_bin_get: {
+        parameters: {
+            query?: {
+                /** @description Allowlist key; unknown values are ignored */
+                type?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RecycleBinResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    purge_api_v1_recycle_bin_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecycleBinActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_api_v1_recycle_bin_restore_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecycleBinActionRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageResponse"];
                 };
             };
             /** @description Validation Error */
@@ -4276,6 +7312,469 @@ export interface operations {
             };
         };
     };
+    global_search_api_v1_search_get: {
+        parameters: {
+            query?: {
+                q?: string;
+                /** @description Results per entity group */
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_credentials_api_v1_settings_api_credentials_credentials_get: {
+        parameters: {
+            query?: {
+                /** @description Matches credential or provider name */
+                search?: string | null;
+                provider_id?: number | null;
+                environment?: string | null;
+                is_active?: boolean | null;
+                sort_by?: string;
+                sort_order?: string;
+                page?: number;
+                per_page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CredentialPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_credential_api_v1_settings_api_credentials_credentials_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CredentialWriteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CredentialResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_credential_api_v1_settings_api_credentials_credentials__credential_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                credential_id: number;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CredentialResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_credential_api_v1_settings_api_credentials_credentials__credential_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                credential_id: number;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CredentialWriteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CredentialResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_credential_api_v1_settings_api_credentials_credentials__credential_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                credential_id: number;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    credential_form_values_api_v1_settings_api_credentials_credentials__credential_id__form_values_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                credential_id: number;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reveal_credential_field_api_v1_settings_api_credentials_credentials__credential_id__reveal_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                credential_id: number;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RevealRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RevealResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_providers_api_v1_settings_api_credentials_providers_get: {
+        parameters: {
+            query?: {
+                search?: string | null;
+                category?: string | null;
+                is_active?: boolean | null;
+                sort_by?: string;
+                sort_order?: string;
+                page?: number;
+                per_page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_provider_api_v1_settings_api_credentials_providers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProviderWriteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_provider_api_v1_settings_api_credentials_providers__provider_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_id: number;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_provider_api_v1_settings_api_credentials_providers__provider_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_id: number;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProviderWriteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_provider_api_v1_settings_api_credentials_providers__provider_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_id: number;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     read_branding_api_v1_settings_branding_get: {
         parameters: {
             query?: never;
@@ -4453,6 +7952,595 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BrandingResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_configuration_api_v1_settings_configuration_get: {
+        parameters: {
+            query?: {
+                /** @description Restrict to one module */
+                module?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingListResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_configuration_api_v1_settings_configuration__setting_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                setting_id: number;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateSettingRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_feature_flags_api_v1_settings_feature_flags_get: {
+        parameters: {
+            query?: {
+                /** @description Matches name, key or description */
+                search?: string | null;
+                enabled?: boolean | null;
+                sort_by?: string;
+                sort_order?: string;
+                page?: number;
+                per_page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeatureFlagPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_feature_flag_api_v1_settings_feature_flags_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeatureFlagWriteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeatureFlagResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    feature_flag_options_api_v1_settings_feature_flags_options_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeatureFlagOptionsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_feature_flag_api_v1_settings_feature_flags__flag_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                flag_id: number;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeatureFlagResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_feature_flag_api_v1_settings_feature_flags__flag_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                flag_id: number;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeatureFlagWriteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeatureFlagResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_feature_flag_api_v1_settings_feature_flags__flag_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                flag_id: number;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    toggle_feature_flag_api_v1_settings_feature_flags__flag_id__toggle_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                flag_id: number;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeatureFlagResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_searchable_entities_api_v1_settings_search_get: {
+        parameters: {
+            query?: {
+                /** @description Matches label, model, group, route or permission */
+                search?: string | null;
+                group?: string | null;
+                enabled?: boolean | null;
+                sort_by?: string;
+                sort_order?: string;
+                page?: number;
+                per_page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchableEntityPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_searchable_entity_api_v1_settings_search_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SearchableEntityWriteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchableEntityResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_searchable_entity_api_v1_settings_search__entity_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entity_id: number;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SearchableEntityWriteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchableEntityResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_searchable_entity_api_v1_settings_search__entity_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entity_id: number;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    toggle_searchable_entity_api_v1_settings_search__entity_id__toggle_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                entity_id: number;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SearchableEntityResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    security_overview_api_v1_settings_security_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SecurityOverviewResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_security_setting_api_v1_settings_security__setting_id__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                setting_id: number;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateSettingRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    system_health_api_v1_system_health_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemHealthResponse"];
                 };
             };
             /** @description Validation Error */

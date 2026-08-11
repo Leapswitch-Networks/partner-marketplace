@@ -39,6 +39,17 @@ from app.db.base import Base
 # --- log_name buckets -------------------------------------------------------
 #: Auth events: login, logout, failed_login. Matches LeapDesk's 'auth' bucket.
 LOG_AUTH = "auth"
+#: Configuration changes — branding, and the settings registry.
+#:
+#: Declared 2026-08-11. The channel already existed in the data: three call sites
+#: in `settings_service` wrote the bare string `"settings"`, which is how a
+#: fourth spelling ends up in the table and nobody notices until a filter misses
+#: rows. `LOG_AUTH` and `LOG_DEFAULT` were constants; this one was not.
+#:
+#: **The Security screen reads `auth` + `settings` together**, which is what
+#: LeapDesk's Security audit panel does with its own `security` + `auth` pair —
+#: who signed in, and who changed how signing in works.
+LOG_SETTINGS = "settings"
 #: Everything else — model changes.
 LOG_DEFAULT = "default"
 

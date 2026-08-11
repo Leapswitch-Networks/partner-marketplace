@@ -125,7 +125,7 @@ def get_current_user(
 ) -> User:
     """The authenticated, ACTIVE user behind the access-token cookie.
 
-    Three checks, none of which trusts the token's own claims about them:
+    Four checks, none of which trusts the token's own claims about them:
 
     1. **The user exists.**
     2. **The session is still live** — not revoked, not expired. This is what
@@ -133,6 +133,8 @@ def get_current_user(
        instead of whenever the token happens to expire.
     3. **The account is ACTIVE**, re-read from the database on every request.
        Suspending an account therefore kills its live sessions at once.
+    4. **The user's ORGANISATION is ACTIVE**, when they belong to one. Added with
+       the partner directory's phase 1 — see below.
     """
     user_id, session_id = _decode_access_token(access_token)
 
@@ -140,22 +142,68 @@ def get_current_user(
     if user is None:
         raise _CREDENTIALS_EXC
 
+    # A soft-deleted account is treated exactly as a missing one. This runs on
+    # every authenticated request, so binning a user ends their live sessions
+    # immediately rather than whenever their token happens to expire — the same
+    # guarantee the `status != "ACTIVE"` check below provides, and it has to be
+    # here for the same reason: the token cannot know.
+    if user.deleted_at is not None:
+        raise _CREDENTIALS_EXC
+
     session = session_service.get_active(db, session_id, user_id)
     if session is None:
         raise _SESSION_EXC
 
+    # `status` holds two values, so `!= "ACTIVE"` IS `== "INACTIVE"` and the
+    # message no longer branches. It used to pick between "awaiting approval" and
+    # "has been suspended"; SUSPENDED was removed on 2026-08-11 — see the note on
+    # `UserStatusEnum`. Written as a comparison against ACTIVE rather than against
+    # INACTIVE so that adding a third value later fails closed: an unknown status
+    # is refused, not admitted.
     if user.status != "ACTIVE":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=(
-                "Your account is awaiting administrator approval."
-                if user.status == "INACTIVE"
-                else "Your account has been suspended. Contact an administrator."
-            ),
+            detail="Your account is not active. Contact an administrator.",
         )
+
+    _assert_organisation_active(user)
 
     session_service.touch(db, session)
     return user
+
+
+def _assert_organisation_active(user: User) -> None:
+    """Refuse a user whose partner organisation is not ACTIVE.
+
+    **The organisation gates its logins.** Suspending a partner has to be one
+    action, not a hunt through every account that belongs to it — otherwise the
+    only way to stop an organisation is to remember all of its people, and the
+    one you forget is the one that matters. Specified in
+    `MARKETPLACE_DOMAIN_PLAN.md` § Entities and carried into
+    `PARTNER_DIRECTORY_PLAN.md` § 0 unchanged.
+
+    `partner_id IS NULL` means Leapswitch staff, who have no organisation to
+    gate — they fall straight through.
+
+    PENDING is refused as well as SUSPENDED. An organisation nobody has activated
+    yet must not have working logins, or onboarding would grant access before
+    approval, which is the same gate `users.status` applies one level down.
+
+    The read is free: `User.partner` is a `lazy="joined"` relationship precisely
+    because this runs on every authenticated request.
+    """
+    partner = user.partner
+    if partner is None or partner.status == "ACTIVE":
+        return
+
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=(
+            "Your organisation is awaiting activation."
+            if partner.status == "PENDING"
+            else "Your organisation has been suspended. Contact an administrator."
+        ),
+    )
 
 
 # --- Authorization ----------------------------------------------------------

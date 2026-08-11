@@ -13,7 +13,10 @@ from pydantic import BaseModel, EmailStr, Field, field_validator, model_validato
 from app.core.config import settings
 
 AccountType = Literal["staff", "partner"]
-UserStatus = Literal["INACTIVE", "ACTIVE", "SUSPENDED"]
+#: Two values, matching `UserStatusEnum` — see the note on it in models/user.py.
+#: Keep this in step with `app.schemas.rbac.UserStatus`, which is the same type
+#: declared twice so the two modules do not import each other.
+UserStatus = Literal["INACTIVE", "ACTIVE"]
 
 
 def validate_password_strength(value: str) -> str:

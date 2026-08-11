@@ -32,7 +32,7 @@ import usePermissions from "@/lib/hooks/usePermissions";
  */
 export default function RoleMatrix() {
   const { can } = usePermissions();
-  const { toast, show, dismiss } = useToast();
+  const { toasts, show, dismiss } = useToast();
 
   const [matrix, setMatrix] = useState<Matrix | null>(null);
   const [loading, setLoading] = useState(true);
@@ -184,7 +184,7 @@ export default function RoleMatrix() {
         </table>
       </div>
 
-      <Toast toast={toast} onDismiss={dismiss} />
+      <Toast toasts={toasts} onDismiss={dismiss} />
     </div>
   );
 }

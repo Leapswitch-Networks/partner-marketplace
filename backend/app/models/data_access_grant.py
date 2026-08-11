@@ -121,3 +121,10 @@ class DataAccessGrant(Base):
             f"<DataAccessGrant {self.grantee_id} -> {self.subject_id} "
             f"scope={self.scope} level={self.access_level}>"
         )
+
+    #: Soft delete (Recycle Bin). NULL means live. See `recycle_bin_service` for
+    #: which queries filter on it and which deliberately do not.
+    deleted_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True,
+        comment="Soft delete. NULL means live; set means in the recycle bin",
+    )

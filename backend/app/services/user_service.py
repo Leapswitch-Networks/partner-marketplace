@@ -106,7 +106,16 @@ def decorate(target: User, actor: User) -> User:
 
 
 def get_user_or_404(db: Session, user_id: str) -> User:
-    return get_or_404(db, User, user_id)
+    """One live user, or 404.
+
+    A binned user answers 404 here even though the row exists — otherwise every
+    detail and write endpoint would still operate on a deleted account, and
+    "deleted" would mean nothing but "hidden from one list".
+    """
+    user = get_or_404(db, User, user_id)
+    if user.deleted_at is not None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "That user does not exist.")
+    return user
 
 
 # --- Listing ----------------------------------------------------------------
@@ -132,7 +141,11 @@ def list_users(
     and no partner-scoped ownership model (TECH_DEBT PM-5), so anything less
     strict would leak accounts across partners.
     """
-    stmt: Select = select(User).options(selectinload(User.roles))
+    # Soft-deleted users are not listed. They are reachable only through the
+    # recycle bin, which is gated on its own permission.
+    stmt: Select = select(User).options(selectinload(User.roles)).where(
+        User.deleted_at.is_(None)
+    )
 
     if not actor.has_admin_access:
         stmt = stmt.where(User.id == actor.id)
@@ -416,7 +429,12 @@ def delete_user(db: Session, user_id: str, actor: User) -> str:
     }
     target_id = target.id
 
-    db.delete(target)
+    # Soft delete. The row stays and the recycle bin can put it back — deleting a
+    # user was the most consequential irreversible action in the product, and it
+    # is now the most recoverable. Every path that could let a deleted account
+    # act is filtered explicitly; see `recycle_bin_service` for the list and for
+    # which lookups deliberately still find them.
+    recycle_bin_service.soft_delete(target)
     db.commit()
 
     activity_service.record_deleted(
@@ -501,19 +519,20 @@ def approve_user(
 
 
 def toggle_status(db: Session, user_id: str, actor: User) -> User:
-    """ACTIVE <-> INACTIVE. SUSPENDED is deliberately not part of the toggle —
-    un-suspending is a decision, not a flip, so it goes through `update_user`.
+    """ACTIVE <-> INACTIVE, which is now the whole of the status domain.
+
+    A third value, SUSPENDED, was removed on 2026-08-11 (migration
+    `b3d7e02f4c19`). This function used to refuse it with a 400 — "a suspended
+    account must be updated explicitly, not toggled" — on the grounds that
+    un-suspending is a decision rather than a flip. With two values that guard
+    has nothing left to refuse: every account is now toggleable, and the
+    permission check above is the only gate.
     """
     target = get_user_or_404(db, user_id)
 
     if not can_toggle_status(actor, target):
         raise HTTPException(
             status.HTTP_403_FORBIDDEN, "You cannot change this account's status."
-        )
-    if target.status == "SUSPENDED":
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            "A suspended account must be updated explicitly, not toggled.",
         )
 
     was = target.status
@@ -645,7 +664,7 @@ def bulk_delete(db: Session, user_ids: list[str], actor: User) -> tuple[int, int
                 "roles": sorted(role.name for role in target.roles),
             }
         )
-        db.delete(target)
+        recycle_bin_service.soft_delete(target)
         deleted += 1
 
     db.commit()
