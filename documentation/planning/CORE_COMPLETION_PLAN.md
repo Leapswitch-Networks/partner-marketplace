@@ -137,6 +137,28 @@ for "confirmed blocked, not merely hidden":
 | Admin deletes a protected role | **400** — system role, cannot be deleted |
 | Admin rewrites SuperAdmin's grants | **403** — same guard, via the new `role-permissions` route |
 
+#### Registered divergences — API Credentials (audit 2026-08-12)
+
+Compared against `ApiCredentialController`, `ApiCredentialValue` and the `api-credentials` route
+group. **No defect found, and ours is stricter in three places** — each recorded here because "we
+were stricter" is only a defence if someone wrote down that it was on purpose.
+
+| Aspect | LeapDesk | Ours |
+|---|---|---|
+| Route gating | The whole group sits under `['auth','verified','admin.access']` with **no `can:` middleware of its own** — the data-access group two lines below has one | **Every route** carries `api-credential-*` or `api-provider-*`, proven by `test_route_enforcement.py` |
+| Re-auth before decrypting | `reauth:credential_decrypt` is registered on `show`/`edit` and, in their own comment, **"defaults to off"** | Reveal **always** requires a fresh password confirmation, and writes an audit row naming the field and the IP |
+| The edit form | `edit()` decrypts **every** value into the form — a provider's whole key set in an HTML response, on a page load meant to change a label | Encrypted fields arrive **empty**; blank on save means "leave it alone" |
+| Masking | Their model's `maskedValue()` keeps the last N characters; their `show()` **bypasses it** for a fixed `••••••••` | Their model's algorithm, translated faithfully — including the short-value case — so the screen can say *which* key is stored without revealing it |
+
+**Not ported, deliberately:**
+
+* **Slack notification channels** (`slack-channels` — list, store, update, toggle, test, destroy). A
+  LeapDesk alerting feature with no equivalent here; we hold Slack only as a credential provider row.
+* **A `verify` / test-connection action.** Recorded when the module was built: none of the four
+  seeded providers has a safe probe — `google` and `anthropic` need a real billed request, `mail` an
+  SMTP connection, `slack` posts a visible message into someone's channel. `verification_status` and
+  `last_verified_at` exist, so a per-provider verifier is a service function away.
+
 ### 1.2 What we deliberately do NOT copy
 
 This matters as much as what we do copy. Each of these was measured today:
@@ -427,7 +449,7 @@ already. **Porting it again would be a regression.** Two genuine gaps worth taki
 | 3 | **Data Access** | ✅ table, service, screen | ⬜ |
 | 4 | **Activity Log** | ✅ source stamping, filters, labels, links, causer sandbox | ⬜ |
 | 5 | **Invitations** | ✅ backend + admin UI | ✅ **audited 2026-08-12** — found and fixed a privilege-escalation path: Staff could invite an Admin |
-| 6 | **API Credentials** | ✅ 4 tables, Fernet at rest, masked by default | ⬜ |
+| 6 | **API Credentials** | ✅ 4 tables, Fernet at rest, masked by default | ✅ **audited 2026-08-12** — no defect; ours stricter in three places, two features deliberately not ported |
 | 7 | **Global Search** | ✅ 2 tables, three permission layers | ⬜ |
 | 8 | **AI Assistant** | ✅ 3 tables, 3 tools, read-only connection | ⬜ |
 
