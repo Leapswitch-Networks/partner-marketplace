@@ -26,12 +26,19 @@ people than the database is, so it is a worse place for a secret, not a better o
 
 from __future__ import annotations
 
+import getpass
 import logging
+import os
+import socket
+import sys
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.query import ListParams, ListSpec, run_list
@@ -46,6 +53,7 @@ from app.models.activity_log import (
     EVENT_UPDATED,
     LOG_AUTH,
     LOG_DEFAULT,
+    LOG_SETTINGS,
     ActivityLog,
 )
 from app.models.user import User
@@ -70,8 +78,110 @@ _SENSITIVE = frozenset(
 _STATUS_KEYS = frozenset({"status", "active", "is_active"})
 
 
+# --- Where a row came from --------------------------------------------------
+#: Ported from the reference's `LogsAllActivity::resolveActivityContext()`. A
+#: trail that cannot tell "an admin changed this in the UI" from "the seeder
+#: wrote it on a fresh database" answers the wrong question during an incident —
+#: and the second kind has no causer, so without a source those rows are simply
+#: unattributed.
+SOURCE_WEB = "web"
+SOURCE_SEEDER = "seeder"
+SOURCE_COMMAND = "command"
+
+#: The reference also declares `tinker` and `job`. **Neither is portable and
+#: neither is declared here.** There is no REPL attached to this app, and there
+#: is no queue — the same absence that blocks Module 16 in
+#: `LEAPDESK_PARITY_PLAN.md`. Offering a filter option that can never match a row
+#: teaches the reader that no background work has happened, which is a different
+#: claim from "nothing runs in the background here".
+SOURCES: tuple[str, ...] = (SOURCE_WEB, SOURCE_SEEDER, SOURCE_COMMAND)
+
+SOURCE_LABELS: dict[str, str] = {
+    SOURCE_WEB: "Web (any UI or API action)",
+    SOURCE_SEEDER: "Seeder (CLI)",
+    SOURCE_COMMAND: "Script / command (CLI)",
+}
+
+#: Set by `use_source()`. A ContextVar rather than a module global because the
+#: web process serves requests concurrently, and a global would let one request's
+#: declaration leak into another's rows.
+_source_override: ContextVar[str | None] = ContextVar("activity_source", default=None)
+
+
+@contextmanager
+def use_source(source: str) -> Iterator[None]:
+    """Declare the source for every row written inside the block.
+
+    For a caller that knows what it is better than the detector does — a seeder
+    invoked from a test, say, where the process is pytest. Detection is the
+    default precisely so that forgetting this yields a *wrong-ish* label rather
+    than no label at all.
+    """
+    token = _source_override.set(source)
+    try:
+        yield
+    finally:
+        _source_override.reset(token)
+
+
+def _detect_source() -> str:
+    """Web if this process is serving HTTP, CLI otherwise.
+
+    The reference asks the framework (`app()->runningInConsole()`); we have no
+    equivalent, so this reads `argv` — which is the same question asked one layer
+    down. Anything not recognisably a server is treated as a command, so a new
+    entry point is mislabelled rather than unlabelled.
+    """
+    argv = sys.argv or [""]
+    program = os.path.basename(argv[0])
+    if "uvicorn" in program or "gunicorn" in program or "app.main" in " ".join(argv[:3]):
+        return SOURCE_WEB
+    if "seed" in " ".join(argv[:6]):
+        return SOURCE_SEEDER
+    return SOURCE_COMMAND
+
+
+def _os_user() -> str | None:
+    # Raises when the container has no passwd entry for the uid, which is normal
+    # in a rootless image. Not knowing is fine; failing an audit write is not.
+    try:
+        return getpass.getuser()
+    except Exception:  # noqa: BLE001 - context is best-effort by definition
+        return None
+
+
+def _source_context() -> dict[str, Any]:
+    """The context bag merged into every row's `properties`."""
+    source = _source_override.get() or _detect_source()
+    if source == SOURCE_WEB:
+        return {"source": source}
+
+    # A CLI row has no causer, so without this the trail records that something
+    # changed and nothing whatever about who changed it.
+    context = {
+        "source": source,
+        "actor_label": f"CLI: {' '.join(sys.argv[:6])}".strip() or "CLI",
+        "os_user": _os_user(),
+        "host": socket.gethostname() or None,
+    }
+    return {k: v for k, v in context.items() if v}
+
+
 def _redact(values: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in values.items() if k not in _SENSITIVE}
+
+
+def _with_context(properties: dict[str, Any] | None) -> dict[str, Any]:
+    """Caller detail, redacted, plus the source context.
+
+    Context is applied **after** the caller's keys and wins on a collision: a
+    `source` a call site passed by hand would otherwise be able to disguise a
+    seeder row as a web one, and the whole value of the discriminator is that
+    nothing chooses its own.
+    """
+    merged = _redact(properties) if properties else {}
+    merged.update(_source_context())
+    return merged
 
 
 def _causer(actor: User | None) -> tuple[str | None, str | None]:
@@ -106,7 +216,7 @@ def record(
             event=event,
             subject_type=subject_type,
             subject_id=str(subject_id) if subject_id is not None else None,
-            properties=_redact(properties) if properties else None,
+            properties=_with_context(properties),
             batch_uuid=batch_uuid,
         )
         if actor is not None:
@@ -286,13 +396,72 @@ def record_logout(db: Session, user_id: str, ip: str | None) -> None:
     )
 
 
+# --- Presentation -----------------------------------------------------------
+#: Friendly labels for the Module filter and the per-row badge, keyed by
+#: `log_name`. The reference's map with its buckets swapped for ours; an unknown
+#: key falls through to a capitalised default rather than rendering a raw slug.
+MODULE_LABELS: dict[str, str] = {
+    LOG_AUTH: "Authentication",
+    LOG_SETTINGS: "Configuration",
+    LOG_DEFAULT: "General",
+}
+
+#: `subject_type` → URL template, `{id}` substituted at read time. This is the
+#: whole map: the reference falls back to a `resolveSubjectUrl()` on the model
+#: when a type is absent here, which co-locates the answer with the model but
+#: means a route lives in two places. **A type that is not here gets no link**,
+#: which is the honest outcome for a record with no page to open — and is why
+#: `Partner` is absent rather than pointed at a page that does not exist yet.
+SUBJECT_URLS: dict[str, str] = {
+    "User": "/dashboard/users/{id}",
+    "Role": "/dashboard/roles/{id}",
+    # No detail route exists for these; the index is where the record is read.
+    "UserInvitation": "/dashboard/invitations",
+    "FeatureFlag": "/dashboard/feature-flags",
+    "DataAccessGrant": "/dashboard/data-access",
+    "ApiCredential": "/dashboard/api-credentials",
+    "Setting": "/dashboard/configuration",
+    "AppSettings": "/dashboard/branding",
+}
+
+
+def module_label(log_name: str | None) -> str:
+    if not log_name:
+        return MODULE_LABELS[LOG_DEFAULT]
+    return MODULE_LABELS.get(log_name) or log_name.replace("_", " ").capitalize()
+
+
+def subject_url(subject_type: str | None, subject_id: str | None) -> str | None:
+    """Where to click through to, or None when the record has no page."""
+    if not subject_type:
+        return None
+    template = SUBJECT_URLS.get(subject_type)
+    if not template:
+        return None
+    if "{id}" not in template:
+        return template
+    if not subject_id:
+        return None
+    return template.replace("{id}", str(subject_id))
+
+
 _LIST_SPEC = ListSpec(
-    # `id`, not `created_at`. Rows written inside one transaction share a
-    # timestamp, so ordering on it is not a total order and a tying row can
-    # appear on two consecutive pages or on neither. This module got that right
-    # by hand before the shared pipeline existed; declaring it here keeps it
-    # right, because `tiebreak` is required and cannot be dropped by an edit.
-    sortable={"id": ActivityLog.id},
+    # `id` is the default, not `created_at`. Rows written inside one transaction
+    # share a timestamp, so ordering on it is not a total order and a tying row
+    # can appear on two consecutive pages or on neither. This module got that
+    # right by hand before the shared pipeline existed; declaring it here keeps
+    # it right, because `tiebreak` is required and cannot be dropped by an edit.
+    #
+    # The other four are the reference's allowlist, and `tiebreak=id` is what
+    # makes them safe: `created_at` ties break on the primary key rather than on
+    # whatever order the planner returns.
+    sortable={
+        "id": ActivityLog.id,
+        "created_at": ActivityLog.created_at,
+        "event": ActivityLog.event,
+        "description": ActivityLog.description,
+        "log_name": ActivityLog.log_name,
+    },
     default_sort="id",
     tiebreak=ActivityLog.id,
     # description + subject_type + log_name, matching the reference. Searching
@@ -315,10 +484,14 @@ def list_entries(
     subject_type: str | None = None,
     subject_id: str | None = None,
     causer_id: str | None = None,
+    source: str | None = None,
     search: str | None = None,
     date_from: datetime | None = None,
     date_to: datetime | None = None,
     hide_system: bool = False,
+    actor: User | None = None,
+    sort_by: str | None = None,
+    sort_order: str | None = None,
     page: int = 1,
     per_page: int = 25,
 ) -> tuple[list[ActivityLog], int, dict[str, str]]:
@@ -333,13 +506,25 @@ def list_entries(
     the whole page rather than per row. Without it, rendering a 25-row page would
     issue 25 lookups, and `causer_id` is a bare UUID that means nothing on screen.
 
-    Deliberately **not** scoped by actor: `activity-view` is the whole
-    authorisation. This is a global audit trail, and a partial view of one is worse
-    than none — someone reviewing an incident needs to know they are seeing
-    everything. When partner scoping lands (PM-5) this is the query to revisit
-    first, because a partner must never read another partner's history.
+    **Scoped by `actor`, and the scope is defence in depth rather than a fix.**
+    Pass the caller and a non-admin sees only rows they caused — they can audit
+    their own actions but not a colleague's, which is what the reference does with
+    `$viewAll = has_admin_access()`. Today no such caller exists: `activity-view`
+    is held only by Admin, RootUser and SuperAdmin, all of which have admin
+    access, so this changes nothing about current behaviour. It is here so that
+    granting `activity-view` to a fourth role is not silently a decision to expose
+    the whole organisation's trail — which is exactly the mistake this endpoint
+    would otherwise be one line away from. When partner scoping lands (PM-5) this
+    is still the query to revisit, because a partner must never read another
+    partner's history.
+
+    `actor=None` means unscoped, for callers that have already established the
+    reader may see everything (the export route passes its actor too).
     """
     stmt = select(ActivityLog)
+
+    if actor is not None and not actor.has_admin_access:
+        stmt = stmt.where(ActivityLog.causer_id == actor.id)
 
     if log_name:
         stmt = stmt.where(ActivityLog.log_name == log_name)
@@ -360,19 +545,53 @@ def list_entries(
         # Someone reading a who-did-what feed can drop them. Ported from the
         # reference, which does exactly `whereNotNull('causer_id')`.
         stmt = stmt.where(ActivityLog.causer_id.isnot(None))
+    if source:
+        # A JSONB path predicate, not a column: the discriminator lives inside
+        # `properties` exactly as the reference stores it. **Rows written before
+        # this shipped carry no `source` and match no value** — they are neither
+        # web nor CLI, they are unlabelled, and reporting them as either would be
+        # the filter inventing history.
+        stmt = stmt.where(ActivityLog.properties["source"].astext == source)
 
-    # Search, count, ordering and paging come from the shared pipeline. The
-    # ordering this module documented — by `id`, because rows written in one
-    # transaction share a timestamp — is now declared once in `_LIST_SPEC` rather
-    # than being a loose `order_by` a later edit could drop.
-    #
-    # No `sort_by` is passed: the trail is newest-first and the endpoint exposes
-    # no sort parameter. `_LIST_SPEC.default_sort` is the only ordering reachable.
+    if search:
+        # Applied here rather than through `ListSpec.searchable`, which matches
+        # columns on this table only. The reference searches the causer's name
+        # and email too, and "show me everything Ayush did" is the search people
+        # actually type. A subquery, not a join: a join would multiply rows.
+        like = f"%{search}%"
+        causers = select(User.id).where(
+            or_(
+                User.first_name.ilike(like),
+                User.last_name.ilike(like),
+                User.email.ilike(like),
+            )
+        )
+        stmt = stmt.where(
+            or_(
+                ActivityLog.description.ilike(like),
+                ActivityLog.subject_type.ilike(like),
+                ActivityLog.log_name.ilike(like),
+                ActivityLog.causer_id.in_(causers),
+            )
+        )
+
+    # Count, ordering and paging come from the shared pipeline. `search=None`
+    # because it has already been applied above — passing it twice would AND the
+    # narrow form onto the wide one and drop every causer-name match.
     rows, total = run_list(
         db,
         stmt,
         _LIST_SPEC,
-        ListParams(page=page, per_page=per_page, search=search),
+        ListParams(
+            page=page,
+            per_page=per_page,
+            search=None,
+            sort_by=sort_by,
+            # Anything but an explicit "asc" is newest-first. `ListSpec.column_for`
+            # already falls back rather than raising on an unknown `sort_by`, and
+            # this keeps the pair consistent: a stale bookmark renders the list.
+            sort_order="asc" if sort_order == "asc" else "desc",
+        ),
     )
 
     causer_ids = {row.causer_id for row in rows if row.causer_id}
@@ -384,6 +603,67 @@ def list_entries(
     return rows, total, names
 
 
+def filter_options(db: Session, *, actor: User | None = None) -> dict[str, list[dict]]:
+    """The dropdown sources for the index filters, scoped like the list itself.
+
+    Derived from the slice the reader is allowed to see, which is the reference's
+    rule and not merely tidiness: an unscoped causer list on a scoped table is a
+    staff directory handed to whoever holds `activity-view`, and every option in
+    it but one would return an empty table.
+
+    Causer-less rows are excluded from the *option* lists — automation has no
+    name to offer — but they remain in the table unless `hide_system` is set.
+    """
+    scope_id = actor.id if actor is not None and not actor.has_admin_access else None
+
+    def scoped(stmt):
+        stmt = stmt.where(ActivityLog.causer_id.is_not(None))
+        return stmt.where(ActivityLog.causer_id == scope_id) if scope_id else stmt
+
+    events = sorted(
+        value
+        for value in db.scalars(
+            scoped(select(ActivityLog.event).distinct()).where(
+                ActivityLog.event.is_not(None)
+            )
+        )
+        if value
+    )
+    log_names = sorted(
+        (value for value in db.scalars(scoped(select(ActivityLog.log_name).distinct())) if value),
+        key=module_label,
+    )
+    subject_types = sorted(
+        value
+        for value in db.scalars(
+            scoped(select(ActivityLog.subject_type).distinct()).where(
+                ActivityLog.subject_type.is_not(None)
+            )
+        )
+        if value
+    )
+    causer_ids = [
+        value for value in db.scalars(scoped(select(ActivityLog.causer_id).distinct())) if value
+    ]
+    causers = sorted(
+        (
+            {"value": user.id, "label": user.full_name or user.email}
+            for user in db.scalars(select(User).where(User.id.in_(causer_ids)))
+        ),
+        key=lambda option: option["label"].lower(),
+    )
+
+    return {
+        "events": [{"value": value, "label": value.replace("_", " ")} for value in events],
+        "log_names": [{"value": value, "label": module_label(value)} for value in log_names],
+        "subject_types": [{"value": value, "label": value} for value in subject_types],
+        "causers": causers,
+        "sources": [
+            {"value": value, "label": SOURCE_LABELS[value]} for value in SOURCES
+        ],
+    }
+
+
 def iter_for_export(
     db: Session,
     *,
@@ -391,6 +671,7 @@ def iter_for_export(
     event: str | None = None,
     date_from: datetime | None = None,
     date_to: datetime | None = None,
+    actor: User | None = None,
     batch_size: int = 500,
 ):
     """Yield matching rows for a CSV export, in batches.
@@ -405,6 +686,11 @@ def iter_for_export(
     bottom as a chronology, where a screen is read newest-first.
     """
     stmt = select(ActivityLog).order_by(ActivityLog.id.asc())
+
+    # The same sandbox the list applies. An export that ignored it would be the
+    # way around the scope, and "download everything" is the more damaging half.
+    if actor is not None and not actor.has_admin_access:
+        stmt = stmt.where(ActivityLog.causer_id == actor.id)
 
     if log_name:
         stmt = stmt.where(ActivityLog.log_name == log_name)
@@ -480,20 +766,20 @@ def purge_older_than(db: Session, days: int) -> int:
     return removed
 
 
-def distinct_events(db: Session) -> list[str]:
+def distinct_events(db: Session, *, actor: User | None = None) -> list[str]:
     """Every event name present in the trail, for a filter dropdown.
 
     Read from the data rather than from a hardcoded list, so an event added by a
     future call site appears in the filter without anyone remembering to register
     it — and one that has never actually occurred does not clutter the list.
+
+    Scoped like `list_entries`: an option that returns nothing for the reader who
+    is offered it is a filter that appears broken.
     """
-    return [
-        value
-        for value in db.scalars(
-            select(ActivityLog.event).distinct().where(ActivityLog.event.is_not(None))
-        )
-        if value
-    ]
+    stmt = select(ActivityLog.event).distinct().where(ActivityLog.event.is_not(None))
+    if actor is not None and not actor.has_admin_access:
+        stmt = stmt.where(ActivityLog.causer_id == actor.id)
+    return [value for value in db.scalars(stmt) if value]
 
 
 def record_failed_login(db: Session, email: str, ip: str | None, reason: str) -> None:

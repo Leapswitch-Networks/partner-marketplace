@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { type BadgeTone } from "@/components/common/Badge";
 import ResourceIndex from "@/components/common/ResourceIndex";
@@ -11,7 +12,11 @@ import useAutoPerPage from "@/lib/hooks/useAutoPerPage";
 import useModalState from "@/lib/hooks/useModalState";
 import useResourceList from "@/lib/hooks/useResourceList";
 import useResourceQuery from "@/lib/hooks/useResourceQuery";
-import { activityApi, type ActivityEntry } from "@/lib/api/rbacApi";
+import {
+  activityApi,
+  type ActivityEntry,
+  type ActivityFilterOptions,
+} from "@/lib/api/rbacApi";
 import { formatDateTime } from "@/lib/utils/format";
 
 /**
@@ -62,21 +67,33 @@ function humanise(event: string | null): string {
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
+/** Nothing has been recorded yet, so every dropdown starts empty and hidden. */
+const NO_OPTIONS: ActivityFilterOptions = {
+  events: [],
+  log_names: [],
+  subject_types: [],
+  causers: [],
+  sources: [],
+};
+
 export default function ActivityModule() {
   const autoPerPage = useAutoPerPage();
-  const [events, setEvents] = useState<string[]>([]);
+  const [options, setOptions] = useState<ActivityFilterOptions>(NO_OPTIONS);
 
   /** One mode. Same hook as the others so all four modules read the same way. */
   const modal = useModalState<"detail", ActivityEntry>();
 
   // Four filters the API already supported and the UI never exposed —
-  // subject_type, the date range and hide_system — plus the three it did.
+  // subject_type, the date range and hide_system — plus the three it did, plus
+  // `source` and `causer_id`, added with the 2026-08-12 parity work.
   const q = useResourceQuery({
     filters: {
       search: "",
       log_name: "",
       event: "",
       subject_type: "",
+      causer_id: "",
+      source: "",
       date_from: "",
       date_to: "",
       hide_system: "",
@@ -88,33 +105,37 @@ export default function ActivityModule() {
   });
 
   /*
-    No `sort_by` / `sort_order` in this call, and **no `sortKey` on any column
-    below** — both deliberate, and the second was wrong until 2026-08-11.
+    Sorting is real now, and the note that stood here is worth keeping in short
+    form because it was right about the thing it was right about.
 
-    The trail is newest-first and that is a design decision, not an omission:
-    `activity_service.list_entries` says so in as many words, because rows written
-    inside one transaction share a timestamp and only `id` gives a stable order.
-    The endpoint exposes no sort parameter at all.
+    Until 2026-08-11 the `When` column declared `sortKey: "created_at"` while the
+    endpoint read no sort parameter at all — a control that rendered an arrow,
+    took a click and did nothing. It was removed rather than papered over, and
+    `MODULE_PARITY_PLAN.md` § 3 step 6 recorded the open question: should the
+    audit trail get a real oldest-first toggle?
 
-    The `When` column nonetheless declared `sortKey: "created_at"`, which rendered
-    a sort arrow, took a click, and sent a parameter the route does not read —
-    **a control that could not do anything.** Removed rather than papered over.
-    Giving the audit trail a real oldest-first toggle is a product change to the
-    API, tracked in `MODULE_PARITY_PLAN.md` § 3, not something to fake here.
+    **It should, and now it has one.** Reading an incident forward is the case
+    that argues for it. `id` remains the default and the tiebreak, so the ordering
+    the service documents — rows written in one transaction share a timestamp, so
+    only `id` is a total order — still holds under every sort.
   */
   const list = useResourceList<ActivityEntry>({
     ready: q.ready,
-    deps: [q.applied, q.page, q.perPage],
+    deps: [q.applied, q.page, q.perPage, q.sortBy, q.sortOrder],
     errorMessage: "Could not load the activity log.",
     fetch: () =>
       activityApi
         .list({
           page: q.page,
           per_page: q.perPage,
+          sort_by: q.sortBy,
+          sort_order: q.sortOrder,
           ...(q.applied.search ? { search: q.applied.search } : {}),
           ...(q.applied.log_name ? { log_name: q.applied.log_name } : {}),
           ...(q.applied.event ? { event: q.applied.event } : {}),
           ...(q.applied.subject_type ? { subject_type: q.applied.subject_type } : {}),
+          ...(q.applied.causer_id ? { causer_id: q.applied.causer_id } : {}),
+          ...(q.applied.source ? { source: q.applied.source } : {}),
           ...(q.applied.date_from ? { date_from: q.applied.date_from } : {}),
           ...(q.applied.date_to ? { date_to: q.applied.date_to } : {}),
           ...(q.applied.hide_system === "1" ? { hide_system: true } : {}),
@@ -122,17 +143,19 @@ export default function ActivityModule() {
         .then((res) => res.data),
   });
 
-  // Loaded once: the event list changes only when a new kind of action first
-  // occurs, so refetching it alongside every filter change would be waste.
+  // Loaded once: these change only when a new kind of action first occurs, so
+  // refetching them alongside every filter change would be waste. One request
+  // rather than four, and every list is read from the data — a module or subject
+  // type nothing has ever written does not appear as an option that finds nothing.
   useEffect(() => {
     let live = true;
     void (async () => {
       try {
-        const res = await activityApi.events();
-        if (live) setEvents(res.data.sort());
+        const res = await activityApi.filterOptions();
+        if (live) setOptions(res.data);
       } catch {
         // A failed dropdown is not worth an error banner — the text search and
-        // the log-name filter still work without it.
+        // the date range still work without it.
       }
     })();
     return () => {
@@ -177,6 +200,19 @@ export default function ActivityModule() {
         tone: (row) => toneFor(row.event),
         label: (row) => humanise(row.event),
         width: "w-[170px]",
+        sortKey: "event",
+      }),
+      badgeColumn<ActivityEntry>({
+        id: "module",
+        header: "Module",
+        // Neutral for all of them: this says which part of the system a row came
+        // from, and no part of the system is more alarming than another. The
+        // Event column is what carries urgency, and two competing tones in one
+        // row means neither reads.
+        tone: () => "neutral",
+        label: (row) => row.module_label,
+        width: "w-[150px]",
+        sortKey: "log_name",
       }),
       dateColumn<ActivityEntry>({
         id: "when",
@@ -186,6 +222,7 @@ export default function ActivityModule() {
         // The exact instant, on hover. The formatted value drops seconds and the
         // offset, which are the two things you want reconstructing an incident.
         title: (row) => new Date(row.created_at).toISOString(),
+        sortKey: "created_at",
       }),
       {
         id: "who",
@@ -203,6 +240,34 @@ export default function ActivityModule() {
         id: "description",
         header: "What happened",
         cell: (row) => <span className="text-ink dark:text-gray-300">{row.description}</span>,
+        sortKey: "description",
+      },
+      {
+        id: "subject",
+        header: "Record",
+        cell: (row) => {
+          if (!row.subject_type) {
+            return <span className="text-ink-label dark:text-night-muted">—</span>;
+          }
+          const label = `${row.subject_type}${
+            row.subject_id ? ` ${row.subject_id.slice(0, 8)}` : ""
+          }`;
+          // No link is the honest state for a record with no page — a link to a
+          // route that does not exist is a 404 the reader blames on the record.
+          // The server decides which is which; see `subject_url` in `rbacApi`.
+          return row.subject_url ? (
+            <Link
+              href={row.subject_url}
+              className="font-semibold text-brand hover:underline dark:text-brand-on-dark"
+              title={`Open this ${row.subject_type}`}
+            >
+              {label}
+            </Link>
+          ) : (
+            <span className="text-ink dark:text-gray-300">{label}</span>
+          );
+        },
+        headerClassName: "w-[180px]",
       },
     ],
     // `modal.open` is the stable `useCallback`; the rule wants the whole `modal`
@@ -222,35 +287,59 @@ export default function ActivityModule() {
       description="Every recorded action — read-only"
       query={q}
       filters={[
-        { type: "text", key: "search", placeholder: "Search description, subject or log…", label: "Search activity" },
         {
+          type: "text",
+          key: "search",
+          // Reaches the causer's name and email as of 2026-08-12 — "show me
+          // everything Ayush did" is the search people actually type.
+          placeholder: "Search description, subject, module or person…",
+          label: "Search activity",
+        },
+        {
+          // Every list below is read from the data and scoped to what this
+          // reader may see, so an option that would return an empty table is
+          // never offered. Hidden until the first load returns rather than
+          // rendered blank.
           type: "select",
           key: "log_name",
-          placeholder: "All logs",
-          label: "Filter by log",
-          options: [
-            { value: "auth", label: "Auth" },
-            { value: "default", label: "Default" },
-          ],
+          placeholder: "All modules",
+          label: "Filter by module",
+          options: options.log_names,
+          hidden: options.log_names.length === 0,
         },
         {
           type: "select",
           key: "event",
           placeholder: "All events",
           label: "Filter by event",
-          options: events.map((e) => ({ value: e, label: e })),
-          // Read from the data, so it is empty until the first load returns.
-          hidden: events.length === 0,
+          options: options.events,
+          hidden: options.events.length === 0,
         },
         {
           type: "select",
           key: "subject_type",
-          placeholder: "All subjects",
-          label: "Filter by subject type",
-          options: [
-            { value: "User", label: "User" },
-            { value: "Role", label: "Role" },
-          ],
+          placeholder: "All records",
+          label: "Filter by record type",
+          options: options.subject_types,
+          hidden: options.subject_types.length === 0,
+        },
+        {
+          type: "select",
+          key: "causer_id",
+          placeholder: "All people",
+          label: "Filter by who did it",
+          options: options.causers,
+          // One option means the reader is sandboxed to their own rows, and a
+          // dropdown offering only yourself is furniture.
+          hidden: options.causers.length < 2,
+        },
+        {
+          type: "select",
+          key: "source",
+          placeholder: "All sources",
+          label: "Filter by source",
+          options: options.sources,
+          hidden: options.sources.length === 0,
         },
         { type: "date", key: "date_from", label: "From date" },
         { type: "date", key: "date_to", label: "To date" },
@@ -286,11 +375,38 @@ export default function ActivityModule() {
               <dd className="text-ink dark:text-gray-300">
                 {modal.target.causer_name ?? "Not signed in"}
               </dd>
+              <dt className="text-ink-label dark:text-night-muted">Module</dt>
+              <dd className="text-ink dark:text-gray-300">{modal.target.module_label}</dd>
+              {/* Lifted out of the raw JSON below because it answers the first
+                  question asked of an unattributed row: was this a person, or
+                  was it the seeder? A row written before 2026-08-12 carries no
+                  source, and says so rather than guessing. */}
+              <dt className="text-ink-label dark:text-night-muted">Source</dt>
+              <dd className="text-ink dark:text-gray-300">
+                {typeof modal.target.properties?.source === "string" ? (
+                  String(modal.target.properties.source)
+                ) : (
+                  <span className="text-ink-label dark:text-night-muted" title="Recorded before the source discriminator shipped">
+                    Not recorded
+                  </span>
+                )}
+              </dd>
               {modal.target.subject_type && (
                 <>
                   <dt className="text-ink-label dark:text-night-muted">Subject</dt>
                   <dd className="font-mono text-ink dark:text-gray-300">
-                    {modal.target.subject_type} {modal.target.subject_id?.slice(0, 8)}
+                    {modal.target.subject_url ? (
+                      <Link
+                        href={modal.target.subject_url}
+                        className="font-semibold text-brand hover:underline dark:text-brand-on-dark"
+                      >
+                        {modal.target.subject_type} {modal.target.subject_id?.slice(0, 8)}
+                      </Link>
+                    ) : (
+                      <>
+                        {modal.target.subject_type} {modal.target.subject_id?.slice(0, 8)}
+                      </>
+                    )}
                   </dd>
                 </>
               )}

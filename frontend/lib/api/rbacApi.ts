@@ -104,10 +104,19 @@ export interface CreateInvitationPayload {
 export interface ActivityEntry {
   id: number;
   log_name: string | null;
+  /** `log_name` as a person reads it — `auth` arrives as `Authentication`. */
+  module_label: string;
   description: string;
   event: string | null;
   subject_type: string | null;
   subject_id: string | null;
+  /**
+   * Where to click through to, or null when the record has no page.
+   * **Resolved server-side on purpose** — building it here would mean keeping a
+   * second copy of the route map, and a renamed route would then produce a link
+   * to nowhere instead of no link.
+   */
+  subject_url: string | null;
   causer_id: string | null;
   /** Resolved name for `causer_id`. Null means an unauthenticated actor. */
   causer_name: string | null;
@@ -121,9 +130,29 @@ export interface ActivityFilters {
   event?: string;
   subject_type?: string;
   causer_id?: string;
+  /** `web` | `seeder` | `command` — read from `/activity/filter-options`. */
+  source?: string;
   search?: string;
+  date_from?: string;
+  date_to?: string;
+  hide_system?: boolean;
+  sort_by?: string;
+  sort_order?: "asc" | "desc";
   page?: number;
   per_page?: number;
+}
+
+export interface FilterOption {
+  value: string;
+  label: string;
+}
+
+export interface ActivityFilterOptions {
+  events: FilterOption[];
+  log_names: FilterOption[];
+  subject_types: FilterOption[];
+  causers: FilterOption[];
+  sources: FilterOption[];
 }
 
 /**
@@ -143,6 +172,14 @@ export const activityApi = {
 
   /** Event names present in the data, for the filter dropdown. */
   events: () => axiosInstance.get<string[]>("/activity/events"),
+
+  /**
+   * Every dropdown on the index in one call, read from the data and scoped to
+   * what the caller may see. Four requests became one; more importantly, an
+   * option that would return an empty table is never offered.
+   */
+  filterOptions: () =>
+    axiosInstance.get<ActivityFilterOptions>("/activity/filter-options"),
 };
 
 export interface ListInvitationsParams {

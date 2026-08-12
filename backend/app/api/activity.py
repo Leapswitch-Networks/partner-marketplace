@@ -32,13 +32,36 @@ from app.services import activity_service
 router = APIRouter(prefix="/activity", tags=["activity"])
 
 
+class FilterOption(BaseModel):
+    value: str
+    label: str
+
+
+class ActivityFilterOptions(BaseModel):
+    """Everything the filter row needs, in one request instead of four."""
+
+    events: list[FilterOption]
+    log_names: list[FilterOption]
+    subject_types: list[FilterOption]
+    causers: list[FilterOption]
+    sources: list[FilterOption]
+
+
 class ActivityEntry(BaseModel):
     id: int
     log_name: str | None
+    #: `log_name` as a person reads it — 'auth' is 'Authentication' on screen.
+    #: Resolved here rather than in the client so the label cannot differ between
+    #: the table, the filter dropdown and the CSV.
+    module_label: str
     description: str
     event: str | None
     subject_type: str | None
     subject_id: str | None
+    #: Where to click through to, or None when the record has no page. The client
+    #: must not build this itself: it would need a copy of the route map, and a
+    #: renamed route would then produce a link to nowhere rather than no link.
+    subject_url: str | None
     causer_id: str | None
     #: Resolved display name for `causer_id`, or None for an unauthenticated
     #: actor. Sent alongside the id because the id alone means nothing on screen,
@@ -64,22 +87,37 @@ def list_activity(
     subject_type: str | None = Query(default=None, description="'User' | 'Role'"),
     subject_id: str | None = Query(default=None),
     causer_id: str | None = Query(default=None, description="Filter to one actor"),
-    search: str | None = Query(default=None, description="Substring of the description"),
+    source: str | None = Query(
+        default=None, description="'web' | 'seeder' | 'command' — where the row came from"
+    ),
+    search: str | None = Query(
+        default=None, description="Substring of the description, subject, module or causer name"
+    ),
     date_from: datetime | None = Query(default=None),
     date_to: datetime | None = Query(default=None),
     hide_system: bool = Query(
         default=False, description="Drop rows with no human causer (automation)"
     ),
+    sort_by: str | None = Query(
+        default=None, description="id | created_at | event | description | log_name"
+    ),
+    sort_order: str | None = Query(default=None, description="asc | desc"),
     page: int = Query(default=1, ge=1),
     per_page: int = Query(default=25, ge=1, le=100),
     db: Session = Depends(get_db),
-    _actor: User = Depends(require_permission(ACTIVITY_VIEW)),
+    actor: User = Depends(require_permission(ACTIVITY_VIEW)),
 ) -> PaginatedActivity:
     """The audit trail, newest first.
 
-    Sorted by `id`, not `created_at`: rows written inside one transaction can share
-    a timestamp, and an unstable sort would let a row appear on two consecutive
-    pages or on neither.
+    Sorted by `id` by default, not `created_at`: rows written inside one
+    transaction can share a timestamp, and an unstable sort would let a row appear
+    on two consecutive pages or on neither. `created_at` is offered as an explicit
+    choice because reading an incident *forward* is a real need, and `id` remains
+    the tiebreak so the order is total either way.
+
+    `actor` is passed to the service, which sandboxes a non-admin to their own
+    rows. No such caller exists today — see the service docstring — and that is
+    precisely why the wiring should be here before one does.
     """
     rows, total, causer_names = activity_service.list_entries(
         db,
@@ -88,10 +126,14 @@ def list_activity(
         subject_type=subject_type,
         subject_id=subject_id,
         causer_id=causer_id,
+        source=source,
         search=search,
         date_from=date_from,
         date_to=date_to,
         hide_system=hide_system,
+        actor=actor,
+        sort_by=sort_by,
+        sort_order=sort_order,
         page=page,
         per_page=per_page,
     )
@@ -101,10 +143,12 @@ def list_activity(
             ActivityEntry(
                 id=row.id,
                 log_name=row.log_name,
+                module_label=activity_service.module_label(row.log_name),
                 description=row.description,
                 event=row.event,
                 subject_type=row.subject_type,
                 subject_id=row.subject_id,
+                subject_url=activity_service.subject_url(row.subject_type, row.subject_id),
                 causer_id=row.causer_id,
                 causer_name=causer_names.get(row.causer_id) if row.causer_id else None,
                 properties=row.properties,
@@ -131,7 +175,7 @@ def export_activity(
     date_from: datetime | None = Query(default=None),
     date_to: datetime | None = Query(default=None),
     db: Session = Depends(get_db),
-    _actor: User = Depends(require_permission(ACTIVITY_VIEW)),
+    actor: User = Depends(require_permission(ACTIVITY_VIEW)),
 ) -> StreamingResponse:
     """Stream the trail as CSV — the first thing anyone asks for in a real review.
 
@@ -164,7 +208,14 @@ def export_activity(
         yield flush()
 
         for row in activity_service.iter_for_export(
-            db, log_name=log_name, event=event, date_from=date_from, date_to=date_to
+            db,
+            log_name=log_name,
+            event=event,
+            date_from=date_from,
+            date_to=date_to,
+            # Scoped like the list. Without this the export is the way around the
+            # sandbox, and it hands over the whole file rather than one page.
+            actor=actor,
         ):
             writer.writerow([
                 row.id,
@@ -193,15 +244,38 @@ def export_activity(
     )
 
 
+@router.get("/filter-options", response_model=ActivityFilterOptions)
+def list_filter_options(
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_permission(ACTIVITY_VIEW)),
+) -> ActivityFilterOptions:
+    """Every dropdown on the index, in one call.
+
+    Read from the data, not from a hardcoded list, so a module or subject type
+    that has never actually been written does not clutter the filter — and one
+    added by a future call site appears without anyone registering it. `sources`
+    is the exception and is a constant: it is the set of *possible* origins, and
+    it must include a value even before the first CLI row exists.
+
+    Scoped by the reader, so the options can never describe rows they cannot see.
+    """
+    return ActivityFilterOptions.model_validate(
+        activity_service.filter_options(db, actor=actor)
+    )
+
+
 @router.get("/events", response_model=list[str])
 def list_events(
     db: Session = Depends(get_db),
-    _actor: User = Depends(require_permission(ACTIVITY_VIEW)),
+    actor: User = Depends(require_permission(ACTIVITY_VIEW)),
 ) -> list[str]:
     """Event names actually present in the trail, for the filter dropdown.
 
     Read from the data rather than a hardcoded list, so an event added by a future
     call site appears without anyone remembering to register it — and one that has
     never occurred does not clutter the filter.
+
+    Superseded by `/filter-options`, which returns this list alongside the other
+    four. Kept because it is the narrower question and something already asks it.
     """
-    return activity_service.distinct_events(db)
+    return activity_service.distinct_events(db, actor=actor)
