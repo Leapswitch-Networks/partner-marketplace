@@ -6,6 +6,62 @@
 > Update this file as part of the same change as the code. A task that isn't here is invisible to the
 > next person.
 
+## August 12, 2026 — The last blocked module, re-scoped rather than built to its spec
+
+**Module 16 was blocked on "we have no queue", and the plan warned that building it anyway "would
+produce a page that says 0 jobs forever".** The worker changed the first half of that: something does
+run in the background now. It did not change the second half, and the interesting work was working
+out what to build instead.
+
+**A worker is not a queue, and the difference decides the whole module.** The reference's
+`queue_job_runs` records a *backlog* — `queued_at`, `attempts`, `payload_summary` — and its five
+operations are retry one, retry all, forget one, purge pending, purge dead. Every one of those acts on
+work that is waiting. Ours has none: a job is due or it is not, a failed job runs again on its next
+interval, and there is nothing queued to forget. **So this records runs, not jobs**, and the screen is
+read-only. Building the five views would have produced exactly the empty page the plan predicted.
+
+**The banner is the screen.** Per-job health cannot answer the question that matters, because every
+job reads "healthy" on a stale last run if the worker died five minutes ago and nothing is due yet.
+That is the failure this whole module exists for — no errors, no red, nothing in the log, and every
+retention sweep and webhook retry silently stopped. "Is the worker running at all" gets its own line,
+and its own summary field, computed from the shortest enabled interval rather than from any job's
+state.
+
+**A failed run is recorded, with its type and message and deliberately not its traceback.** A job
+that has been throwing for a week is the single thing worth surfacing, and a traceback is a stack of
+file paths rendered on a screen someone can open — the full one is already in the logs. The recording
+never raises either: monitoring that can crash the thing it monitors is worse than none.
+
+The worker gained a fifth job to trim its own run history, because every table that only grows needs
+an answer — including the one that monitors the thing enforcing the others.
+
+### And the last two open items on the module parity plan
+
+**Step 5 — `ProfileForm`.** The last flat form in the app, now on `FormSection` + `FormGrid`. The
+rewrite found something better than styling: **its email field was a control wired to nothing.**
+Editable, counted by `isDirty`, lighting up the Save button — while the endpoint stopped accepting
+`email` some time ago. You could type a new address, press Save, read "Profile updated successfully",
+and nothing whatever had happened. It is read-only now with the reason inline, which is the position
+the parity plan already recorded. Dropping its hand-rolled inputs also cleared one of the standing
+lint errors — 20 down to 19.
+
+**Step 6 — sort keys.** Closed by measurement rather than by reading: every module's columns were
+cross-checked against its service's `ListSpec.sortable` by importing the specs and comparing.
+**No column anywhere sorts on something the API refuses**, which is the half of the rule that was ever
+a defect. Six keys are sortable in the API with no column offering them, and that is not an omission —
+a table with one Name column cannot offer two sorts.
+
+**Checked, not assumed:** 572 backend tests (28 new); a probe of 19 assertions covering a successful
+run, a failing one, all five health states against real rows, and retention. The migration
+round-trips. `tsc` clean, whole-tree lint down to 19.
+
+> **Every module in the LeapDesk parity plan is now built.** What remains is not a module: nothing has
+> been rendered in a browser, and the worker is not in `docker-compose.yml` — so on this machine the
+> Background Jobs screen will report it stopped the moment the last manual run ages out. That is the
+> screen doing its job, and it is also the next thing to fix.
+
+---
+
 ## August 12, 2026 — The scheduler that four docstrings kept apologising for
 
 **Four functions already existed, each with a docstring saying some version of "nothing calls this on

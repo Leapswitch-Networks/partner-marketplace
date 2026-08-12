@@ -202,8 +202,13 @@ where they were, in `filterExtras`; no new `ResourceIndex` slot was needed after
 in the end — that is structure, not a feature, and it was already there and mis-numbered. It did not
 get row actions, selection or a bulk bar.
 
-**Step 5 — the flat forms.** `RoleForm` ✅ done with step 2. `InvitationForm` is a repeater and does
-not take sections. **`ProfileForm` remains.**
+**Step 5 — the flat forms. ✅ done 2026-08-12.** `RoleForm` with step 2. `InvitationForm` is a
+repeater and does not take sections. `ProfileForm` is now `FormSection` + `FormGrid` — and the
+rewrite found that **its email field was a control wired to nothing**: editable, counted by
+`isDirty`, lighting up the Save button, while the endpoint had stopped accepting `email` entirely.
+You could change it, see "Profile updated successfully", and nothing had happened. Read-only now
+with the reason inline, which is the position `LEAPDESK_PARITY_PLAN.md` § Still open already
+records. Removing its hand-rolled inputs also cleared one of the standing lint errors.
 
 **Step 6 — sort keys.** Item 26, per module: read each service's `ListSpec.sortable` and make the
 columns match it exactly. Users has six of the API's seven and Invitations now matches; Roles sorts in
@@ -217,8 +222,22 @@ the browser. ~~Activity's endpoint exposes no sort parameter at all.~~
 > the first place — rows written in one transaction share a timestamp, so `created_at` alone is not
 > a total order — holds under every sort rather than being traded away for the feature.
 >
-> **Users' seventh sort key is still unchecked**, and Roles is still client-side by the § 4.2
-> decision. Step 6 is not finished; it is one module shorter.
+> **Step 6 closed 2026-08-12.** Every module's columns were cross-checked against its service's
+> `ListSpec.sortable`, by importing the specs and comparing:
+>
+> | Module | Dead sort keys | Sortable in the API, no column |
+> |---|---|---|
+> | Users | none | `last_name` |
+> | Invitations | none | `created_at` |
+> | Activity | none | `id` |
+> | Feature Flags | none | `created_at`, `key` |
+> | Platform API | none | `slug` |
+> | Webhooks | none | `created_at` |
+>
+> **No column anywhere sorts on something the API refuses** — which is the half of item 26 that was
+> a defect. The right-hand column is not one: a table with a single Name column cannot offer two
+> sorts, so `last_name` staying API-only is correct rather than outstanding. Roles remains
+> client-side by the § 4.2 decision.
 
 ---
 
