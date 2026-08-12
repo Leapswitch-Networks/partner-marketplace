@@ -15,12 +15,14 @@ and enforced HERE, in one place, so no route can forget them:
 UI and the API cannot disagree about what is allowed.
 """
 
+from collections.abc import Sequence
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
 from sqlalchemy import Select, select
 from sqlalchemy.orm import Session, selectinload
 
+from app.core.attachments import Attachment
 from app.core.config import settings
 from app.core.crud import get_or_404
 from app.core.query import ListParams, ListSpec, run_list
@@ -36,8 +38,10 @@ from app.schemas.rbac import (
 from app.services import (
     activity_service,
     mail_service,
+    recycle_bin_service,
     session_service,
     two_factor_service,
+    webhook_service,
 )
 from app.services.auth_service import email_exists, normalise_email
 from app.services.rbac_service import resolve_roles
@@ -174,18 +178,28 @@ def list_users(
 
 
 def send_user_email(
-    db: Session, user_id: str, data: SendUserEmailRequest, actor: User
+    db: Session,
+    user_id: str,
+    data: SendUserEmailRequest,
+    actor: User,
+    attachments: Sequence[Attachment] = (),
 ) -> tuple[bool, str]:
     """Send an ad-hoc message from `actor` to a user. Returns `(sent, message)`.
 
-    Ported from the reference's `sendEmail`. Two deliberate differences:
+    Ported from the reference's `sendEmail`. **Attachments landed 2026-08-12** —
+    the note that used to stand here registered their absence as a parity gap,
+    and this closes it. Validation lives in `core/attachments.py`, which checks
+    magic bytes rather than trusting the browser's `Content-Type`; the caps on
+    file count and total size are ours and are explained there.
 
-    * **No attachments.** The reference accepts up to 25MB of pdf/doc/xls/image
-      files. That needs upload plumbing this endpoint does not have, and it is
-      registered as a parity gap rather than silently dropped.
+    Remaining deliberate differences from the reference:
+
     * **Plain text, no template.** Matching the rest of `mail_service`, whose
       module comment explains why: every client renders it and there is no layout
       to break.
+    * **The recipient is the user record, not a field.** The reference takes
+      `recipient_email` from the request, which its own code comments call an
+      outbound spam vector. Ours can only mail an address we already hold.
 
     A send failure returns `(False, reason)` rather than raising. The mail backend
     can be down for reasons that are nothing to do with this request, and a 500
@@ -200,20 +214,33 @@ def send_user_email(
         f"Reply to this address to reach them: {actor.email}"
     )
 
-    sent = mail_service.send(target.email, data.subject, body)
-    if sent and data.bcc_sender and actor.email != target.email:
-        # Best effort: the sender's copy failing must not report the whole send as
-        # failed, because the message the user cares about has already gone.
-        mail_service.send(
-            actor.email, f"[copy] {data.subject}", f"Sent to {target.email}:\n\n{body}"
-        )
+    sent = mail_service.send(
+        target.email,
+        data.subject,
+        body,
+        attachments=attachments,
+        # A real Bcc rather than the second "[copy]" send this used to do. The
+        # copy arrived without the attachments, which made it a misleading record
+        # of what was sent — and with them it would upload every file twice.
+        bcc=(
+            actor.email
+            if data.bcc_sender and actor.email != target.email
+            else None
+        ),
+        # The reference sends from the configured address under the sender's
+        # name, so a reply reaches a monitored mailbox while the recipient sees
+        # who wrote to them.
+        from_name=actor.full_name,
+    )
 
     if not sent:
         return False, "The message could not be sent. Check the mail configuration."
 
-    # The subject line is recorded; the body is NOT. An audit trail is read by
-    # more people than the mailbox is, and the message may be about the user
-    # rather than for general circulation.
+    # The subject line and the attachment NAMES are recorded; the body and the
+    # file contents are NOT. An audit trail is read by more people than the
+    # mailbox is, and the message may be about the user rather than for general
+    # circulation. "What was sent to this person" is answerable; "what did it
+    # say" deliberately is not.
     activity_service.record(
         db,
         actor=actor,
@@ -221,6 +248,9 @@ def send_user_email(
         subject_id=target.id,
         event="emailed",
         description=f"Emailed {target.full_name}: {data.subject}",
+        properties=(
+            {"attachments": [a.filename for a in attachments]} if attachments else None
+        ),
     )
     return True, f"Message sent to {target.email}."
 
@@ -277,6 +307,21 @@ def create_user(db: Session, data: CreateUserRequest, actor: User) -> User:
         },
         actor=actor,
         label=user.email,
+    )
+
+    # After the commit and the audit row. `emit` never raises, so a webhook
+    # receiver that is down cannot fail an account creation that has already
+    # succeeded — see `webhook_service.emit`.
+    webhook_service.emit(
+        db,
+        "user.created",
+        {
+            "id": user.id,
+            "email": user.email,
+            "full_name": user.full_name,
+            "account_type": user.account_type,
+            "roles": sorted(role.name for role in user.roles),
+        },
     )
     return user
 

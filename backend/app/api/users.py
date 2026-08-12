@@ -5,9 +5,19 @@ Every route declares its permission explicitly. An endpoint with no
 Replaces the previous `admin.py`, which authenticated but did not authorize.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    UploadFile,
+    status,
+)
 from sqlalchemy.orm import Session
 
+from app.core.attachments import MAX_ATTACHMENT_BYTES, validate as validate_attachments
 from app.core.dependencies import get_db, require_permission
 from app.core.permissions import (
     USER_APPROVE,
@@ -73,22 +83,47 @@ def list_users(
 @router.post("/{user_id}/email", response_model=SendUserEmailResult)
 def send_user_email(
     user_id: str,
-    data: SendUserEmailRequest,
+    subject: str = Form(min_length=1, max_length=255),
+    message: str = Form(min_length=1, max_length=10000),
+    bcc_sender: bool = Form(default=False),
+    attachments: list[UploadFile] = File(default_factory=list),
     db: Session = Depends(get_db),
     actor: User = Depends(require_permission(USER_EMAIL)),
 ) -> SendUserEmailResult:
-    """Send an ad-hoc message to a user.
+    """Send an ad-hoc message to a user, optionally with files attached.
 
     Gated on `user-email`, which no role but Admin and above holds by default —
     the ability to send mail *as the platform* is worth separating from the
-    ability to edit an account.
+    ability to edit an account. Throttled per caller by `rate_limit.py`'s
+    `mail-user` bucket, which matches the reference's per-route throttle.
+
+    **`multipart/form-data`, not JSON, as of 2026-08-12.** A Pydantic body and an
+    upload cannot share one request, and the alternative — a second endpoint for
+    the attachment case — would mean two code paths to the same send, one of
+    which would eventually miss a rule the other has.
+
+    Each file is read with a **bounded** read, so an oversized upload is rejected
+    rather than held whole in memory. That is a limit on this handler, not on the
+    request: the body has already been buffered to a spooled temp file by the ASGI
+    server before any of this runs. A hard ingress body cap belongs in the reverse
+    proxy and is not configured — worth knowing rather than assuming.
 
     Returns 200 with `sent: false` when the mail backend refuses, rather than a
     5xx. The request was valid and the record exists; only delivery failed, and
     conflating the two sends whoever is debugging to the wrong place.
     """
-    sent, message = user_service.send_user_email(db, user_id, data, actor)
-    return SendUserEmailResult(sent=sent, message=message)
+    files = [
+        # One byte past the cap, so `validate` can tell "at the limit" from "over
+        # it" without the rest of a 4 GB file ever being read.
+        (upload.filename, upload.file.read(MAX_ATTACHMENT_BYTES + 1))
+        for upload in attachments
+        if upload.filename
+    ]
+    validated = validate_attachments(files)
+
+    data = SendUserEmailRequest(subject=subject, message=message, bcc_sender=bcc_sender)
+    sent, result = user_service.send_user_email(db, user_id, data, actor, validated)
+    return SendUserEmailResult(sent=sent, message=result)
 
 
 @router.get("/{user_id}", response_model=UserDetailResponse)

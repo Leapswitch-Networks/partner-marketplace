@@ -101,9 +101,22 @@ export const adminApi = {
    * than lost, clearing only the secret would strip the second factor and leave
    * the attacker signed in.
    */
-  /** Ad-hoc message to a user. 200 with `sent: false` means delivery failed. */
-  sendEmail: (id: string, data: SendUserEmailPayload) =>
-    axiosInstance.post<SendUserEmailResult>(`/users/${id}/email`, data),
+  /**
+   * Ad-hoc message to a user. 200 with `sent: false` means delivery failed.
+   *
+   * `multipart/form-data`, because the endpoint accepts attachments as of
+   * 2026-08-12. **The Content-Type header is deliberately not set here** — the
+   * browser has to write it itself so it can append the multipart boundary, and
+   * setting it by hand produces a body the server cannot parse.
+   */
+  sendEmail: (id: string, data: SendUserEmailPayload, files: File[] = []) => {
+    const form = new FormData();
+    form.append("subject", data.subject);
+    form.append("message", data.message);
+    form.append("bcc_sender", String(data.bcc_sender ?? false));
+    files.forEach((file) => form.append("attachments", file));
+    return axiosInstance.post<SendUserEmailResult>(`/users/${id}/email`, form);
+  },
 
   resetTwoFactor: (id: string) =>
     axiosInstance.post<ManagedUser>(`/users/${id}/reset-two-factor`),

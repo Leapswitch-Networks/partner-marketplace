@@ -30,8 +30,10 @@ from __future__ import annotations
 
 import logging
 import smtplib
+from collections.abc import Sequence
 from email.message import EmailMessage
 
+from app.core.attachments import Attachment
 from app.core.config import settings
 
 logger = logging.getLogger("app.mail")
@@ -41,12 +43,36 @@ class MailError(Exception):
     """Raised only by `send_or_raise`. The normal path returns a boolean."""
 
 
-def _build(to: str, subject: str, body: str) -> EmailMessage:
+def _build(
+    to: str,
+    subject: str,
+    body: str,
+    *,
+    attachments: Sequence[Attachment] = (),
+    bcc: str | None = None,
+    from_name: str | None = None,
+) -> EmailMessage:
     message = EmailMessage()
-    message["From"] = f"{settings.MAIL_FROM_NAME} <{settings.MAIL_FROM}>"
+    # The address is always ours — only the display name may be overridden, and
+    # only by a caller that has already established who the sender is. Letting a
+    # caller set the address would make this a relay for anyone who reaches it.
+    message["From"] = f"{from_name or settings.MAIL_FROM_NAME} <{settings.MAIL_FROM}>"
     message["To"] = to
+    if bcc:
+        # A real Bcc header, not a second send. `smtplib.send_message` expands it
+        # into the envelope and strips it from the transmitted headers, so the
+        # recipient does not learn who was copied — and a 20 MB attachment is
+        # uploaded once rather than twice.
+        message["Bcc"] = bcc
     message["Subject"] = subject
     message.set_content(body)
+    for attachment in attachments:
+        message.add_attachment(
+            attachment.content,
+            maintype=attachment.maintype,
+            subtype=attachment.subtype,
+            filename=attachment.filename,
+        )
     return message
 
 
@@ -71,10 +97,21 @@ def _send_smtp(message: EmailMessage) -> None:
         client.send_message(message)
 
 
-def send(to: str, subject: str, body: str) -> bool:
+def send(
+    to: str,
+    subject: str,
+    body: str,
+    *,
+    attachments: Sequence[Attachment] = (),
+    bcc: str | None = None,
+    from_name: str | None = None,
+) -> bool:
     """Deliver a message. Returns True if it was sent, False if sending failed.
 
     A `console` send always succeeds — it is a log write.
+
+    The three keyword arguments are used only by the ad-hoc user email; every
+    other caller sends a plain text-only message and is unaffected.
     """
     backend = settings.MAIL_BACKEND.lower()
 
@@ -85,7 +122,18 @@ def send(to: str, subject: str, body: str) -> bool:
         # a valid credential to anyone who can read logs. DEPLOYMENT § 0 lists it.
         logger.info(
             "email not sent (console backend)",
-            extra={"to": to, "subject": subject, "body": body},
+            extra={
+                "to": to,
+                "subject": subject,
+                "body": body,
+                # Names and sizes only. Logging an attachment's bytes would put a
+                # document someone chose to send to one person into a log file
+                # read by everyone with shell access.
+                "attachments": [
+                    f"{a.filename} ({len(a.content)} bytes)" for a in attachments
+                ],
+                "bcc": bcc,
+            },
         )
         return True
 
@@ -94,7 +142,16 @@ def send(to: str, subject: str, body: str) -> bool:
         return False
 
     try:
-        _send_smtp(_build(to, subject, body))
+        _send_smtp(
+            _build(
+                to,
+                subject,
+                body,
+                attachments=attachments,
+                bcc=bcc,
+                from_name=from_name,
+            )
+        )
     except (smtplib.SMTPException, OSError, MailError) as exc:
         # Never log the body here: a reset email contains a working token, and an
         # SMTP failure is exactly when someone would be reading the logs.
