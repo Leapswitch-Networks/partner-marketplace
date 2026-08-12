@@ -14,14 +14,19 @@ export default function AuthInitializer({ children }: { children: React.ReactNod
 
   // Track whether we have attempted the session check this mount cycle
   const fetchedRef = useRef(false);
-  const [checked, setChecked] = useState(isAuthenticated); // skip check if already auth'd
+  // `settled` means "the session check has finished". `checked` is that OR
+  // already being authenticated — derived rather than stored, so an account that
+  // becomes authenticated after mount (a sign-in elsewhere in the tab) still
+  // clears the loading screen without an effect writing state to say so.
+  const [settled, setChecked] = useState(false);
+  const checked = settled || isAuthenticated;
 
   useEffect(() => {
-    // Already authenticated (e.g. user just logged in and was routed here) — nothing to do
-    if (isAuthenticated) {
-      setChecked(true);
-      return;
-    }
+    // Already authenticated (e.g. user just logged in and was routed here) —
+    // nothing to fetch. `checked` is derived from that below rather than set
+    // here: an effect that immediately sets state on the render it runs in is
+    // the cascading pass `react-hooks/set-state-in-effect` exists to prevent.
+    if (isAuthenticated) return;
 
     // Only fire once per mount
     if (fetchedRef.current) return;

@@ -329,8 +329,21 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
     [router]
   );
 
+  // Declared **above** the effects that call it. It used to sit below them, which
+  // the React Compiler reports as "cannot access variable before it is declared":
+  // legal at runtime, because an effect body runs after the whole component has
+  // rendered, but the compiler cannot prove that and bails out of memoising the
+  // component — the "Compilation Skipped" error on the same line.
+  const closeMobile = useCallback(() => {
+    setMobileVisible(false);
+    setTimeout(() => setMobileOpen(false), 300);
+  }, []);
+
+  // Close the drawer when the section changes. Deferred like every other
+  // effect-driven update in this pass: navigating is not a reason to render
+  // twice, and a microtask is imperceptible against a 300ms exit transition.
   useEffect(() => {
-    if (mobileOpen) closeMobile();
+    if (mobileOpen) void Promise.resolve().then(closeMobile);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeSection]);
 
@@ -340,17 +353,16 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
       // Mount then trigger enter transition on next frame
       requestAnimationFrame(() => setMobileVisible(true));
     } else {
-      // Trigger exit transition, then unmount after it completes
-      setMobileVisible(false);
+      // Trigger exit transition, then unmount after it completes. Deferred to
+      // the next frame like the enter path above, rather than set here: a
+      // synchronous update in an effect body is a second render pass, and the
+      // two directions of one animation should not be written two different
+      // ways for no reason.
+      requestAnimationFrame(() => setMobileVisible(false));
       document.body.style.overflow = "";
     }
     return () => { document.body.style.overflow = ""; };
   }, [mobileOpen]);
-
-  const closeMobile = useCallback(() => {
-    setMobileVisible(false);
-    setTimeout(() => setMobileOpen(false), 300);
-  }, []);
 
   const handleLogout = useCallback(async () => {
     setLoggingOut(true);

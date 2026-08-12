@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import useHydrated from "@/lib/hooks/useHydrated";
 import StatCard from "./StatCard";
 import QuickActionsCard from "./QuickActionsCard";
 import usePermissions from "@/lib/hooks/usePermissions";
@@ -33,7 +34,10 @@ export default function DashboardOverview({
   onNavigate: (section: AdminSection) => void;
 }) {
   const { can } = usePermissions();
-  const [isLoaded, setIsLoaded] = useState(false);
+  // Drives the entry animation: false on the server and the first render, true
+  // once hydrated. Was a `useState` flipped in an effect, which is a whole extra
+  // render pass to answer a question `useSyncExternalStore` answers in the first.
+  const isLoaded = useHydrated();
   const [counts, setCounts] = useState<Counts>({
     users: null,
     roles: null,
@@ -41,9 +45,7 @@ export default function DashboardOverview({
     activity: null,
   });
 
-  useEffect(() => {
-    setIsLoaded(true);
-  }, []);
+
 
   useEffect(() => {
     let cancelled = false;

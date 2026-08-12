@@ -71,7 +71,13 @@ export default function UserShow({
   }, [userId]);
 
   useEffect(() => {
-    load();
+    // Handed to a callback rather than called in the body. `load` sets state,
+    // and calling it directly here runs those updates inside the effect's own
+    // synchronous phase — a second render pass for values React could have had
+    // in the first, which is what `react-hooks/set-state-in-effect` is for. One
+    // microtask's remove makes them ordinary updates, and nothing else changes:
+    // the fetch still starts on mount and the retry path still calls `load`.
+    void Promise.resolve().then(load);
   }, [load]);
 
   if (loading) {

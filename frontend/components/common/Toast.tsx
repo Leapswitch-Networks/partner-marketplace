@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import useHydrated from "@/lib/hooks/useHydrated";
 import { createPortal } from "react-dom";
 import { AlertCircle, CheckCircle2, Info, X } from "lucide-react";
 
@@ -118,8 +119,7 @@ export default function Toast({
   toasts: ToastState[];
   onDismiss: (id: string) => void;
 }) {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const mounted = useHydrated();
 
   if (!mounted || toasts.length === 0) return null;
 

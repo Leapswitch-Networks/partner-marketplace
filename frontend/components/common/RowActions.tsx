@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import useHydrated from "@/lib/hooks/useHydrated";
 import { createPortal } from "react-dom";
 
 export interface RowAction {
@@ -27,10 +28,8 @@ export interface RowAction {
 export default function RowActions({ actions }: { actions: RowAction[] }) {
   const [open, setOpen] = useState(false);
   const [coords, setCoords] = useState({ top: 0, left: 0 });
-  const [mounted, setMounted] = useState(false);
+  const mounted = useHydrated();
   const btnRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => setMounted(true), []);
 
   useEffect(() => {
     if (!open) return;

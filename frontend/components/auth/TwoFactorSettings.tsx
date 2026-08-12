@@ -69,7 +69,11 @@ export default function TwoFactorSettings() {
     // effect should do anyway, and it satisfies the rule honestly rather than
     // with a disable comment.
     let live = true;
-    void load(() => live);
+    // Deferred by a microtask: `load` sets state, and calling it in the effect
+    // body runs those updates in the effect's own synchronous phase. The
+    // liveness guard still closes over the same `live`, so an unmount between
+    // the two ticks is handled exactly as before.
+    void Promise.resolve().then(() => load(() => live));
     return () => {
       live = false;
     };

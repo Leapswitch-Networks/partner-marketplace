@@ -131,7 +131,11 @@ export function useResourceList<T extends { id: string | number }>({
 
   useEffect(() => {
     if (!ready) return;
-    refetch();
+    // Deferred by a microtask. `refetch` sets `loading` before it awaits, so
+    // calling it here put that update inside the effect's synchronous phase —
+    // and this hook is used by every index in the app, so it was one error
+    // reported once and a second render pass on twelve screens.
+    void Promise.resolve().then(refetch);
   }, [depsKey, ready, refetch]);
 
   /** Replace one row in place, from the record a write returned. */

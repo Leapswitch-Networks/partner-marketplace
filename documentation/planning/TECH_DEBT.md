@@ -72,7 +72,7 @@ since 2026-07-31 — only the documentation was wrong, and wrong in a way that b
 | [PM-27](#pm-27--no-email-transport-so-invitations-and-resets-are-manual--resolved) | ✅ | ~~No email transport — invitations/resets are manual~~ | Infra |
 | [PM-28](#pm-28--google-sso-is-unverified-against-real-google) | 🟠 | Google SSO implemented but never run against Google | Auth |
 | [PM-29](#pm-29--eslint-cannot-run-v6-resolves-against-a-v9-flat-config--resolved) | ✅ | ~~ESLint cannot run — v6 binary vs v9 flat config~~ | Quality |
-| [PM-30](#pm-30--17-react-hooks-errors-from-rules-that-arrive-with-the-wrong-config-version) | 🟡 | **20** react-hooks errors, from `eslint-config-next` 16 on Next 14 | Quality |
+| [PM-30](#pm-30--17-react-hooks-errors-from-rules-that-arrive-with-the-wrong-config-version) | ✅ | **Closed 2026-08-12 — count is 0**, and `continue-on-error` is gone from CI | Quality |
 | [PM-31](#pm-31--refresh-reissues-rather-than-rotates-no-token-reuse-detection--resolved) | ✅ | ~~`/refresh` reissues rather than rotates~~ | Auth |
 | [PM-32](#pm-32--no-audit-log-leapdesk-has-one--recording-done-read-surface-pending) | ✅ | ~~No audit log~~ | Quality |
 | [PM-33](#pm-33--no-security-response-headers--backend-done-frontend-pending) | ✅ | ~~No security response headers~~ | Infra |
@@ -985,6 +985,26 @@ are recorded as PM-30.
 ---
 
 ### PM-30 — 17 react-hooks errors, from rules that arrive with the wrong config version
+
+> **✅ CLOSED 2026-08-12. The count is zero and lint now blocks CI.**
+>
+> The register said PM-41's data layer would retire this "by construction", and `PLANNING.md` § 3.2
+> asked for a decision rather than drift. PM-41 has not started; 19 errors behind
+> `continue-on-error` is a CI step nobody reads. So they were fixed by hand.
+>
+> Almost all of them were one shape — a `setState` run synchronously inside an effect body — and
+> four remedies covered every case:
+>
+> | Remedy | Where |
+> |---|---|
+> | Hand the function to a callback instead of calling it: `void Promise.resolve().then(load)` | 12 modules, and `useResourceList`, which every index uses |
+> | Derive the value rather than store it | `AuthInitializer`'s `checked` |
+> | `useHydrated()` — a `useSyncExternalStore` that answers "has hydration happened" in the first render | `Modal`, `Toast`, `RowActions`, `DashboardOverview` |
+> | Declare the callback above the effect that uses it | `Sidebar`, which also fixed its "Compilation Skipped" |
+>
+> **Verified by the browser harness afterwards**, not just by the linter: `useResourceList` is the
+> fetch hook behind twelve screens, and a change there that satisfied a rule while breaking a page
+> would have been the worst possible outcome.
 
 **Where:** 12 files across `components/` and `app/`. Reproduce with `npm run lint`.
 

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
+import useHydrated from "@/lib/hooks/useHydrated";
 import { createPortal } from "react-dom";
 
 /**
@@ -27,9 +28,7 @@ export default function Modal({
   footer?: ReactNode;
   size?: "md" | "lg" | "xl";
 }) {
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => setMounted(true), []);
+  const mounted = useHydrated();
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

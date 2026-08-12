@@ -79,7 +79,11 @@ export default function ConfigurationModule() {
   }, []);
 
   useEffect(() => {
-    load();
+    // Handed to a callback rather than called in the body. `load` sets state,
+    // and calling it here would run those updates inside the effect's own
+    // synchronous phase — one microtask's remove is what makes them ordinary
+    // updates instead of a cascading second pass.
+    void Promise.resolve().then(load);
   }, [load]);
 
   /** Replace one row in place after a save — the response is the updated record. */

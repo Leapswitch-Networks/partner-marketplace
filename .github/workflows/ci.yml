@@ -123,18 +123,20 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      # continue-on-error, and this is the one compromise in the file. `npm run
-      # lint` currently reports 20 react-hooks errors (PM-30) which come from
-      # eslint-config-next@16 judging a Next 14 codebase, and which PM-25 may make
-      # moot. Blocking on them would mean every PR is red on day one, and a red CI
-      # nobody can turn green is a CI nobody reads.
+      # This step used to carry `continue-on-error: true` with an instruction to
+      # delete it "when PM-25 is settled and PM-30's count is zero". PM-25 was
+      # settled on 2026-08-11 and **the count reached zero on 2026-08-12**, so it
+      # is gone: lint now blocks, which is the only state in which anyone reads it.
       #
-      # DELETE THIS LINE when PM-25 is settled and PM-30's count is zero. Until
-      # then the output is visible in the log and the count is tracked in the
-      # register.
+      # The 19 were all `react-hooks` rules, and almost all one shape: a setState
+      # run synchronously inside an effect body. Four remedies, in order of how
+      # often they applied — hand the function to a callback rather than calling
+      # it (`void Promise.resolve().then(load)`); derive the value instead of
+      # storing it; `useHydrated()` for the three portals that only wanted to
+      # know whether hydration had happened; and declaring a callback above the
+      # effect that uses it.
       - name: Lint
         run: npm run lint
-        continue-on-error: true
 
       # The step that matters most, because this is the one that was silently
       # broken for an unknown length of time (PM-24). Type errors are fatal to

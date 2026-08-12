@@ -6,6 +6,47 @@
 > Update this file as part of the same change as the code. A task that isn't here is invisible to the
 > next person.
 
+## August 12, 2026 — PM-30 closed: lint blocks CI now, because it can
+
+**`ci.yml` carried `continue-on-error: true` on the lint step with an instruction attached: *"DELETE
+THIS LINE when PM-25 is settled and PM-30's count is zero."*** PM-25 was settled yesterday. The count
+was 19. It is zero, and the line is gone.
+
+**The judgement call first, because `PLANNING.md` § 3.2 asked for one rather than drift.**
+`CORE_HARDENING_PLAN` says PM-41's data layer retires PM-30 "by construction", which would make
+hand-fixing these throwaway work. PM-41 has not started and is not scheduled this week — and 19
+errors behind `continue-on-error` is a CI step nobody reads, which is worse than no step at all. So
+they were fixed.
+
+**Almost all nineteen were one shape:** a `setState` run synchronously inside an effect body. React
+schedules a second render pass for a value it could have had in the first, and the rule exists to
+say so. Four remedies covered every case:
+
+| Remedy | Where |
+|---|---|
+| Hand the function to a callback instead of calling it — `void Promise.resolve().then(load)` | 12 modules, plus `useResourceList` |
+| Derive the value instead of storing it | `AuthInitializer`'s `checked` |
+| `useHydrated()` — a `useSyncExternalStore` answering "has hydration happened" in the first render | `Modal`, `Toast`, `RowActions`, `DashboardOverview` |
+| Declare the callback above the effect that uses it | `Sidebar` |
+
+**`Sidebar` was the one the register called the worst offender, and its three errors were one
+mistake.** `closeMobile` was declared eighteen lines below the effect that calls it — legal at
+runtime, because an effect runs after render, but the compiler cannot prove that, so it reported
+"cannot access variable before it is declared" *and* bailed out of memoising the whole component.
+Moving the declaration up fixed both, and left only the drawer's exit animation, which set state
+synchronously while its enter path already waited for the next frame. The two directions of one
+animation are written the same way now.
+
+**Verified in the browser, not just by the linter.** `useResourceList` is the fetch hook behind
+twelve screens; a change there that satisfies a rule while breaking a page would be the worst
+possible trade. All 25 screens still render, no console errors, no failed requests.
+
+> **Lint blocks from now on.** That is the point of the exercise: the errors were never the problem,
+> the `continue-on-error` was — it made the step advisory, and an advisory check is one that goes
+> red and stays red.
+
+---
+
 ## August 12, 2026 — The contrast was reasoned about; now it is measured
 
 **`MODULE_PARITY_PLAN.md` § 5 says the table work was *"reasoned about from classes and contrast
