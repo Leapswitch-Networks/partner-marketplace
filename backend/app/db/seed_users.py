@@ -119,9 +119,20 @@ def seed_users(db: Session, roster: list[dict]) -> None:
         if user is None:
             supplied = entry.get("password")
             password = supplied or secrets.token_urlsafe(_GENERATED_PASSWORD_BYTES)
+            # `pre_hashed` carries LeapDesk's flag of the same name, for accounts
+            # migrated with their digest rather than their password. **Hashing a
+            # digest a second time is the failure this flag exists to prevent**:
+            # the account is created, the seeder reports success, and the person
+            # simply cannot log in — with nothing anywhere saying why.
+            #
+            # `$2y$` digests from PHP are accepted: it is the same bcrypt with a
+            # different version letter, and `bcrypt.checkpw` reads all of
+            # `$2a$`/`$2b$`/`$2y$`. Verified rather than assumed — see
+            # `tests/test_password_hashing.py`.
+            stored = password if entry.get("pre_hashed") else hash_password(password)
             user = User(
                 email=email,
-                password=hash_password(password),
+                password=stored,
                 first_name=entry["first_name"].strip(),
                 last_name=entry["last_name"].strip(),
                 account_type=entry.get(

@@ -14,19 +14,60 @@ Naming convention (inherited from LeapDesk):
 
 ROLE_ROOT = "RootUser"
 ROLE_SUPER_ADMIN = "SuperAdmin"
+#: Added 2026-08-12 for parity. The reference's engineering role, and it is
+#: **privileged, not descriptive**: it sits in the same bypass list as RootUser,
+#: so it is a second key to the building rather than a job title. Named after the
+#: reference's rather than invented, because an operator who knows one system's
+#: role names should not have to learn a second set.
+ROLE_BACKEND_DEVELOPER = "BackendDeveloper"
 ROLE_ADMIN = "Admin"
+#: The reference's commercial role, added 2026-08-12 alongside BackendDeveloper
+#: so the role vocabulary matches. **It is not a synonym for `Staff`**: Staff is
+#: ours and holds read access across the admin modules; Sales is the reference's
+#: and holds four permissions, none of which read another person's records.
+ROLE_SALES = "Sales"
 ROLE_STAFF = "Staff"
 ROLE_PARTNER = "Partner"
 ROLE_USER = "User"
 
 #: Bypass every permission check. Kept deliberately tiny.
-SUPER_ADMIN_ROLES: frozenset[str] = frozenset({ROLE_ROOT, ROLE_SUPER_ADMIN})
+#:
+#: Verified against LeapDesk source on 2026-08-12 — `AppServiceProvider`'s
+#: `Gate::before` and `AdminAccess::$superAdminRoles`, which are **both**
+#: `['RootUser', 'BackendDeveloper']`. Two notes on how ours differs, both
+#: deliberate:
+#:
+#: 1. **`BackendDeveloper` is added**, matching the reference. Its stated reason
+#:    is worth keeping: these roles must never see a 403 from a permission that
+#:    has not been seeded into their assignments yet.
+#: 2. **`SuperAdmin` stays, where the reference does not bypass for it.** Ours is
+#:    documented as emergency and maintenance access and has held the bypass
+#:    since the RBAC rebuild; removing it would be a privilege *reduction* to a
+#:    live role, made on the strength of a comparison rather than a decision.
+#:    In practice the gap is narrow — SuperAdmin holds `"*"` in the matrix, so
+#:    the bypass only matters for a permission added but not yet seeded, which is
+#:    precisely the case the reference wrote it for.
+SUPER_ADMIN_ROLES: frozenset[str] = frozenset(
+    {ROLE_ROOT, ROLE_SUPER_ADMIN, ROLE_BACKEND_DEVELOPER}
+)
 
 #: "Sees all data" rather than only their own. Drives data-visibility scoping.
-ADMIN_ACCESS_ROLES: frozenset[str] = frozenset({ROLE_ROOT, ROLE_SUPER_ADMIN, ROLE_ADMIN})
+#: The reference's `admin_roles()` verbatim: RootUser, SuperAdmin, Admin,
+#: BackendDeveloper.
+ADMIN_ACCESS_ROLES: frozenset[str] = frozenset(
+    {ROLE_ROOT, ROLE_SUPER_ADMIN, ROLE_BACKEND_DEVELOPER, ROLE_ADMIN}
+)
 
 #: Cannot be deleted or renamed, and cannot be edited by a non-super-admin.
-PROTECTED_ROLES: frozenset[str] = frozenset({ROLE_ROOT, ROLE_SUPER_ADMIN, ROLE_USER})
+#:
+#: `BackendDeveloper` belongs here for a reason specific to it: **its name is
+#: hardcoded in the bypass set above.** A role whose name is a security rule
+#: must not be renameable, or the rename silently detaches the rule and the role
+#: keeps its label while losing its power — or worse, a new role created under
+#: the old name inherits it.
+PROTECTED_ROLES: frozenset[str] = frozenset(
+    {ROLE_ROOT, ROLE_SUPER_ADMIN, ROLE_BACKEND_DEVELOPER, ROLE_USER}
+)
 
 #: Assigned automatically to a self-registering partner.
 DEFAULT_PARTNER_ROLE = ROLE_PARTNER
@@ -133,6 +174,18 @@ API_PROVIDER_VIEW = "api-provider-view"
 API_PROVIDER_CREATE = "api-provider-create"
 API_PROVIDER_UPDATE = "api-provider-update"
 API_PROVIDER_DELETE = "api-provider-delete"
+
+# Platform API — machine consumers and their tokens (LeapDesk parity Module 10).
+#
+# **Token management is separate from consumer editing on purpose**, and it is the
+# one line of this permission design that is about security rather than tidiness:
+# editing a description and minting standing credentials are not the same act and
+# must not ride on one checkbox.
+API_CONSUMER_VIEW = "api-consumer-view"
+API_CONSUMER_CREATE = "api-consumer-create"
+API_CONSUMER_UPDATE = "api-consumer-update"
+API_CONSUMER_DELETE = "api-consumer-delete"
+API_TOKEN_MANAGE = "api-token-manage"
 
 # Global Search (module 7)
 SEARCH_ENTITY_MANAGE = "search-entity-manage"
@@ -360,6 +413,21 @@ PERMISSION_CATALOG: dict[str, tuple[str, int, str, list[tuple[str, str]]]] = {
             (AI_ASSISTANT_QUERY_DATABASE, "Let the assistant query the database"),
         ],
     ),
+    "platform-api": (
+        "Platform API",
+        120,
+        "core",
+        [
+            (API_CONSUMER_VIEW, "View the systems permitted to call our API"),
+            (API_CONSUMER_CREATE, "Register a new system"),
+            (API_CONSUMER_UPDATE, "Edit a system, and switch its access off"),
+            (API_CONSUMER_DELETE, "Remove a system and every token it holds"),
+            # Read the description twice: this one mints standing, unattended
+            # credentials for a third party. It is separate from the four above
+            # so it can be withheld from someone who may administer the list.
+            (API_TOKEN_MANAGE, "Issue and revoke API tokens"),
+        ],
+    ),
 }
 
 
@@ -368,7 +436,24 @@ PERMISSION_CATALOG: dict[str, tuple[str, int, str, list[tuple[str, str]]]] = {
 ROLE_PERMISSION_MATRIX: dict[str, list[str] | str] = {
     ROLE_ROOT: "*",
     ROLE_SUPER_ADMIN: "*",
+    # Holds every permission explicitly AND bypasses the check, which is
+    # belt-and-braces on purpose: the grant is what the Roles screen shows a
+    # reader, and the bypass is what survives a permission added after the last
+    # seed. Neither alone gives both properties.
+    ROLE_BACKEND_DEVELOPER: "*",
     ROLE_ADMIN: "*",
+    # The reference's `Sales` grants, ported name for name:
+    # dashboard-view, settings-view, settings-update, ai-assistant.use.
+    # **Deliberately narrow, and worth not widening by reflex** — it holds no
+    # `user-view`, so a salesperson cannot read the staff directory, and no
+    # `ai-assistant-query-database`, so the assistant will converse with them but
+    # not read records for them. Both omissions are the reference's.
+    ROLE_SALES: [
+        DASHBOARD_VIEW,
+        SETTINGS_VIEW,
+        SETTINGS_UPDATE,
+        AI_ASSISTANT_USE,
+    ],
     ROLE_STAFF: [
         DASHBOARD_VIEW,
         USER_VIEW,
@@ -419,7 +504,15 @@ ROLE_PERMISSION_MATRIX: dict[str, list[str] | str] = {
 ROLE_DESCRIPTIONS: dict[str, str] = {
     ROLE_ROOT: "System owner. Bypasses every permission check. Cannot be deleted or edited.",
     ROLE_SUPER_ADMIN: "Emergency and maintenance access. Bypasses every permission check.",
+    ROLE_BACKEND_DEVELOPER: (
+        "Engineering access. Bypasses every permission check and sees all data — "
+        "a second key to the building, not a job title."
+    ),
     ROLE_ADMIN: "Full management access across the platform. Sees all data.",
+    ROLE_SALES: (
+        "Commercial team. Dashboard, their own settings, and the assistant — "
+        "no access to other people's records."
+    ),
     ROLE_STAFF: "Internal staff. Read access across modules, may invite users.",
     ROLE_PARTNER: "External partner. Sees only their own records.",
     ROLE_USER: "Default role for a new account. Dashboard only.",

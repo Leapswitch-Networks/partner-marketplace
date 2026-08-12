@@ -95,3 +95,36 @@ def test_multibyte_password_is_measured_in_bytes_not_characters():
 @pytest.mark.parametrize("value", [None, "", "plaintext"])
 def test_is_bcrypt_digest_rejects_non_digests(value):
     assert is_bcrypt_digest(value) is False
+
+
+# --- Migrated digests --------------------------------------------------------
+#
+# The roster seeder supports a `pre_hashed` entry so an account can be brought
+# across with its digest rather than its password (LeapDesk's flag of the same
+# name). Those digests come from PHP and carry the `$2y$` version letter, where
+# Python's bcrypt writes `$2b$`. The letters mark the same algorithm — `$2y$` was
+# PHP's marker after the 2011 sign-extension fix — so a digest written by one
+# must verify under the other.
+#
+# Tested because the failure mode is silent and confusing: the account seeds
+# without complaint, reports success, and the person simply cannot sign in.
+
+
+def test_a_php_2y_digest_verifies():
+    """The case that matters for a migrated account."""
+    import bcrypt as _bcrypt
+
+    digest = _bcrypt.hashpw(b"Known@123", _bcrypt.gensalt(rounds=4)).decode()
+    php_style = "$2y$" + digest[4:]
+
+    assert verify_password("Known@123", php_style) is True
+    assert verify_password("Wrong@123", php_style) is False
+
+
+def test_a_2y_digest_is_recognised_as_a_digest():
+    """`is_bcrypt_digest` gates whether a stored value is treated as hashed at
+    all, so a `$2y$` value it did not recognise would be read as plaintext."""
+    import bcrypt as _bcrypt
+
+    digest = _bcrypt.hashpw(b"Known@123", _bcrypt.gensalt(rounds=4)).decode()
+    assert is_bcrypt_digest("$2y$" + digest[4:]) is True
