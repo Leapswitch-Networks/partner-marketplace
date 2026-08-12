@@ -67,12 +67,27 @@ const ACCOUNT_TYPE_OPTIONS = [
   { value: "staff", label: "Staff" },
 ];
 
-/** Summary card. Counts come from their own endpoint — see `stats`. */
+/**
+ * Summary card. Counts come from their own endpoint — see `stats`.
+ *
+ * **The number is ink, not the tone colour**, and the tone moved to a dot beside
+ * the label. Measured on 2026-08-12: colouring the figure itself put
+ * `tone-success` at 1.84:1 on the dark surface and `tone-warning` at 1.47:1 on
+ * the light one — the count was the least readable thing on a card whose entire
+ * job is to show a count. A semantic fill is designed to sit *behind* white text
+ * in a badge, not to be text on a page background.
+ *
+ * The dot keeps the colour coding at a glance, where a shape rather than a glyph
+ * is what carries it, and passes because a 6px block is not text.
+ */
 function StatCard({ label, value, tone }: { label: string; value: number; tone: string }) {
   return (
     <div className="flex-1 rounded-[5px] border border-brand/20 px-3 py-2 dark:border-night-border">
-      <p className={`text-lg font-bold tabular-nums ${tone}`}>{value}</p>
-      <p className="text-[11px] text-ink-label dark:text-night-muted">{label}</p>
+      <p className="text-lg font-bold tabular-nums text-ink dark:text-gray-100">{value}</p>
+      <p className="flex items-center gap-1.5 text-[11px] text-ink-label dark:text-night-muted">
+        <span className={`inline-block h-1.5 w-1.5 rounded-full ${tone.replace("text-", "bg-")}`} />
+        {label}
+      </p>
     </div>
   );
 }
