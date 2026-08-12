@@ -75,6 +75,18 @@ class UpdateRoleRequest(BaseModel):
     permission_ids: list[int] | None = None
 
 
+class SetRolePermissionsRequest(BaseModel):
+    """The whole grant set, for `PUT /roles/{id}/permissions`.
+
+    A replacement rather than a patch, and required rather than optional: this
+    endpoint exists to say what a role grants, so an omitted list would have to
+    mean either "grant nothing" or "change nothing", and no wording makes that
+    unambiguous at the call site. `[]` clears the grants and says so.
+    """
+
+    permission_ids: list[int]
+
+
 # --- Users (administration) -------------------------------------------------
 
 
@@ -258,10 +270,10 @@ class MatrixCellRequest(BaseModel):
 class SendUserEmailRequest(BaseModel):
     """An ad-hoc message from an administrator to one user.
 
-    Ported from the reference's `sendEmail`. **Attachments are not implemented**
-    — it accepts up to 25MB of pdf/doc/xls/image files, which needs upload
-    plumbing this endpoint does not have. Registered as a parity gap in
-    CORE_COMPLETION_PLAN.md § 1.1 rather than silently dropped.
+    Ported from the reference's `sendEmail`. **The three text fields only** —
+    files arrive as multipart parts alongside them and are validated by
+    `core/attachments.py`, not by this model, because a Pydantic body and an
+    upload cannot share one request. The route composes both.
     """
 
     subject: str = Field(min_length=1, max_length=255)

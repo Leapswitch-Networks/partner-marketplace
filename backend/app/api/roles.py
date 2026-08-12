@@ -4,7 +4,13 @@ from fastapi import APIRouter, Depends, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db, require_permission
-from app.core.permissions import ROLE_CREATE, ROLE_DELETE, ROLE_UPDATE, ROLE_VIEW
+from app.core.permissions import (
+    ROLE_CREATE,
+    ROLE_DELETE,
+    ROLE_PERMISSIONS,
+    ROLE_UPDATE,
+    ROLE_VIEW,
+)
 from app.models.user import User
 from app.schemas.auth import MessageResponse
 from app.schemas.navigation import (
@@ -20,6 +26,7 @@ from app.schemas.rbac import (
     RoleMatrixResponse,
     RoleResponse,
     RoleUserItem,
+    SetRolePermissionsRequest,
     UpdateRoleRequest,
 )
 from app.services import navigation_service, rbac_service
@@ -90,6 +97,28 @@ def role_users(
 ) -> list[RoleUserItem]:
     """Users holding this role."""
     return [RoleUserItem.model_validate(u) for u in rbac_service.role_users(db, role_id)]
+
+
+@router.put("/{role_id}/permissions", response_model=RoleResponse)
+def set_role_permissions(
+    role_id: int,
+    data: SetRolePermissionsRequest,
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_permission(ROLE_PERMISSIONS)),
+) -> RoleResponse:
+    """Replace what a role grants.
+
+    **Its own route as of 2026-08-12** — parity plan § 3e. The rule was enforced
+    only as a conditional check on one field of `PATCH /roles/{id}`, which worked
+    but left `role-permissions` the one permission of the forty-nine that appeared
+    nowhere in the API contract. `PATCH` still accepts `permission_ids` and still
+    applies the same check, because grants remain part of the role edit form; this
+    route is the one that can be read off the contract.
+
+    `PUT`, not `PATCH`: the list replaces the role's grants entirely.
+    """
+    role = rbac_service.set_role_permissions(db, role_id, data.permission_ids, actor)
+    return _to_response(role, rbac_service.role_user_counts(db))
 
 
 @router.post("/{role_id}/clone", response_model=RoleResponse, status_code=status.HTTP_201_CREATED)

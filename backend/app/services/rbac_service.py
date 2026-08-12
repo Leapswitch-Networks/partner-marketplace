@@ -12,12 +12,19 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.core.crud import get_or_404
 from app.core.permissions import PROTECTED_ROLES, ROLE_PERMISSIONS, SUPER_ADMIN_ROLES
+from app.models.activity_log import EVENT_PERMISSIONS_CHANGED
 from app.models.associations import user_roles
 from app.models.permission import Permission
 from app.models.permission_group import PermissionGroup
 from app.models.role import Role
 from app.models.user import User
 from app.schemas.rbac import CloneRoleRequest, CreateRoleRequest, UpdateRoleRequest
+from app.services import activity_service, setting_service
+
+#: Registered in `seed_settings.py`. Read here rather than assumed, because the
+#: Security screen shows it as a switch and a switch wired to nothing is worse
+#: than no switch.
+AUDIT_SETTING = "security.audit.permission_changes"
 
 # --- Reads ------------------------------------------------------------------
 
@@ -237,6 +244,74 @@ def permission_matrix(db: Session) -> tuple[list[PermissionGroup], list[dict]]:
 # --- Writes -----------------------------------------------------------------
 
 
+def _assert_may_change_grants(role: Role, actor: User) -> None:
+    """The two rules every write to a role's permissions has to pass.
+
+    Three call sites apply them — the ordinary edit, the matrix cell and the
+    dedicated permissions route — and they were previously copied into two of
+    them and reasoned about separately. Copies of a privilege check are how one
+    of them ends up a version behind.
+    """
+    # A super-admin role's grants may only be edited by a super admin, otherwise
+    # an Admin could quietly widen their own path to full access.
+    if role.name in SUPER_ADMIN_ROLES and not actor.is_super_admin:
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Only a super admin may modify a super-admin role",
+        )
+    # Beyond whatever the route declares. A route states the minimum; the service
+    # enforces the rest — the same split `update_user` makes for `status`.
+    if not actor.has_permission(ROLE_PERMISSIONS):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "Changing what a role grants requires the 'role-permissions' permission.",
+        )
+
+
+def _apply_permissions(
+    db: Session, role: Role, permission_ids: list[int], actor: User
+) -> None:
+    """Set a role's grants, and record what changed.
+
+    **The audit entry is the point of routing all three writers through here.**
+    `security.audit.permission_changes` has been in the registry since the
+    Configuration module shipped, described as "already true of our behaviour" —
+    and nothing read it and nothing wrote the entry. A permission grant is the
+    single most security-relevant change in an RBAC system; it was the one kind
+    of change the trail did not have.
+
+    Recorded before/after by **name**, not id: an audit row is read by a person,
+    and `[3, 17, 41]` is not evidence of anything a year later.
+    """
+    before = {p.name for p in role.permissions}
+    role.permissions = _resolve_grantable_permissions(db, permission_ids, actor)
+    after = {p.name for p in role.permissions}
+    role.updated_by = actor.id
+
+    granted, revoked = sorted(after - before), sorted(before - after)
+    if not granted and not revoked:
+        return
+    if not setting_service.get(db, AUDIT_SETTING, True):
+        return
+
+    # Written after the caller commits would be safer against a rollback, but
+    # `activity_service.record` commits on its own — deliberately, so an audit
+    # row survives a caller that fails partway. The trade is that a change that
+    # is then rolled back leaves a row saying it happened; for grants, a false
+    # positive in the trail is the better failure.
+    activity_service.record(
+        db,
+        description=(
+            f"{actor.full_name} changed what '{role.display_name or role.name}' grants"
+        ),
+        event=EVENT_PERMISSIONS_CHANGED,
+        subject_type="Role",
+        subject_id=str(role.id),
+        actor=actor,
+        properties={"granted": granted, "revoked": revoked},
+    )
+
+
 def clone_role(db: Session, role_id: int, data: CloneRoleRequest, actor: User) -> Role:
     """Copy a role's permissions onto a new role.
 
@@ -288,19 +363,11 @@ def set_matrix_cell(
     """
     role = get_role_or_404(db, role_id)
 
-    # The same two checks `update_role` applies when `permission_ids` changes.
-    # Inlined rather than shared, because they are four lines and hoisting them
-    # into a helper used by exactly two callers hides which rule fires where.
-    if role.name in SUPER_ADMIN_ROLES and not actor.is_super_admin:
-        raise HTTPException(
-            status.HTTP_403_FORBIDDEN,
-            "Only a super admin may modify a super-admin role",
-        )
-    if not actor.has_permission(ROLE_PERMISSIONS):
-        raise HTTPException(
-            status.HTTP_403_FORBIDDEN,
-            "Changing what a role grants requires the 'role-permissions' permission.",
-        )
+    # Was two inlined checks with a comment explaining that hoisting them would
+    # hide which rule fires where. A third caller has since appeared, so they are
+    # shared — the comment's concern is answered by the helper naming the rules
+    # rather than by repeating them.
+    _assert_may_change_grants(role, actor)
 
     group = db.get(PermissionGroup, group_id)
     if group is None:
@@ -310,8 +377,7 @@ def set_matrix_cell(
     current = {p.id for p in role.permissions}
     wanted = (current | group_ids) if granted else (current - group_ids)
 
-    role.permissions = _resolve_grantable_permissions(db, sorted(wanted), actor)
-    role.updated_by = actor.id
+    _apply_permissions(db, role, sorted(wanted), actor)
     db.commit()
     db.refresh(role)
     return role
@@ -363,19 +429,33 @@ def update_role(db: Session, role_id: int, data: UpdateRoleRequest, actor: User)
         role.description = data.description.strip() or None
 
     if data.permission_ids is not None:
-        # Changing grants needs its own permission, beyond the ROLE_UPDATE the route
-        # declares. Same pattern as `update_user`, where the route requires
-        # USER_UPDATE and the service additionally requires admin access to touch
-        # `status` or `role_ids` — the route states the minimum, the service enforces
-        # the rest.
-        if not actor.has_permission(ROLE_PERMISSIONS):
-            raise HTTPException(
-                status.HTTP_403_FORBIDDEN,
-                "Changing what a role grants requires the 'role-permissions' permission.",
-            )
-        role.permissions = _resolve_grantable_permissions(db, data.permission_ids, actor)
+        # The conditional check survives alongside `set_role_permissions`'s
+        # declarative one, and both are needed: this route accepts grants as one
+        # field of an ordinary edit, so `role-update` alone must not carry them.
+        _assert_may_change_grants(role, actor)
+        _apply_permissions(db, role, data.permission_ids, actor)
 
     role.updated_by = actor.id
+    db.commit()
+    db.refresh(role)
+    return role
+
+
+def set_role_permissions(
+    db: Session, role_id: int, permission_ids: list[int], actor: User
+) -> Role:
+    """Replace a role's grants. The write behind `PUT /roles/{id}/permissions`.
+
+    **Split out on 2026-08-12 to close § 3e of the parity plan.** The rule was
+    enforced only as a conditional field check inside `update_role`, so unlike
+    every other permission in the system it appeared nowhere in OpenAPI — and
+    `VERSION_SUMMARY.md`'s principle is that gating is declarative per route
+    precisely so an ungated route is obvious in review. A rule you cannot see in
+    the contract is one a reviewer has to know to go looking for.
+    """
+    role = get_role_or_404(db, role_id)
+    _assert_may_change_grants(role, actor)
+    _apply_permissions(db, role, permission_ids, actor)
     db.commit()
     db.refresh(role)
     return role

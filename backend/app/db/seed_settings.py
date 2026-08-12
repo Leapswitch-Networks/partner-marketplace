@@ -168,11 +168,32 @@ def seed_settings(db: Session) -> int:
         module="core",
         group="Audit",
         label="Log role and permission changes",
-        # Already true of our behaviour: `rbac_service` records every grant
-        # change to the activity log. Default `True` therefore describes what
-        # already happens.
+        # ⚠️ This comment used to read "already true of our behaviour:
+        # `rbac_service` records every grant change". **It did not.** Nothing
+        # read this key and nothing wrote the entry, so the Security screen
+        # showed a switch wired to nothing — and the most security-relevant
+        # change in an RBAC system was the one kind of change the trail did not
+        # have. `rbac_service._apply_permissions` writes it as of 2026-08-12 and
+        # reads this key first, so the sentence is now true.
         default=True,
         description="Write an activity-log entry whenever a role's grants change.",
+    )
+    setting_service.register(
+        db,
+        key="security.audit.credential_decrypt",
+        setting_type="bool",
+        module="core",
+        group="Audit",
+        label="Log API credential reveals",
+        # `credential_service.reveal_field` has read this key since the API
+        # Credentials module shipped, defaulting to True because a missing row
+        # must never quietly switch auditing off. The row was missing anyway —
+        # registered here so the switch exists rather than only the fallback.
+        default=True,
+        description=(
+            "Write an activity-log entry whenever a stored credential is decrypted "
+            "and shown. Records who, which field and from where — never the value."
+        ),
     )
 
     db.commit()

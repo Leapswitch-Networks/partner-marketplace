@@ -67,6 +67,12 @@ EVENT_FAILED_LOGIN = "failed_login"
 #: change in an RBAC system and deserve their own event rather than hiding inside
 #: a generic `updated` diff.
 EVENT_ROLES_CHANGED = "roles_changed"
+#: The other half of that pair, added 2026-08-12: `roles_changed` is *which roles
+#: a user holds*, this is *what a role grants*. Both are escalation paths and
+#: conflating them would make the trail unable to answer either question — "who
+#: gave Ayush Admin" and "who gave Admin the ability to delete users" are
+#: different incidents.
+EVENT_PERMISSIONS_CHANGED = "permissions_changed"
 
 
 class ActivityLog(Base):
