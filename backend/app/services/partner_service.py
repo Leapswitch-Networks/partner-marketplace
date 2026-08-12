@@ -64,7 +64,7 @@ from app.schemas.partner import (
     UpdatePartnerRequest,
     UpdatePartnerTierRequest,
 )
-from app.services import activity_service, session_service
+from app.services import activity_service, session_service, webhook_service
 
 _LIST_SPEC = ListSpec(
     sortable={
@@ -314,6 +314,15 @@ def create_partner(db: Session, data: CreatePartnerRequest, actor: User) -> Part
         actor=actor,
         label=partner.name,
     )
+
+    # Emitted after the commit, deliberately: a webhook makes a network request,
+    # and `emit` never raises, so a slow or broken receiver delays this response
+    # without holding a lock or risking the write it is reporting.
+    webhook_service.emit(
+        db,
+        "partner.created",
+        {"id": partner.id, "name": partner.name, "slug": partner.slug, "status": partner.status},
+    )
     return decorate(partner, actor)
 
 
@@ -414,6 +423,22 @@ def change_status(
         actor=actor,
         properties={"from": previous, "to": data.status, "sessions_revoked": revoked},
     )
+
+    # Only activation is published. A subscriber cares that a partner became
+    # usable, not that it moved between two internal states — and `ACTIVE` is
+    # what approval *is* here; there is no `APPROVED` status, which is why the
+    # first version of this check could never have fired.
+    if data.status == "ACTIVE" and previous == "PENDING":
+        webhook_service.emit(
+            db,
+            "partner.activated",
+            {
+                "id": partner.id,
+                "name": partner.name,
+                "slug": partner.slug,
+                "previous_status": previous,
+            },
+        )
     return decorate(partner, actor)
 
 

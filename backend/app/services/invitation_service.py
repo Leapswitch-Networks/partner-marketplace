@@ -27,7 +27,7 @@ from app.models.user import User
 from app.models.user_invitation import UserInvitation
 from app.schemas.auth import AcceptInvitationRequest
 from app.schemas.rbac import CreateInvitationRequest
-from app.services import activity_service
+from app.services import activity_service, webhook_service
 from app.services.auth_service import email_exists, normalise_email
 from app.services.rbac_service import get_role_or_404
 
@@ -431,6 +431,20 @@ def accept_with_credentials(
     _mark_accepted(invitation, user)
     db.commit()
     db.refresh(user)
+
+    # After the commit. `emit` never raises, so a webhook receiver cannot fail an
+    # acceptance that has already created the account — the invitee would be left
+    # with a working password and an error page.
+    webhook_service.emit(
+        db,
+        "invitation.accepted",
+        {
+            "invitation_id": invitation.id,
+            "user_id": user.id,
+            "email": user.email,
+            "role": invitation.role.name if invitation.role is not None else None,
+        },
+    )
     return user
 
 
