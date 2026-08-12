@@ -37,19 +37,19 @@ where a decision has been settled; see § Progress for what is actually built.
 |---|--------|-------|
 | 1 | **Settings** (Profile / Password / Appearance) | ✅ **Done.** OTP recovery verified 13/13 end to end. One decision open — see below |
 | 4 | **Navigation** (server-driven + per-role collapse) | ✅ **Done** end to end; Sidebar consumes the tree |
-| 2 | Invitations admin index | ⬜ Started — nothing committed. Backend already complete; needs UI + bulk create, stats, 60s cooldown |
-| 3 | Users `user-email`; Roles matrix / clone / role-users / route split | ⬜ Not started |
-| 6 | Activity Log parity gaps | ⬜ Not started. **Scope shrank** — see the correction below |
+| 2 | Invitations admin index | ✅ **Done 2026-08-11** — index, bulk create, stats, cooldown. This row read "nothing committed" until the 2026-08-12 audit; it had shipped |
+| 3 | Users `user-email`; Roles matrix / clone / role-users / route split | ✅ **Done — completed 2026-08-12.** Matrix, clone, role-users and `user-email` had already shipped and were mismarked. Closed on 2026-08-12: attachments on `user-email` (magic-byte validated) and § 3e, `PUT /roles/{id}/permissions` as its own route — which found `security.audit.permission_changes` reading nothing and wrote the missing audit entry |
+| 6 | Activity Log parity gaps | ✅ **Done 2026-08-12** — `source` stamped on write and filterable, module labels, clickable subject URLs, causer-name search, sort, scoped filter options, and the causer sandbox on both the list and the export. `tinker`/`job` deliberately not ported |
 | 5 | Data Access | ✅ **Done 2026-08-11** (parallel agent) — grants, scoping helpers, admin screen at `/dashboard/data-access` |
 | 7 | API Credentials | ✅ **Done 2026-08-11** (parallel agent) — 4 tables, Fernet at rest via the existing HKDF path, masked by default, startup self-test. Unblocks module 9 |
 | 8 | Global Search | ✅ **Done 2026-08-11** (parallel agent) — configurable entities, model+field allowlists probed against hostile input, search logging |
-| 9 | AI Assistant | ⬜ Not started. Needs 7 and 8 |
-| 10 | **Platform API** (machine consumers + tokens) | ⬜ Not started — **specced 2026-08-10**. New in the reference; not part of the original scope |
+| 9 | AI Assistant | ✅ **Done 2026-08-12** — 3 tables, 3 tools, permission-gated tool registry, a read-only connection Postgres enforces, output guard, chat widget + settings screen. Off by default. **The model call itself is unproven** — no valid API key exists here, so everything up to and including the network request is verified and a real answer is not. `tinker`/`job` sources and the QMAS pricing tools are deliberately not ported |
+| 10 | **Platform API** (machine consumers + tokens) | ✅ **Part I done 2026-08-12** — 3 tables, SHA-256 token hashing, the `active` kill switch ahead of the token, six logged rejection reasons behind one 401, a retention policy, and the `Principal` union this plan asked to be introduced once. **Part II (the resource engine) deliberately not ported.** Nothing accepts a token yet — the gate is written and tested, waiting for the first machine-facing endpoint |
 | 11 | **Configuration** (settings registry) | ✅ **Done 2026-08-11** — table, service, 2 endpoints, seeder, screen. 10 settings registered. Gates 12 and 13, which are now unblocked |
 | 12 | **Security** (`security.*` settings) | ✅ **Done 2026-08-11** — namespace-guarded router, tabs per group, audit panel over `auth` + `settings`. Found and did not copy a reference bug that hides two of its own settings |
 | 13 | **Feature Flags** | ✅ **Done 2026-08-11** (parallel agent) — full CRUD + toggle, role/user targeting, unknown key is OFF |
-| 14 | **Webhooks** | ⬜ Not started — specced 2026-08-11. Needs 10 |
-| 15 | **API Documentation** | ⬜ Not started — **we start ahead**; PM-42 already commits an OpenAPI document |
+| 14 | **Webhooks** | ✅ **Done 2026-08-12** — 2 tables, HMAC-SHA256 over `{timestamp}.{body}`, backoff `[30,120,600]`, 4xx-permanent/5xx-retried, circuit breaker, delivery log with redeliver, secret rotation. **Adds an SSRF guard the reference has no equivalent of.** Two limits: no call site emits the four events yet, and delivery is inline because there is still no queue |
+| 15 | **API Documentation** | ✅ **Done 2026-08-12** — a reader over the live route table rather than a second registry, showing the **permission that gates each route**, which OpenAPI cannot express for us. Turned into a guard rail: a test fails if any route is reachable with no auth and no permission and is not on an explicit list of the seventeen that are public by necessity |
 | 16 | **Queue Monitor** | 🚫 **Blocked — we have no queue.** Not portable until something runs in the background |
 | 17 | **Error Tracking** | ✅ **Done 2026-08-11** — fingerprinting, regression reopen, recorder wired into the 500 handler, triage screen |
 | 18 | **System Health** | ✅ **Done 2026-08-11** — database, storage, errors live. Queue and provider panels report **not configured** rather than a fake zero |
@@ -71,6 +71,14 @@ system on 2026-08-11; the numbers the old block flagged as wrong are corrected.
 **Routers that exist** (`backend/app/api/`): `auth`, `google`, `users`, `roles`, `permissions`,
 `invitations`, `activity`, `navigation`, `settings`, `partners`. **Ten.** No router exists for data
 access, API credentials, global search, the AI assistant, the platform API, or any of modules 11–18.
+
+> **Superseded 2026-08-12.** That sentence was true when written and is now wrong in both halves:
+> there are **21 routers** and 124 operations, including `data_access`, `api_credentials`, `search`,
+> `configuration`, `security_settings`, `feature_flags`, `errors`, `health_status` and
+> `recycle_bin`. What has **no** router is the AI assistant (module 9), the platform API (10),
+> webhooks (14) and API documentation (15). Left in place rather than rewritten, because the point
+> of the paragraph below it — that a ⬜ in this table means "nobody ticked it", not "nobody built
+> it" — is exactly what the 2026-08-12 audit proved again.
 
 **Frontend index modules that exist and are on the shared shape:** Users, Roles, Invitations, Activity
 — all four brought to parity on 2026-08-11, see [`MODULE_PARITY_PLAN.md`](./MODULE_PARITY_PLAN.md).

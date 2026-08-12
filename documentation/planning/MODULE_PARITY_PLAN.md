@@ -207,9 +207,18 @@ not take sections. **`ProfileForm` remains.**
 
 **Step 6 — sort keys.** Item 26, per module: read each service's `ListSpec.sortable` and make the
 columns match it exactly. Users has six of the API's seven and Invitations now matches; Roles sorts in
-the browser; Activity's endpoint exposes no sort parameter at all. **The open question is whether the
-audit trail should get one** — an oldest-first toggle is genuinely useful for reading an incident
-forward, and it is an API change, not a UI one.
+the browser. ~~Activity's endpoint exposes no sort parameter at all.~~
+
+> **Activity resolved 2026-08-12.** The open question — *should the audit trail get an oldest-first
+> toggle?* — was answered yes, and it was an API change as predicted. `list_entries` now accepts
+> `sort_by`/`sort_order` over an allowlist of `id`, `created_at`, `event`, `description`, `log_name`
+> (the reference's four plus ours), and the four sortable columns declare matching `sortKey`s. `id`
+> stays the default **and the tiebreak**, so the property that made this module refuse sorting in
+> the first place — rows written in one transaction share a timestamp, so `created_at` alone is not
+> a total order — holds under every sort rather than being traded away for the feature.
+>
+> **Users' seventh sort key is still unchecked**, and Roles is still client-side by the § 4.2
+> decision. Step 6 is not finished; it is one module shorter.
 
 ---
 

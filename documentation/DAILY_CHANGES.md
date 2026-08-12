@@ -6,6 +6,424 @@
 > Update this file as part of the same change as the code. A task that isn't here is invisible to the
 > next person.
 
+## August 12, 2026 — The scheduler that four docstrings kept apologising for
+
+**Four functions already existed, each with a docstring saying some version of "nothing calls this on
+a schedule, because there is no scheduler".** Webhook retries. Expired sessions. API request-log
+retention. Audit-log retention. `app/worker.py` is the scheduler. It calls them.
+
+**This is a completion, not a new feature**, and that distinction was the point of doing it now:
+today has produced several things that exist but nothing invokes, and the honest way to stop adding
+to that pile is to connect what is already built. The retry backoff has been recording
+`next_attempt_at` since this morning and nothing has ever read it. Now something does — the probe
+takes a delivery the API gave up on, backdates its next attempt by a second, runs one worker pass,
+and watches the receiver get called.
+
+**A loop, not Celery.** Every job here is "run this function every N seconds" — no fan-out, no
+queues, no results to collect. A broker plus a result backend plus a second deployment topology to
+express a `while True` with a sleep in it would be the expensive way to be modern. If real background
+*work* ever appears — a thousand emails, a generated export — that is the moment for a broker, and
+Module 16 is where that conversation belongs.
+
+**One decision, and it is the audit trail.** `activity-log` ships **disabled**.
+`purge_older_than` states plainly that how long who-did-what is kept is a policy question — legal,
+contractual, or simply how far back you want to be able to answer questions — and that picking a
+number is not the function's place. Switching on a worker must not quietly begin deleting an audit
+trail on the strength of a default nobody chose. It runs when someone asks for it by name. The other
+three are safe unattended: a retry sends something already meant to be sent, and the two purges
+delete rows that already grant and prove nothing.
+
+**Three things it is careful about**, each because of how the failure would look. A job that raises
+is caught and logged so it cannot take the other three with it — that is how a webhook backlog builds
+up unnoticed behind a failing retention sweep. **A failed run still records when it ran**, or a
+permanently broken job becomes a hot loop against the database on every tick. And SIGTERM sets a flag
+rather than exiting, so `docker compose down` finishes the delivery in flight instead of recording as
+pending something that was in fact sent.
+
+**It is deliberately not in `docker-compose.yml`.** That file is protected, and adding a long-running
+process to everyone's stack is the owner's call rather than a side effect of a feature landing. The
+`--once` mode is what makes it useful before that decision — runnable by hand or from cron, on
+exactly the code path the loop uses. The README now carries both, plus the four-line compose service
+for whenever the answer is yes.
+
+**Checked, not assumed:** 559 backend tests (16 new); a live probe of 13 assertions — a due delivery
+is retried and marked delivered, an *undue* one is left alone, the three enabled jobs run in one pass
+and the audit purge does not, and a deliberately exploding job returns zero while the real jobs still
+run.
+
+> **Module 16 is one step less blocked.** The plan blocks Queue Monitor on "we have no queue"; there
+> is now something running in the background, which is the condition it was actually waiting for. It
+> is still not a queue, and a monitor over four cron-ish jobs is a smaller and different screen than
+> the one specced — worth re-scoping rather than building to the old spec.
+
+---
+
+## August 12, 2026 — Two loops closed, and one of them was a bug I shipped an hour earlier
+
+**Both halves of this entry are the same idea from opposite sides: a control that exists but is
+connected to nothing.**
+
+**A permission that gates no route grants nothing**, and it looks identical on the Roles screen to
+one that grants everything. Module 15's catalogue made that answerable, so it is now a test. Three of
+the fifty-four gate no route — and all three turn out to be **genuinely enforced elsewhere**:
+`ai-assistant-query-database` gates the assistant's *tools* rather than an endpoint,
+`dashboard-view` gates a nav entry (there is no `GET /dashboard` — the dashboard is assembled from
+other calls), and `settings-manage` is the one `permissions.py` already documents as deliberately
+route-less, because the branding writes are gated on `require_super_admin` and Admin holds `"*"`.
+
+**Each of those three is checked against the file that enforces it, not merely listed.** An excuse
+nobody verifies is exactly how a genuinely dead permission would hide among live ones — so the test
+reads `registry.py` for the tool gate and `navigation_service.py` for the nav ones, and fails if a
+claim stops being true. A fourth test catches the opposite rot: a permission that later *gains* a
+route should be removed from the excused list rather than left excusing something that no longer
+needs it.
+
+**The other half: the four webhook events now have call sites.** `user.created` fires from
+`create_user`, `partner.created` from `create_partner`, `invitation.accepted` from
+`accept_with_credentials`, all after the commit and through a new `emit()` that **never raises** —
+the rule `activity_service.record` already follows, and it matters more here because delivery makes a
+network request. Creating a user is not allowed to fail because somebody else's server is down. The
+probe proves it twice: with a receiver returning 500, and with a port refusing the connection.
+
+**And the probe caught a real defect in yesterday's module — one hour old.** `partner.approved` was
+in the event catalogue and wired to `if data.status == "APPROVED"`. **There is no APPROVED status.**
+A partner is `PENDING`, `ACTIVE` or `SUSPENDED`; activation *is* approval here. The event could never
+have fired: the form offered it, an integrator could have subscribed, and it would have delivered
+nothing forever — which is precisely the failure the subscriber-side validation was written to
+prevent, arriving from the side nothing was checking. It is `partner.activated` now, firing on
+`PENDING → ACTIVE`, and **a test greps the service layer to prove every offered event has an emitter**
+so the next one fails in CI rather than in a probe.
+
+> The lesson is the one this whole day keeps repeating: **validation that runs in one direction only
+> catches half the bug.** `_validate_events` stopped a subscriber naming an event that does not
+> exist. Nothing stopped us offering one that nothing emits.
+
+**Checked, not assumed:** 543 backend tests (6 new); a live probe of 13 assertions that creates a
+real user and a real partner with a webhook listening, confirms what arrives carries no password,
+and confirms a broken or unreachable receiver leaves the account created either way. `tsc` clean.
+
+---
+
+## August 12, 2026 — The API documents itself, and the docs turned into a guard rail
+
+**Module 15, and the parity scope closes with it** — every module in the LeapDesk plan is now built
+except Queue Monitor, which stays blocked because we still have no queue.
+
+**The plan said we start ahead here, and the honest reading of that was to build less.** FastAPI
+already serves `/docs`; `backend/openapi.json` is generated from the running app and CI-checked for
+staleness. Rebuilding a request explorer would have been a third copy of the same information and a
+third thing to keep true. So this is a *reader*, not a registry.
+
+**What it adds is the one fact OpenAPI cannot express for us: which permission gates each route.**
+Our authorization is a FastAPI dependency, not an OpenAPI security scheme, so the generated document
+is silent on it — and that is the single most useful thing to know about an endpoint here.
+`require_permission("user-view")` returns a closure over the name, so the catalogue recovers it by
+walking the dependency graph. No decorator, no registry, nothing for anyone to remember to update: a
+route that starts declaring a different permission says so on the next request.
+
+**Then it stopped being documentation and became a test.** `VERSION_SUMMARY.md` has always argued
+that gating is declarative per route *"so an ungated route is obvious in review"* — which only holds
+if somebody looks. Now something does, on every run: `test_no_route_is_unexpectedly_public` builds
+the real application and fails if any route is reachable with **no authentication and no permission**,
+unless it is on an explicit list of routes that are public by necessity.
+
+**That list is deliberately exact rather than a wildcard**, and writing it out was the interesting
+part. A `/auth/*` prefix rule would have been one line and would have quietly excused `/auth/me/*`
+too. Instead each of the seventeen public routes is named with its reason: signing in and the three
+Google SSO legs, because there is no account to authenticate as yet; password recovery, by definition
+reached without a password; invitation preview and acceptance, which *create* the account; branding,
+because the sign-in page renders it before anyone has signed in; and logout, which is public on
+purpose — a session that has already expired must still be able to clear its cookie, or a stuck user
+cannot get unstuck. **`unexpected_public` is 0**, and it is meant to stay 0.
+
+The reverse index answers the question an administrator actually asks before granting something:
+*what does this permission let someone do?* `api-token-manage` opens exactly four routes, all of
+which mint or rotate a credential. Read off the routes, so it cannot drift from what the code
+enforces the way a written description does.
+
+**Checked, not assumed:** 537 backend tests (11 new). 156 operations across 117 paths, 118
+permission-gated, 19 signed-in-only, 19 public and every one of them expected. `tsc` clean, lint
+unchanged at 20 pre-existing errors, none in a file touched today.
+
+> **The page has not been opened in a browser**, like everything else built today. And a second guard
+> rail is worth adding later but is not here: nothing yet asserts that every permission in
+> `permissions.py` is actually *used* by a route. A permission that gates nothing is a checkbox on
+> the Roles screen that grants nothing, which is the mirror image of the bug this module catches.
+
+---
+
+## August 12, 2026 — Webhooks ship, and the URL a user types is treated as hostile
+
+**Module 14.** An endpoint belongs to an `api_consumer` — a webhook is a
+machine-to-machine arrangement, and hanging it off a person means the integration breaks when they
+leave. Registration, a signing secret, a delivery log, redelivery, and a circuit breaker.
+
+**The three mechanics the plan said to copy exactly are copied exactly.** The timestamp is **inside**
+the signed string (`{timestamp}.{body}`), not a header beside it — that is what stops a captured
+payload being replayed later, because a receiver checking the timestamp's age is checking something
+the signature covers. Backoff is `[30, 120, 600]` over three attempts, on the reference's reasoning
+that "a receiver that is down is usually down for minutes, not milliseconds". And **a 4xx is not
+retried where a 5xx is**: a receiver rejecting the payload will reject it again, and retrying is
+noise in their logs and ours.
+
+**The reference does not guard the destination URL. We do, and it is the most important thing here.**
+An endpoint is a URL a user supplies that our server then makes a POST to, which is textbook SSRF:
+`http://169.254.169.254/` reads cloud instance credentials, `http://localhost:8002/api/v1/users`
+reaches our own API from inside the perimeter where it is trusted, and `10.x` reaches whatever else
+is on the private network. Every one is refused, at write time **and again immediately before each
+send** because DNS can change between the two. A hostname that will not resolve is refused as well —
+unresolvable means unverifiable, and "allow what we could not check" is how these guards get walked
+around. Redirects are not followed, for the same reason: a 302 would take the request to a URL that
+never passed the check.
+
+**Three kinds of secret now exist in this codebase and they are stored three different ways**, which
+is worth stating plainly because the temptation is to pick one rule: **API tokens are hashed**
+(Module 10 — we only ever compare one), **provider credentials are encrypted** (Module 7 — we have to
+send them), and **webhook secrets are encrypted** (here — we have to reproduce the HMAC on every
+delivery). The rule is not "hash everything"; it is hash what you compare, encrypt what you must
+reproduce, and never store plaintext either way.
+
+**The circuit breaker is the difference between a log worth reading and one nobody opens.** Ten
+consecutive failures disables the endpoint, and `disabled_at` is deliberately separate from
+`is_active` — "we gave up" and "a person switched it off" are different answers to "why did this stop
+working", and only one of them is somebody's fault. Any success resets the counter, so it measures
+whether an endpoint is broken *now* rather than whether it has ever failed.
+
+**Nothing retries automatically, and the UI says so.** Failed deliveries record when their next
+attempt is due and `process_due_retries()` performs the sweep, but nothing calls it — there is no
+scheduler, the same reason Module 16 stays blocked. **Redeliver is the retry that works today**, and
+the delivery log carries it, because a webhook that failed silently is otherwise unrecoverable: the
+event happened, the receiver missed it, and nothing anywhere can replay it.
+
+**Checked, not assumed:** 526 backend tests (33 new); a live probe of 37 assertions against a **real
+HTTP receiver** running in the probe — the signature verifies with the secret we handed over and
+breaks when one byte of the body changes, a 4xx settles immediately while a 5xx schedules a retry and
+fails after three, redelivery restarts the count, ten failures trip the breaker, a disabled endpoint
+receives nothing, rotation invalidates the old secret, and no audit row contains either secret. The
+probe patches the URL guard to reach its own loopback server — after first asserting that the guard
+refuses exactly that address.
+
+> **Two honest limits.** The four events on offer (`partner.created`, `partner.approved`,
+> `user.created`, `invitation.accepted`) have a `dispatch()` entry point but **no call site emits them
+> yet** — wiring them into those flows is a separate change, and offering events nothing fires is the
+> failure the catalogue validation exists to prevent, so they are listed as the contract rather than
+> claimed as live. And delivery is inline: a slow receiver holds the request that triggered it for up
+> to ten seconds. That is acceptable for the test button and the redeliver button, which are what
+> exercise it today; it is the first thing a queue would fix.
+
+---
+
+## August 12, 2026 — Machine identities get a governance surface, and a token is not a password
+
+**Module 10 Part I — the Platform API.** A *consumer* is a system, not a person, permitted to call
+our API; it holds tokens, each carrying abilities and an optional expiry. The screen exists so that
+who holds standing access, what it reaches and when it last called are answerable without SSHing
+into production.
+
+**Part II is deliberately not ported.** The reference's registry-driven read engine answers a
+question we do not have — the marketplace domain is greenfield, so there is nothing to expose and no
+consumer asking — and their own code review found **100 of its 105 registered resources had no field
+allowlist**, where NULL means every column. Building an exposure engine before there is data to
+expose is speculative by definition.
+
+**The whole porting difficulty is that Sanctum does not exist for us**, and the four decisions it
+otherwise makes are made here explicitly. The one most likely to be got wrong: **tokens are hashed
+with SHA-256, not with the bcrypt already sitting in `core/security.py`.** Bcrypt is wrong three
+times over — it is deliberately slow, which is right for a low-entropy human password and pointless
+against 400 bits of random; it *salts*, so an arriving bearer token could not be looked up at all and
+every API call would load and check every row; and it truncates at 72 bytes, which is shorter than
+the tokens we mint. The token's entropy is the security property, not the hash's cost factor.
+
+**This is the opposite direction from Module 7 and the two must never be merged.** API Credentials
+holds *other people's* secrets, encrypted because we have to send them. This holds *ours*, hashed
+because we only ever need to compare one. They sit next to each other in the sidebar, both say
+"API", and housing them together would blur an access-control boundary for the sake of a superficial
+grouping. Even the sidebar glyphs are deliberately different.
+
+**`active` is a kill switch that outranks the token**, and the gate checks it before anything about
+the token itself — that is the "switch an integration off at 2am without hunting down its
+credentials" control, and it is why the flag lives on the consumer rather than being inferred from
+whether tokens exist. Switching back on restores the same tokens, which is what makes it safe to use
+in a hurry.
+
+**A rejected call is logged with its reason; the caller is told nothing.** Six outcomes —
+`no_token`, `unknown_token`, `expired`, `revoked`, `consumer_inactive`, `missing_ability` — go to
+our table and all six surface as one 401, because telling a caller a token is "expired" rather than
+"unknown" confirms it once existed. Rejections are logged precisely because a burst of them is how a
+leaked or probed token shows up, which means the table grows fastest exactly when something is
+wrong: **it has a retention policy on day one.** The reference has none and its tracker does not
+list one as planned.
+
+**We took the `Principal` decision the plan asked us to take once.** Three requirements in four days
+have needed a caller that is not a `User` — an anonymous visitor, a partner organisation, and now a
+machine consumer. `core/principal.py` introduces the union with **anonymous as the most restrictive
+branch by construction**, and a machine principal answers `False` to *every* permission: a machine
+that could satisfy `require_permission` would be a token that can administer the application. The
+tempting shortcut — a hidden service user per integration — is refused in as many words, because one
+forgotten filter would turn an integration into a login.
+
+**The ability catalogue ships almost empty, and that is the finding.** One real ability, so the
+catalogue is exercised rather than hypothetical. Inventing a taxonomy for a domain that does not
+exist would mint tokens whose abilities nothing honours — which reads as "granted" on the screen and
+arrives as a 403 at the consumer, the worst kind of failure because both sides believe the other is
+wrong. Abilities are validated against the catalogue at write time for that reason.
+
+**Checked, not assumed:** 470 backend tests (34 new); a live probe of 28 assertions — the plaintext
+appears in no column of the token table, the gate stamps `last_used_at`, `active=false` refuses a
+perfectly valid token, expired and revoked each refuse with their own logged reason, deleting a
+consumer cascades its tokens but **keeps its request log**, and no audit row anywhere contains a
+token. Permissions seeded 5/5: Admin holds all five, **Staff holds none** — who holds standing
+machine access is not general staff information. The migration round-trips.
+
+> **Nothing accepts a token yet.** Part II is not built, so the tokens this screen mints have no
+> endpoint to call. The gate that will honour them is written and tested so the first machine-facing
+> endpoint inherits it rather than inventing one — but "issue a token and watch a real request
+> authenticate" is not something that has happened.
+>
+> **Two known gaps recorded rather than papered over:** rate limiting is per-IP, so a machine
+> consumer cannot yet be limited on its own axis, and PM-26's per-process counters mean N workers
+> multiply every limit by N — which is a speed bump for a login form and a broken contract for an
+> API. Both are arguments for PM-44 (Redis).
+
+---
+
+## August 12, 2026 — The AI assistant ships, and the database it reads cannot be written to
+
+**Module 9 — the last of the original nine, and the one every other module was blocking.** It is a
+chat widget in the corner of every signed-in page that answers questions from this application's own
+data: who holds which role, which partners exist, where a record lives. It is **off by default** and
+stays off until someone adds an Anthropic API key in API Credentials and turns it on.
+
+**The whole design question is what an assistant with database access must not be able to do**, and
+the answer here is five controls, four of them ported from the reference and one ours.
+
+**It reads through a connection Postgres will not let it write to.** Not a rule in our code — a
+startup parameter on the connection, so `INSERT`, `UPDATE`, `DELETE` and `DROP` are refused by the
+database whatever SQL arrives and however it was built. The first attempt at this used a `SET`
+statement and *silently did nothing*, because `SET` is transactional in Postgres and the rollback
+after connection setup discarded it; the probe caught it by asking the connection what it thought
+its own setting was. The stronger version — a dedicated `SELECT`-only role — needs an environment
+change in two protected files, so the settings screen says in as many words which of the two is
+actually in force rather than implying the better one.
+
+**Credential, session and password tables are invisible, not merely unreadable.** The denylist is
+applied to schema discovery as well as to reads, so the assistant is never told the name it would
+have to ask for. Matching is by substring, so a table called `partner_api_credentials` that nobody
+has thought of yet is already denied. **We deny two tables the reference leaves open: its own
+conversation history.** In LeapDesk, anyone who can use the assistant can ask it to read what other
+people asked it. That is a privacy hole rather than a feature and it is not ported.
+
+**Secret columns come back redacted**, using the same `is_sensitive_column` rule Global Search
+already enforces — one definition with two consumers, because two lists drift and only one of them
+gets updated when a new secret column appears. **Filters are bound, never concatenated**: identifiers
+are resolved against the live catalogue and used as column objects, so a table or column name the
+model invents cannot reach SQL as text. Operators come from a nine-item allowlist. Output is capped
+at 50 rows and 12,000 characters, and truncation drops whole rows rather than cutting the JSON —
+a model handed malformed JSON does not report a parse error, it guesses.
+
+**Which tools a user gets is the authorization, and it is applied before the model is told anything.**
+A role without `ai-assistant-query-database` gets no database tools *described* to it, so there is
+nothing to ask for and nothing to argue the model out of. That is what lets the system prompt honestly
+say "you only hold the tools your role grants".
+
+**Every reply passes a final deterministic check** for anything shaped like a credential — Anthropic,
+Slack, GitHub and AWS key formats, PEM headers, and our own Fernet ciphertext, which would mean a
+stored credential had escaped Module 7. PII is deliberately **not** blocked: this is an internal
+staff tool and staff legitimately need a customer's email address.
+
+**Probing it found a live defect in yesterday's work.** `credential_service.resolve` asked for
+`APP_ENV` verbatim — `development` on every developer machine — while the credentials UI offers only
+`local`, `staging` and `production`. **No row it could create was a row `resolve` would ever look
+for**, so every credential consumer silently found nothing in development and the symptom was
+indistinguishable from having configured nothing: the assistant reported itself off with a key
+sitting in the database. One mapping function, and a regression test, because nothing raised and
+nothing logged.
+
+**Checked, not assumed:** 436 backend tests (16 new here); three live probes — 35 assertions on the
+data path, 22 on the full chat pipeline using a deliberately invalid key, so the SDK really called
+Anthropic and really got a 401 and the failure surfaced as a 502 that says nothing about the key. The
+migration round-trips. `tsc` clean, lint unchanged at 20 pre-existing errors, none in a file touched
+today.
+
+> **The model call itself has never succeeded**, because no valid key exists here. Everything up to
+> and including the network request is proven; what a real answer looks like, whether the prompt
+> produces good tool choices, and how the widget renders a long reply are not.
+
+---
+
+## August 12, 2026 — The three half-finished modules are finished, and the tracker was wrong about all three
+
+**The Activity Log, Roles and Users each had a list of gaps against LeapDesk that had been open
+since the parity plan was written on 4 August.** They are closed. Measuring them first was worth
+more than the closing: the tracker said Roles and Users were "not started" when both were nearly
+complete, and said the Activity Log was untouched when its `hide_system` filter already worked. Two
+of the eleven listed gaps turned out to have been built by someone and never ticked off.
+
+**The audit trail can now tell a person from a script.** Every row written from here on carries a
+`source` — `web`, `seeder` or `command` — and a CLI row additionally records which command ran, as
+which OS user, on which host, because a CLI row has no causer and that was previously its only
+attribution: none. The reference's `tinker` and `job` sources are deliberately **not** offered; we
+have no REPL attached to the app and no queue at all, and a filter option that can never match a row
+teaches the reader something false about what has been happening. Rows written before today carry no
+source and match **no** value, rather than being quietly counted as web traffic.
+
+**A non-admin now sees only the rows they caused — in the list and in the export.** This changes
+nothing today and that is the point: `activity-view` is held by three roles, all of which have admin
+access, so the sandbox is unreachable. It is wired now so that granting the permission to a fourth
+role is not silently a decision to hand over the whole organisation's audit trail. The export was
+the half that mattered — an unscoped download is the way around a scoped list, and it hands over the
+file rather than one page. The filter dropdowns are scoped the same way, so a sandboxed reader is
+not handed the staff directory in a "who did it" menu that would return nothing for everyone but
+themselves.
+
+**Search reaches the person, the record links to its page, and the trail sorts.** Searching now
+matches the causer's name and email, because "show me everything Ayush did" is what people type.
+Each row links through to the record it happened to, from a route map the server owns — the client
+building those URLs would need a second copy of it, and a renamed route would then produce a link to
+nowhere instead of no link. Types with no page, like `Partner`, get no link, which is the honest
+answer. And the oldest-first toggle that `MODULE_PARITY_PLAN.md` § 3 left as an open question now
+exists: reading an incident forward is the case that argues for it, and `id` stays the tiebreak so
+the ordering is still total.
+
+**`role-permissions` became a route, and doing so exposed a switch wired to nothing.** It was the
+one permission of the forty-nine enforced as a conditional field check inside an update rather than
+declared on a route, so it appeared nowhere in the API contract — `VERSION_SUMMARY.md`'s whole
+argument for declarative gating is that an ungated route is obvious in review, and a rule you cannot
+see is a rule a reviewer must already know to look for. Routing all three writers through one place
+turned up the real finding: `security.audit.permission_changes` had been in the registry since
+Configuration shipped, its code comment claiming "already true of our behaviour — `rbac_service`
+records every grant change". **Nothing read the key and nothing wrote the entry.** The most
+security-relevant change an RBAC system can undergo was the one change the trail did not record. It
+does now, by permission *name* rather than id, because an audit row is read by a person and
+`[3, 17, 41]` is not evidence of anything a year later.
+
+**Ad-hoc emails can carry attachments, and the validator does not trust the browser.** PDF, Word,
+Excel and images, matching the reference's allowlist exactly — but checked by magic bytes, so an
+executable renamed `invoice.pdf` is refused. Three limits are ours and not the reference's: a cap on
+the number of files and on their total size, because capping each file at 25 MB and saying nothing
+about how many is two hundred files and five gigabytes; and the byte check itself. Filenames are
+stripped of paths and quotes before they reach a mail header. The sender's copy became a real `Bcc`
+rather than a second send, which had been arriving without the attachments — a misleading record of
+what was sent. **The audit row names the files but stores neither the body nor their contents**:
+"what was sent to this person" is answerable, "what did it say" deliberately is not.
+
+**Deleting a user crashed, and linting the tree is what found it.** `user_service.delete_user` calls
+`recycle_bin_service.soft_delete` and the module was never imported — a `NameError` on every delete,
+single or bulk, since the Recycle Bin shipped yesterday. Typecheck cannot see it, no test covered
+it, and the Users index would have raised a 500 on the first click. One line. The lesson is the same
+one as yesterday's: the tooling that was green all day was not looking at this.
+
+**Checked, not assumed:** 369 backend tests pass (48 new); two live probes against the running
+database — 23 assertions on the trail's scoping, source filter and links, 21 on the attachment path
+end to end, including that a refused file writes no audit row and sends nothing. `tsc` is clean.
+Whole-tree lint is 20 errors, unchanged in kind and none of them in a file touched today.
+
+> **Still not clicked in a browser.** Yesterday's caveat stands and now covers a file picker, a new
+> filter row and a linked column — all of which are exactly the kind of thing that renders wrong
+> rather than failing loudly.
+
+---
+
 ## August 11, 2026 — Day in review: nine modules, and what the browser caught that the tooling did not
 
 **Seventeen entries below, so this is the map.** Read this, then whichever one you need.
