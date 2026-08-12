@@ -107,7 +107,18 @@ layout spec in `UI_PATTERNS.md` explicitly requires *"sticky thead (top-0 z-10, 
 
 Pre-existing and unrelated to the colour change — it reads the same on either background.
 
-- [ ] Give the header an opaque fill that matches the new green card.
+- [x] **Does not reproduce — measured 2026-08-12, and the item is closed.**
+
+> Scrolled the Users table in headless Chrome 147 and captured the header band at 3× with and
+> without a fix applied. **The two images are identical**: rows are correctly clipped at the
+> header's bottom edge and nothing paints through. The `<thead>` is indeed transparent, but the
+> header `<tr>` carries an opaque `rgb(36,105,92)` and this engine paints it while stuck.
+>
+> `bg-inherit` was added to `TableHead` anyway — it makes the cell itself opaque, which is what
+> `UI_PATTERNS.md` actually asks for, and it costs nothing. But it fixed no observable defect, and
+> saying otherwise would have been a fix in a commit message and nothing on screen. **Do not spend
+> time here again without reproducing it first** — and if it ever does appear, it will be in an
+> engine that does not paint a stuck row, which is the case `bg-inherit` already covers.
 
 ---
 

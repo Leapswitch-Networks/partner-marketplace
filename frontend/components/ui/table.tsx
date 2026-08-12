@@ -95,7 +95,23 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
         // overriding it at 2xl (it was `text-[0.9375rem]`, 15px against the
         // cells' 14px). The header is distinguished by weight — the vendor row
         // sets `[&>th]:font-bold` — not by being a size of its own.
-        "text-muted-foreground h-10 px-3 text-left align-middle font-medium whitespace-nowrap border-b border-border/60 2xl:h-11 2xl:px-3.5 [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
+        // ⚠️ `bg-inherit` is load-bearing, not decoration. The header is
+        // `position: sticky` and its fill is set on the `<tr>` — but **a table
+        // section that is stuck does not paint its own background** in several
+        // engines, and neither does its row. Measured on 2026-08-12 by scrolling
+        // the Users table in headless Chrome: the second row rendered straight
+        // through the header, badges and all, which reads as a rendering fault
+        // rather than a style choice.
+        //
+        // `UI_PATTERNS.md` § Full-Page Index Layout has required "sticky thead
+        // (top-0 z-10, **opaque bg**)" all along, and `common/DataTable.tsx`
+        // fixed it the same way — but on the *other* table, and every module
+        // moved to this one on 2026-08-11.
+        //
+        // Inheriting rather than naming a colour keeps the fill wherever the
+        // consumer put it: this file does not need to know that the row is
+        // `bg-brand`, and a future theme that changes it stays correct.
+        "bg-inherit text-muted-foreground h-10 px-3 text-left align-middle font-medium whitespace-nowrap border-b border-border/60 2xl:h-11 2xl:px-3.5 [&:has([role=checkbox])]:pr-0 [&>[role=checkbox]]:translate-y-[2px]",
         className
       )}
       {...props}
