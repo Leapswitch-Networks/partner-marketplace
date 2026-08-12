@@ -31,6 +31,23 @@ jobs:
     defaults:
       run:
         working-directory: backend
+    # Added 2026-08-12 with the first `db`-marked tests. Postgres 16 to match
+    # docker-compose: a suite that proves route enforcement against a different
+    # major version is proving it somewhere nobody runs.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
 
@@ -55,12 +72,28 @@ jobs:
       # the first green build. That is a decision for its own commit, not a side
       # effect of turning CI on. See the note at the end of backend/pyproject.toml.
 
-      # No `services: postgres` block, deliberately. The suite is pure logic today
-      # and `create_engine` opens no socket, so a database would be 30 seconds of
-      # startup per run buying nothing. Add it in the same change as the first test
-      # that needs it — the `db` marker already exists to select those.
+      # The `db`-marked tests arrived on 2026-08-12 (`test_route_enforcement.py`),
+      # so the postgres service this comment said to add "in the same change as
+      # the first test that needs it" is in the job's `services` block above.
+      #
+      # They are what `DEPLOYMENT.md` § 0 blocker 2 asks for and the pure-logic
+      # suite could not give: **RBAC enforcement across every route**, a login
+      # round trip, and the migration chain. The first walks the application's
+      # own route table rather than a hand-kept list, so a route added next week
+      # is covered the moment it exists.
+      - name: Migrate the test database
+        env:
+          DATABASE_URL: postgresql+psycopg2://ci:ci@localhost:5432/ci
+          SECRET_KEY: ci-only-key-with-enough-distinct-characters-8vRqM3
+          APP_ENV: development
+        run: alembic upgrade head
+
       - name: Test
-        run: pytest -m "not db"
+        env:
+          DATABASE_URL: postgresql+psycopg2://ci:ci@localhost:5432/ci
+          SECRET_KEY: ci-only-key-with-enough-distinct-characters-8vRqM3
+          APP_ENV: development
+        run: pytest
 
       # The committed OpenAPI document is the source of the frontend's types (PM-42),
       # so a stale one means the frontend is typed against yesterday's API — which

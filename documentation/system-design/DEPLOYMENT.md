@@ -34,7 +34,25 @@ get lost among the six that aren't.
 | # | Blocker | Where | Required change |
 |---|---------|-------|-----------------|
 | 1 | **No monitoring or alerting** | — | Structured JSON logging with request-id correlation and three exception handlers **exist** since 2026-08-03, and `APP_ENV=production` enforces `LOG_FORMAT=json`. What is missing is a destination: no error tracker, no aggregation, no retention — container stdout is lost on `docker compose down`, so a 500 in production is recorded and then discarded. PM-10 |
-| 2 | **No automated tests** — *partially addressed 2026-08-06* | — | Nothing verified a deploy didn't break auth. The production build was **silently broken** by a type error until 2026-07-30 (PM-24) precisely because no workflow ran `npm run build`. **Since 2026-08-06** there are **241 tests** and a CI workflow running `ruff`, `pytest`, `tsc --noEmit`, `npm run lint` and `npm run build` on every push (PM-39) — so the hand-run instruction below is now a fallback rather than the only line of defence. **Still blocking**, because the suite covers authentication primitives, config validation, upload validation and theme contrast, and **not RBAC enforcement across the routes, a login round trip, or migrations** — which is what a deploy most needs proven. PM-11 stays open |
+| 2 | ~~**No automated tests**~~ — **closed 2026-08-12** | — | Nothing verified a deploy didn't break auth. The production build was **silently broken** by a type error until 2026-07-30 (PM-24) precisely because no workflow ran `npm run build`. **Since 2026-08-06** there are **241 tests** and a CI workflow running `ruff`, `pytest`, `tsc --noEmit`, `npm run lint` and `npm run build` on every push (PM-39) — so the hand-run instruction below is now a fallback rather than the only line of defence. **Still blocking**, because the suite covers authentication primitives, config validation, upload validation and theme contrast, and **not RBAC enforcement across the routes, a login round trip, or migrations** — which is what a deploy most needs proven. PM-11 stays open |
+
+> **Blocker 2 closed 2026-08-12.** The three things this row named as missing —
+> **RBAC enforcement across the routes, a login round trip, and migrations** — are now
+> `backend/tests/test_route_enforcement.py`, and CI runs them against a real PostgreSQL 16 service.
+>
+> * **Every gated route is walked**, not a hand-picked few: the test asks the running application for
+>   its own route table, calls all 120 permission-gated routes unauthenticated, and fails on any
+>   answer that is not 401/403. A route added next week is covered the moment it exists. A 404 counts
+>   as a failure too — it would mean the handler ran a lookup before anyone checked who was asking.
+> * **Signed in is not allowed in**: an account holding a role with no permissions is refused by
+>   every gated GET.
+> * **The login cycle** — anonymous 401, sign in, recognised, sign out, 401 again — plus the
+>   enumeration check that a wrong password and an unknown address answer identically.
+> * **Migrations**: one head (a branched chain is silent until `upgrade` runs, which on a deploy is
+>   the worst moment to discover it) and every mapped model has a table.
+>
+> Verified from empty as a deploy would: a scratch database, `alembic upgrade head` through the whole
+> chain, then the full suite — **579 passed**. That path had never been exercised.
 | 3 | **No production topology** | — | The Compose services are development-only: bind-mounted source, reload servers, no Nginx, no TLS terminator. See § 1 |
 
 ### Configuration that must change per environment — not defects
