@@ -398,6 +398,38 @@ The backend test command installs its own tooling because `pytest` and `ruff` li
 | Rebuild after `package.json` changed | `docker compose up -d --build frontend` |
 | Force a clean node_modules | `docker compose down && docker volume rm partnermarketplace_frontend_node_modules && docker compose up -d --build frontend` |
 
+### The background worker
+
+Four things need to happen on a timer: webhook deliveries whose retry backoff has
+elapsed, expired session rows, API request-log retention, and — if you choose to
+switch it on — audit-log retention.
+
+```bash
+docker compose run --rm backend python -m app.worker --list   # what would run, and how often
+docker compose run --rm backend python -m app.worker --once   # one pass, then exit
+docker compose run --rm backend python -m app.worker          # stay running
+```
+
+**It is not a service in `docker-compose.yml`, deliberately.** That file is a
+protected file and adding a long-running process to everyone's stack is the
+owner's decision, not a side effect of a feature landing. Until then `--once` is
+the useful mode: run it by hand, or from cron.
+
+To make it permanent, the compose service is four lines beside `backend`:
+
+```yaml
+  worker:
+    build: ./backend
+    command: python -m app.worker
+    env_file: [./backend/.env]
+    depends_on: [db]
+```
+
+**`activity-log` is disabled by default and stays that way until someone asks for
+it by name** (`--job activity-log`). How long the audit trail is kept is a policy
+question — legal, contractual, or simply how far back you want to be able to
+answer questions — and starting a worker should not quietly begin deleting it.
+
 ### Changing the ports
 
 The app ports are deliberately **not** the framework defaults — `:3000` and `:8000` are too often
