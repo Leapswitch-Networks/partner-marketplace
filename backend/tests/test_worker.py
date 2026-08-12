@@ -15,6 +15,25 @@ import pytest
 from app.worker import DAY, Job, Worker, build_jobs, run_job
 
 
+@pytest.fixture(autouse=True)
+def _no_run_recording(monkeypatch):
+    """Stop these tests writing to the real `worker_job_runs` table.
+
+    `run_job` records every run so the Module 16 monitor has something to show —
+    which means the fake jobs below (`works`, `explodes`) were landing in the
+    development database and appearing on the Background Jobs screen as failures
+    with "RuntimeError: boom". **Found by looking at the screen**, not by any
+    check: the rows were valid, the tests passed, and the monitor was faithfully
+    reporting junk.
+
+    The recording itself is covered against real rows in the Module 16 probe;
+    what these tests are about is the schedule.
+    """
+    monkeypatch.setattr(
+        "app.worker.worker_service.record_run", lambda *args, **kwargs: None
+    )
+
+
 def at(seconds_ago: int) -> datetime:
     return datetime.now(timezone.utc) - timedelta(seconds=seconds_ago)
 

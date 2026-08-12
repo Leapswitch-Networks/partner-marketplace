@@ -430,6 +430,27 @@ it by name** (`--job activity-log`). How long the audit trail is kept is a polic
 question — legal, contractual, or simply how far back you want to be able to
 answer questions — and starting a worker should not quietly begin deleting it.
 
+### Checking every screen in a real browser
+
+`UI_PATTERNS.md` warned from 2026-08-06 that nothing had been verified on screen
+since the Viho migration, and blamed a missing Chrome-DevTools-Protocol harness.
+This is that harness. It needs Chrome on your host and nothing else — no
+Playwright, no Puppeteer, no browser download.
+
+```bash
+CHECK_EMAIL=root@example.com CHECK_PASSWORD=... \
+  node --experimental-websocket scripts/browser-check.mjs
+```
+
+It signs in, visits all 24 signed-in screens, and fails on any that redirects to
+the login page, renders no sidebar, produces a console error, makes a failing
+request, or comes back with almost no text — **a client-rendered page that throws
+during hydration leaves an empty shell, which is exactly what fetching the HTML
+cannot see.** Screenshots go to `/tmp/pmp-browser-check` unless you set `SHOTS`.
+
+`--experimental-websocket` is only needed on Node 20; 22 and later have the
+WebSocket global as standard.
+
 ### Changing the ports
 
 The app ports are deliberately **not** the framework defaults — `:3000` and `:8000` are too often
