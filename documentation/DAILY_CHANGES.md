@@ -6,6 +6,40 @@
 > Update this file as part of the same change as the code. A task that isn't here is invisible to the
 > next person.
 
+## August 12, 2026 — Every screen opened in a real browser, at last
+
+**The caveat at the bottom of every entry for the past week is closed.**
+`UI_PATTERNS.md` has said since 2026-08-06 that no component had been checked on screen since the
+Viho migration, and each day's writeup repeated it as the largest gap in confidence. The reason given
+was always the same: a missing Chrome-DevTools-Protocol harness.
+
+**Chrome was installed on this machine the whole time.** The harness was the missing part, not the
+browser — and it is 250 lines with no dependencies at all: Node's `WebSocket` speaking CDP to
+headless Chrome. No Playwright, no Puppeteer, nothing downloaded. `scripts/browser-check.mjs`.
+
+It signs in and walks all twenty-four signed-in screens, failing on any that redirects to the login
+page, renders no sidebar, raises a console error, makes a failing request, or comes back with almost
+no text — **that last one is the point**: a client-rendered page that throws during hydration leaves
+an empty shell, which is exactly the failure that fetching the HTML cannot see and the reason a week
+of green typechecks proved nothing about the screens.
+
+**All twenty-four pass**, including every screen built today. The credentials come from the
+environment rather than the file, because this repository is public and a working credential in a
+committed script is a working credential on GitHub.
+
+**And then looking at the screenshots earned it immediately.** The Background Jobs screen — an hour
+old — was showing runs of jobs called `works` and `explodes`, one of them failing with
+"RuntimeError: boom". `run_job` records every run so the monitor has something to report, and pytest
+uses the real `DATABASE_URL`, so **the worker's own schedule tests had been writing fake jobs into
+the development database** and the monitor was faithfully displaying them. Nothing was red: the rows
+were valid, the tests passed, the screen was correct. It took a person looking at a page. Those tests
+patch the recorder now.
+
+> The same lesson as the day's other findings, from a third angle. Typecheck sees types, lint sees
+> patterns, tests see what they were told to look at — **and none of them opens the page.**
+
+---
+
 ## August 12, 2026 — The last blocked module, re-scoped rather than built to its spec
 
 **Module 16 was blocked on "we have no queue", and the plan warned that building it anyway "would

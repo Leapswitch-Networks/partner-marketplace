@@ -849,6 +849,17 @@ Rules:
 
 ## Pending
 
+> **✅ Closed 2026-08-12 — every screen has now been opened in a browser.** The warning below stood
+> from 2026-08-06 and was repeated in every writeup since. `scripts/browser-check.mjs` drives headless
+> Chrome over all twenty-four signed-in screens; all twenty-four render, with no console errors, no
+> failed requests and no empty shells. Run it after any change to a shared component — the whole point
+> of the warning was that a shared piece is a mistake in every page at once.
+>
+> What it does **not** cover, and what still needs eyes: contrast ratios, the exact stripe and hover
+> shades, and how anything looks in light mode. The harness proves a page *renders*; it does not have
+> an opinion about whether it looks right.
+
+
 > **Design-system work still outstanding.** Last audited **2026-08-06**. The Viho migration is complete
 > and § *Known Issues* is accurate — unusually, this file is the least stale of the standards docs. What
 > remains is mostly consistency debt the migration exposed rather than created.
