@@ -6,6 +6,44 @@
 > Update this file as part of the same change as the code. A task that isn't here is invisible to the
 > next person.
 
+## August 12, 2026 — The first parity audit, and the search that found nobody
+
+**Every core module is built; none had been audited.** `CORE_COMPLETION_PLAN.md` § 8.1 is blunt
+about the difference: *"'we built the Users module' and 'our Users module does what LeapDesk's Users
+module does' are different claims and only the second one counts."* This is the first module
+compared screen by screen, with the reference source open beside it — Users, because every other
+index was copied from it, so a divergence there is eight divergences.
+
+**One real defect, and it is the kind only a comparison finds.** LeapDesk's user search matches the
+**role name** — `orWhereHas('roles', …)` in its controller. Ours matched email, first name, last
+name and company. So typing "Admin" into the user search returned **nothing** here and every
+administrator there. Nothing was broken, no test failed, and the feature looked complete. Fixed with
+`roles.any(...)` rather than a join, because a join multiplies a user by their roles and the count
+then lies. Verified against real rows afterwards: "SuperAdmin" finds four people, "Sales" two,
+"BackendDeveloper" two, and a nonsense term still finds none.
+
+**Seven other differences were found and are now registered rather than fixed**, each with its
+reason, in § 1.1: the three HR-chart fields (`level`, `department`, `team_lead_id`) that have no
+column here; our `account_type` filter, which the reference has no equivalent of; and our non-admin
+visibility, which is *stricter* — LeapDesk shows a non-admin the users they created, we show them
+only themselves, because "users I created" leaks across partners the moment there are any.
+
+**One thing I expected to find and did not.** LeapDesk requires `min:8` on an admin-set password and
+our schema declares no `min_length`, which looked like a hole. It is not: `validate_password_strength`
+is wired to `CreateUserRequest` and enforces `PASSWORD_MIN_LENGTH`. Recorded because an audit that
+only reports hits is one that stops being read.
+
+**§ 5 of the plan was itself stale and is corrected.** It described API Credentials, Global Search
+and AI Assistant as "❌ nothing" and permissions as "0 of 14 seeded" — all three shipped yesterday
+and 54 are seeded. The original table is kept collapsed underneath rather than deleted: this is the
+file that warns against trusting the *other* plan's marks, and it had drifted exactly the same way.
+**Third stale tracker in one day.**
+
+> **Users' Show page is not yet compared**, and the other seven modules are not started. The audit
+> is 1 of 8, and calling it more than that would be the same failure this entry is about.
+
+---
+
 ## August 12, 2026 — PM-30 closed: lint blocks CI now, because it can
 
 **`ci.yml` carried `continue-on-error: true` on the lint step with an instruction attached: *"DELETE

@@ -98,6 +98,23 @@ stacked and were merged the same day, so that now matches too.
 | Role badges use our brand tone; theirs hardcodes red/purple/blue per role name | Sanctioned #1 | Visual theme is ours |
 | **Row-action items have no icons**; theirs has a lucide glyph per item | ⚠️ **Genuine gap** | `RowActions` has no icon slot and we have no icon library — these are inline SVGs. Additive work, not yet done. **Not a decision — a to-do** |
 
+#### Registered divergences — Users (audit 2026-08-12)
+
+Found by comparing `UserController::index` and `pages/Users/Form.tsx` against ours, LeapDesk source
+open beside it. **One was a defect and is fixed; the rest are sanctioned and recorded here so they
+cannot drift back into being accidents.**
+
+| Aspect | LeapDesk | Ours | Why |
+|---|---|---|---|
+| Search covers the **role name** | yes | **now yes — was a gap** | Typing "Admin" returned nothing here and every administrator there. Fixed, not registered: a person notices this on their first day |
+| `level`, `department`, `team_lead_id` filters and fields | present | absent | HR-chart columns that do not exist on our `users` table. The parity plan already recommended dropping them for `role-users`; the same reasoning covers the index and the form |
+| `account_type` filter (staff / partner) | none | present | Ours. The reference has no partner/staff split; we do, and it is the most useful filter on the screen |
+| `company_name` searched | no | yes | Follows from the above |
+| Non-admin visibility | users they **created** | **only themselves** | Ours is stricter. There is no team concept and no partner-scoped ownership yet (PM-5); "users I created" would leak accounts across partners the moment there are any |
+| Default sort | `id desc` | `created_at desc`, `id` tiebreak | Same result — newest first — with a total order. `created_at` alone is not unique |
+| Per-page options | 10 · 25 · 50 · 100 | 10 · **15** · 25 · 50 · 100 | Superset. 15 is the default in both |
+| Password on create | required, `min:8`, confirmed | optional, same strength floor | A Google-only account has no password. **Checked during the audit**: `validate_password_strength` is wired to `CreateUserRequest` and enforces `PASSWORD_MIN_LENGTH` |
+
 ### 1.2 What we deliberately do NOT copy
 
 This matters as much as what we do copy. Each of these was measured today:
@@ -371,9 +388,30 @@ already. **Porting it again would be a regression.** Two genuine gaps worth taki
 
 ## 5. Module-by-module — current state → target
 
-Verified against the code and the database today. **Permissions: 0 of 14 seeded** — confirmed by
-querying `permissions`; none of `data-access.*`, `api-credentials.*`, `search.entities.manage`,
-`ai-assistant.*`, `user-email`, `settings-view`, `settings-update` exist.
+> ⚠️ **This table was stale and is corrected below — re-measured 2026-08-12.** It described API
+> Credentials, Global Search and AI Assistant as "❌ nothing" and permissions as "0 of 14 seeded".
+> All three shipped on 2026-08-11 and **54 permissions are seeded**, every route gated (proven by
+> `tests/test_route_enforcement.py`, which walks all 120 gated routes). Left visible rather than
+> deleted: this file warns against trusting the *other* plan's marks, and it had drifted the same
+> way. The lesson is the file's own — measure before you work from a table.
+
+**Measured 2026-08-12.** All eight modules are built. What is *not* done for any of them is the
+§ 8.1 parity audit, which is the thing this plan says decides whether a module is finished.
+
+| # | Module | Built | § 8.1 audit |
+|---|---|---|---|
+| 1 | **Users** | ✅ index, form, show, `user-email` with attachments | 🟡 **Index + Form audited 2026-08-12** — one gap found and fixed. Show not yet compared |
+| 2 | **Roles** | ✅ index, form, show, matrix, clone, role-users, nav-preferences | ⬜ |
+| 3 | **Data Access** | ✅ table, service, screen | ⬜ |
+| 4 | **Activity Log** | ✅ source stamping, filters, labels, links, causer sandbox | ⬜ |
+| 5 | **Invitations** | ✅ backend + admin UI | ⬜ |
+| 6 | **API Credentials** | ✅ 4 tables, Fernet at rest, masked by default | ⬜ |
+| 7 | **Global Search** | ✅ 2 tables, three permission layers | ⬜ |
+| 8 | **AI Assistant** | ✅ 3 tables, 3 tools, read-only connection | ⬜ |
+
+<details>
+<summary>The original table, as written on 2026-08-06 — kept for the record</summary>
+
 
 | # | Module | Backend today | Frontend today | Remaining |
 |---|---|---|---|---|
@@ -385,6 +423,8 @@ querying `permissions`; none of `data-access.*`, `api-credentials.*`, `search.en
 | 6 | **API Credentials** | ❌ nothing | ❌ nothing | Largest. 5 tables, encryption + masking, `CredentialManager` resolution chain, 9 permissions. Gates module 8 |
 | 7 | **Global Search** | ❌ nothing | ❌ nothing | 2 tables, 3 permission layers, 1 permission |
 | 8 | **AI Assistant** | ❌ nothing | ❌ nothing | 3 tables, 2 permissions, 5 security controls. Needs 6 (key storage) + 7 (LocateData) |
+
+</details>
 
 > **Do not trust the ⬜ marks in `LEAPDESK_PARITY_PLAN.md` without re-checking.** That file's Progress
 > block is dated 2026-08-04 and its migration head (`f5a3c81b7d29`) is already stale — the real head

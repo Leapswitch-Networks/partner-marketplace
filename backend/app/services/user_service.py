@@ -19,7 +19,7 @@ from collections.abc import Sequence
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
-from sqlalchemy import Select, select
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.attachments import Attachment
@@ -163,6 +163,29 @@ def list_users(
     if role_id is not None:
         stmt = stmt.where(User.roles.any(Role.id == role_id))
 
+    if search:
+        # Applied here rather than through `ListSpec.searchable`, which matches
+        # columns on `users` alone.
+        #
+        # **The reference searches the role name too** (`UserController::index`,
+        # `orWhereHas('roles', …)`), and the parity audit on 2026-08-12 found we
+        # did not: typing "Admin" into the user search returned nothing here and
+        # every administrator there. That is a difference a person notices on
+        # their first day, so it is closed rather than registered.
+        #
+        # `roles.any(...)` rather than a join: a join multiplies a user by their
+        # roles and the count would then be wrong.
+        like = f"%{search.strip().lower()}%"
+        stmt = stmt.where(
+            or_(
+                func.lower(User.email).like(like),
+                func.lower(User.first_name).like(like),
+                func.lower(User.last_name).like(like),
+                func.lower(User.company_name).like(like),
+                User.roles.any(func.lower(Role.name).like(like)),
+            )
+        )
+
     return run_list(
         db,
         stmt,
@@ -172,7 +195,10 @@ def list_users(
             per_page=per_page,
             sort_by=sort_by,
             sort_order=sort_order,
-            search=search,
+            # Already applied above, with the role name included. Passing it
+            # again would AND the narrower form onto the wider one and drop
+            # every role match.
+            search=None,
         ),
     )
 
