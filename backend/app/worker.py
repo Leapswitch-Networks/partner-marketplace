@@ -61,11 +61,13 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.logging import configure_logging
 from app.db.session import SessionLocal
+from app.models.worker_run import STATUS_FAILED, STATUS_SUCCEEDED
 from app.services import (
     activity_service,
     api_consumer_service,
     session_service,
     webhook_service,
+    worker_service,
 )
 
 logger = logging.getLogger("app.worker")
@@ -118,6 +120,10 @@ def _activity_log(db: Session) -> int:
     return activity_service.purge_older_than(db, settings.ACTIVITY_LOG_RETENTION_DAYS)
 
 
+def _worker_run_history(db: Session) -> int:
+    return worker_service.purge_runs(db)
+
+
 def build_jobs() -> list[Job]:
     """The schedule.
 
@@ -156,6 +162,16 @@ def build_jobs() -> list[Job]:
             ),
         ),
         Job(
+            name="worker-runs",
+            interval_seconds=DAY,
+            run=_worker_run_history,
+            unit="run records removed",
+            description=(
+                "Trims this worker's own run history. Every table that only grows "
+                "needs an answer, including the monitoring one."
+            ),
+        ),
+        Job(
             name="activity-log",
             interval_seconds=DAY,
             run=_activity_log,
@@ -185,7 +201,9 @@ def run_job(job: Job) -> int:
     would build up unnoticed behind a failing retention sweep.
     """
     started = time.monotonic()
+    started_at = datetime.now(timezone.utc)
     db = SessionLocal()
+    count, error = 0, None
     try:
         count = job.run(db)
         duration = int((time.monotonic() - started) * 1000)
@@ -195,13 +213,36 @@ def run_job(job: Job) -> int:
         )
         return count
     except Exception as exc:  # noqa: BLE001 - one job must not stop the worker
+        duration = int((time.monotonic() - started) * 1000)
+        # Type and message for the screen; the traceback goes to the log, which is
+        # where a traceback belongs.
+        error = f"{type(exc).__name__}: {exc}"
         logger.exception(
             "worker job failed", extra={"job": job.name, "error": type(exc).__name__}
         )
         return 0
     finally:
         job.last_run = datetime.now(timezone.utc)
+        # **Recorded whether it succeeded or failed**, because a job that has been
+        # throwing for a week is the single thing the monitor exists to show. Its
+        # own session, opened after this one is closed: the job's session may be in
+        # any state — that is often why we are here.
         db.close()
+        monitor_db = SessionLocal()
+        try:
+            worker_service.record_run(
+                monitor_db,
+                job=job.name,
+                status=STATUS_FAILED if error else STATUS_SUCCEEDED,
+                started_at=started_at,
+                finished_at=job.last_run,
+                duration_ms=int((time.monotonic() - started) * 1000),
+                count=count,
+                unit=job.unit,
+                error=error,
+            )
+        finally:
+            monitor_db.close()
 
 
 class Worker:

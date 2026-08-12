@@ -90,13 +90,23 @@ class TestOneFailingJobDoesNotStopTheRest:
 
 
 class TestTheSchedule:
-    def test_the_four_jobs_are_registered(self):
+    def test_the_registered_jobs_are_the_expected_set(self):
+        """Pinned by name rather than by count. `worker-runs` was added with the
+        monitor in Module 16 — the worker's own run history is a table that only
+        grows, so it needs the same answer every other one got."""
         assert {job.name for job in build_jobs()} == {
             "webhook-retries",
             "expired-sessions",
             "api-request-logs",
+            "worker-runs",
             "activity-log",
         }
+
+    def test_every_job_records_what_it_did(self):
+        """Module 16 reads this table; a job that ran and left no row is a job
+        the monitor cannot report on."""
+        for job in build_jobs():
+            assert job.unit, job.name
 
     def test_webhook_retries_runs_first_and_often(self):
         """Ordered so a slow retention sweep does not delay a delivery: the

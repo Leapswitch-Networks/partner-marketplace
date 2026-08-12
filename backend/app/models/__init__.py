@@ -43,6 +43,7 @@ from app.models.user import User
 from app.models.user_invitation import UserInvitation
 from app.models.user_session import UserSession
 from app.models.webhook import WebhookDelivery, WebhookEndpoint
+from app.models.worker_run import WorkerJobRun
 
 __all__ = [
     # Core identity + RBAC
@@ -90,4 +91,7 @@ __all__ = [
     # not to a person: a webhook is a machine-to-machine arrangement.
     "WebhookEndpoint",
     "WebhookDelivery",
+    # LeapDesk parity — Module 16, re-scoped: a worker is not a queue, so this
+    # records runs rather than a backlog. See the model docstring.
+    "WorkerJobRun",
 ]
