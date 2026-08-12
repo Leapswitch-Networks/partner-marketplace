@@ -8,6 +8,7 @@ import Sidebar, {
   urlForSection,
 } from "@/components/dashboard/Sidebar";
 import TopNav from "@/components/common/TopNav";
+import AssistantWidget from "@/components/dashboard/AssistantWidget";
 
 /**
  * The signed-in chrome: sidebar, top bar, and the content area.
@@ -151,6 +152,15 @@ export default function AppShell({
           </main>
         )}
       </div>
+
+      {/*
+        Mounted here rather than per page, which is what makes the flag in API
+        Credentials show or hide it app-wide at once — the reference makes the
+        same point about its widget. It renders `null` until it has confirmed the
+        integration is on AND the caller holds `ai-assistant-use`, so for most
+        roles this costs one request and nothing on screen.
+      */}
+      <AssistantWidget />
     </>
   );
 }

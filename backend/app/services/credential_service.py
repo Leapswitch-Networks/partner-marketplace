@@ -741,6 +741,37 @@ def reveal_field(
 # --- Resolution chain --------------------------------------------------------
 
 
+#: `APP_ENV` and a credential's `environment` are two different vocabularies, and
+#: nothing said so until 2026-08-12.
+#:
+#: ⚠️ **This was a live defect, found by probing the AI assistant.** `resolve`
+#: asked for `APP_ENV` verbatim — `"development"` on every developer machine —
+#: while `ENVIRONMENTS` offers only `local`, `staging` and `production`, so the
+#: UI could not create a row `resolve` would ever look for. Every credential
+#: consumer silently found nothing in development, and the symptom was
+#: indistinguishable from "no credential configured": the AI assistant reported
+#: itself off with a key sitting in the database.
+#:
+#: Unknown values map to `production` rather than raising: an install with a
+#: bespoke `APP_ENV` should read production credentials, which is the
+#: conservative reading, and a startup crash over a naming mismatch would be a
+#: worse failure than the one being fixed.
+_APP_ENV_TO_CREDENTIAL_ENV = {
+    "development": "local",
+    "dev": "local",
+    "local": "local",
+    "test": "local",
+    "testing": "local",
+    "staging": "staging",
+    "production": "production",
+}
+
+
+def environment_for_app_env(app_env: str) -> str:
+    """Which credential environment an `APP_ENV` reads from."""
+    return _APP_ENV_TO_CREDENTIAL_ENV.get((app_env or "").strip().lower(), "production")
+
+
 def resolve(
     db: Session,
     provider_slug: str,
@@ -755,7 +786,9 @@ def resolve(
 
     The chain, per the reference's `CredentialManager::get`:
 
-    1. The requested environment, defaulting to `APP_ENV`.
+    1. The requested environment, defaulting to whichever one this `APP_ENV`
+       reads from — see `environment_for_app_env`, and note that the two are
+       *not* the same vocabulary.
     2. `CREDENTIALS_FALLBACK_ENV`, when the primary yielded nothing. Intended for
        local development where credential rows drift behind production; unset in
        production, where it is a no-op.
@@ -770,7 +803,9 @@ def resolve(
     """
     from app.core.config import settings
 
-    requested = environment or getattr(settings, "APP_ENV", "production")
+    requested = environment or environment_for_app_env(
+        getattr(settings, "APP_ENV", "production")
+    )
     values = _resolve_for_env(db, provider_slug, requested)
 
     if values is None:
