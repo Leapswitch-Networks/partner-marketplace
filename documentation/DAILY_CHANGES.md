@@ -6,6 +6,48 @@
 > Update this file as part of the same change as the code. A task that isn't here is invisible to the
 > next person.
 
+## August 12, 2026 — The contrast was reasoned about; now it is measured
+
+**`MODULE_PARITY_PLAN.md` § 5 says the table work was *"reasoned about from classes and contrast
+ratios"* and never seen.** `scripts/ui-audit.mjs` stops reasoning and measures: it walks every
+visible text node, climbs the ancestors until it finds something actually painted, and computes the
+WCAG ratio against it. Both themes, plus a 375px pass for the one responsive question that is
+objective — does the page scroll sideways.
+
+**All fifteen pages pass at 375px.** Nothing is unreachable on a phone, which is the single failure
+that would have made the app unusable on the device most people would open it on.
+
+**Contrast found real failures, and the worst was `/settings/profile`: 94 of 326 text nodes in dark
+mode, 95 in light.** The cause is the rule this project already wrote down and never enforced — bare
+`text-gray-*`. `text-gray-500` with no dark override renders at 3.69:1 on the dark surface;
+`text-gray-400` used as a light-mode colour is 2.54:1 on white. Both are under the 4.5:1 AA floor.
+Fifty-two utilities across nine settings and auth components now use the sanctioned pair, and the
+same page **measures zero failures afterwards** — the number moved, which is the only reason to
+believe the change did anything. `placeholder-gray-*` and `disabled:text-gray-*` were left alone:
+those are muted deliberately and WCAG exempts them.
+
+**The Invitations stat cards were colouring the count itself** in `tone-success` (1.84:1 on dark) and
+`tone-warning` (1.47:1 on light) — the least readable thing on a card whose whole job is to show a
+count. A semantic fill is built to sit *behind* white text in a badge, not to be text on a page.
+The number is ink now and the tone moved to a dot beside the label, so the colour coding survives
+carried by a shape rather than a glyph.
+
+**And it caught a claim I had made a few hours earlier that was wrong.**
+`components/admin/ProfileForm.tsx` — which I rewrote this morning, and whose commit message
+described a user typing a new email, pressing Save and being told it worked — **is imported by
+nothing.** The live form is `components/settings/EditProfileForm`, which disables the field
+correctly. The bug was real in that file; the file is dead, so no user could reach it, and the
+commit message said otherwise. The dead component is deleted, and `MODULE_PARITY_PLAN` step 5 had
+been pointing at it too.
+
+> **Two findings are recorded rather than fixed, because both are token changes in
+> `frontend/tailwind.config.ts` — a protected file, and the owner's call.** `tone-danger` (#d22d3d)
+> measures 3.56:1 on the dark surface and 4.35:1 on the light one: below AA in both, and it is the
+> "Protected" badge on Roles, the DELETE badge in the API catalogue, and every danger badge in the
+> app. Fixing it is one hex value; deciding to change a brand colour is not mine.
+
+---
+
 ## August 12, 2026 — Every screen opened in a real browser, at last
 
 **The caveat at the bottom of every entry for the past week is closed.**
