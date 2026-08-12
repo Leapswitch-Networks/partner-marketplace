@@ -55,6 +55,7 @@ from app.core.query import ListParams, ListSpec, run_list
 from app.models.data_access_grant import SCOPE_ALL, DataAccessGrant
 from app.models.user import User
 from app.services import activity_service, recycle_bin_service
+
 LEVEL_VIEW = "view"
 LEVEL_MANAGE = "manage"
 

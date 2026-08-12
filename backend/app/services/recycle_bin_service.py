@@ -32,9 +32,10 @@ matters, listed above, rather than everywhere and then unpick it.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Callable
+from typing import Any
 
 from fastapi import HTTPException, status
 from sqlalchemy import func, select

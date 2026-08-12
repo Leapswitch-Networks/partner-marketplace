@@ -160,3 +160,94 @@ class TestPromptIsRebuiltNotStored:
         # The module states the rule; a stored prompt would go stale on a role
         # change and would sit in a table the assistant can be asked to read.
         assert "not stored" in (prompt.__doc__ or "").lower()
+
+
+@pytest.mark.db
+class TestTheQueryToolRefusesRatherThanExecutes:
+    """The § 8.1 audit's adversarial probe of `database_query`, made permanent.
+
+    `TestTableDenylist` and `TestOperatorAllowlist` above test the *predicates*.
+    This runs the tool itself against a real read-only connection, because the
+    question a reviewer actually has is not "does `is_queryable` return False"
+    but **"what happens when the model is talked into asking for it"** — and the
+    two only agree while every call site remembers to consult the predicate.
+
+    Probed by hand during the audit on 2026-08-12; all eight refused. Written
+    down so the ninth change to this file has to keep it that way.
+    """
+
+    @pytest.fixture
+    def db(self):
+        from app.db.readonly import readonly_session
+
+        with readonly_session() as session:
+            yield session
+
+    def test_the_connection_is_read_only_at_the_database(self, db):
+        """**Not a setting we assert — a refusal Postgres issues.**
+
+        An earlier attempt set this with `SET SESSION CHARACTERISTICS`, which is
+        transactional: the rollback discarded it and the session was read-write
+        while reporting success. It is a libpq startup parameter now, and this
+        asks the server rather than the config.
+        """
+        from sqlalchemy import text
+        from sqlalchemy.exc import InternalError
+
+        assert db.execute(text("show default_transaction_read_only")).scalar() == "on"
+
+        # `WHERE 1=0` matches nothing, so a passing test proves the refusal and a
+        # failing one still cannot damage a row.
+        with pytest.raises(InternalError, match="read-only"):
+            db.execute(text("UPDATE users SET first_name = 'x' WHERE 1=0"))
+
+    @pytest.mark.parametrize(
+        "label,kwargs",
+        [
+            ("statement terminator in the table", {"table": "users; DROP TABLE users--"}),
+            ("a denied table by name", {"table": "api_credential_values"}),
+            ("a denied table by substring", {"table": "user_sessions"}),
+            (
+                "an injected order_by",
+                {"table": "users", "order_by": "id; DELETE FROM users--"},
+            ),
+            (
+                "an injected operator",
+                {
+                    "table": "users",
+                    "where": [{"column": "email", "operator": "= 1 OR 1", "value": "x"}],
+                },
+            ),
+            (
+                "an injected where column",
+                {"table": "users", "where": [{"column": "1=1--", "operator": "=", "value": "x"}]},
+            ),
+        ],
+    )
+    def test_it_returns_an_error_instead_of_running_anything(self, db, label, kwargs):
+        import json
+
+        from app.ai import tools
+
+        payload = json.loads(tools.database_query(**kwargs))
+        assert "error" in payload, f"{label} was not refused: {payload}"
+
+    def test_a_secret_column_asked_for_by_name_still_comes_back_redacted(self, db):
+        """Naming the column is the obvious move, so it is the one to test."""
+        import json
+
+        from app.ai import tools
+
+        payload = json.loads(tools.database_query(table="users", columns=["password", "email"]))
+        assert payload.get("rows"), "no rows came back, so nothing was proven"
+        assert all(row["password"] == tools.REDACTED for row in payload["rows"])
+        # The point of the redaction is that the *rest* of the row still works.
+        assert any(row["email"] for row in payload["rows"])
+
+    def test_an_absurd_limit_is_capped(self, db):
+        import json
+
+        from app.ai import tools
+
+        payload = json.loads(tools.database_query(table="users", limit=100_000))
+        assert payload["count"] <= tools.MAX_LIMIT

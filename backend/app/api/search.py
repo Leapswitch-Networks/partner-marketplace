@@ -95,14 +95,19 @@ def global_search(
     when a proxy is configured to be in front. Reading that header here directly
     would let a caller write any address they liked into `search_logs`.
     """
-    groups, duration_ms = search_service.timed_search(
+    result, duration_ms = search_service.timed_search(
         db,
         actor,
         q,
         per_entity=limit,
         ip=get_client_ip(request),
     )
-    return SearchResponse(q=q.strip(), groups=groups, duration_ms=duration_ms)
+    return SearchResponse(
+        q=q.strip(),
+        groups=result["groups"],
+        hidden_areas=result["hidden_areas"],
+        duration_ms=duration_ms,
+    )
 
 
 # --- The registry ------------------------------------------------------------

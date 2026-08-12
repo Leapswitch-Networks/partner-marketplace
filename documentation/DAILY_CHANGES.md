@@ -6,6 +6,176 @@
 > Update this file as part of the same change as the code. A task that isn't here is invisible to the
 > next person.
 
+## August 12, 2026 — All eight core modules audited; the last one had a guard and no test
+
+**Audit 3 of 8 — Data Access — and with it § 8.1 is complete for the core scope.**
+
+The port is faithful: the same four helpers, the same "no grants means own records only" default, and
+the same asymmetric scope rule, which is the part worth stating because it reads like a bug. A
+wildcard grant answers any question; a grant scoped to one module does **not** answer the unscoped
+one. Checked case by case against the reference's `grantScopeApplies`, all five agree:
+
+```
+grant '*'    requested None    -> True
+grant '*'    requested 'qmas'  -> True
+grant 'qmas' requested 'qmas'  -> True
+grant 'qmas' requested 'other' -> False
+grant 'qmas' requested None    -> False
+```
+
+**Ours refuses something the reference allows, and the refusal fires.** The reference blocks a user
+being granted access to their own records — pointless rather than dangerous. It leaves the shape
+that matters open: set `grantee_id` to your own id, `subject_id` to anyone, `scope='*'`,
+`access_level='manage'`, and one request makes you able to see and write every user's records.
+Probed against live accounts:
+
+```
+grantee == subject   422  a user cannot be granted access to their own records
+grantee == actor     403  you cannot grant data access to yourself
+access_level 'root'  422  must be view or manage
+a -> b, view         allowed, and does not satisfy a manage question
+```
+
+**The gap this audit actually closed was the test file — there wasn't one.** Not one test for the
+module that carries the only guard we hold and the reference doesn't. A guard with no test is a
+guard the next refactor removes with a green suite. Thirteen now cover the scope rule, all three
+`create_grant` refusals, the view-does-not-imply-manage comparison, and the empty default.
+
+**One note on method, since it cost something.** Probing `create_grant` by hand left a real grant in
+the dev database — it commits, so the rollback in my throwaway script did nothing. Found it,
+removed it, and the test fixture cleans up by id rather than by rollback for exactly that reason.
+Same mistake as the worker runs that turned up on the Background Jobs screen last week; the fix is
+the same one.
+
+**§ 8.1 now stands at 8 of 8.** Three defects across the eight: a privilege escalation in
+Invitations, a role-name search gap in Users, and a silent withholding in Global Search — plus the
+Activity Log's missing horizon. The five clean modules were each probed, not read.
+
+## August 12, 2026 — The assistant was attacked rather than read, and it held
+
+**Audit 8 of 8 — AI Assistant.** No defect. Reading it would have said that in a paragraph; the
+module is the most sensitive code in the parity scope, so it was probed instead.
+
+**The gating matches the reference exactly.** `describe_schema` and `database_query` sit behind
+`ai-assistant-query-database`; `locate_data` needs only the right to use the assistant at all,
+because Global Search applies its own three permission layers to every result. Who actually holds
+that permission, read from the live database rather than the seeder:
+
+```
+RootUser · SuperAdmin · BackendDeveloper · Admin   query-database ✓
+Staff · Sales                                      use only — locate_data, row-scoped
+Partner · User                                     no assistant at all
+```
+
+That is the reference's shape: `database_query` does no row scoping by design, so it is admin-only,
+and the roles that are not admins get the tool that scopes itself.
+
+**Eight attacks on `database_query`, all refused.** A statement terminator in the table name, a
+denied table by name and by substring, an injected `order_by`, an injected operator, an injected
+`where` column, a secret column asked for outright, and a limit of 100,000:
+
+```
+users; DROP TABLE users--            not found
+api_credential_values                not accessible
+user_sessions                        not accessible
+id; DELETE FROM users--              unknown order_by column
+= 1 OR 1                             operator not allowed
+1=1--                                unknown column
+columns=[password, email]            password → [redacted], email intact
+limit=100000                         capped
+```
+
+The safety is structural rather than a regex over SQL: the table is checked against a denylist, the
+column against the real column list, the operator against an allowlist, and every value is bound.
+
+**And the read-only guarantee was checked against the server, not the config.** `show
+default_transaction_read_only` returns `on`, and an `UPDATE` is refused by Postgres itself. That
+distinction is not pedantry — an earlier attempt used `SET SESSION CHARACTERISTICS`, which is
+transactional, so the rollback discarded it and the connection was read-write while reporting
+success. Nine tests now hold all of this down.
+
+**Four places where ours is deliberately stricter**, all already documented in the code: the
+assistant's own conversation tables are denied (the reference leaves them readable, which lets
+anyone who can use the assistant ask it to read back what colleagues asked it), `otp` and
+`alembic_version` are denied, column redaction delegates to the same `is_sensitive_column` Global
+Search uses rather than keeping a second list that would drift, and the output guard redacts our own
+Fernet ciphertext — a shape that appearing in a reply would mean a stored credential had escaped.
+
+**All eight core modules have now been through § 8.1**, except Data Access, which the plan's table
+still shows as unaudited and which no entry here evidences — so it stays open rather than being
+marked done on the strength of a memory.
+
+## August 12, 2026 — The audit log now says how far back it goes, and a docstring stopped lying
+
+**Audit 7 of 8 — Activity Log.** The module itself came out well: the causer sandbox, the source
+stamping, the module labels, the subject links, the dropdowns scoped to the reader's own slice and
+the search that reaches the causer's name are all faithful to the reference. Two things were not.
+
+**A sentence in our own code had become false.** `activity_service.purge_older_than` said *"nothing
+calls it on a schedule because there is no scheduler."* True when it was written; untrue since
+`app/worker.py` shipped, which has an `activity-log` job. The substance survived — that job is the
+one deliberate `enabled=False` in the worker, so switching a worker on does not quietly start
+deleting an audit trail — but the docstring told a reader the opposite of the arrangement that now
+exists. Corrected, with the correction dated so nobody has to guess which version is current.
+
+**The screen never said where the trail ends.** The reference publishes a retention number on this
+index. Ours published nothing, and the consequence is the same shape as yesterday's Global Search
+finding: **a trail that stops somewhere looks exactly like a trail with nothing in it.** Someone
+filters to last year, sees an empty table, and concludes the thing never happened.
+
+Ours now reports the window **and something a config value cannot know — whether the purge has ever
+actually run**:
+
+```
+retention_days 730 · purge_ever_ran False · last_purge_at None · rows_removed_last_run 0
+```
+
+That is the honest state of this deployment, and it is the stronger statement: not "we would delete
+after 730 days" but *"nothing has ever been deleted — this trail is complete."* The index says so
+under its title. If the job is ever enabled, the same line switches to naming the last purge and how
+many rows it took, because at that point an absence really does have two explanations.
+
+**Registered divergence — the `via` filter is not ported.** The reference distinguishes `inline` /
+`form` / `api` because it has a DataTable that writes on the spot. Every write here goes through the
+API, so the field would hold one value on every row and filter nothing.
+
+## August 12, 2026 — Global Search told you "no results" when it meant "you weren't allowed to look"
+
+**Audit 6 of 8 — Global Search.** The reference implementation returns, alongside its results, a
+list of the areas it *skipped* because the caller could not see them. The comment above that field
+explains why it exists, and it is the whole finding:
+
+> *"Lets the UI say 'Quotes was not searched' instead of a bare 'No results', which is what hid a
+> broken permission for two months."*
+
+Ours skipped silently. Six places in the search service dropped an entity with a bare `continue`,
+and the response carried only the query, the groups and a duration. So a person whose permission had
+been mis-set typed a name they knew existed, saw **"No results you have access to."**, and concluded
+the record was gone — reproducing precisely the two-month failure the reference documents having
+suffered and then fixed.
+
+Confirmed by probing, not by reading. Same query, two real accounts:
+
+```
+RootUser   groups=['Users', 'Roles']   hidden=[]
+limited    groups=[]                   hidden=['Roles', 'Users']
+```
+
+The second row is the defect: before this change that account received an empty result with nothing
+to distinguish it from a genuinely empty database.
+
+**What changed.** The service now records the label of every area it withholds and returns it as
+`hidden_areas`; the search box renders it beneath the list — *"Roles, Users were not searched — you
+do not have access."* It renders whether or not anything matched, because a partial answer misleads
+just as badly as an empty one: five results and a silently skipped area still reads as complete.
+
+**One caller deliberately does not get it.** The AI assistant's `locate_data` tool keeps the plain
+list of groups. Handing a model the names of the areas it was refused turns a withheld area into a
+suggestion of what to ask about next, which is the opposite of the point.
+
+Four regression tests pin it, including one asserting the permission gate records before it skips —
+the failure mode being a later edit that deletes the recording and leaves the `continue`.
+
 ## August 12, 2026 — The audit found an escalation path: Staff could invite an Admin
 
 **Audit 3 of 8 — Invitations — and this is what the exercise was for.**

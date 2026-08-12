@@ -14,17 +14,17 @@ from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db, require_permission
 from app.core.permissions import ERROR_MANAGE, ERROR_VIEW
+from app.core.query import page_count
 from app.models.error_group import ERROR_STATUSES
 from app.models.user import User
 from app.schemas.auth import MessageResponse
+from app.schemas.common import Page
 from app.schemas.error_tracking import (
     ErrorGroupDetailResponse,
     ErrorGroupResponse,
     ErrorOccurrenceResponse,
     UpdateErrorStatusRequest,
 )
-from app.core.query import page_count
-from app.schemas.common import Page
 from app.services import error_service
 
 router = APIRouter(prefix="/errors", tags=["errors"])

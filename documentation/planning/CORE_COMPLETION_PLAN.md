@@ -446,12 +446,12 @@ already. **Porting it again would be a regression.** Two genuine gaps worth taki
 |---|---|---|---|
 | 1 | **Users** | ✅ index, form, show, `user-email` with attachments | ✅ **audited 2026-08-12** — Index, Form, Show, permissions, edge cases. One gap found and fixed |
 | 2 | **Roles** | ✅ index, form, show, matrix, clone, role-users, nav-preferences | ✅ **audited 2026-08-12** — no defect; five divergences registered, three protections verified live |
-| 3 | **Data Access** | ✅ table, service, screen | ⬜ |
-| 4 | **Activity Log** | ✅ source stamping, filters, labels, links, causer sandbox | ⬜ |
+| 3 | **Data Access** | ✅ table, service, screen | ✅ **audited 2026-08-12** — no defect; ours refuses a self-elevation the reference allows. Had no test file; thirteen added |
+| 4 | **Activity Log** | ✅ source stamping, filters, labels, links, causer sandbox | ✅ **audited 2026-08-12** — the trail did not state its own horizon; a stale docstring corrected; `via` registered as not ported |
 | 5 | **Invitations** | ✅ backend + admin UI | ✅ **audited 2026-08-12** — found and fixed a privilege-escalation path: Staff could invite an Admin |
 | 6 | **API Credentials** | ✅ 4 tables, Fernet at rest, masked by default | ✅ **audited 2026-08-12** — no defect; ours stricter in three places, two features deliberately not ported |
-| 7 | **Global Search** | ✅ 2 tables, three permission layers | ⬜ |
-| 8 | **AI Assistant** | ✅ 3 tables, 3 tools, read-only connection | ⬜ |
+| 7 | **Global Search** | ✅ 2 tables, three permission layers | ✅ **audited 2026-08-12** — found and fixed a silent withholding: a permission-blocked area was indistinguishable from an empty result |
+| 8 | **AI Assistant** | ✅ 3 tables, 3 tools, read-only connection | ✅ **audited 2026-08-12** — no defect; eight injection attempts refused, read-only proven at the server, ours stricter in four places |
 
 <details>
 <summary>The original table, as written on 2026-08-06 — kept for the record</summary>
@@ -616,7 +616,7 @@ Before marking any module complete, with LeapDesk's version of the screen **open
 
 The core is complete when **all** of these hold:
 
-- [ ] All 8 modules pass their § 8.1 parity audit
+- [x] All 8 modules pass their § 8.1 parity audit — completed 2026-08-12
 - [ ] All 8 modules exist with Index, Form (create+update) and Show, on the § 2.3 routes
 - [ ] Every list endpoint goes through the § 3.1 pipeline — no hand-rolled filter chains remain
 - [ ] Every index page is built from `ResourceIndex` — none approaches LeapDesk's 936 lines

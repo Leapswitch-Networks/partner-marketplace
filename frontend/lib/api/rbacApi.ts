@@ -147,12 +147,28 @@ export interface FilterOption {
   label: string;
 }
 
+/**
+ * How far back the trail actually goes. **`purge_ever_ran` is the field that
+ * matters** — false means nothing has ever been deleted, so the configured
+ * window is theoretical and an empty old date range means "it did not happen"
+ * rather than "it was removed". The reference publishes only the static number,
+ * which cannot tell those apart.
+ */
+export interface RetentionStatus {
+  retention_days: number;
+  purge_ever_ran: boolean;
+  last_purge_at: string | null;
+  rows_removed_last_run: number;
+}
+
 export interface ActivityFilterOptions {
   events: FilterOption[];
   log_names: FilterOption[];
   subject_types: FilterOption[];
   causers: FilterOption[];
   sources: FilterOption[];
+  /** Not a filter — context for reading the result. */
+  retention: RetentionStatus;
 }
 
 /**

@@ -90,7 +90,7 @@ def coerce(setting_type: SettingType, value: Any) -> Any:
     if setting_type in ("string", "text"):
         if value is None:
             return None
-        if not isinstance(value, (str, int, float)):
+        if not isinstance(value, str | int | float):
             raise SettingValueError("Expected text.")
         text = str(value)
         limit = STRING_MAX if setting_type == "string" else TEXT_MAX
@@ -102,7 +102,7 @@ def coerce(setting_type: SettingType, value: Any) -> Any:
         # LeapDesk validates `array`, which in PHP covers both a list and a map.
         # Both are allowed here for the same reason: an allowlist is a list, a
         # per-environment override is a map, and both are real settings.
-        if isinstance(value, (list, dict)):
+        if isinstance(value, list | dict):
             return value
         raise SettingValueError("Expected a JSON object or array.")
 

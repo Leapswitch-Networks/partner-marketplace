@@ -29,6 +29,14 @@ export interface SearchGroup {
 export interface SearchResponse {
   q: string;
   groups: SearchGroup[];
+  /**
+   * Record types the caller may not search, by label — **the reason an empty
+   * result is not the same as an absent record.** Rendered as "Partners was not
+   * searched" beneath the list, because a bare "No results" is what let a broken
+   * permission sit unnoticed in the reference implementation for two months.
+   * Empty for a reader who may see everything.
+   */
+  hidden_areas: string[];
   duration_ms: number;
 }
 

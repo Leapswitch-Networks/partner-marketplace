@@ -733,14 +733,55 @@ def count_purgeable(db: Session, days: int) -> int:
     ) or 0
 
 
+def retention_status(db: Session) -> dict:
+    """What the trail's horizon actually is — **as observed, not as configured.**
+
+    The reference puts a static `retentionDays` on the index. A number from a
+    config file answers the wrong question: it says what *would* be deleted, and
+    a reader wants to know whether anything *was*. A trail that silently ends
+    somewhere is the audit-log version of the finding in Global Search — an
+    absence that looks like evidence.
+
+    So this reports the configured window **and** the last time the purge job
+    actually completed. `purge_ever_ran` false means every row ever written is
+    still here and the window is theoretical, which is the state this project is
+    in by default and the honest thing to tell someone reading an audit.
+    """
+    # Imported here rather than at module scope: the audit trail is written from
+    # everywhere, and a top-level import of the worker's model would put the
+    # monitoring table on the import path of every request that logs anything.
+    from app.core.config import settings
+    from app.models.worker_run import STATUS_SUCCEEDED, WorkerJobRun
+
+    last = db.scalars(
+        select(WorkerJobRun)
+        .where(WorkerJobRun.job == "activity-log", WorkerJobRun.status == STATUS_SUCCEEDED)
+        .order_by(WorkerJobRun.started_at.desc())
+        .limit(1)
+    ).first()
+    return {
+        "retention_days": settings.ACTIVITY_LOG_RETENTION_DAYS,
+        "purge_ever_ran": last is not None,
+        "last_purge_at": last.finished_at or last.started_at if last else None,
+        "rows_removed_last_run": last.count if last else 0,
+    }
+
+
 def purge_older_than(db: Session, days: int) -> int:
     """Delete audit rows older than `days`. Returns how many were removed.
 
-    **Not wired to anything, and that is deliberate.** How long who-did-what is kept
-    is a policy decision — legal, contractual, or simply "how far back do we want to
-    be able to answer questions?" — and it is not this function's place to pick a
-    number. `ACTIVITY_LOG_RETENTION_DAYS` exists as a default for whoever runs this,
-    and nothing calls it on a schedule because there is no scheduler.
+    **Called only by a job that is off unless someone switches it on.** How long
+    who-did-what is kept is a policy decision — legal, contractual, or simply "how
+    far back do we want to be able to answer questions?" — and it is not this
+    function's place to pick a number. `ACTIVITY_LOG_RETENTION_DAYS` exists as a
+    default for whoever runs it.
+
+    This paragraph used to end *"nothing calls it on a schedule because there is
+    no scheduler"*. That stopped being true when `app/worker.py` shipped: there
+    is a scheduler, and `activity-log` is one of its jobs. What remains true is
+    the substance — that job is the one deliberate `enabled=False` in the file,
+    so switching a worker on does not quietly start deleting an audit trail.
+    Corrected by the § 8.1 audit, 2026-08-12.
 
     Refuses a non-positive value rather than treating it as "everything": a stray
     `0` from a config file should not silently destroy the entire trail.

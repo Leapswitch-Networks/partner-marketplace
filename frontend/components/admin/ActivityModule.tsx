@@ -74,6 +74,15 @@ const NO_OPTIONS: ActivityFilterOptions = {
   subject_types: [],
   causers: [],
   sources: [],
+  // Until the real answer arrives, claim nothing: a horizon of 0 days that had
+  // "never purged" attached would still render a sentence, and a sentence about
+  // an audit trail's completeness must not be a placeholder.
+  retention: {
+    retention_days: 0,
+    purge_ever_ran: false,
+    last_purge_at: null,
+    rows_removed_last_run: 0,
+  },
 };
 
 export default function ActivityModule() {
@@ -277,6 +286,29 @@ export default function ActivityModule() {
     [modal.open]
   );
 
+  /**
+   * **Why an audit index states its own horizon.**
+   *
+   * A trail that ends somewhere looks identical to a trail with nothing in it:
+   * a reader filters to last year, sees an empty table, and concludes the thing
+   * did not happen. The reference publishes a static retention number for this
+   * reason. Ours adds the part a config value cannot know — whether the purge
+   * has ever actually run — because that is what decides which of the two an
+   * empty result means.
+   *
+   * Empty string until the real numbers arrive, so nothing is claimed on a
+   * placeholder.
+   */
+  const retentionNote = useMemo(() => {
+    const r = options.retention;
+    if (!r.retention_days) return "";
+    if (!r.purge_ever_ran) {
+      return `Kept ${r.retention_days} days by policy, but nothing has ever been deleted — this trail is complete.`;
+    }
+    const when = r.last_purge_at ? formatDateTime(r.last_purge_at) : "an earlier run";
+    return `Rows older than ${r.retention_days} days are removed. Last purge ${when} removed ${r.rows_removed_last_run.toLocaleString()}.`;
+  }, [options.retention]);
+
   return (
     <ResourceIndex<ActivityEntry, typeof q.filters>
       icon={navIcon("activity")}
@@ -284,7 +316,7 @@ export default function ActivityModule() {
       // The count moved out of here to the pager, which already says
       // "1–25 of 137" and does not go stale between fetches — same change Users
       // made. What is left is the sentence that says what the page is *for*.
-      description="Every recorded action — read-only"
+      description={`Every recorded action — read-only.${retentionNote ? ` ${retentionNote}` : ""}`}
       query={q}
       filters={[
         {

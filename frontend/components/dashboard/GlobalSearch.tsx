@@ -57,10 +57,11 @@ export default function GlobalSearch({
    * booleans it replaces could disagree with each other while a request was in
    * flight.
    */
-  const [result, setResult] = useState<{ q: string; groups: SearchGroup[] }>({
-    q: "",
-    groups: [],
-  });
+  const [result, setResult] = useState<{
+    q: string;
+    groups: SearchGroup[];
+    hiddenAreas: string[];
+  }>({ q: "", groups: [], hiddenAreas: [] });
   const [active, setActive] = useState(0);
   const [coords, setCoords] = useState({ top: 0, left: 0, width: 0 });
 
@@ -88,6 +89,15 @@ export default function GlobalSearch({
   );
   const loading = !tooShort && result.q !== term;
 
+  /**
+   * Same derivation as `groups`: below the floor nothing was searched, so
+   * naming areas as "not searched" would be false.
+   */
+  const hiddenAreas = useMemo(
+    () => (tooShort ? [] : result.hiddenAreas),
+    [tooShort, result.hiddenAreas]
+  );
+
   useEffect(() => {
     // No `setState` in the effect body. Under the floor there is simply nothing
     // to do: `groups` already derives to `[]`, and bumping the sequence
@@ -103,7 +113,11 @@ export default function GlobalSearch({
       .query(term)
       .then((res) => {
         if (mine !== seq.current) return; // a newer keystroke already won
-        setResult({ q: term, groups: res.data.groups });
+        setResult({
+          q: term,
+          groups: res.data.groups,
+          hiddenAreas: res.data.hidden_areas ?? [],
+        });
         setActive(0);
       })
       .catch(() => {
@@ -112,7 +126,7 @@ export default function GlobalSearch({
         // the chrome. The box is not the place to report an outage, and the
         // next keystroke retries anyway. Recording `q` is what stops `loading`
         // hanging true forever after a failure.
-        setResult({ q: term, groups: [] });
+        setResult({ q: term, groups: [], hiddenAreas: [] });
       });
   }, [term, tooShort]);
 
@@ -145,7 +159,7 @@ export default function GlobalSearch({
     setQuery("");
     // Reset to the empty result rather than clearing a separate `groups` state,
     // so the next open does not flash the previous search's hits.
-    setResult({ q: "", groups: [] });
+    setResult({ q: "", groups: [], hiddenAreas: [] });
     router.push(hit.url);
   };
 
@@ -302,6 +316,23 @@ export default function GlobalSearch({
                     })}
                   </div>
                 ))
+              )}
+
+              {/*
+                **Outside the empty/loading branch on purpose.** A withheld area
+                misleads just as badly when something *did* match: five partners
+                and a silently skipped Quotes reads as a complete answer. It
+                renders whenever anything was withheld, results or not.
+              */}
+              {hiddenAreas.length > 0 && !tooShort && (
+                <p
+                  className="border-t border-surface-border px-3 py-2 text-xs text-ink-label dark:border-night-border dark:text-night-muted"
+                  role="note"
+                >
+                  {hiddenAreas.join(", ")}{" "}
+                  {hiddenAreas.length === 1 ? "was" : "were"} not searched — you
+                  do not have access.
+                </p>
               )}
             </div>
           </>,

@@ -50,6 +50,12 @@ class SearchGroup(BaseModel):
 class SearchResponse(BaseModel):
     q: str
     groups: list[SearchGroup]
+    #: Record types the caller may not search, by label. **Returned so the box
+    #: can say "Partners was not searched" rather than "No results"** — the
+    #: reference's own comment says that distinction is what hid a broken
+    #: permission from it for two months. Empty for a reader who may see
+    #: everything, which is the common case.
+    hidden_areas: list[str] = []
     duration_ms: int
 
 

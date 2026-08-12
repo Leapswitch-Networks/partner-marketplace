@@ -325,3 +325,60 @@ def test_the_minimum_query_length_is_two():
     configured entity.
     """
     assert MIN_QUERY_LENGTH == 2
+
+
+class TestAWithheldAreaIsNamedRatherThanSkipped:
+    """A permission-filtered search must say what it did not look at.
+
+    Found by the parity audit on 2026-08-12. The reference returns `hidden_areas`
+    and its own comment explains why: it lets the UI say *"Quotes was not
+    searched"* instead of a bare "No results", **"which is what hid a broken
+    permission for two months"**.
+
+    Ours skipped with a bare `continue` at every gate, so a reader could not tell
+    "nothing matched" from "you were not allowed to look" — the exact condition
+    the reference documents having suffered. These tests pin the distinction so
+    a later refactor cannot quietly restore the silence.
+    """
+
+    def test_search_detailed_returns_both_halves(self):
+        from app.services import search_service
+
+        assert hasattr(search_service, "search_detailed")
+
+    def test_a_query_under_the_floor_names_nothing(self):
+        """Below the floor no entity was consulted, so calling one "not
+        searched" would be a false statement, not a cautious one."""
+        from app.services import search_service
+
+        result = search_service.search_detailed(None, None, "a")
+        assert result == {"groups": [], "hidden_areas": []}
+
+    def test_search_still_returns_a_bare_list(self):
+        """`ai/tools.locate_data` and the entity health screen call `search`.
+
+        Handing the model a list of areas it was refused would turn a withheld
+        area into a suggestion of what to ask about next, which is backwards.
+        """
+        import inspect
+
+        from app.services import search_service
+
+        source = inspect.getsource(search_service.search)
+        assert '["groups"]' in source, "search must project the groups out"
+
+    def test_the_permission_gate_records_before_it_skips(self):
+        """The L1 gate is the one that hides a whole area.
+
+        Asserted against the source because reaching it needs a database and a
+        role with a hole in it; the failure this guards against is someone
+        deleting the `hidden.append` and leaving the `continue`.
+        """
+        import inspect
+
+        from app.services import search_service
+
+        source = inspect.getsource(search_service.search_detailed)
+        gate = source.index("actor.has_permission(entity.permission)")
+        after = source[gate : gate + 600]
+        assert "hidden.append" in after, "the entity gate skips without recording"

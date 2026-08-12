@@ -37,6 +37,22 @@ class FilterOption(BaseModel):
     label: str
 
 
+class RetentionStatus(BaseModel):
+    """How far back the trail actually goes.
+
+    The reference publishes a static `retentionDays` on this screen. Ours reports
+    the configured window **and whether the purge has ever run**, because those
+    answer different questions and only the second one changes how you read an
+    empty result for an old date range.
+    """
+
+    retention_days: int
+    #: False means nothing has ever been deleted and the window is theoretical.
+    purge_ever_ran: bool
+    last_purge_at: datetime | None
+    rows_removed_last_run: int
+
+
 class ActivityFilterOptions(BaseModel):
     """Everything the filter row needs, in one request instead of four."""
 
@@ -45,6 +61,10 @@ class ActivityFilterOptions(BaseModel):
     subject_types: list[FilterOption]
     causers: list[FilterOption]
     sources: list[FilterOption]
+    #: Not a filter — context for reading the result. Returned here because this
+    #: is already the index's one metadata call, and a second round trip to say
+    #: "nothing has been deleted" would not earn its request.
+    retention: RetentionStatus
 
 
 class ActivityEntry(BaseModel):
@@ -260,7 +280,10 @@ def list_filter_options(
     Scoped by the reader, so the options can never describe rows they cannot see.
     """
     return ActivityFilterOptions.model_validate(
-        activity_service.filter_options(db, actor=actor)
+        {
+            **activity_service.filter_options(db, actor=actor),
+            "retention": activity_service.retention_status(db),
+        }
     )
 
 

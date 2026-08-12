@@ -63,6 +63,7 @@ from app.models.role import Role
 from app.models.searchable_entity import SearchableEntity, SearchLog
 from app.models.user import User
 from app.services import activity_service, recycle_bin_service
+
 logger = logging.getLogger("app.search")
 
 EVENT_ENTITY_CREATED = "search_entity_created"
@@ -324,19 +325,32 @@ def enabled_entities(db: Session) -> list[SearchableEntity]:
 def search(
     db: Session, actor: User, query: str, per_entity: int = DEFAULT_PER_ENTITY
 ) -> list[dict]:
-    """Grouped, permission-filtered, row-scoped results.
+    """The groups alone — for callers that cannot act on a hidden area.
+
+    `ai/tools.locate_data` is one: telling the model which areas were withheld
+    would hand it a list of things to ask about, which is the opposite of what
+    the withholding is for.
+    """
+    return search_detailed(db, actor, query, per_entity)["groups"]
+
+
+def search_detailed(
+    db: Session, actor: User, query: str, per_entity: int = DEFAULT_PER_ENTITY
+) -> dict:
+    """Grouped, permission-filtered, row-scoped results **plus what was withheld**.
 
     Returns `[]` for a query under `MIN_QUERY_LENGTH`, before touching the
     database or the registry.
     """
     query = (query or "").strip()
     if len(query) < MIN_QUERY_LENGTH:
-        return []
+        return {"groups": [], "hidden_areas": []}
 
     per_entity = max(1, min(per_entity, MAX_PER_ENTITY))
     term = f"%{query.lower()}%"
 
     groups: list[dict] = []
+    hidden: list[str] = []
     total = 0
 
     for entity in enabled_entities(db):
@@ -347,6 +361,13 @@ def search(
         # `has_permission` returns True for super admins, which is the
         # reference's bypass without a second branch.
         if entity.permission and not actor.has_permission(entity.permission):
+            # **Recorded, not merely skipped.** The reference returns these as
+            # `hidden_areas` so the UI can say "Quotes was not searched" instead
+            # of a bare "No results" — and its comment says that distinction is
+            # "what hid a broken permission for two months". Ours skipped
+            # silently, which reproduces exactly that condition: a reader cannot
+            # tell "nothing matched" from "you were not allowed to look".
+            hidden.append(entity.label)
             continue
 
         # --- L2: model allowlist ---------------------------------------------
@@ -431,7 +452,7 @@ def search(
                 }
             )
 
-    return groups
+    return {"groups": groups, "hidden_areas": sorted(set(hidden))}
 
 
 def log_search(
@@ -476,10 +497,14 @@ def timed_search(
     query: str,
     per_entity: int,
     ip: str | None,
-) -> tuple[list[dict], int]:
-    """Run a search, log it, and return `(groups, duration_ms)`."""
+) -> tuple[dict, int]:
+    """Run a search, log it, and return `(result, duration_ms)`.
+
+    `result` carries `groups` **and** `hidden_areas` — see `search_detailed`.
+    """
     started = time.perf_counter()
-    groups = search(db, actor, query, per_entity)
+    result = search_detailed(db, actor, query, per_entity)
+    groups = result["groups"]
     duration_ms = int((time.perf_counter() - started) * 1000)
 
     cleaned = (query or "").strip()
@@ -495,7 +520,7 @@ def timed_search(
             ip=ip,
         )
 
-    return groups, duration_ms
+    return result, duration_ms
 
 
 # --- Admin CRUD over the registry --------------------------------------------
