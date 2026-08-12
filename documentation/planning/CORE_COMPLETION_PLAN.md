@@ -426,7 +426,7 @@ already. **Porting it again would be a regression.** Two genuine gaps worth taki
 | 2 | **Roles** | ✅ index, form, show, matrix, clone, role-users, nav-preferences | ✅ **audited 2026-08-12** — no defect; five divergences registered, three protections verified live |
 | 3 | **Data Access** | ✅ table, service, screen | ⬜ |
 | 4 | **Activity Log** | ✅ source stamping, filters, labels, links, causer sandbox | ⬜ |
-| 5 | **Invitations** | ✅ backend + admin UI | ⬜ |
+| 5 | **Invitations** | ✅ backend + admin UI | ✅ **audited 2026-08-12** — found and fixed a privilege-escalation path: Staff could invite an Admin |
 | 6 | **API Credentials** | ✅ 4 tables, Fernet at rest, masked by default | ⬜ |
 | 7 | **Global Search** | ✅ 2 tables, three permission layers | ⬜ |
 | 8 | **AI Assistant** | ✅ 3 tables, 3 tools, read-only connection | ⬜ |

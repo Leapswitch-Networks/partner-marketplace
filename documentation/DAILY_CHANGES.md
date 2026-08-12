@@ -6,6 +6,58 @@
 > Update this file as part of the same change as the code. A task that isn't here is invisible to the
 > next person.
 
+## August 12, 2026 — The audit found an escalation path: Staff could invite an Admin
+
+**Audit 3 of 8 — Invitations — and this is what the exercise was for.**
+
+`InvitationController` excludes `RootUser` from its role picker, so the audit asked the obvious
+question of ours: **which roles can someone be invited into?** The answer was any of them that the
+super-admin guard did not name. Probing rather than reading, with a throwaway Staff account at
+exactly the privilege the matrix grants:
+
+```
+blocked  invite as RootUser     — only a super admin may invite into a super-admin role
+blocked  invite as SuperAdmin   — same
+ALLOWED  invite as Admin        ⚠️
+```
+
+**Staff holds `invitation-create`. Admin holds every permission in the catalogue.** So a Staff
+account could create an invitation that, once accepted, produced a full administrator — without ever
+holding a permission the route required, because the escalation was not in the request, it was in the
+`role_id` *inside* the request.
+
+**The codebase had already written the rule down, in the other module.**
+`rbac_service._resolve_grantable_permissions` calls it the privilege ceiling and says exactly this:
+*"the route guard cannot catch this — they legitimately hold the permission the route requires. The
+escalation is in the payload."* That is why this is a defect rather than a policy question: the
+principle was decided, and one of the two places that needed it did not have it. An invitation is
+that same escalation with a delay on it — whoever accepts arrives holding whatever `role_id` said.
+
+The ceiling now applies to invitations, and the check is the same one: you cannot invite someone
+into a role that grants a permission you do not hold yourself. Verified in both directions —
+
+```
+Staff:      RootUser ✗   SuperAdmin ✗   Admin ✗ (42 permissions it lacks)   Staff ✓   User ✓
+RootUser:   Admin ✓      SuperAdmin ✓
+```
+
+Staff can still invite people, which is what the role exists to do; it can no longer invite someone
+more powerful than itself. `has_permission` returns True for a super admin, so the ceiling narrows
+nobody who could already grant the same access directly. Four regression tests, marked `db`, run in
+CI.
+
+**Two other things the audit checked and cleared.** Our bulk create *reports* what it skipped where
+the reference silently drops duplicates, and the 60-second resend cooldown matches. And the guard I
+suspected was missing for RootUser was already there — we are stricter than the reference, which
+only hides that role in the picker while its validation would still accept it.
+
+> **This is the third finding in a row that nothing else could have caught.** Not the type checker,
+> not the linter, not the 572 tests, not the browser pass — all of which were green while a Staff
+> account could mint an administrator. Only reading someone else's implementation of the same screen
+> and asking why it is different.
+
+---
+
 ## August 12, 2026 — Users and Roles audited; the two modules disagree about visibility on purpose
 
 **Audit 2 of 8, and the interesting result is a pair.** Users' Show page finished the first audit —

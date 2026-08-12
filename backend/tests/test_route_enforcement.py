@@ -19,14 +19,18 @@ that matters, which is the one nobody thought to add to a list.
 import uuid
 
 import pytest
+from fastapi import HTTPException
 from fastapi.testclient import TestClient
+from sqlalchemy import delete, select
 
 from app.core.security import hash_password
 from app.db.session import SessionLocal
 from app.main import app
 from app.models.role import Role
 from app.models.user import User
-from app.services import api_docs_service
+from app.models.user_invitation import UserInvitation
+from app.schemas.rbac import CreateInvitationRequest
+from app.services import api_docs_service, invitation_service
 
 pytestmark = pytest.mark.db
 
@@ -225,3 +229,100 @@ class TestTheMigrationChain:
 
         missing = sorted(set(Base.metadata.tables) - present)
         assert missing == [], f"models with no table: {missing}"
+
+
+class TestAnInvitationCannotOutrankItsSender:
+    """The privilege ceiling, applied to invitations.
+
+    Found by the parity audit on 2026-08-12, by probing rather than reading:
+    **Staff holds `invitation-create` and could invite a new Admin** — every
+    permission in the catalogue — because the super-admin guard covered RootUser
+    and SuperAdmin and nothing covered the rest.
+
+    `rbac_service` had already written the rule down for editing a role: *"the
+    escalation is in the payload"*, which a route guard cannot catch because the
+    actor legitimately holds the permission the route requires. An invitation is
+    that same escalation with a delay on it — whoever accepts arrives holding
+    whatever `role_id` said.
+    """
+
+    @pytest.fixture
+    def staff_actor(self):
+        db = SessionLocal()
+        suffix = uuid.uuid4().hex[:8]
+        staff_role = db.scalar(select(Role).where(Role.name == "Staff"))
+        user = User(
+            email=f"zz-ceiling-{suffix}@example.com",
+            password=hash_password(PASSWORD),
+            first_name="Ceil",
+            last_name="Tester",
+            account_type="staff",
+            status="ACTIVE",
+            auth_provider="password",
+        )
+        user.roles.append(staff_role)
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        yield db, user
+        db.execute(delete(UserInvitation).where(UserInvitation.email.like("zz-ceiling-%")))
+        user.roles = []
+        db.delete(user)
+        db.commit()
+        db.close()
+
+    @pytest.mark.parametrize("role_name", ["Admin", "SuperAdmin", "RootUser"])
+    def test_staff_cannot_invite_a_role_it_does_not_hold(self, staff_actor, role_name):
+        db, actor = staff_actor
+        role = db.scalar(select(Role).where(Role.name == role_name))
+        with pytest.raises(HTTPException) as exc:
+            invitation_service.create_invitation(
+                db,
+                CreateInvitationRequest(
+                    email=f"zz-ceiling-target-{role_name}@example.com", role_id=role.id
+                ),
+                actor,
+            )
+        assert exc.value.status_code == 403
+
+    @pytest.mark.parametrize("role_name", ["Staff", "User"])
+    def test_staff_can_still_invite_within_its_own_privilege(self, staff_actor, role_name):
+        """The ceiling must not turn into "nobody may invite anyone" — Staff is
+        described as a role that invites users, and it still can."""
+        db, actor = staff_actor
+        role = db.scalar(select(Role).where(Role.name == role_name))
+        invitation, _url = invitation_service.create_invitation(
+            db,
+            CreateInvitationRequest(
+                email=f"zz-ceiling-ok-{role_name}@example.com", role_id=role.id
+            ),
+            actor,
+        )
+        assert invitation.id
+        db.execute(delete(UserInvitation).where(UserInvitation.id == invitation.id))
+        db.commit()
+
+    def test_a_super_admin_is_unaffected(self):
+        """`has_permission` returns True for a super admin, so the ceiling
+        narrows nobody who could already grant the same access directly."""
+        db = SessionLocal()
+        try:
+            root = db.scalars(
+                select(User).join(User.roles).where(Role.name == "RootUser")
+            ).first()
+            if root is None:
+                pytest.skip("no RootUser account seeded in this database")
+            admin_role = db.scalar(select(Role).where(Role.name == "Admin"))
+            invitation, _ = invitation_service.create_invitation(
+                db,
+                CreateInvitationRequest(
+                    email=f"zz-ceiling-root-{uuid.uuid4().hex[:6]}@example.com",
+                    role_id=admin_role.id,
+                ),
+                root,
+            )
+            assert invitation.id
+            db.execute(delete(UserInvitation).where(UserInvitation.id == invitation.id))
+            db.commit()
+        finally:
+            db.close()

@@ -261,6 +261,33 @@ def create_invitation(
                 "Only a super admin may invite someone into a super-admin role.",
             )
 
+        # **The privilege ceiling, applied to invitations.**
+        #
+        # `rbac_service._resolve_grantable_permissions` already states the rule
+        # for editing a role — *"the escalation is in the payload"*, which the
+        # route guard cannot catch because the actor legitimately holds the
+        # permission the route requires. An invitation is the same escalation
+        # with a delay on it: whoever accepts arrives holding whatever `role_id`
+        # said.
+        #
+        # Found by the parity audit on 2026-08-12, and by probing rather than
+        # reading: **Staff holds `invitation-create` and could invite a new
+        # Admin**, which is every permission in the catalogue. The super-admin
+        # guard above stopped RootUser and SuperAdmin; nothing stopped Admin.
+        #
+        # `has_permission` returns True for a super admin, so they are unaffected
+        # — this narrows nobody who could not already grant the same access
+        # directly.
+        ungrantable = sorted(
+            p.name for p in role.permissions if not actor.has_permission(p.name)
+        )
+        if ungrantable:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                f"You cannot invite someone into '{role.display_name or role.name}': "
+                f"it grants {len(ungrantable)} permission(s) you do not hold yourself.",
+            )
+
     # A staff invitation must point at a staff domain, or the invitee could never
     # complete it — staff sign in with Google, which is domain-gated.
     if data.account_type == "staff" and not settings.is_staff_email(email):
