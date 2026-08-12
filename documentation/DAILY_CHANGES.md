@@ -6,6 +6,42 @@
 > Update this file as part of the same change as the code. A task that isn't here is invisible to the
 > next person.
 
+## August 12, 2026 — Users and Roles audited; the two modules disagree about visibility on purpose
+
+**Audit 2 of 8, and the interesting result is a pair.** Users' Show page finished the first audit —
+it carries everything LeapDesk's does except the three HR-chart fields already registered, plus a
+last sign-in and IP that the reference does not have. Then Roles, compared against `RoleController`
+and its seven pages.
+
+**No defect in Roles.** Five divergences, all deliberate, and two of them point in opposite
+directions — which is the thing worth writing down:
+
+* **Users is stricter than the reference.** LeapDesk shows a non-admin the users *they created*; we
+  show them only themselves, because "users I created" leaks across partners the moment there are
+  any.
+* **Roles is looser.** LeapDesk scopes roles to `created_by` too — but a role is configuration, not
+  a personal record, and that scoping renders the screen **empty** for every reader who has not
+  authored a role. Ours shows all roles to anyone holding `role-view`.
+
+Opposite calls from the same reference behaviour, because the data is a different kind of thing in
+each case. Both are now registered with that reasoning rather than being two accidents that happen
+to look like a policy.
+
+**`RootUser` is the other one.** LeapDesk excludes it from the query entirely; we show it, badged
+Protected and uneditable. Concealing a role that holds every permission is worse than showing one
+nobody can touch — and the guards, not the query, are what stop anyone changing it.
+
+**Which the audit then proved rather than assumed.** § 8.1 asks for permissions "confirmed blocked,
+not merely hidden", so the three protections were run against a live Admin account: editing the
+SuperAdmin role → **403**, deleting a protected role → **400**, rewriting SuperAdmin's grants through
+the new route → **403**. Read from the source they are three `if` statements; run, they are three
+refusals.
+
+> Audit stands at **2 of 8**. Data Access, Activity, Invitations, API Credentials, Global Search and
+> the AI Assistant have not been compared.
+
+---
+
 ## August 12, 2026 — The first parity audit, and the search that found nobody
 
 **Every core module is built; none had been audited.** `CORE_COMPLETION_PLAN.md` § 8.1 is blunt

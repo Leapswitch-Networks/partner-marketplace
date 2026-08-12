@@ -115,6 +115,28 @@ cannot drift back into being accidents.**
 | Per-page options | 10 · 25 · 50 · 100 | 10 · **15** · 25 · 50 · 100 | Superset. 15 is the default in both |
 | Password on create | required, `min:8`, confirmed | optional, same strength floor | A Google-only account has no password. **Checked during the audit**: `validate_password_strength` is wired to `CreateUserRequest` and enforces `PASSWORD_MIN_LENGTH` |
 
+#### Registered divergences — Roles (audit 2026-08-12)
+
+Compared against `RoleController` and `pages/Roles/*`. **No defect found.** The differences are all
+deliberate, and two of them run in opposite directions, which is the useful thing the audit surfaced.
+
+| Aspect | LeapDesk | Ours | Why |
+|---|---|---|---|
+| `RootUser` in the list | **excluded from the query** | shown, badged **Protected**, uneditable | Concealing a role that holds every permission is worse than showing one nobody can touch. An administrator should be able to see that it exists; the guards, not the query, are what stop them changing it |
+| Non-admin visibility | roles they **created** | all roles, to anyone holding `role-view` | **Looser than theirs, deliberately** — the opposite direction from Users, and for the opposite reason. A role is configuration, not a personal record; `created_by` scoping renders the screen *empty* for every reader who has not authored a role, which is worse than useless |
+| Pagination and search | server-side, `paginate(15)` | client-side over the whole list | § 4.2's recorded decision: `/api/roles` returns six rows unpaged, so `useResourceList` would mean a round trip per keystroke |
+| Sort | `created_at desc` | `is_system desc, name asc` | System roles first, then alphabetical. A role is looked up by name, not discovered by recency — the same reasoning Feature Flags uses |
+| `guard_name` searched | yes | n/a | Spatie's concept; we have no guard column |
+
+**Edge cases verified against a live Admin account** rather than read from the source — § 8.1 asks
+for "confirmed blocked, not merely hidden":
+
+| Attempt | Result |
+|---|---|
+| Admin edits the SuperAdmin role | **403** — only a super admin may modify a super-admin role |
+| Admin deletes a protected role | **400** — system role, cannot be deleted |
+| Admin rewrites SuperAdmin's grants | **403** — same guard, via the new `role-permissions` route |
+
 ### 1.2 What we deliberately do NOT copy
 
 This matters as much as what we do copy. Each of these was measured today:
@@ -400,8 +422,8 @@ already. **Porting it again would be a regression.** Two genuine gaps worth taki
 
 | # | Module | Built | § 8.1 audit |
 |---|---|---|---|
-| 1 | **Users** | ✅ index, form, show, `user-email` with attachments | 🟡 **Index + Form audited 2026-08-12** — one gap found and fixed. Show not yet compared |
-| 2 | **Roles** | ✅ index, form, show, matrix, clone, role-users, nav-preferences | ⬜ |
+| 1 | **Users** | ✅ index, form, show, `user-email` with attachments | ✅ **audited 2026-08-12** — Index, Form, Show, permissions, edge cases. One gap found and fixed |
+| 2 | **Roles** | ✅ index, form, show, matrix, clone, role-users, nav-preferences | ✅ **audited 2026-08-12** — no defect; five divergences registered, three protections verified live |
 | 3 | **Data Access** | ✅ table, service, screen | ⬜ |
 | 4 | **Activity Log** | ✅ source stamping, filters, labels, links, causer sandbox | ⬜ |
 | 5 | **Invitations** | ✅ backend + admin UI | ⬜ |
