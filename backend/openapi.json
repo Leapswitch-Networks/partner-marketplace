@@ -3800,6 +3800,138 @@
         "title": "IssueTokenRequest",
         "type": "object"
       },
+      "JobRun": {
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "job": {
+            "title": "Job",
+            "type": "string"
+          },
+          "started_at": {
+            "format": "date-time",
+            "title": "Started At",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "unit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Unit"
+          }
+        },
+        "required": [
+          "id",
+          "job",
+          "status",
+          "started_at",
+          "finished_at",
+          "duration_ms",
+          "count",
+          "unit",
+          "error"
+        ],
+        "title": "JobRun",
+        "type": "object"
+      },
+      "JobStatus": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "health": {
+            "title": "Health",
+            "type": "string"
+          },
+          "interval_seconds": {
+            "title": "Interval Seconds",
+            "type": "integer"
+          },
+          "last_run": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/JobRun"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "unit": {
+            "title": "Unit",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "description",
+          "interval_seconds",
+          "enabled",
+          "unit",
+          "health",
+          "last_run"
+        ],
+        "title": "JobStatus",
+        "type": "object"
+      },
       "LoginRequest": {
         "properties": {
           "email": {
@@ -8451,6 +8583,82 @@
           }
         },
         "title": "WebhookUpdateRequest",
+        "type": "object"
+      },
+      "WorkerReport": {
+        "properties": {
+          "jobs": {
+            "items": {
+              "$ref": "#/components/schemas/JobStatus"
+            },
+            "title": "Jobs",
+            "type": "array"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/WorkerSummary"
+          }
+        },
+        "required": [
+          "summary",
+          "jobs"
+        ],
+        "title": "WorkerReport",
+        "type": "object"
+      },
+      "WorkerSummary": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "integer"
+          },
+          "failed_24h": {
+            "title": "Failed 24H",
+            "type": "integer"
+          },
+          "jobs": {
+            "title": "Jobs",
+            "type": "integer"
+          },
+          "last_seen_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Seen At"
+          },
+          "never_run": {
+            "title": "Never Run",
+            "type": "integer"
+          },
+          "runs_24h": {
+            "title": "Runs 24H",
+            "type": "integer"
+          },
+          "unhealthy": {
+            "title": "Unhealthy",
+            "type": "integer"
+          },
+          "worker_seen_recently": {
+            "title": "Worker Seen Recently",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "jobs",
+          "enabled",
+          "unhealthy",
+          "never_run",
+          "runs_24h",
+          "failed_24h",
+          "last_seen_at",
+          "worker_seen_recently"
+        ],
+        "title": "WorkerSummary",
         "type": "object"
       }
     }
@@ -18661,6 +18869,158 @@
         "summary": "Send Test",
         "tags": [
           "webhooks"
+        ]
+      }
+    },
+    "/api/v1/worker/jobs": {
+      "get": {
+        "description": "Every registered job, its last run, and whether it is healthy.\n\nThe schedule comes from `worker.build_jobs()` rather than a second list here,\nso a job added to the worker appears without anyone registering it twice.",
+        "operationId": "job_report_api_v1_worker_jobs_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkerReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Job Report",
+        "tags": [
+          "worker"
+        ]
+      }
+    },
+    "/api/v1/worker/runs": {
+      "get": {
+        "description": "Run history, newest first. Filterable to the failures, which is the view\nanyone actually opens this page for.",
+        "operationId": "recent_runs_api_v1_worker_runs_get",
+        "parameters": [
+          {
+            "description": "Restrict to one job",
+            "in": "query",
+            "name": "job",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Restrict to one job",
+              "title": "Job"
+            }
+          },
+          {
+            "description": "'succeeded' | 'failed'",
+            "in": "query",
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "'succeeded' | 'failed'",
+              "title": "Status"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/JobRun"
+                  },
+                  "title": "Response Recent Runs Api V1 Worker Runs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Recent Runs",
+        "tags": [
+          "worker"
         ]
       }
     },

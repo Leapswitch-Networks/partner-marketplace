@@ -337,6 +337,12 @@ def build_sections(user: User) -> list[dict[str, Any]]:
                 _item("Error Tracking", "/dashboard/errors", "errors", ERROR_VIEW),
                 # LeapDesk parity Module 18.
                 _item("System Health", "/dashboard/health", "health", HEALTH_VIEW),
+                # Beside System Health because it answers the same kind of
+                # question — is the running system healthy — and on the same
+                # permission. Its own entry rather than a panel on that screen
+                # because "the worker is not running" is a distinct failure with
+                # its own remedy.
+                _item("Background Jobs", "/dashboard/worker", "worker", HEALTH_VIEW),
                 # LeapDesk parity. Operations, not System Settings: you open this
                 # because something was deleted by mistake.
                 _item("Recycle Bin", "/dashboard/recycle-bin", "recycleBin", RECYCLE_BIN_MANAGE),

@@ -34,6 +34,7 @@ from app.api import (
     settings as settings_api,
     users,
     webhooks,
+    worker_jobs,
 )
 from app.core.config import settings
 from app.core.dependencies import get_client_ip
@@ -254,6 +255,7 @@ app.include_router(ai.router, prefix=settings.API_PREFIX)
 app.include_router(api_consumers.router, prefix=settings.API_PREFIX)
 app.include_router(webhooks.router, prefix=settings.API_PREFIX)
 app.include_router(api_docs.router, prefix=settings.API_PREFIX)
+app.include_router(worker_jobs.router, prefix=settings.API_PREFIX)
 app.include_router(recycle_bin.router, prefix=settings.API_PREFIX)
 app.include_router(partners.router, prefix=settings.API_PREFIX)
 

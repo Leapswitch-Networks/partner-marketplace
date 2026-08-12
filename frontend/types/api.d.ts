@@ -2752,6 +2752,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/worker/jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Job Report
+         * @description Every registered job, its last run, and whether it is healthy.
+         *
+         *     The schedule comes from `worker.build_jobs()` rather than a second list here,
+         *     so a job added to the worker appears without anyone registering it twice.
+         */
+        get: operations["job_report_api_v1_worker_jobs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/worker/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Recent Runs
+         * @description Run history, newest first. Filterable to the failures, which is the view
+         *     anyone actually opens this page for.
+         */
+        get: operations["recent_runs_api_v1_worker_runs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -4199,6 +4243,46 @@ export interface components {
             expires_in_days?: number | null;
             /** Name */
             name: string;
+        };
+        /** JobRun */
+        JobRun: {
+            /** Count */
+            count: number;
+            /** Duration Ms */
+            duration_ms: number | null;
+            /** Error */
+            error: string | null;
+            /** Finished At */
+            finished_at: string | null;
+            /** Id */
+            id: string;
+            /** Job */
+            job: string;
+            /**
+             * Started At
+             * Format: date-time
+             */
+            started_at: string;
+            /** Status */
+            status: string;
+            /** Unit */
+            unit: string | null;
+        };
+        /** JobStatus */
+        JobStatus: {
+            /** Description */
+            description: string;
+            /** Enabled */
+            enabled: boolean;
+            /** Health */
+            health: string;
+            /** Interval Seconds */
+            interval_seconds: number;
+            last_run: components["schemas"]["JobRun"] | null;
+            /** Name */
+            name: string;
+            /** Unit */
+            unit: string;
         };
         /** LoginRequest */
         LoginRequest: {
@@ -5989,6 +6073,31 @@ export interface components {
             name?: string | null;
             /** Url */
             url?: string | null;
+        };
+        /** WorkerReport */
+        WorkerReport: {
+            /** Jobs */
+            jobs: components["schemas"]["JobStatus"][];
+            summary: components["schemas"]["WorkerSummary"];
+        };
+        /** WorkerSummary */
+        WorkerSummary: {
+            /** Enabled */
+            enabled: number;
+            /** Failed 24H */
+            failed_24h: number;
+            /** Jobs */
+            jobs: number;
+            /** Last Seen At */
+            last_seen_at: string | null;
+            /** Never Run */
+            never_run: number;
+            /** Runs 24H */
+            runs_24h: number;
+            /** Unhealthy */
+            unhealthy: number;
+            /** Worker Seen Recently */
+            worker_seen_recently: boolean;
         };
     };
     responses: never;
@@ -11259,6 +11368,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DeliveryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    job_report_api_v1_worker_jobs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkerReport"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recent_runs_api_v1_worker_runs_get: {
+        parameters: {
+            query?: {
+                /** @description Restrict to one job */
+                job?: string | null;
+                /** @description 'succeeded' | 'failed' */
+                status?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobRun"][];
                 };
             };
             /** @description Validation Error */
