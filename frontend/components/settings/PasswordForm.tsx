@@ -17,7 +17,7 @@ function RevealButton({ shown, onClick }: { shown: boolean; onClick: () => void 
   return (
     <button type="button" onClick={onClick}
       aria-label={shown ? "Hide password" : "Show password"}
-      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 transition hover:text-gray-600 dark:hover:text-gray-300">
+      className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-label dark:text-night-muted transition hover:text-gray-600 dark:hover:text-gray-300">
       {shown ? (
         <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
@@ -138,7 +138,7 @@ export default function PasswordForm() {
       <div className="overflow-hidden rounded-none bg-white ring-1 ring-surface-border dark:bg-night-card dark:ring-night-border">
         <div className="border-b border-surface-border px-6 py-4 dark:border-night-border">
           <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">Update password</h3>
-          <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">
+          <p className="mt-0.5 text-sm text-ink-label dark:text-night-muted">
             Ensure your account is using a long, random password to stay secure.
           </p>
         </div>
@@ -174,7 +174,7 @@ export default function PasswordForm() {
                   <RevealButton shown={show.current} onClick={() => setShow((s) => ({ ...s, current: !s.current }))} />
                 </div>
                 {isSsoOnly && (
-                  <p className="mt-1.5 text-[11px] text-gray-400 dark:text-gray-500">
+                  <p className="mt-1.5 text-[11px] text-ink-label dark:text-night-muted">
                     This account signs in with Google and has no password yet. Verify
                     your email below to set one.
                   </p>
@@ -233,7 +233,7 @@ export default function PasswordForm() {
                   <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">
                     Verify your email instead
                   </h3>
-                  <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                  <p className="mt-1 text-sm text-ink-label dark:text-night-muted">
                     We&rsquo;ll email a 6-digit code to{" "}
                     <span className="font-medium text-gray-700 dark:text-gray-300">{user?.email}</span>.
                     Enter it below and you can set a new password without the old one.

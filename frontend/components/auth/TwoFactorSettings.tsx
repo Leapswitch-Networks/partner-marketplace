@@ -154,7 +154,7 @@ export default function TwoFactorSettings() {
     });
 
   if (loading) {
-    return <p className="text-sm text-gray-400 dark:text-gray-500">Loading…</p>;
+    return <p className="text-sm text-ink-label dark:text-night-muted">Loading…</p>;
   }
 
   const pending = status?.pending_confirmation ?? false;
@@ -170,7 +170,7 @@ export default function TwoFactorSettings() {
             {pending && <Badge tone="warning">Setup incomplete</Badge>}
             {!enabled && !pending && <Badge tone="neutral">Disabled</Badge>}
           </h3>
-          <p className="mt-1 max-w-prose text-xs text-gray-500 dark:text-gray-400">
+          <p className="mt-1 max-w-prose text-xs text-ink-label dark:text-night-muted">
             {enabled
               ? "You'll be asked for a code from your authenticator app when you sign in."
               : pending
@@ -195,7 +195,7 @@ export default function TwoFactorSettings() {
       </div>
 
       {enabled && (
-        <p className="text-xs text-gray-400 dark:text-gray-500">
+        <p className="text-xs text-ink-label dark:text-night-muted">
           {status?.recovery_codes_remaining ?? 0} recovery code
           {status?.recovery_codes_remaining === 1 ? "" : "s"} remaining.
           {(status?.recovery_codes_remaining ?? 0) <= 2 && (
@@ -224,7 +224,7 @@ export default function TwoFactorSettings() {
         title="Confirm your password"
       >
         <div className="flex flex-col gap-4">
-          <p className="text-sm text-gray-500 dark:text-gray-400">
+          <p className="text-sm text-ink-label dark:text-night-muted">
             For your security, please re-enter your password to continue.
           </p>
           <Input
@@ -322,7 +322,7 @@ export default function TwoFactorSettings() {
         title="Your new recovery codes"
       >
         <div className="flex flex-col gap-3">
-          <p className="text-sm text-gray-500 dark:text-gray-400">
+          <p className="text-sm text-ink-label dark:text-night-muted">
             Your previous codes no longer work. Save these now — they are not shown again.
           </p>
           <div className="grid grid-cols-2 gap-1 rounded-lg bg-gray-50 p-3 font-mono text-xs dark:bg-night-card">

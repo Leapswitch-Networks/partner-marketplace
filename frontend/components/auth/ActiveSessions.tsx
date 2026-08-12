@@ -104,7 +104,7 @@ export default function ActiveSessions() {
   };
 
   if (loading) {
-    return <p className="text-sm text-gray-400 dark:text-gray-500">Loading sessions…</p>;
+    return <p className="text-sm text-ink-label dark:text-night-muted">Loading sessions…</p>;
   }
 
   const others = sessions.filter((s) => !s.is_current).length;
@@ -116,7 +116,7 @@ export default function ActiveSessions() {
           <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">
             Where you&apos;re signed in
           </h3>
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          <p className="mt-1 text-xs text-ink-label dark:text-night-muted">
             End any session you don&apos;t recognise. Signing out a device makes its
             saved login stop working immediately.
           </p>
@@ -148,7 +148,7 @@ export default function ActiveSessions() {
                 <span className="truncate">{describeDevice(session.user_agent)}</span>
                 {session.is_current && <Badge tone="success">This device</Badge>}
               </p>
-              <p className="mt-0.5 text-[11px] text-gray-400 dark:text-gray-500">
+              <p className="mt-0.5 text-[11px] text-ink-label dark:text-night-muted">
                 {session.ip_address ?? "unknown address"} · active{" "}
                 {relative(session.last_seen_at)} · signed in{" "}
                 {formatDate(session.created_at)}
@@ -173,7 +173,7 @@ export default function ActiveSessions() {
       </ul>
 
       {sessions.length === 1 && (
-        <p className="text-xs text-gray-400 dark:text-gray-500">
+        <p className="text-xs text-ink-label dark:text-night-muted">
           This is your only active session.
         </p>
       )}

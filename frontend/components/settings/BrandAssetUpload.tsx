@@ -86,7 +86,7 @@ export default function BrandAssetUpload({
   return (
     <div>
       <p className="text-sm font-medium text-gray-700 dark:text-gray-300">{label}</p>
-      <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">{hint}</p>
+      <p className="mt-0.5 text-xs text-ink-label dark:text-night-muted">{hint}</p>
 
       <div className="mt-3 flex items-center gap-3">
         <div
@@ -105,7 +105,7 @@ export default function BrandAssetUpload({
               className="h-full w-full object-contain p-1"
             />
           ) : (
-            <span className="text-[10px] font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+            <span className="text-[10px] font-medium uppercase tracking-wide text-ink-label dark:text-night-muted">
               None
             </span>
           )}

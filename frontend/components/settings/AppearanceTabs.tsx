@@ -61,7 +61,7 @@ export default function AppearanceTabs() {
               className={`flex items-center gap-1.5 rounded-[5px] px-3.5 py-1.5 text-sm font-medium transition-colors ${
                 active
                   ? "bg-white text-gray-900 shadow-sm dark:bg-gray-700 dark:text-gray-100"
-                  : "text-gray-500 hover:bg-gray-200/60 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-700/60 dark:hover:text-gray-100"
+                  : "text-ink-label dark:text-night-muted hover:bg-gray-200/60 hover:text-gray-900 dark:text-gray-400 dark:hover:bg-gray-700/60 dark:hover:text-gray-100"
               }`}
             >
               {tab.icon}
@@ -71,7 +71,7 @@ export default function AppearanceTabs() {
         })}
       </div>
 
-      <p className="mt-3 text-xs text-gray-400 dark:text-gray-500">
+      <p className="mt-3 text-xs text-ink-label dark:text-night-muted">
         {appearance === "system"
           ? "Following your operating system, and will keep following it if you change that setting."
           : `Always ${appearance}, regardless of your operating system setting.`}

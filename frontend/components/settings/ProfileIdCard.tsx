@@ -55,7 +55,7 @@ export default function ProfileIdCard() {
             <h2 className="truncate text-lg font-semibold text-gray-900 dark:text-gray-100">
               {user.full_name}
             </h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
+            <p className="text-sm text-ink-label dark:text-night-muted">
               {user.designation || (isPartner ? "Partner" : "Employee")}
             </p>
             {user.roles?.length > 0 && (
@@ -91,7 +91,7 @@ export default function ProfileIdCard() {
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {infoItems.map((item) => (
             <div key={item.label} className="space-y-1">
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-400 dark:text-gray-500">
+              <p className="text-xs font-medium uppercase tracking-wide text-ink-label dark:text-night-muted">
                 {item.label}
               </p>
               <p

@@ -175,7 +175,7 @@ export default function BrandingForm({
   // page sees an explanation rather than a form that 403s on submit.
   if (!isSuperAdmin) {
     return (
-      <p className="text-sm text-gray-500 dark:text-gray-400">
+      <p className="text-sm text-ink-label dark:text-night-muted">
         Only a super administrator can change the application&rsquo;s identity.
       </p>
     );
@@ -192,11 +192,11 @@ export default function BrandingForm({
             placeholder={resolved[key]}
             onChange={(event) => setField(key, event.target.value)}
           />
-          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{hint}</p>
+          <p className="mt-1 text-xs text-ink-label dark:text-night-muted">{hint}</p>
         </div>
       ))}
 
-      <p className="text-xs text-gray-500 dark:text-gray-400">
+      <p className="text-xs text-ink-label dark:text-night-muted">
         Clearing a field restores this deployment&rsquo;s configured default rather than
         leaving it blank.
       </p>
@@ -222,7 +222,7 @@ export default function BrandingForm({
 
       <div>
         <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Brand colour</p>
-        <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+        <p className="mt-0.5 text-xs text-ink-label dark:text-night-muted">
           A fixed set rather than a colour picker. Each one ships a light counterpart
           for dark mode, and both halves are contrast-checked — a freely chosen colour
           would be unreadable in one theme or the other.
@@ -242,7 +242,7 @@ export default function BrandingForm({
                 className={`flex items-center gap-2 rounded-[5px] border px-2.5 py-2 text-left text-xs font-medium transition-colors ${
                   active
                     ? "border-brand bg-brand/10 text-gray-900 dark:border-brand-on-dark dark:bg-brand/20 dark:text-gray-100"
-                    : "border-surface-border text-gray-600 hover:bg-gray-50 dark:border-night-border dark:text-gray-400 dark:hover:bg-night-body"
+                    : "border-surface-border text-ink-label dark:text-night-muted hover:bg-gray-50 dark:border-night-border dark:text-gray-400 dark:hover:bg-night-body"
                 }`}
               >
                 {/* Swatches use the preset's own hexes as inline styles, not brand
@@ -260,7 +260,7 @@ export default function BrandingForm({
             );
           })}
         </div>
-        <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
+        <p className="mt-2 text-xs text-ink-label dark:text-night-muted">
           Saving a new colour reloads the page — the theme is applied server-side.
         </p>
       </div>

@@ -100,7 +100,7 @@ export default function EditProfileForm() {
         <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">
           Edit Profile
         </h3>
-        <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">
+        <p className="mt-0.5 text-sm text-ink-label dark:text-night-muted">
           Update your personal information and contact details.
         </p>
       </div>
@@ -126,7 +126,7 @@ export default function EditProfileForm() {
             <label htmlFor="email" className={LABEL_CLASS}>Email Address</label>
             <input id="email" type="email" className={FIELD_CLASS} value={user.email}
               disabled readOnly autoComplete="email" />
-            <p className="mt-1.5 text-[11px] text-gray-400 dark:text-gray-500">
+            <p className="mt-1.5 text-[11px] text-ink-label dark:text-night-muted">
               Changing this would break the link to a Google sign-in and to any
               pending invitation, so an administrator has to do it.
             </p>
