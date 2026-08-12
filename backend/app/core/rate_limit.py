@@ -164,12 +164,35 @@ SENSITIVE_PATH_SHAPES: tuple[tuple[str, str, str], ...] = (
     # platform's own sender. Unthrottled, one admin account is a spam relay.
     # The reference throttles the same route at 5/min.
     (f"{settings.API_PREFIX}/users/", "/email", "mail-user"),
+    # POST /api-consumers/{id}/tokens — mints a standing credential for a third
+    # party. The reference throttles it at 10/min because "a runaway script
+    # should not be able to mint hundreds before anyone notices", and our limiter
+    # is explicitly built so a new route does NOT silently inherit a tier — so
+    # this entry is required, not automatic.
+    (f"{settings.API_PREFIX}/api-consumers/", "/tokens", "api-token-mint"),
     # POST /invitations/{id}/resend — the reference throttles this at 10/min.
     # Complements the per-invitation 60s cooldown in invitation_service: that
     # stops one invitee being mailed repeatedly, this stops one caller working
     # through the whole list.
     (f"{settings.API_PREFIX}/invitations/", "/resend", "mail-invite"),
 )
+
+
+#: Paths whose cost is money rather than database work. Every request here is a
+#: paid call to a third party, so the default tier's 300/minute is the wrong
+#: order of magnitude entirely — a stuck client would spend real money at it.
+#:
+#: Each gets its **own** bucket and its own limit, matching the reference's
+#: per-route `throttle:30,1` and `throttle:60,1`. The window is a literal 60
+#: seconds rather than a setting: "thirty per minute" is the limit being
+#: expressed, and reading the window from configuration would silently change
+#: what the number means.
+METERED_PATHS: dict[str, tuple[str, int]] = {
+    f"{settings.API_PREFIX}/ai/chat": ("ai-chat", 30),
+    f"{settings.API_PREFIX}/ai/feedback": ("ai-feedback", 60),
+}
+
+METERED_WINDOW_SECONDS = 60
 
 
 def _sensitive_shape_bucket(path: str) -> str | None:
@@ -191,6 +214,10 @@ def _tier_for(path: str) -> tuple[str, int, int] | None:
     """Return ``(tier, limit, window)`` for a path, or ``None`` if exempt."""
     if path.startswith(EXEMPT_PREFIXES):
         return None
+    metered = METERED_PATHS.get(path)
+    if metered is not None:
+        bucket, limit = metered
+        return (bucket, limit, METERED_WINDOW_SECONDS)
     shape_bucket = _sensitive_shape_bucket(path)
     if shape_bucket is not None:
         # Sensitive LIMITS, its own counter — see SENSITIVE_PATH_SHAPES.

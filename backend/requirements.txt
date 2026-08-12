@@ -21,3 +21,14 @@ httpx==0.28.1
 #     renders it, which avoids pulling in qrcode + Pillow to draw a picture the
 #     browser can draw itself
 pyotp==2.9.0
+
+# Anthropic SDK for the AI assistant (LeapDesk parity Module 9). Pinned to the
+# version this module was written and verified against — its `beta_tool` and
+# `client.beta.messages.tool_runner` are what remove the hand-written tool loop,
+# and both are beta surfaces that can move between minor releases.
+#
+# The package is imported **lazily**, inside `app/ai/client.py`'s functions
+# rather than at module scope, so an install that never enables the assistant
+# never loads it — and a missing SDK fails the one endpoint that needs it rather
+# than the whole application at boot.
+anthropic==0.121.0

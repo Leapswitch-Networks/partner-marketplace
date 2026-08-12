@@ -12,24 +12,28 @@ from sqlalchemy.exc import SQLAlchemyError
 # `app.core.config.settings` (the config object) would otherwise collide here.
 from app.api import (
     activity,
+    ai,
+    api_consumers,
     api_credentials,
+    api_docs,
     auth,
     configuration,
     data_access,
+    errors,
+    feature_flags,
     google,
+    health_status,
     invitations,
     navigation,
     partners,
     permissions,
-    errors,
     recycle_bin,
-    feature_flags,
-    health_status,
     roles,
     search,
     security_settings,
     settings as settings_api,
     users,
+    webhooks,
 )
 from app.core.config import settings
 from app.core.dependencies import get_client_ip
@@ -246,6 +250,10 @@ app.include_router(data_access.router, prefix=settings.API_PREFIX)
 app.include_router(feature_flags.router, prefix=settings.API_PREFIX)
 app.include_router(search.router, prefix=settings.API_PREFIX)
 app.include_router(api_credentials.router, prefix=settings.API_PREFIX)
+app.include_router(ai.router, prefix=settings.API_PREFIX)
+app.include_router(api_consumers.router, prefix=settings.API_PREFIX)
+app.include_router(webhooks.router, prefix=settings.API_PREFIX)
+app.include_router(api_docs.router, prefix=settings.API_PREFIX)
 app.include_router(recycle_bin.router, prefix=settings.API_PREFIX)
 app.include_router(partners.router, prefix=settings.API_PREFIX)
 

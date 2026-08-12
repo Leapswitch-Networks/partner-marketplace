@@ -1,6 +1,39 @@
 {
   "components": {
     "schemas": {
+      "AbilityOption": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "group": {
+            "title": "Group",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "sensitivity": {
+            "title": "Sensitivity",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "label",
+          "group",
+          "sensitivity",
+          "description"
+        ],
+        "title": "AbilityOption",
+        "type": "object"
+      },
       "AcceptInvitationRequest": {
         "description": "Completing a tokenised invitation with credentials.",
         "properties": {
@@ -112,6 +145,10 @@
             ],
             "title": "Log Name"
           },
+          "module_label": {
+            "title": "Module Label",
+            "type": "string"
+          },
           "properties": {
             "anyOf": [
               {
@@ -144,15 +181,28 @@
               }
             ],
             "title": "Subject Type"
+          },
+          "subject_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Subject Url"
           }
         },
         "required": [
           "id",
           "log_name",
+          "module_label",
           "description",
           "event",
           "subject_type",
           "subject_id",
+          "subject_url",
           "causer_id",
           "causer_name",
           "properties",
@@ -160,6 +210,126 @@
           "created_at"
         ],
         "title": "ActivityEntry",
+        "type": "object"
+      },
+      "ActivityFilterOptions": {
+        "description": "Everything the filter row needs, in one request instead of four.",
+        "properties": {
+          "causers": {
+            "items": {
+              "$ref": "#/components/schemas/FilterOption"
+            },
+            "title": "Causers",
+            "type": "array"
+          },
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/FilterOption"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "log_names": {
+            "items": {
+              "$ref": "#/components/schemas/FilterOption"
+            },
+            "title": "Log Names",
+            "type": "array"
+          },
+          "sources": {
+            "items": {
+              "$ref": "#/components/schemas/FilterOption"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "subject_types": {
+            "items": {
+              "$ref": "#/components/schemas/FilterOption"
+            },
+            "title": "Subject Types",
+            "type": "array"
+          }
+        },
+        "required": [
+          "events",
+          "log_names",
+          "subject_types",
+          "causers",
+          "sources"
+        ],
+        "title": "ActivityFilterOptions",
+        "type": "object"
+      },
+      "AssistantAvailability": {
+        "description": "The one question the widget asks, and the only one it is entitled to.\n\nTwo booleans and nothing about the configuration — the model in use, whether\na key is present and which read-only control is in force are all answers for\nan administrator, on `/ai/settings`.",
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "can_use": {
+            "title": "Can Use",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "available",
+          "can_use"
+        ],
+        "title": "AssistantAvailability",
+        "type": "object"
+      },
+      "AssistantSettings": {
+        "description": "What the settings screen shows, and what the widget reads to decide whether\nto render at all.",
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "can_use": {
+            "title": "Can Use",
+            "type": "boolean"
+          },
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "has_api_key": {
+            "title": "Has Api Key",
+            "type": "boolean"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "readonly_dedicated_role": {
+            "title": "Readonly Dedicated Role",
+            "type": "boolean"
+          },
+          "readonly_guard_holds": {
+            "title": "Readonly Guard Holds",
+            "type": "boolean"
+          },
+          "tools": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tools",
+            "type": "array"
+          }
+        },
+        "required": [
+          "enabled",
+          "has_api_key",
+          "model",
+          "available",
+          "can_use",
+          "tools",
+          "readonly_dedicated_role",
+          "readonly_guard_holds"
+        ],
+        "title": "AssistantSettings",
         "type": "object"
       },
       "BinnedItem": {
@@ -207,6 +377,41 @@
           "deleted_at"
         ],
         "title": "BinnedItem",
+        "type": "object"
+      },
+      "Body_send_user_email_api_v1_users__user_id__email_post": {
+        "properties": {
+          "attachments": {
+            "items": {
+              "format": "binary",
+              "type": "string"
+            },
+            "title": "Attachments",
+            "type": "array"
+          },
+          "bcc_sender": {
+            "default": false,
+            "title": "Bcc Sender",
+            "type": "boolean"
+          },
+          "message": {
+            "maxLength": 10000,
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          },
+          "subject": {
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Subject",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subject",
+          "message"
+        ],
+        "title": "Body_send_user_email_api_v1_users__user_id__email_post",
         "type": "object"
       },
       "Body_upload_asset_api_v1_settings_branding__asset__post": {
@@ -417,6 +622,72 @@
         "title": "BulkUserIdsRequest",
         "type": "object"
       },
+      "CatalogueResponse": {
+        "properties": {
+          "operations": {
+            "items": {
+              "$ref": "#/components/schemas/OperationEntry"
+            },
+            "title": "Operations",
+            "type": "array"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/CatalogueSummary"
+          }
+        },
+        "required": [
+          "summary",
+          "operations"
+        ],
+        "title": "CatalogueResponse",
+        "type": "object"
+      },
+      "CatalogueSummary": {
+        "properties": {
+          "auth_only": {
+            "title": "Auth Only",
+            "type": "integer"
+          },
+          "operations": {
+            "title": "Operations",
+            "type": "integer"
+          },
+          "paths": {
+            "title": "Paths",
+            "type": "integer"
+          },
+          "permission_gated": {
+            "title": "Permission Gated",
+            "type": "integer"
+          },
+          "public": {
+            "title": "Public",
+            "type": "integer"
+          },
+          "tags": {
+            "title": "Tags",
+            "type": "integer"
+          },
+          "unexpected_public": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unexpected Public",
+            "type": "array"
+          }
+        },
+        "required": [
+          "operations",
+          "paths",
+          "tags",
+          "permission_gated",
+          "auth_only",
+          "public",
+          "unexpected_public"
+        ],
+        "title": "CatalogueSummary",
+        "type": "object"
+      },
       "ChangePartnerStatusRequest": {
         "description": "Move a partner through PENDING → ACTIVE ↔ SUSPENDED.\n\nAn explicit endpoint rather than a `PATCH status`, matching the rule\n`MARKETPLACE_DOMAIN_PLAN.md` § State Machines sets for quotes: a state machine\ndriven by a free-form status field is one that will be driven into an invalid\nstate.",
         "properties": {
@@ -479,6 +750,78 @@
         "title": "ChangePasswordRequest",
         "type": "object"
       },
+      "ChatRequest": {
+        "properties": {
+          "conversation_id": {
+            "anyOf": [
+              {
+                "maxLength": 36,
+                "minLength": 36,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "message": {
+            "maxLength": 4000,
+            "minLength": 1,
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "title": "ChatRequest",
+        "type": "object"
+      },
+      "ChatResponse": {
+        "properties": {
+          "conversation_id": {
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "flags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Flags",
+            "type": "array"
+          },
+          "reply": {
+            "title": "Reply",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "tools_used": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tools Used",
+            "type": "array"
+          }
+        },
+        "required": [
+          "reply",
+          "conversation_id",
+          "title"
+        ],
+        "title": "ChatResponse",
+        "type": "object"
+      },
       "CloneRoleRequest": {
         "description": "Copy a role's permissions onto a new one.\n\n`name` is required and must be new. The reference pre-fills it with\n\"<original> Copy\" in the form; the server does not invent one, because a\nsilently generated role name is a thing nobody chose.",
         "properties": {
@@ -531,6 +874,334 @@
           "password"
         ],
         "title": "ConfirmPasswordRequest",
+        "type": "object"
+      },
+      "ConsumerResponse": {
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "has_live_token": {
+            "default": false,
+            "title": "Has Live Token",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "owner_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Email"
+          },
+          "owner_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Name"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "tokens": {
+            "items": {
+              "$ref": "#/components/schemas/TokenSummary"
+            },
+            "title": "Tokens",
+            "type": "array"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "slug",
+          "description",
+          "owner_name",
+          "owner_email",
+          "active",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ConsumerResponse",
+        "type": "object"
+      },
+      "ConsumerUpdateRequest": {
+        "properties": {
+          "active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 150,
+                "minLength": 2,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "owner_email": {
+            "anyOf": [
+              {
+                "format": "email",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Email"
+          },
+          "owner_name": {
+            "anyOf": [
+              {
+                "maxLength": 150,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Name"
+          },
+          "slug": {
+            "anyOf": [
+              {
+                "maxLength": 150,
+                "minLength": 2,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slug"
+          }
+        },
+        "title": "ConsumerUpdateRequest",
+        "type": "object"
+      },
+      "ConsumerUsage": {
+        "properties": {
+          "last_called_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Called At"
+          },
+          "rejected": {
+            "title": "Rejected",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "rejected",
+          "last_called_at"
+        ],
+        "title": "ConsumerUsage",
+        "type": "object"
+      },
+      "ConsumerWriteRequest": {
+        "properties": {
+          "active": {
+            "default": true,
+            "title": "Active",
+            "type": "boolean"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "maxLength": 2000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "name": {
+            "maxLength": 150,
+            "minLength": 2,
+            "title": "Name",
+            "type": "string"
+          },
+          "owner_email": {
+            "format": "email",
+            "title": "Owner Email",
+            "type": "string"
+          },
+          "owner_name": {
+            "anyOf": [
+              {
+                "maxLength": 150,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Name"
+          },
+          "slug": {
+            "maxLength": 150,
+            "minLength": 2,
+            "title": "Slug",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "slug",
+          "owner_email"
+        ],
+        "title": "ConsumerWriteRequest",
+        "type": "object"
+      },
+      "ConversationMessage": {
+        "properties": {
+          "content": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "role": {
+            "title": "Role",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "role",
+          "content",
+          "created_at"
+        ],
+        "title": "ConversationMessage",
+        "type": "object"
+      },
+      "ConversationSummary": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "ConversationSummary",
         "type": "object"
       },
       "CreateDataAccessRequest": {
@@ -1803,6 +2474,143 @@
         "title": "DataAccessOptionsResponse",
         "type": "object"
       },
+      "DeliveryResponse": {
+        "properties": {
+          "attempts": {
+            "title": "Attempts",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "delivered_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delivered At"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "event": {
+            "title": "Event",
+            "type": "string"
+          },
+          "failed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Failed At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "next_attempt_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Attempt At"
+          },
+          "response_body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response Body"
+          },
+          "response_status": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Response Status"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "event",
+          "status",
+          "response_status",
+          "response_body",
+          "attempts",
+          "duration_ms",
+          "next_attempt_at",
+          "delivered_at",
+          "failed_at",
+          "created_at"
+        ],
+        "title": "DeliveryResponse",
+        "type": "object"
+      },
+      "DeliverySummary": {
+        "properties": {
+          "delivered": {
+            "title": "Delivered",
+            "type": "integer"
+          },
+          "failed": {
+            "title": "Failed",
+            "type": "integer"
+          },
+          "pending": {
+            "title": "Pending",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "delivered",
+          "failed",
+          "pending"
+        ],
+        "title": "DeliverySummary",
+        "type": "object"
+      },
       "ErrorGroupDetailResponse": {
         "description": "The detail view — the group plus its most recent sightings.",
         "properties": {
@@ -2231,6 +3039,24 @@
         "title": "ErrorOccurrenceResponse",
         "type": "object"
       },
+      "EventOption": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "description"
+        ],
+        "title": "EventOption",
+        "type": "object"
+      },
       "FeatureFlagOptionsResponse": {
         "description": "Both targeting pickers, in one request.\n\nSplit out of the index rather than shipped with it, unlike the reference's\nInertia payload: our index refetches on every filter keystroke, and resending\nthe whole role and ACTIVE-user list each time would be the dominant cost of\nthe screen.",
         "properties": {
@@ -2464,6 +3290,80 @@
           "name"
         ],
         "title": "FeatureFlagWriteRequest",
+        "type": "object"
+      },
+      "FeedbackRequest": {
+        "properties": {
+          "comment": {
+            "anyOf": [
+              {
+                "maxLength": 1000,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "conversation_id": {
+            "anyOf": [
+              {
+                "maxLength": 36,
+                "minLength": 36,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Id"
+          },
+          "helpful": {
+            "title": "Helpful",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "helpful"
+        ],
+        "title": "FeedbackRequest",
+        "type": "object"
+      },
+      "FeedbackResponse": {
+        "properties": {
+          "helpful": {
+            "title": "Helpful",
+            "type": "boolean"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "helpful"
+        ],
+        "title": "FeedbackResponse",
+        "type": "object"
+      },
+      "FilterOption": {
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "value",
+          "label"
+        ],
+        "title": "FilterOption",
         "type": "object"
       },
       "ForgotPasswordRequest": {
@@ -2863,6 +3763,43 @@
         "title": "InvitationStats",
         "type": "object"
       },
+      "IssueTokenRequest": {
+        "properties": {
+          "abilities": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Abilities",
+            "type": "array"
+          },
+          "expires_in_days": {
+            "anyOf": [
+              {
+                "maximum": 3650.0,
+                "minimum": 1.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires In Days"
+          },
+          "name": {
+            "maxLength": 150,
+            "minLength": 1,
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "abilities"
+        ],
+        "title": "IssueTokenRequest",
+        "type": "object"
+      },
       "LoginRequest": {
         "properties": {
           "email": {
@@ -3213,6 +4150,92 @@
         "title": "NavigationSection",
         "type": "object"
       },
+      "OperationEntry": {
+        "properties": {
+          "is_public": {
+            "title": "Is Public",
+            "type": "boolean"
+          },
+          "method": {
+            "title": "Method",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "permissions": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Permissions",
+            "type": "array"
+          },
+          "requires_auth": {
+            "title": "Requires Auth",
+            "type": "boolean"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "tag": {
+            "title": "Tag",
+            "type": "string"
+          }
+        },
+        "required": [
+          "method",
+          "path",
+          "name",
+          "summary",
+          "tag",
+          "requires_auth",
+          "is_public"
+        ],
+        "title": "OperationEntry",
+        "type": "object"
+      },
+      "Page_ConsumerResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ConsumerResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "pages": {
+            "title": "Pages",
+            "type": "integer"
+          },
+          "per_page": {
+            "title": "Per Page",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "per_page",
+          "pages"
+        ],
+        "title": "Page[ConsumerResponse]",
+        "type": "object"
+      },
       "Page_ErrorGroupResponse_": {
         "properties": {
           "items": {
@@ -3319,6 +4342,42 @@
           "pages"
         ],
         "title": "Page[PartnerListItem]",
+        "type": "object"
+      },
+      "Page_WebhookResponse_": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/WebhookResponse"
+            },
+            "title": "Items",
+            "type": "array"
+          },
+          "page": {
+            "title": "Page",
+            "type": "integer"
+          },
+          "pages": {
+            "title": "Pages",
+            "type": "integer"
+          },
+          "per_page": {
+            "title": "Per Page",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "items",
+          "total",
+          "page",
+          "per_page",
+          "pages"
+        ],
+        "title": "Page[WebhookResponse]",
         "type": "object"
       },
       "PaginatedActivity": {
@@ -4535,6 +5594,88 @@
         "title": "RegisterRequest",
         "type": "object"
       },
+      "RequestLogEntry": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "duration_ms": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Duration Ms"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "ip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ip"
+          },
+          "method": {
+            "title": "Method",
+            "type": "string"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "status_code": {
+            "title": "Status Code",
+            "type": "integer"
+          },
+          "token_prefix": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token Prefix"
+          }
+        },
+        "required": [
+          "id",
+          "method",
+          "path",
+          "status_code",
+          "outcome",
+          "token_prefix",
+          "ip",
+          "duration_ms",
+          "created_at"
+        ],
+        "title": "RequestLogEntry",
+        "type": "object"
+      },
       "ResetPasswordRequest": {
         "properties": {
           "confirm_password": {
@@ -5257,34 +6398,6 @@
         "title": "SecurityOverviewResponse",
         "type": "object"
       },
-      "SendUserEmailRequest": {
-        "description": "An ad-hoc message from an administrator to one user.\n\nPorted from the reference's `sendEmail`. **Attachments are not implemented**\n— it accepts up to 25MB of pdf/doc/xls/image files, which needs upload\nplumbing this endpoint does not have. Registered as a parity gap in\nCORE_COMPLETION_PLAN.md § 1.1 rather than silently dropped.",
-        "properties": {
-          "bcc_sender": {
-            "default": false,
-            "title": "Bcc Sender",
-            "type": "boolean"
-          },
-          "message": {
-            "maxLength": 10000,
-            "minLength": 1,
-            "title": "Message",
-            "type": "string"
-          },
-          "subject": {
-            "maxLength": 255,
-            "minLength": 1,
-            "title": "Subject",
-            "type": "string"
-          }
-        },
-        "required": [
-          "subject",
-          "message"
-        ],
-        "title": "SendUserEmailRequest",
-        "type": "object"
-      },
       "SendUserEmailResult": {
         "properties": {
           "message": {
@@ -5356,6 +6469,49 @@
           "is_current"
         ],
         "title": "SessionResponse",
+        "type": "object"
+      },
+      "SetActiveRequest": {
+        "properties": {
+          "active": {
+            "title": "Active",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "active"
+        ],
+        "title": "SetActiveRequest",
+        "type": "object"
+      },
+      "SetAssistantEnabledRequest": {
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "enabled"
+        ],
+        "title": "SetAssistantEnabledRequest",
+        "type": "object"
+      },
+      "SetRolePermissionsRequest": {
+        "description": "The whole grant set, for `PUT /roles/{id}/permissions`.\n\nA replacement rather than a patch, and required rather than optional: this\nendpoint exists to say what a role grants, so an omitted list would have to\nmean either \"grant nothing\" or \"change nothing\", and no wording makes that\nunambiguous at the call site. `[]` clears the grants and says so.",
+        "properties": {
+          "permission_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Permission Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "permission_ids"
+        ],
+        "title": "SetRolePermissionsRequest",
         "type": "object"
       },
       "SettingListResponse": {
@@ -5577,6 +6733,106 @@
           "default_key"
         ],
         "title": "ThemePresetsResponse",
+        "type": "object"
+      },
+      "TokenIssued": {
+        "description": "⚠️ Contains the plaintext token. Returned once, stored nowhere.\n\nThe router must keep this body out of any request/response logging, and the\nclient must not put it in Redux or `localStorage` — render it, offer copy,\ndiscard on dismiss.",
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/TokenSummary"
+          },
+          "token": {
+            "title": "Token",
+            "type": "string"
+          },
+          "warning": {
+            "title": "Warning",
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "warning",
+          "detail"
+        ],
+        "title": "TokenIssued",
+        "type": "object"
+      },
+      "TokenSummary": {
+        "description": "A token as it can ever be shown after the moment it was minted.",
+        "properties": {
+          "abilities": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Abilities",
+            "type": "array"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "last_used_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Used At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "prefix": {
+            "title": "Prefix",
+            "type": "string"
+          },
+          "revoked_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Revoked At"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "prefix",
+          "abilities",
+          "expires_at",
+          "last_used_at",
+          "revoked_at",
+          "created_at"
+        ],
+        "title": "TokenSummary",
         "type": "object"
       },
       "TwoFactorChallengeRequest": {
@@ -6991,6 +8247,211 @@
         ],
         "title": "VerifyPasswordOtpRequest",
         "type": "object"
+      },
+      "WebhookCreateRequest": {
+        "properties": {
+          "api_consumer_id": {
+            "title": "Api Consumer Id",
+            "type": "string"
+          },
+          "events": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Events",
+            "type": "array"
+          },
+          "is_active": {
+            "default": true,
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "name": {
+            "maxLength": 191,
+            "minLength": 2,
+            "title": "Name",
+            "type": "string"
+          },
+          "url": {
+            "maxLength": 500,
+            "minLength": 8,
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "api_consumer_id",
+          "name",
+          "url",
+          "events"
+        ],
+        "title": "WebhookCreateRequest",
+        "type": "object"
+      },
+      "WebhookCreated": {
+        "description": "⚠️ Carries the signing secret in plaintext. Returned once, stored hashed\nnowhere and encrypted at rest — the receiver needs it to verify us, so unlike\nan API token it must be reproducible on our side.",
+        "properties": {
+          "endpoint": {
+            "$ref": "#/components/schemas/WebhookResponse"
+          },
+          "secret": {
+            "title": "Secret",
+            "type": "string"
+          },
+          "warning": {
+            "title": "Warning",
+            "type": "string"
+          }
+        },
+        "required": [
+          "secret",
+          "warning",
+          "endpoint"
+        ],
+        "title": "WebhookCreated",
+        "type": "object"
+      },
+      "WebhookResponse": {
+        "properties": {
+          "api_consumer_id": {
+            "title": "Api Consumer Id",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "disabled_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Disabled At"
+          },
+          "events": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "failure_count": {
+            "title": "Failure Count",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "is_active": {
+            "title": "Is Active",
+            "type": "boolean"
+          },
+          "last_delivery_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Delivery At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "updated_at": {
+            "format": "date-time",
+            "title": "Updated At",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "api_consumer_id",
+          "name",
+          "url",
+          "events",
+          "is_active",
+          "last_delivery_at",
+          "failure_count",
+          "disabled_at",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "WebhookResponse",
+        "type": "object"
+      },
+      "WebhookUpdateRequest": {
+        "properties": {
+          "events": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Events"
+          },
+          "is_active": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Is Active"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 191,
+                "minLength": 2,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "maxLength": 500,
+                "minLength": 8,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "title": "WebhookUpdateRequest",
+        "type": "object"
       }
     }
   },
@@ -7002,7 +8463,7 @@
   "paths": {
     "/api/v1/activity": {
       "get": {
-        "description": "The audit trail, newest first.\n\nSorted by `id`, not `created_at`: rows written inside one transaction can share\na timestamp, and an unstable sort would let a row appear on two consecutive\npages or on neither.",
+        "description": "The audit trail, newest first.\n\nSorted by `id` by default, not `created_at`: rows written inside one\ntransaction can share a timestamp, and an unstable sort would let a row appear\non two consecutive pages or on neither. `created_at` is offered as an explicit\nchoice because reading an incident *forward* is a real need, and `id` remains\nthe tiebreak so the order is total either way.\n\n`actor` is passed to the service, which sandboxes a non-admin to their own\nrows. No such caller exists today — see the service docstring — and that is\nprecisely why the wiring should be here before one does.",
         "operationId": "list_activity_api_v1_activity_get",
         "parameters": [
           {
@@ -7092,7 +8553,25 @@
             }
           },
           {
-            "description": "Substring of the description",
+            "description": "'web' | 'seeder' | 'command' — where the row came from",
+            "in": "query",
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "'web' | 'seeder' | 'command' — where the row came from",
+              "title": "Source"
+            }
+          },
+          {
+            "description": "Substring of the description, subject, module or causer name",
             "in": "query",
             "name": "search",
             "required": false,
@@ -7105,7 +8584,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Substring of the description",
+              "description": "Substring of the description, subject, module or causer name",
               "title": "Search"
             }
           },
@@ -7153,6 +8632,42 @@
               "description": "Drop rows with no human causer (automation)",
               "title": "Hide System",
               "type": "boolean"
+            }
+          },
+          {
+            "description": "id | created_at | event | description | log_name",
+            "in": "query",
+            "name": "sort_by",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "id | created_at | event | description | log_name",
+              "title": "Sort By"
+            }
+          },
+          {
+            "description": "asc | desc",
+            "in": "query",
+            "name": "sort_order",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "asc | desc",
+              "title": "Sort Order"
             }
           },
           {
@@ -7225,7 +8740,7 @@
     },
     "/api/v1/activity/events": {
       "get": {
-        "description": "Event names actually present in the trail, for the filter dropdown.\n\nRead from the data rather than a hardcoded list, so an event added by a future\ncall site appears without anyone remembering to register it — and one that has\nnever occurred does not clutter the filter.",
+        "description": "Event names actually present in the trail, for the filter dropdown.\n\nRead from the data rather than a hardcoded list, so an event added by a future\ncall site appears without anyone remembering to register it — and one that has\nnever occurred does not clutter the filter.\n\nSuperseded by `/filter-options`, which returns this list alongside the other\nfour. Kept because it is the narrower question and something already asks it.",
         "operationId": "list_events_api_v1_activity_events_get",
         "parameters": [
           {
@@ -7388,6 +8903,1412 @@
         "summary": "Export Activity",
         "tags": [
           "activity"
+        ]
+      }
+    },
+    "/api/v1/activity/filter-options": {
+      "get": {
+        "description": "Every dropdown on the index, in one call.\n\nRead from the data, not from a hardcoded list, so a module or subject type\nthat has never actually been written does not clutter the filter — and one\nadded by a future call site appears without anyone registering it. `sources`\nis the exception and is a constant: it is the set of *possible* origins, and\nit must include a value even before the first CLI row exists.\n\nScoped by the reader, so the options can never describe rows they cannot see.",
+        "operationId": "list_filter_options_api_v1_activity_filter_options_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ActivityFilterOptions"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Filter Options",
+        "tags": [
+          "activity"
+        ]
+      }
+    },
+    "/api/v1/ai/availability": {
+      "get": {
+        "description": "Whether the widget should render at all.\n\nSplit from `/ai/settings` deliberately. The settings route is gated on\n`api-credential-view` because it reports the integration's configuration; the\nwidget needs one boolean and is used by people who hold no credential\npermission at all. Pointing the widget at the admin route would have meant\neither a 403 on every page load for ordinary users, or loosening the gate on\na route that reports what is configured.",
+        "operationId": "availability_api_v1_ai_availability_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantAvailability"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Availability",
+        "tags": [
+          "ai-assistant"
+        ]
+      }
+    },
+    "/api/v1/ai/chat": {
+      "post": {
+        "description": "Ask the assistant one question.\n\nReturns **403** when the integration is off — the same status the reference\nuses, and correct: the request was well-formed and authenticated, and the\nthing being refused is the feature. **502** when the model could not be\nreached or declined; the question is already saved to the thread by then, so\na retry does not lose it.",
+        "operationId": "chat_api_v1_ai_chat_post",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Chat",
+        "tags": [
+          "ai-assistant"
+        ]
+      }
+    },
+    "/api/v1/ai/conversations": {
+      "get": {
+        "description": "This caller's threads, most recently used first. **Only ever their own.**",
+        "operationId": "list_conversations_api_v1_ai_conversations_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ConversationSummary"
+                  },
+                  "title": "Response List Conversations Api V1 Ai Conversations Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Conversations",
+        "tags": [
+          "ai-assistant"
+        ]
+      }
+    },
+    "/api/v1/ai/conversations/{conversation_id}": {
+      "delete": {
+        "operationId": "delete_conversation_api_v1_ai_conversations__conversation_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Conversation",
+        "tags": [
+          "ai-assistant"
+        ]
+      },
+      "get": {
+        "description": "One thread's messages. 404 for a thread belonging to someone else — see\n`ai_service._conversation_for` for why that is a 404 and not a 403.",
+        "operationId": "conversation_messages_api_v1_ai_conversations__conversation_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ConversationMessage"
+                  },
+                  "title": "Response Conversation Messages Api V1 Ai Conversations  Conversation Id  Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Conversation Messages",
+        "tags": [
+          "ai-assistant"
+        ]
+      }
+    },
+    "/api/v1/ai/feedback": {
+      "post": {
+        "description": "Record 👍/👎 on a reply.",
+        "operationId": "feedback_api_v1_ai_feedback_post",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Feedback",
+        "tags": [
+          "ai-assistant"
+        ]
+      }
+    },
+    "/api/v1/ai/settings": {
+      "get": {
+        "description": "The state of the integration, including which read-only control is in force.",
+        "operationId": "get_settings_api_v1_ai_settings_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Settings",
+        "tags": [
+          "ai-assistant"
+        ]
+      },
+      "put": {
+        "description": "Turn the assistant on or off.\n\n**Refuses to enable with no API key present** (422), matching the reference:\nan enabled assistant with no key is visible, inviting and broken.",
+        "operationId": "set_settings_api_v1_ai_settings_put",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetAssistantEnabledRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AssistantSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Settings",
+        "tags": [
+          "ai-assistant"
+        ]
+      }
+    },
+    "/api/v1/api-consumers": {
+      "get": {
+        "operationId": "list_consumers_api_v1_api_consumers_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "active",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Active"
+            }
+          },
+          {
+            "description": "True: holds at least one live token. False: registered but cannot call.",
+            "in": "query",
+            "name": "has_tokens",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "True: holds at least one live token. False: registered but cannot call.",
+              "title": "Has Tokens"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort_by",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sort By"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort_order",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "title": "Sort Order",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "per_page",
+            "required": false,
+            "schema": {
+              "default": 15,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Per Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_ConsumerResponse_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Consumers",
+        "tags": [
+          "platform-api"
+        ]
+      },
+      "post": {
+        "description": "Register a system. The slug names the **system**, never a person.",
+        "operationId": "create_consumer_api_v1_api_consumers_post",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConsumerWriteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsumerResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Consumer",
+        "tags": [
+          "platform-api"
+        ]
+      }
+    },
+    "/api/v1/api-consumers/abilities": {
+      "get": {
+        "description": "What a token can be granted.\n\nRead from the catalogue rather than typed into the UI, because the same\ncatalogue is what write-time validation checks against — a list the screen\nkept separately would eventually offer an ability the API rejects.",
+        "operationId": "list_abilities_api_v1_api_consumers_abilities_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/AbilityOption"
+                  },
+                  "title": "Response List Abilities Api V1 Api Consumers Abilities Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Abilities",
+        "tags": [
+          "platform-api"
+        ]
+      }
+    },
+    "/api/v1/api-consumers/{consumer_id}": {
+      "delete": {
+        "description": "Remove a system **and every token it holds** — the tokens cascade.\n\nIts request logs do not: \"which credential made these calls\" is the question\nthe log exists to answer, and deleting the consumer is often exactly when\nsomeone needs it.",
+        "operationId": "delete_consumer_api_v1_api_consumers__consumer_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "consumer_id",
+            "required": true,
+            "schema": {
+              "title": "Consumer Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Consumer",
+        "tags": [
+          "platform-api"
+        ]
+      },
+      "get": {
+        "operationId": "get_consumer_api_v1_api_consumers__consumer_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "consumer_id",
+            "required": true,
+            "schema": {
+              "title": "Consumer Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsumerResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Consumer",
+        "tags": [
+          "platform-api"
+        ]
+      },
+      "patch": {
+        "operationId": "update_consumer_api_v1_api_consumers__consumer_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "consumer_id",
+            "required": true,
+            "schema": {
+              "title": "Consumer Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ConsumerUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsumerResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Consumer",
+        "tags": [
+          "platform-api"
+        ]
+      }
+    },
+    "/api/v1/api-consumers/{consumer_id}/requests": {
+      "get": {
+        "description": "The last calls this system made, **including the rejected ones** — a burst\nof refusals is how a leaked or probed token shows up.",
+        "operationId": "recent_requests_api_v1_api_consumers__consumer_id__requests_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "consumer_id",
+            "required": true,
+            "schema": {
+              "title": "Consumer Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 25,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RequestLogEntry"
+                  },
+                  "title": "Response Recent Requests Api V1 Api Consumers  Consumer Id  Requests Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Recent Requests",
+        "tags": [
+          "platform-api"
+        ]
+      }
+    },
+    "/api/v1/api-consumers/{consumer_id}/toggle": {
+      "post": {
+        "description": "The kill switch — switch an integration off without hunting its credentials.\n\nIts own route because it is what someone reaches for at 2am, and it takes\neffect on the very next call: `active` is checked at the gate ahead of\nanything about the token, so a perfectly valid credential stops working.",
+        "operationId": "set_active_api_v1_api_consumers__consumer_id__toggle_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "consumer_id",
+            "required": true,
+            "schema": {
+              "title": "Consumer Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetActiveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsumerResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Active",
+        "tags": [
+          "platform-api"
+        ]
+      }
+    },
+    "/api/v1/api-consumers/{consumer_id}/tokens": {
+      "post": {
+        "description": "Mint a token. **This response is the only place the plaintext ever exists.**\n\nGated on `api-token-manage`, which is deliberately not `api-consumer-update`:\nediting a description and minting standing credentials are not the same act\nand must not ride on one checkbox. Rate-limited by `core/rate_limit.py`'s\nshape matcher, because a runaway script should not mint hundreds before\nanyone notices.\n\n⚠️ This body must be excluded from any request/response logging that is ever\nadded, and the client must render it, offer copy, and discard it on dismiss —\nnever Redux, never `localStorage`.",
+        "operationId": "issue_token_api_v1_api_consumers__consumer_id__tokens_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "consumer_id",
+            "required": true,
+            "schema": {
+              "title": "Consumer Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IssueTokenRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenIssued"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Issue Token",
+        "tags": [
+          "platform-api"
+        ]
+      }
+    },
+    "/api/v1/api-consumers/{consumer_id}/tokens/{token_id}": {
+      "delete": {
+        "description": "Revoke a token. It stops working immediately and the row is kept.\n\nKept rather than deleted so its request-log rows still point at something —\n\"which credential made these calls, and when did we stop it\" is the question\nthe log exists to answer.",
+        "operationId": "revoke_token_api_v1_api_consumers__consumer_id__tokens__token_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "consumer_id",
+            "required": true,
+            "schema": {
+              "title": "Consumer Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "token_id",
+            "required": true,
+            "schema": {
+              "title": "Token Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Revoke Token",
+        "tags": [
+          "platform-api"
+        ]
+      }
+    },
+    "/api/v1/api-consumers/{consumer_id}/usage": {
+      "get": {
+        "operationId": "usage_api_v1_api_consumers__consumer_id__usage_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "consumer_id",
+            "required": true,
+            "schema": {
+              "title": "Consumer Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConsumerUsage"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Usage",
+        "tags": [
+          "platform-api"
+        ]
+      }
+    },
+    "/api/v1/api-docs": {
+      "get": {
+        "description": "Every route the application serves, with the permission that gates it.\n\nRead from `request.app.routes` rather than from the committed document: the\ncommitted file can be a code change behind, where the route table is the\nthing actually serving requests.",
+        "operationId": "catalogue_api_v1_api_docs_get",
+        "parameters": [
+          {
+            "description": "Restrict to one tag",
+            "in": "query",
+            "name": "tag",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Restrict to one tag",
+              "title": "Tag"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CatalogueResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Catalogue",
+        "tags": [
+          "api-docs"
+        ]
+      }
+    },
+    "/api/v1/api-docs/permissions": {
+      "get": {
+        "description": "Permission → the routes it opens.\n\nThe question an administrator actually asks before granting one: *what does\nthis let someone do?* Answered from the routes, so it cannot drift from what\nthe code enforces the way a written description does.",
+        "operationId": "permissions_in_use_api_v1_api_docs_permissions_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "title": "Response Permissions In Use Api V1 Api Docs Permissions Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Permissions In Use",
+        "tags": [
+          "api-docs"
         ]
       }
     },
@@ -11596,6 +14517,75 @@
         ]
       }
     },
+    "/api/v1/roles/{role_id}/permissions": {
+      "put": {
+        "description": "Replace what a role grants.\n\n**Its own route as of 2026-08-12** — parity plan § 3e. The rule was enforced\nonly as a conditional check on one field of `PATCH /roles/{id}`, which worked\nbut left `role-permissions` the one permission of the forty-nine that appeared\nnowhere in the API contract. `PATCH` still accepts `permission_ids` and still\napplies the same check, because grants remain part of the role edit form; this\nroute is the one that can be read off the contract.\n\n`PUT`, not `PATCH`: the list replaces the role's grants entirely.",
+        "operationId": "set_role_permissions_api_v1_roles__role_id__permissions_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "role_id",
+            "required": true,
+            "schema": {
+              "title": "Role Id",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetRolePermissionsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RoleResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Role Permissions",
+        "tags": [
+          "roles"
+        ]
+      }
+    },
     "/api/v1/roles/{role_id}/users": {
       "get": {
         "description": "Users holding this role.",
@@ -14682,7 +17672,7 @@
     },
     "/api/v1/users/{user_id}/email": {
       "post": {
-        "description": "Send an ad-hoc message to a user.\n\nGated on `user-email`, which no role but Admin and above holds by default —\nthe ability to send mail *as the platform* is worth separating from the\nability to edit an account.\n\nReturns 200 with `sent: false` when the mail backend refuses, rather than a\n5xx. The request was valid and the record exists; only delivery failed, and\nconflating the two sends whoever is debugging to the wrong place.",
+        "description": "Send an ad-hoc message to a user, optionally with files attached.\n\nGated on `user-email`, which no role but Admin and above holds by default —\nthe ability to send mail *as the platform* is worth separating from the\nability to edit an account. Throttled per caller by `rate_limit.py`'s\n`mail-user` bucket, which matches the reference's per-route throttle.\n\n**`multipart/form-data`, not JSON, as of 2026-08-12.** A Pydantic body and an\nupload cannot share one request, and the alternative — a second endpoint for\nthe attachment case — would mean two code paths to the same send, one of\nwhich would eventually miss a rule the other has.\n\nEach file is read with a **bounded** read, so an oversized upload is rejected\nrather than held whole in memory. That is a limit on this handler, not on the\nrequest: the body has already been buffered to a spooled temp file by the ASGI\nserver before any of this runs. A hard ingress body cap belongs in the reverse\nproxy and is not configured — worth knowing rather than assuming.\n\nReturns 200 with `sent: false` when the mail backend refuses, rather than a\n5xx. The request was valid and the record exists; only delivery failed, and\nconflating the two sends whoever is debugging to the wrong place.",
         "operationId": "send_user_email_api_v1_users__user_id__email_post",
         "parameters": [
           {
@@ -14713,9 +17703,9 @@
         ],
         "requestBody": {
           "content": {
-            "application/json": {
+            "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/SendUserEmailRequest"
+                "$ref": "#/components/schemas/Body_send_user_email_api_v1_users__user_id__email_post"
               }
             }
           },
@@ -14922,6 +17912,755 @@
         "summary": "Unlock User",
         "tags": [
           "users"
+        ]
+      }
+    },
+    "/api/v1/webhooks": {
+      "get": {
+        "operationId": "list_endpoints_api_v1_webhooks_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "consumer_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Consumer Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "search",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Search"
+            }
+          },
+          {
+            "in": "query",
+            "name": "is_active",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Is Active"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort_by",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Sort By"
+            }
+          },
+          {
+            "in": "query",
+            "name": "sort_order",
+            "required": false,
+            "schema": {
+              "default": "desc",
+              "title": "Sort Order",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "page",
+            "required": false,
+            "schema": {
+              "default": 1,
+              "minimum": 1,
+              "title": "Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "per_page",
+            "required": false,
+            "schema": {
+              "default": 15,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Per Page",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Page_WebhookResponse_"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Endpoints",
+        "tags": [
+          "webhooks"
+        ]
+      },
+      "post": {
+        "description": "Register an endpoint. **Returns the signing secret once.**\n\nGated on `api-token-manage` rather than `api-consumer-update`: this hands a\nthird party a shared secret and points our server at a URL they chose, which\nis credential-issuing work rather than record-editing.\n\nThe URL is checked against private, loopback and metadata addresses before it\nis stored — see `webhook_service.assert_safe_url`.",
+        "operationId": "create_endpoint_api_v1_webhooks_post",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebhookCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookCreated"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Endpoint",
+        "tags": [
+          "webhooks"
+        ]
+      }
+    },
+    "/api/v1/webhooks/deliveries/{delivery_id}/redeliver": {
+      "post": {
+        "description": "Try a past delivery again.\n\n**The retry that actually works today.** The backoff schedule exists and\nrecords when each attempt is due, but nothing sweeps for due retries because\nthere is no scheduler — see `webhook_service.process_due_retries`.",
+        "operationId": "redeliver_api_v1_webhooks_deliveries__delivery_id__redeliver_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "delivery_id",
+            "required": true,
+            "schema": {
+              "title": "Delivery Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Redeliver",
+        "tags": [
+          "webhooks"
+        ]
+      }
+    },
+    "/api/v1/webhooks/events": {
+      "get": {
+        "description": "What an endpoint may subscribe to.\n\nEvery one is emitted by a real call site. Offering an event nothing fires\nwould produce an endpoint that reads as configured and delivers nothing.",
+        "operationId": "list_events_api_v1_webhooks_events_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/EventOption"
+                  },
+                  "title": "Response List Events Api V1 Webhooks Events Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Events",
+        "tags": [
+          "webhooks"
+        ]
+      }
+    },
+    "/api/v1/webhooks/{endpoint_id}": {
+      "delete": {
+        "operationId": "delete_endpoint_api_v1_webhooks__endpoint_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "endpoint_id",
+            "required": true,
+            "schema": {
+              "title": "Endpoint Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Endpoint",
+        "tags": [
+          "webhooks"
+        ]
+      },
+      "get": {
+        "operationId": "get_endpoint_api_v1_webhooks__endpoint_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "endpoint_id",
+            "required": true,
+            "schema": {
+              "title": "Endpoint Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Endpoint",
+        "tags": [
+          "webhooks"
+        ]
+      },
+      "patch": {
+        "description": "Edit an endpoint. Re-enabling it also clears the failure counter.",
+        "operationId": "update_endpoint_api_v1_webhooks__endpoint_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "endpoint_id",
+            "required": true,
+            "schema": {
+              "title": "Endpoint Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WebhookUpdateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update Endpoint",
+        "tags": [
+          "webhooks"
+        ]
+      }
+    },
+    "/api/v1/webhooks/{endpoint_id}/deliveries": {
+      "get": {
+        "description": "The delivery log. **With the redeliver button, this is the module** —\nwithout it, a webhook that failed silently is unrecoverable.",
+        "operationId": "list_deliveries_api_v1_webhooks__endpoint_id__deliveries_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "endpoint_id",
+            "required": true,
+            "schema": {
+              "title": "Endpoint Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 50,
+              "maximum": 200,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DeliveryResponse"
+                  },
+                  "title": "Response List Deliveries Api V1 Webhooks  Endpoint Id  Deliveries Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Deliveries",
+        "tags": [
+          "webhooks"
+        ]
+      }
+    },
+    "/api/v1/webhooks/{endpoint_id}/rotate-secret": {
+      "post": {
+        "description": "Issue a new signing secret. **Deliveries signed with the old one stop\nverifying immediately**, so the receiver has to be updated in the same\nchange.",
+        "operationId": "rotate_secret_api_v1_webhooks__endpoint_id__rotate_secret_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "endpoint_id",
+            "required": true,
+            "schema": {
+              "title": "Endpoint Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WebhookCreated"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rotate Secret",
+        "tags": [
+          "webhooks"
+        ]
+      }
+    },
+    "/api/v1/webhooks/{endpoint_id}/summary": {
+      "get": {
+        "operationId": "delivery_summary_api_v1_webhooks__endpoint_id__summary_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "endpoint_id",
+            "required": true,
+            "schema": {
+              "title": "Endpoint Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliverySummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delivery Summary",
+        "tags": [
+          "webhooks"
+        ]
+      }
+    },
+    "/api/v1/webhooks/{endpoint_id}/test": {
+      "post": {
+        "description": "Send a test delivery now, whatever the endpoint is subscribed to.\n\nThe question being asked is \"can we reach you and will you accept our\nsignature\", not \"do you want this event\".",
+        "operationId": "send_test_api_v1_webhooks__endpoint_id__test_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "endpoint_id",
+            "required": true,
+            "schema": {
+              "title": "Endpoint Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeliveryResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Send Test",
+        "tags": [
+          "webhooks"
         ]
       }
     },

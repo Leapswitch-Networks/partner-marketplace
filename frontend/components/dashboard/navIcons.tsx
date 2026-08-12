@@ -131,6 +131,60 @@ export const NAV_ICONS: Record<string, ReactNode> = {
     </svg>
   ),
 
+  /** API Documentation — a book. It is a reference, not a control surface. */
+  apiDocs: (
+    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
+      />
+    </svg>
+  ),
+
+  /** Webhooks — an outbound arrow leaving a box: events going out, not coming in. */
+  webhooks: (
+    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M14 4h6v6M20 4l-8 8M18 14v5a1 1 0 01-1 1H5a1 1 0 01-1-1V7a1 1 0 011-1h5"
+      />
+    </svg>
+  ),
+
+  /**
+   * Platform API — a plug. Deliberately not the key used for API Credentials:
+   * the two sit next to each other in the sidebar and both say "API", and a
+   * shared glyph would suggest they are two views of one thing. They are
+   * opposites — that module holds secrets we send, this one holds secrets we
+   * only ever compare.
+   */
+  platformApi: (
+    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M9 3v5M15 3v5M7 8h10v3a5 5 0 01-5 5 5 5 0 01-5-5V8zM12 16v5"
+      />
+    </svg>
+  ),
+
+  /**
+   * AI Assistant — a sparkle. Deliberately not a robot or a speech bubble: the
+   * first reads as automation running on its own, which this is not, and the
+   * second is already what a support-chat glyph looks like everywhere else.
+   */
+  ai: (
+    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M12 3l1.9 4.6L18.5 9.5 13.9 11.4 12 16l-1.9-4.6L5.5 9.5l4.6-1.9L12 3zM18 15l.8 2 2 .8-2 .8L18 21l-.8-2.4-2-.8 2-.8L18 15z"
+      />
+    </svg>
+  ),
+
   /** Recycle Bin — a bin with a lid, distinct from any delete glyph. */
   recycleBin: (
     <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>

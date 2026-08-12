@@ -15,9 +15,15 @@ export interface paths {
          * List Activity
          * @description The audit trail, newest first.
          *
-         *     Sorted by `id`, not `created_at`: rows written inside one transaction can share
-         *     a timestamp, and an unstable sort would let a row appear on two consecutive
-         *     pages or on neither.
+         *     Sorted by `id` by default, not `created_at`: rows written inside one
+         *     transaction can share a timestamp, and an unstable sort would let a row appear
+         *     on two consecutive pages or on neither. `created_at` is offered as an explicit
+         *     choice because reading an incident *forward* is a real need, and `id` remains
+         *     the tiebreak so the order is total either way.
+         *
+         *     `actor` is passed to the service, which sandboxes a non-admin to their own
+         *     rows. No such caller exists today — see the service docstring — and that is
+         *     precisely why the wiring should be here before one does.
          */
         get: operations["list_activity_api_v1_activity_get"];
         put?: never;
@@ -42,6 +48,9 @@ export interface paths {
          *     Read from the data rather than a hardcoded list, so an event added by a future
          *     call site appears without anyone remembering to register it — and one that has
          *     never occurred does not clutter the filter.
+         *
+         *     Superseded by `/filter-options`, which returns this list alongside the other
+         *     four. Kept because it is the narrower question and something already asks it.
          */
         get: operations["list_events_api_v1_activity_events_get"];
         put?: never;
@@ -75,6 +84,411 @@ export interface paths {
          *     silently drop the before/after diff that makes an export worth having.
          */
         get: operations["export_activity_api_v1_activity_export_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/activity/filter-options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Filter Options
+         * @description Every dropdown on the index, in one call.
+         *
+         *     Read from the data, not from a hardcoded list, so a module or subject type
+         *     that has never actually been written does not clutter the filter — and one
+         *     added by a future call site appears without anyone registering it. `sources`
+         *     is the exception and is a constant: it is the set of *possible* origins, and
+         *     it must include a value even before the first CLI row exists.
+         *
+         *     Scoped by the reader, so the options can never describe rows they cannot see.
+         */
+        get: operations["list_filter_options_api_v1_activity_filter_options_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/availability": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Availability
+         * @description Whether the widget should render at all.
+         *
+         *     Split from `/ai/settings` deliberately. The settings route is gated on
+         *     `api-credential-view` because it reports the integration's configuration; the
+         *     widget needs one boolean and is used by people who hold no credential
+         *     permission at all. Pointing the widget at the admin route would have meant
+         *     either a 403 on every page load for ordinary users, or loosening the gate on
+         *     a route that reports what is configured.
+         */
+        get: operations["availability_api_v1_ai_availability_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/chat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Chat
+         * @description Ask the assistant one question.
+         *
+         *     Returns **403** when the integration is off — the same status the reference
+         *     uses, and correct: the request was well-formed and authenticated, and the
+         *     thing being refused is the feature. **502** when the model could not be
+         *     reached or declined; the question is already saved to the thread by then, so
+         *     a retry does not lose it.
+         */
+        post: operations["chat_api_v1_ai_chat_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/conversations": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Conversations
+         * @description This caller's threads, most recently used first. **Only ever their own.**
+         */
+        get: operations["list_conversations_api_v1_ai_conversations_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/conversations/{conversation_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Conversation Messages
+         * @description One thread's messages. 404 for a thread belonging to someone else — see
+         *     `ai_service._conversation_for` for why that is a 404 and not a 403.
+         */
+        get: operations["conversation_messages_api_v1_ai_conversations__conversation_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Conversation */
+        delete: operations["delete_conversation_api_v1_ai_conversations__conversation_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/feedback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Feedback
+         * @description Record 👍/👎 on a reply.
+         */
+        post: operations["feedback_api_v1_ai_feedback_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/ai/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Settings
+         * @description The state of the integration, including which read-only control is in force.
+         */
+        get: operations["get_settings_api_v1_ai_settings_get"];
+        /**
+         * Set Settings
+         * @description Turn the assistant on or off.
+         *
+         *     **Refuses to enable with no API key present** (422), matching the reference:
+         *     an enabled assistant with no key is visible, inviting and broken.
+         */
+        put: operations["set_settings_api_v1_ai_settings_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/api-consumers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Consumers */
+        get: operations["list_consumers_api_v1_api_consumers_get"];
+        put?: never;
+        /**
+         * Create Consumer
+         * @description Register a system. The slug names the **system**, never a person.
+         */
+        post: operations["create_consumer_api_v1_api_consumers_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/api-consumers/abilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Abilities
+         * @description What a token can be granted.
+         *
+         *     Read from the catalogue rather than typed into the UI, because the same
+         *     catalogue is what write-time validation checks against — a list the screen
+         *     kept separately would eventually offer an ability the API rejects.
+         */
+        get: operations["list_abilities_api_v1_api_consumers_abilities_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/api-consumers/{consumer_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Consumer */
+        get: operations["get_consumer_api_v1_api_consumers__consumer_id__get"];
+        put?: never;
+        post?: never;
+        /**
+         * Delete Consumer
+         * @description Remove a system **and every token it holds** — the tokens cascade.
+         *
+         *     Its request logs do not: "which credential made these calls" is the question
+         *     the log exists to answer, and deleting the consumer is often exactly when
+         *     someone needs it.
+         */
+        delete: operations["delete_consumer_api_v1_api_consumers__consumer_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Consumer */
+        patch: operations["update_consumer_api_v1_api_consumers__consumer_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/api-consumers/{consumer_id}/requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Recent Requests
+         * @description The last calls this system made, **including the rejected ones** — a burst
+         *     of refusals is how a leaked or probed token shows up.
+         */
+        get: operations["recent_requests_api_v1_api_consumers__consumer_id__requests_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/api-consumers/{consumer_id}/toggle": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set Active
+         * @description The kill switch — switch an integration off without hunting its credentials.
+         *
+         *     Its own route because it is what someone reaches for at 2am, and it takes
+         *     effect on the very next call: `active` is checked at the gate ahead of
+         *     anything about the token, so a perfectly valid credential stops working.
+         */
+        post: operations["set_active_api_v1_api_consumers__consumer_id__toggle_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/api-consumers/{consumer_id}/tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Issue Token
+         * @description Mint a token. **This response is the only place the plaintext ever exists.**
+         *
+         *     Gated on `api-token-manage`, which is deliberately not `api-consumer-update`:
+         *     editing a description and minting standing credentials are not the same act
+         *     and must not ride on one checkbox. Rate-limited by `core/rate_limit.py`'s
+         *     shape matcher, because a runaway script should not mint hundreds before
+         *     anyone notices.
+         *
+         *     ⚠️ This body must be excluded from any request/response logging that is ever
+         *     added, and the client must render it, offer copy, and discard it on dismiss —
+         *     never Redux, never `localStorage`.
+         */
+        post: operations["issue_token_api_v1_api_consumers__consumer_id__tokens_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/api-consumers/{consumer_id}/tokens/{token_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke Token
+         * @description Revoke a token. It stops working immediately and the row is kept.
+         *
+         *     Kept rather than deleted so its request-log rows still point at something —
+         *     "which credential made these calls, and when did we stop it" is the question
+         *     the log exists to answer.
+         */
+        delete: operations["revoke_token_api_v1_api_consumers__consumer_id__tokens__token_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/api-consumers/{consumer_id}/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Usage */
+        get: operations["usage_api_v1_api_consumers__consumer_id__usage_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/api-docs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Catalogue
+         * @description Every route the application serves, with the permission that gates it.
+         *
+         *     Read from `request.app.routes` rather than from the committed document: the
+         *     committed file can be a code change behind, where the route table is the
+         *     thing actually serving requests.
+         */
+        get: operations["catalogue_api_v1_api_docs_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/api-docs/permissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Permissions In Use
+         * @description Permission → the routes it opens.
+         *
+         *     The question an administrator actually asks before granting one: *what does
+         *     this let someone do?* Answered from the routes, so it cannot drift from what
+         *     the code enforces the way a written description does.
+         */
+        get: operations["permissions_in_use_api_v1_api_docs_permissions_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1330,6 +1744,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/roles/{role_id}/permissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Role Permissions
+         * @description Replace what a role grants.
+         *
+         *     **Its own route as of 2026-08-12** — parity plan § 3e. The rule was enforced
+         *     only as a conditional check on one field of `PATCH /roles/{id}`, which worked
+         *     but left `role-permissions` the one permission of the forty-nine that appeared
+         *     nowhere in the API contract. `PATCH` still accepts `permission_ids` and still
+         *     applies the same check, because grants remain part of the role edit form; this
+         *     route is the one that can be read off the contract.
+         *
+         *     `PUT`, not `PATCH`: the list replaces the role's grants entirely.
+         */
+        put: operations["set_role_permissions_api_v1_roles__role_id__permissions_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/roles/{role_id}/users": {
         parameters: {
             query?: never;
@@ -2029,11 +2472,23 @@ export interface paths {
         put?: never;
         /**
          * Send User Email
-         * @description Send an ad-hoc message to a user.
+         * @description Send an ad-hoc message to a user, optionally with files attached.
          *
          *     Gated on `user-email`, which no role but Admin and above holds by default —
          *     the ability to send mail *as the platform* is worth separating from the
-         *     ability to edit an account.
+         *     ability to edit an account. Throttled per caller by `rate_limit.py`'s
+         *     `mail-user` bucket, which matches the reference's per-route throttle.
+         *
+         *     **`multipart/form-data`, not JSON, as of 2026-08-12.** A Pydantic body and an
+         *     upload cannot share one request, and the alternative — a second endpoint for
+         *     the attachment case — would mean two code paths to the same send, one of
+         *     which would eventually miss a rule the other has.
+         *
+         *     Each file is read with a **bounded** read, so an oversized upload is rejected
+         *     rather than held whole in memory. That is a limit on this handler, not on the
+         *     request: the body has already been buffered to a spooled temp file by the ASGI
+         *     server before any of this runs. A hard ingress body cap belongs in the reverse
+         *     proxy and is not configured — worth knowing rather than assuming.
          *
          *     Returns 200 with `sent: false` when the mail backend refuses, rather than a
          *     5xx. The request was valid and the record exists; only delivery failed, and
@@ -2117,6 +2572,186 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/webhooks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Endpoints */
+        get: operations["list_endpoints_api_v1_webhooks_get"];
+        put?: never;
+        /**
+         * Create Endpoint
+         * @description Register an endpoint. **Returns the signing secret once.**
+         *
+         *     Gated on `api-token-manage` rather than `api-consumer-update`: this hands a
+         *     third party a shared secret and points our server at a URL they chose, which
+         *     is credential-issuing work rather than record-editing.
+         *
+         *     The URL is checked against private, loopback and metadata addresses before it
+         *     is stored — see `webhook_service.assert_safe_url`.
+         */
+        post: operations["create_endpoint_api_v1_webhooks_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/webhooks/deliveries/{delivery_id}/redeliver": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Redeliver
+         * @description Try a past delivery again.
+         *
+         *     **The retry that actually works today.** The backoff schedule exists and
+         *     records when each attempt is due, but nothing sweeps for due retries because
+         *     there is no scheduler — see `webhook_service.process_due_retries`.
+         */
+        post: operations["redeliver_api_v1_webhooks_deliveries__delivery_id__redeliver_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/webhooks/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Events
+         * @description What an endpoint may subscribe to.
+         *
+         *     Every one is emitted by a real call site. Offering an event nothing fires
+         *     would produce an endpoint that reads as configured and delivers nothing.
+         */
+        get: operations["list_events_api_v1_webhooks_events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/webhooks/{endpoint_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Endpoint */
+        get: operations["get_endpoint_api_v1_webhooks__endpoint_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Endpoint */
+        delete: operations["delete_endpoint_api_v1_webhooks__endpoint_id__delete"];
+        options?: never;
+        head?: never;
+        /**
+         * Update Endpoint
+         * @description Edit an endpoint. Re-enabling it also clears the failure counter.
+         */
+        patch: operations["update_endpoint_api_v1_webhooks__endpoint_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/webhooks/{endpoint_id}/deliveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Deliveries
+         * @description The delivery log. **With the redeliver button, this is the module** —
+         *     without it, a webhook that failed silently is unrecoverable.
+         */
+        get: operations["list_deliveries_api_v1_webhooks__endpoint_id__deliveries_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/webhooks/{endpoint_id}/rotate-secret": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rotate Secret
+         * @description Issue a new signing secret. **Deliveries signed with the old one stop
+         *     verifying immediately**, so the receiver has to be updated in the same
+         *     change.
+         */
+        post: operations["rotate_secret_api_v1_webhooks__endpoint_id__rotate_secret_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/webhooks/{endpoint_id}/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Delivery Summary */
+        get: operations["delivery_summary_api_v1_webhooks__endpoint_id__summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/webhooks/{endpoint_id}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send Test
+         * @description Send a test delivery now, whatever the endpoint is subscribed to.
+         *
+         *     The question being asked is "can we reach you and will you accept our
+         *     signature", not "do you want this event".
+         */
+        post: operations["send_test_api_v1_webhooks__endpoint_id__test_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health": {
         parameters: {
             query?: never;
@@ -2164,6 +2799,19 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AbilityOption */
+        AbilityOption: {
+            /** Description */
+            description: string;
+            /** Group */
+            group: string;
+            /** Label */
+            label: string;
+            /** Name */
+            name: string;
+            /** Sensitivity */
+            sensitivity: string;
+        };
         /**
          * AcceptInvitationRequest
          * @description Completing a tokenised invitation with credentials.
@@ -2201,12 +2849,69 @@ export interface components {
             id: number;
             /** Log Name */
             log_name: string | null;
+            /** Module Label */
+            module_label: string;
             /** Properties */
             properties: Record<string, never> | null;
             /** Subject Id */
             subject_id: string | null;
             /** Subject Type */
             subject_type: string | null;
+            /** Subject Url */
+            subject_url: string | null;
+        };
+        /**
+         * ActivityFilterOptions
+         * @description Everything the filter row needs, in one request instead of four.
+         */
+        ActivityFilterOptions: {
+            /** Causers */
+            causers: components["schemas"]["FilterOption"][];
+            /** Events */
+            events: components["schemas"]["FilterOption"][];
+            /** Log Names */
+            log_names: components["schemas"]["FilterOption"][];
+            /** Sources */
+            sources: components["schemas"]["FilterOption"][];
+            /** Subject Types */
+            subject_types: components["schemas"]["FilterOption"][];
+        };
+        /**
+         * AssistantAvailability
+         * @description The one question the widget asks, and the only one it is entitled to.
+         *
+         *     Two booleans and nothing about the configuration — the model in use, whether
+         *     a key is present and which read-only control is in force are all answers for
+         *     an administrator, on `/ai/settings`.
+         */
+        AssistantAvailability: {
+            /** Available */
+            available: boolean;
+            /** Can Use */
+            can_use: boolean;
+        };
+        /**
+         * AssistantSettings
+         * @description What the settings screen shows, and what the widget reads to decide whether
+         *     to render at all.
+         */
+        AssistantSettings: {
+            /** Available */
+            available: boolean;
+            /** Can Use */
+            can_use: boolean;
+            /** Enabled */
+            enabled: boolean;
+            /** Has Api Key */
+            has_api_key: boolean;
+            /** Model */
+            model: string;
+            /** Readonly Dedicated Role */
+            readonly_dedicated_role: boolean;
+            /** Readonly Guard Holds */
+            readonly_guard_holds: boolean;
+            /** Tools */
+            tools: string[];
         };
         /**
          * BinnedItem
@@ -2228,6 +2933,20 @@ export interface components {
             type: string;
             /** Type Label */
             type_label: string;
+        };
+        /** Body_send_user_email_api_v1_users__user_id__email_post */
+        Body_send_user_email_api_v1_users__user_id__email_post: {
+            /** Attachments */
+            attachments?: string[];
+            /**
+             * Bcc Sender
+             * @default false
+             */
+            bcc_sender: boolean;
+            /** Message */
+            message: string;
+            /** Subject */
+            subject: string;
         };
         /** Body_upload_asset_api_v1_settings_branding__asset__post */
         Body_upload_asset_api_v1_settings_branding__asset__post: {
@@ -2324,6 +3043,29 @@ export interface components {
             /** User Ids */
             user_ids: string[];
         };
+        /** CatalogueResponse */
+        CatalogueResponse: {
+            /** Operations */
+            operations: components["schemas"]["OperationEntry"][];
+            summary: components["schemas"]["CatalogueSummary"];
+        };
+        /** CatalogueSummary */
+        CatalogueSummary: {
+            /** Auth Only */
+            auth_only: number;
+            /** Operations */
+            operations: number;
+            /** Paths */
+            paths: number;
+            /** Permission Gated */
+            permission_gated: number;
+            /** Public */
+            public: number;
+            /** Tags */
+            tags: number;
+            /** Unexpected Public */
+            unexpected_public: string[];
+        };
         /**
          * ChangePartnerStatusRequest
          * @description Move a partner through PENDING → ACTIVE ↔ SUSPENDED.
@@ -2363,6 +3105,26 @@ export interface components {
             /** Password */
             password: string;
         };
+        /** ChatRequest */
+        ChatRequest: {
+            /** Conversation Id */
+            conversation_id?: string | null;
+            /** Message */
+            message: string;
+        };
+        /** ChatResponse */
+        ChatResponse: {
+            /** Conversation Id */
+            conversation_id: string;
+            /** Flags */
+            flags?: string[];
+            /** Reply */
+            reply: string;
+            /** Title */
+            title: string | null;
+            /** Tools Used */
+            tools_used?: string[];
+        };
         /**
          * CloneRoleRequest
          * @description Copy a role's permissions onto a new one.
@@ -2383,6 +3145,116 @@ export interface components {
         ConfirmPasswordRequest: {
             /** Password */
             password: string;
+        };
+        /** ConsumerResponse */
+        ConsumerResponse: {
+            /** Active */
+            active: boolean;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Description */
+            description: string | null;
+            /**
+             * Has Live Token
+             * @default false
+             */
+            has_live_token: boolean;
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /** Owner Email */
+            owner_email: string | null;
+            /** Owner Name */
+            owner_name: string | null;
+            /** Slug */
+            slug: string;
+            /** Tokens */
+            tokens?: components["schemas"]["TokenSummary"][];
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+        };
+        /** ConsumerUpdateRequest */
+        ConsumerUpdateRequest: {
+            /** Active */
+            active?: boolean | null;
+            /** Description */
+            description?: string | null;
+            /** Name */
+            name?: string | null;
+            /** Owner Email */
+            owner_email?: string | null;
+            /** Owner Name */
+            owner_name?: string | null;
+            /** Slug */
+            slug?: string | null;
+        };
+        /** ConsumerUsage */
+        ConsumerUsage: {
+            /** Last Called At */
+            last_called_at: string | null;
+            /** Rejected */
+            rejected: number;
+            /** Total */
+            total: number;
+        };
+        /** ConsumerWriteRequest */
+        ConsumerWriteRequest: {
+            /**
+             * Active
+             * @default true
+             */
+            active: boolean;
+            /** Description */
+            description?: string | null;
+            /** Name */
+            name: string;
+            /**
+             * Owner Email
+             * Format: email
+             */
+            owner_email: string;
+            /** Owner Name */
+            owner_name?: string | null;
+            /** Slug */
+            slug: string;
+        };
+        /** ConversationMessage */
+        ConversationMessage: {
+            /** Content */
+            content: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** Role */
+            role: string;
+        };
+        /** ConversationSummary */
+        ConversationSummary: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Id */
+            id: string;
+            /** Title */
+            title: string | null;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
         };
         /**
          * CreateDataAccessRequest
@@ -2859,6 +3731,45 @@ export interface components {
             /** Users */
             users: components["schemas"]["GrantUserOption"][];
         };
+        /** DeliveryResponse */
+        DeliveryResponse: {
+            /** Attempts */
+            attempts: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Delivered At */
+            delivered_at: string | null;
+            /** Duration Ms */
+            duration_ms: number | null;
+            /** Event */
+            event: string;
+            /** Failed At */
+            failed_at: string | null;
+            /** Id */
+            id: string;
+            /** Next Attempt At */
+            next_attempt_at: string | null;
+            /** Response Body */
+            response_body: string | null;
+            /** Response Status */
+            response_status: number | null;
+            /** Status */
+            status: string;
+        };
+        /** DeliverySummary */
+        DeliverySummary: {
+            /** Delivered */
+            delivered: number;
+            /** Failed */
+            failed: number;
+            /** Pending */
+            pending: number;
+            /** Total */
+            total: number;
+        };
         /**
          * ErrorGroupDetailResponse
          * @description The detail view — the group plus its most recent sightings.
@@ -2981,6 +3892,13 @@ export interface components {
             /** User Id */
             user_id: string | null;
         };
+        /** EventOption */
+        EventOption: {
+            /** Description */
+            description: string;
+            /** Name */
+            name: string;
+        };
         /**
          * FeatureFlagOptionsResponse
          * @description Both targeting pickers, in one request.
@@ -3073,6 +3991,29 @@ export interface components {
             target_roles?: string[] | null;
             /** Target User Ids */
             target_user_ids?: string[] | null;
+        };
+        /** FeedbackRequest */
+        FeedbackRequest: {
+            /** Comment */
+            comment?: string | null;
+            /** Conversation Id */
+            conversation_id?: string | null;
+            /** Helpful */
+            helpful: boolean;
+        };
+        /** FeedbackResponse */
+        FeedbackResponse: {
+            /** Helpful */
+            helpful: boolean;
+            /** Id */
+            id: string;
+        };
+        /** FilterOption */
+        FilterOption: {
+            /** Label */
+            label: string;
+            /** Value */
+            value: string;
         };
         /** ForgotPasswordRequest */
         ForgotPasswordRequest: {
@@ -3250,6 +4191,15 @@ export interface components {
             /** Pending */
             pending: number;
         };
+        /** IssueTokenRequest */
+        IssueTokenRequest: {
+            /** Abilities */
+            abilities: string[];
+            /** Expires In Days */
+            expires_in_days?: number | null;
+            /** Name */
+            name: string;
+        };
         /** LoginRequest */
         LoginRequest: {
             /**
@@ -3410,6 +4360,38 @@ export interface components {
             /** Label */
             label?: string | null;
         };
+        /** OperationEntry */
+        OperationEntry: {
+            /** Is Public */
+            is_public: boolean;
+            /** Method */
+            method: string;
+            /** Name */
+            name: string;
+            /** Path */
+            path: string;
+            /** Permissions */
+            permissions?: string[];
+            /** Requires Auth */
+            requires_auth: boolean;
+            /** Summary */
+            summary: string;
+            /** Tag */
+            tag: string;
+        };
+        /** Page[ConsumerResponse] */
+        Page_ConsumerResponse_: {
+            /** Items */
+            items: components["schemas"]["ConsumerResponse"][];
+            /** Page */
+            page: number;
+            /** Pages */
+            pages: number;
+            /** Per Page */
+            per_page: number;
+            /** Total */
+            total: number;
+        };
         /** Page[ErrorGroupResponse] */
         Page_ErrorGroupResponse_: {
             /** Items */
@@ -3440,6 +4422,19 @@ export interface components {
         Page_PartnerListItem_: {
             /** Items */
             items: components["schemas"]["PartnerListItem"][];
+            /** Page */
+            page: number;
+            /** Pages */
+            pages: number;
+            /** Per Page */
+            per_page: number;
+            /** Total */
+            total: number;
+        };
+        /** Page[WebhookResponse] */
+        Page_WebhookResponse_: {
+            /** Items */
+            items: components["schemas"]["WebhookResponse"][];
             /** Page */
             page: number;
             /** Pages */
@@ -3896,6 +4891,30 @@ export interface components {
             /** Personal Mobile Number */
             personal_mobile_number?: string | null;
         };
+        /** RequestLogEntry */
+        RequestLogEntry: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Duration Ms */
+            duration_ms: number | null;
+            /** Id */
+            id: number;
+            /** Ip */
+            ip: string | null;
+            /** Method */
+            method: string;
+            /** Outcome */
+            outcome: string | null;
+            /** Path */
+            path: string;
+            /** Status Code */
+            status_code: number;
+            /** Token Prefix */
+            token_prefix: string | null;
+        };
         /** ResetPasswordRequest */
         ResetPasswordRequest: {
             /** Confirm Password */
@@ -4198,26 +5217,6 @@ export interface components {
             /** Items */
             items: components["schemas"]["SettingResponse"][];
         };
-        /**
-         * SendUserEmailRequest
-         * @description An ad-hoc message from an administrator to one user.
-         *
-         *     Ported from the reference's `sendEmail`. **Attachments are not implemented**
-         *     — it accepts up to 25MB of pdf/doc/xls/image files, which needs upload
-         *     plumbing this endpoint does not have. Registered as a parity gap in
-         *     CORE_COMPLETION_PLAN.md § 1.1 rather than silently dropped.
-         */
-        SendUserEmailRequest: {
-            /**
-             * Bcc Sender
-             * @default false
-             */
-            bcc_sender: boolean;
-            /** Message */
-            message: string;
-            /** Subject */
-            subject: string;
-        };
         /** SendUserEmailResult */
         SendUserEmailResult: {
             /** Message */
@@ -4252,6 +5251,29 @@ export interface components {
             last_seen_at: string;
             /** User Agent */
             user_agent: string | null;
+        };
+        /** SetActiveRequest */
+        SetActiveRequest: {
+            /** Active */
+            active: boolean;
+        };
+        /** SetAssistantEnabledRequest */
+        SetAssistantEnabledRequest: {
+            /** Enabled */
+            enabled: boolean;
+        };
+        /**
+         * SetRolePermissionsRequest
+         * @description The whole grant set, for `PUT /roles/{id}/permissions`.
+         *
+         *     A replacement rather than a patch, and required rather than optional: this
+         *     endpoint exists to say what a role grants, so an omitted list would have to
+         *     mean either "grant nothing" or "change nothing", and no wording makes that
+         *     unambiguous at the call site. `[]` clears the grants and says so.
+         */
+        SetRolePermissionsRequest: {
+            /** Permission Ids */
+            permission_ids: number[];
         };
         /**
          * SettingListResponse
@@ -4359,6 +5381,46 @@ export interface components {
             default_key: string;
             /** Presets */
             presets: components["schemas"]["ThemePresetOption"][];
+        };
+        /**
+         * TokenIssued
+         * @description ⚠️ Contains the plaintext token. Returned once, stored nowhere.
+         *
+         *     The router must keep this body out of any request/response logging, and the
+         *     client must not put it in Redux or `localStorage` — render it, offer copy,
+         *     discard on dismiss.
+         */
+        TokenIssued: {
+            detail: components["schemas"]["TokenSummary"];
+            /** Token */
+            token: string;
+            /** Warning */
+            warning: string;
+        };
+        /**
+         * TokenSummary
+         * @description A token as it can ever be shown after the moment it was minted.
+         */
+        TokenSummary: {
+            /** Abilities */
+            abilities: string[];
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Expires At */
+            expires_at: string | null;
+            /** Id */
+            id: string;
+            /** Last Used At */
+            last_used_at: string | null;
+            /** Name */
+            name: string;
+            /** Prefix */
+            prefix: string;
+            /** Revoked At */
+            revoked_at: string | null;
         };
         /** TwoFactorChallengeRequest */
         TwoFactorChallengeRequest: {
@@ -4857,6 +5919,77 @@ export interface components {
             /** Otp */
             otp: string;
         };
+        /** WebhookCreateRequest */
+        WebhookCreateRequest: {
+            /** Api Consumer Id */
+            api_consumer_id: string;
+            /** Events */
+            events: string[];
+            /**
+             * Is Active
+             * @default true
+             */
+            is_active: boolean;
+            /** Name */
+            name: string;
+            /** Url */
+            url: string;
+        };
+        /**
+         * WebhookCreated
+         * @description ⚠️ Carries the signing secret in plaintext. Returned once, stored hashed
+         *     nowhere and encrypted at rest — the receiver needs it to verify us, so unlike
+         *     an API token it must be reproducible on our side.
+         */
+        WebhookCreated: {
+            endpoint: components["schemas"]["WebhookResponse"];
+            /** Secret */
+            secret: string;
+            /** Warning */
+            warning: string;
+        };
+        /** WebhookResponse */
+        WebhookResponse: {
+            /** Api Consumer Id */
+            api_consumer_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Disabled At */
+            disabled_at: string | null;
+            /** Events */
+            events: string[];
+            /** Failure Count */
+            failure_count: number;
+            /** Id */
+            id: string;
+            /** Is Active */
+            is_active: boolean;
+            /** Last Delivery At */
+            last_delivery_at: string | null;
+            /** Name */
+            name: string;
+            /**
+             * Updated At
+             * Format: date-time
+             */
+            updated_at: string;
+            /** Url */
+            url: string;
+        };
+        /** WebhookUpdateRequest */
+        WebhookUpdateRequest: {
+            /** Events */
+            events?: string[] | null;
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Name */
+            name?: string | null;
+            /** Url */
+            url?: string | null;
+        };
     };
     responses: never;
     parameters: never;
@@ -4877,12 +6010,18 @@ export interface operations {
                 subject_id?: string | null;
                 /** @description Filter to one actor */
                 causer_id?: string | null;
-                /** @description Substring of the description */
+                /** @description 'web' | 'seeder' | 'command' — where the row came from */
+                source?: string | null;
+                /** @description Substring of the description, subject, module or causer name */
                 search?: string | null;
                 date_from?: string | null;
                 date_to?: string | null;
                 /** @description Drop rows with no human causer (automation) */
                 hide_system?: boolean;
+                /** @description id | created_at | event | description | log_name */
+                sort_by?: string | null;
+                /** @description asc | desc */
+                sort_order?: string | null;
                 page?: number;
                 per_page?: number;
             };
@@ -4968,6 +6107,753 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_filter_options_api_v1_activity_filter_options_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityFilterOptions"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    availability_api_v1_ai_availability_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantAvailability"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    chat_api_v1_ai_chat_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChatRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_conversations_api_v1_ai_conversations_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationSummary"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    conversation_messages_api_v1_ai_conversations__conversation_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConversationMessage"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_conversation_api_v1_ai_conversations__conversation_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conversation_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    feedback_api_v1_ai_feedback_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FeedbackRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FeedbackResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_settings_api_v1_ai_settings_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantSettings"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_settings_api_v1_ai_settings_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetAssistantEnabledRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantSettings"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_consumers_api_v1_api_consumers_get: {
+        parameters: {
+            query?: {
+                search?: string | null;
+                active?: boolean | null;
+                /** @description True: holds at least one live token. False: registered but cannot call. */
+                has_tokens?: boolean | null;
+                sort_by?: string | null;
+                sort_order?: string;
+                page?: number;
+                per_page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_ConsumerResponse_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_consumer_api_v1_api_consumers_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConsumerWriteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsumerResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_abilities_api_v1_api_consumers_abilities_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AbilityOption"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_consumer_api_v1_api_consumers__consumer_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                consumer_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsumerResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_consumer_api_v1_api_consumers__consumer_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                consumer_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_consumer_api_v1_api_consumers__consumer_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                consumer_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ConsumerUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsumerResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    recent_requests_api_v1_api_consumers__consumer_id__requests_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                consumer_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RequestLogEntry"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_active_api_v1_api_consumers__consumer_id__toggle_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                consumer_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetActiveRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsumerResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    issue_token_api_v1_api_consumers__consumer_id__tokens_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                consumer_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["IssueTokenRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenIssued"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_token_api_v1_api_consumers__consumer_id__tokens__token_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                consumer_id: string;
+                token_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    usage_api_v1_api_consumers__consumer_id__usage_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                consumer_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ConsumerUsage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    catalogue_api_v1_api_docs_get: {
+        parameters: {
+            query?: {
+                /** @description Restrict to one tag */
+                tag?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CatalogueResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    permissions_in_use_api_v1_api_docs_permissions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: string[];
+                    };
                 };
             };
             /** @description Validation Error */
@@ -7279,6 +9165,43 @@ export interface operations {
             };
         };
     };
+    set_role_permissions_api_v1_roles__role_id__permissions_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                role_id: number;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetRolePermissionsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RoleResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     role_users_api_v1_roles__role_id__users_get: {
         parameters: {
             query?: never;
@@ -8851,7 +10774,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["SendUserEmailRequest"];
+                "multipart/form-data": components["schemas"]["Body_send_user_email_api_v1_users__user_id__email_post"];
             };
         };
         responses: {
@@ -8961,6 +10884,381 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_endpoints_api_v1_webhooks_get: {
+        parameters: {
+            query?: {
+                consumer_id?: string | null;
+                search?: string | null;
+                is_active?: boolean | null;
+                sort_by?: string | null;
+                sort_order?: string;
+                page?: number;
+                per_page?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_WebhookResponse_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_endpoint_api_v1_webhooks_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WebhookCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookCreated"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    redeliver_api_v1_webhooks_deliveries__delivery_id__redeliver_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                delivery_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_events_api_v1_webhooks_events_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EventOption"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_endpoint_api_v1_webhooks__endpoint_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                endpoint_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_endpoint_api_v1_webhooks__endpoint_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                endpoint_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_endpoint_api_v1_webhooks__endpoint_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                endpoint_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WebhookUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_deliveries_api_v1_webhooks__endpoint_id__deliveries_get: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                endpoint_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    rotate_secret_api_v1_webhooks__endpoint_id__rotate_secret_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                endpoint_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookCreated"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delivery_summary_api_v1_webhooks__endpoint_id__summary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                endpoint_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliverySummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    send_test_api_v1_webhooks__endpoint_id__test_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                endpoint_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeliveryResponse"];
                 };
             };
             /** @description Validation Error */

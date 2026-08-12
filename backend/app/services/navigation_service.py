@@ -27,13 +27,13 @@ from sqlalchemy.orm import Session
 
 from app.core.permissions import (
     ACTIVITY_VIEW,
-    DASHBOARD_VIEW,
-    INVITATION_VIEW,
+    API_CONSUMER_VIEW,
     API_CREDENTIAL_VIEW,
+    DASHBOARD_VIEW,
     DATA_ACCESS_VIEW,
     ERROR_VIEW,
-    FEATURE_FLAG_VIEW,
     HEALTH_VIEW,
+    INVITATION_VIEW,
     RECYCLE_BIN_MANAGE,
     ROLE_VIEW,
     SEARCH_ENTITY_MANAGE,
@@ -272,6 +272,51 @@ def build_sections(user: User) -> list[dict[str, Any]]:
                 # accurate one: this configures what the *global* search box looks
                 # in, which is a different thing from the search box on every index.
                 _item("Global Search", "/dashboard/search", "search", SEARCH_ENTITY_MANAGE),
+                # Gated on API_CREDENTIAL_VIEW, not on `ai-assistant-use`, and the
+                # difference is the point: this screen turns the integration on
+                # and reports what it can reach, which is a credential-management
+                # job. *Using* the assistant needs no nav entry at all — it is the
+                # widget in the corner of every page.
+                _item(
+                    "AI Assistant",
+                    "/dashboard/ai-assistant",
+                    "ai",
+                    API_CREDENTIAL_VIEW,
+                    active_prefixes=["/dashboard/ai-assistant"],
+                ),
+                # Next to API Credentials and deliberately NOT merged with it.
+                # That screen manages other people's secrets, encrypted so we can
+                # send them; this one manages ours, hashed so nobody can read
+                # them back. Housing them together would blur an access-control
+                # boundary for the sake of both names containing "API".
+                _item(
+                    "Platform API",
+                    "/dashboard/api-consumers",
+                    "platformApi",
+                    API_CONSUMER_VIEW,
+                    active_prefixes=["/dashboard/api-consumers"],
+                ),
+                # Beside Platform API because a webhook belongs to a consumer —
+                # it is the outbound half of the same integration, and gated on
+                # the same permission rather than a sixth one.
+                _item(
+                    "Webhooks",
+                    "/dashboard/webhooks",
+                    "webhooks",
+                    API_CONSUMER_VIEW,
+                    active_prefixes=["/dashboard/webhooks"],
+                ),
+                # Reference material rather than a control surface, so it sits
+                # last in the section. Same permission as the two above: it is a
+                # map of every route in the application, which is not general
+                # staff reading.
+                _item(
+                    "API Documentation",
+                    "/dashboard/api-docs",
+                    "apiDocs",
+                    API_CONSUMER_VIEW,
+                    active_prefixes=["/dashboard/api-docs"],
+                ),
             ],
         },
         {
