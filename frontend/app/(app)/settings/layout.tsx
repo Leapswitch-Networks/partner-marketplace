@@ -27,8 +27,11 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
   return (
     <div className="mx-auto w-full max-w-5xl">
       <div className="mb-6">
-        <h1 className="text-xl font-semibold text-gray-900 dark:text-gray-100">Settings</h1>
-        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+        <h1 className="text-xl font-semibold text-ink dark:text-gray-100">Settings</h1>
+        {/* `text-gray-500` measured 4.19:1 on the light wash — under the 4.5:1
+            floor by a hair, which is exactly the kind of miss that reasoning
+            about a palette produces and measuring catches. */}
+        <p className="mt-1 text-sm text-ink-label dark:text-night-muted">
           Manage your profile and account settings
         </p>
       </div>

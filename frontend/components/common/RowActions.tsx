@@ -46,7 +46,10 @@ export default function RowActions({ actions }: { actions: RowAction[] }) {
 
   const available = actions.filter((a) => a.visible !== false);
   if (available.length === 0) {
-    return <span className="text-gray-300 dark:text-gray-600">—</span>;
+    // Measured at 1.28:1 on the light card — invisible rather than merely quiet.
+    // A placeholder should read as "nothing here", not as a smudge, and this one
+    // sits in the Actions column of every row a user cannot act on.
+    return <span className="text-ink-label dark:text-night-muted">—</span>;
   }
 
   const toggle = () => {
@@ -76,7 +79,7 @@ export default function RowActions({ actions }: { actions: RowAction[] }) {
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label="Row actions"
-        className="flex h-7 w-7 items-center justify-center rounded-[5px] text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-gray-800 dark:hover:text-gray-300"
+        className="flex h-7 w-7 items-center justify-center rounded-[5px] text-ink-label transition-colors hover:bg-brand/10 hover:text-brand dark:text-night-muted dark:hover:bg-brand/20 dark:hover:text-brand-on-dark"
       >
         <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
           <circle cx="12" cy="5" r="1.8" />
