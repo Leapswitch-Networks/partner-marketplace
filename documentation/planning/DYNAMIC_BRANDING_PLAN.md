@@ -288,7 +288,8 @@ sees.
 | 2 | ✅ **Group C → env constants** | 16 literals became one constant; a new project sets `NEXT_PUBLIC_APP_NAME` and rebuilds. **Shipped 2026-08-06.** | — |
 | 3 | ✅ **Theme presets** — CSS custom properties + curated set | Colour is configurable, accessibly. **Shipped 2026-08-06.** | — |
 | 4 | ✅ **Logo + favicon upload** | Full visual identity, `bytea` storage. **Shipped 2026-08-06.** | — |
-| 5 | *(deferred)* Runtime-dynamic `<title>` | Rename without a redeploy | Accepting § 3.2's cost. **Only if a customer asks.** The favicon no longer needs this — see § 7. |
+| 5 | ✅ Runtime-dynamic `<title>` | Rename without a redeploy. **Shipped 2026-08-13** — not by accepting § 3.2's cost, but by sidestepping it: a client-side `TitleSync` patches the title after hydration, at zero prerender cost. The trade (a pre-hydration flash of the build-time name) is documented on the component. | — |
+| 6 | ✅ **The colour picker with the solver in front of it** | Any `#rrggbb`, shades derived server-side, WCAG-refused with a suggestion, live whole-page preview, derived tint family un-freezing every hardcoded brand percentage, themed default logo/favicon, DB app name in emails. **Shipped 2026-08-13** — see that day's DAILY_CHANGES entry for the leak table this closed. § 3.5's argument for a closed colour space is superseded by `theme.derive_shades` + `validate_brand_colour`. | — |
 
 **Phases 1 and 2 need no decisions and no protected files.** They are the ones to build.
 

@@ -32,6 +32,31 @@ export default function BrandMark() {
     ? `${API_BASE_URL}${branding.logo_url}`
     : APP_LOGO || null;
 
+  // The bundled default is rendered INLINE rather than via its static file:
+  // `public/logo.svg` freezes the rounded square at the original green, which
+  // was the most visible leak the 2026-08-13 branding sweep found — pick
+  // crimson, keep a green badge on every page. Inline, the square reads the
+  // live `--brand` variable and the artwork follows the theme. The static file
+  // stays for anything that hotlinks it; a custom `NEXT_PUBLIC_APP_LOGO` path
+  // still goes through the <img> branch untouched.
+  if (src === "/logo.svg") {
+    return (
+      <svg
+        viewBox="0 0 1024 1024"
+        className="h-full w-full"
+        role="img"
+        aria-label={branding.app_name}
+      >
+        <rect x="0" y="0" width="1024" height="1024" rx="232" fill="rgb(var(--brand))" />
+        <g transform="translate(207,207) scale(1.17308)" fill="#ffffff">
+          <rect x="0" y="0" width="152" height="520" rx="76" />
+          <rect x="212" y="0" width="308" height="232" rx="80" />
+          <rect x="212" y="288" width="308" height="232" rx="80" />
+        </g>
+      </svg>
+    );
+  }
+
   // Takes no className, deliberately. The two branches need *different* styling —
   // the image fills its container, the monogram is a text node the container is
   // already centring — so one shared class would be wrong for one of them. Every

@@ -73,12 +73,20 @@ class AppSettings(Base):
         String(200), nullable=True,
         comment="Sign-in screen copy. Product description, not branding",
     )
-    # A preset KEY, never a hex colour. The colour space is closed on purpose —
-    # see core/theme.py for why a picker would break the brand-on-dark rule.
-    # NULL falls back to theme.DEFAULT_PRESET.
+    # A preset KEY. NULL falls back to theme.DEFAULT_PRESET. The colour space
+    # was closed on purpose until 2026-08-13 — see core/theme.py's docstring for
+    # the history; `brand_color` below is what opened it.
     theme_preset: Mapped[str | None] = mapped_column(
         String(40), nullable=True,
         comment="Key into core.theme.THEME_PRESETS; NULL means the default",
+    )
+    # A custom `#rrggbb`, validated by `theme.validate_brand_colour` at write
+    # time (white-on-brand must clear WCAG AA; every other shade derives). When
+    # set it wins over `theme_preset`; the preset is kept so clearing the custom
+    # colour restores the previous choice rather than the default.
+    brand_color: Mapped[str | None] = mapped_column(
+        String(7), nullable=True,
+        comment="Custom brand hex; overrides theme_preset when set",
     )
 
     # --- Brand assets (phase 4) ---------------------------------------------

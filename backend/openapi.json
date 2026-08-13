@@ -236,6 +236,9 @@
             "title": "Log Names",
             "type": "array"
           },
+          "retention": {
+            "$ref": "#/components/schemas/RetentionStatus"
+          },
           "sources": {
             "items": {
               "$ref": "#/components/schemas/FilterOption"
@@ -256,7 +259,8 @@
           "log_names",
           "subject_types",
           "causers",
-          "sources"
+          "sources",
+          "retention"
         ],
         "title": "ActivityFilterOptions",
         "type": "object"
@@ -439,6 +443,17 @@
             "title": "App Short Name",
             "type": "string"
           },
+          "brand_color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand Color"
+          },
           "chrome_subtitle": {
             "title": "Chrome Subtitle",
             "type": "string"
@@ -482,6 +497,11 @@
           },
           "theme_preset": {
             "title": "Theme Preset",
+            "type": "string"
+          },
+          "theme_source": {
+            "default": "preset",
+            "title": "Theme Source",
             "type": "string"
           }
         },
@@ -4513,6 +4533,7 @@
         "type": "object"
       },
       "PaginatedActivity": {
+        "description": "The standard page envelope. Kept as its own name — `PaginatedActivity`,\nnot `Page[ActivityEntry]` — so the OpenAPI schema name and the generated\nfrontend types it feeds don't move.",
         "properties": {
           "items": {
             "items": {
@@ -4549,6 +4570,7 @@
         "type": "object"
       },
       "PaginatedUsers": {
+        "description": "The standard page envelope. Kept as its own name — `PaginatedUsers`,\nnot `Page[UserListItem]` — so the OpenAPI schema name and the generated\nfrontend types it feeds don't move.",
         "properties": {
           "items": {
             "items": {
@@ -5834,6 +5856,43 @@
         "title": "ResetPasswordRequest",
         "type": "object"
       },
+      "RetentionStatus": {
+        "description": "How far back the trail actually goes.\n\nThe reference publishes a static `retentionDays` on this screen. Ours reports\nthe configured window **and whether the purge has ever run**, because those\nanswer different questions and only the second one changes how you read an\nempty result for an old date range.",
+        "properties": {
+          "last_purge_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Purge At"
+          },
+          "purge_ever_ran": {
+            "title": "Purge Ever Ran",
+            "type": "boolean"
+          },
+          "retention_days": {
+            "title": "Retention Days",
+            "type": "integer"
+          },
+          "rows_removed_last_run": {
+            "title": "Rows Removed Last Run",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "retention_days",
+          "purge_ever_ran",
+          "last_purge_at",
+          "rows_removed_last_run"
+        ],
+        "title": "RetentionStatus",
+        "type": "object"
+      },
       "RevealRequest": {
         "description": "Which single field to decrypt.\n\nOne field per call, deliberately: the audit entry then names the secret that\nwas read, and someone who needs the SMTP host does not also pull the token\ninto their browser.",
         "properties": {
@@ -6159,6 +6218,14 @@
               "$ref": "#/components/schemas/SearchGroup"
             },
             "title": "Groups",
+            "type": "array"
+          },
+          "hidden_areas": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Hidden Areas",
             "type": "array"
           },
           "q": {
@@ -6867,6 +6934,72 @@
         "title": "ThemePresetsResponse",
         "type": "object"
       },
+      "ThemePreviewRequest": {
+        "description": "Try a colour or a preset without saving anything.\n\nExactly one of the two should be set; a custom colour wins when both are,\nmatching the read path's precedence so the preview can never disagree with\nwhat saving would do.",
+        "properties": {
+          "brand_color": {
+            "anyOf": [
+              {
+                "maxLength": 7,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand Color"
+          },
+          "theme_preset": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Theme Preset"
+          }
+        },
+        "title": "ThemePreviewRequest",
+        "type": "object"
+      },
+      "ThemePreviewResponse": {
+        "properties": {
+          "brand_color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand Color"
+          },
+          "contrast": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "title": "Contrast",
+            "type": "object"
+          },
+          "css_variables": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Css Variables",
+            "type": "object"
+          }
+        },
+        "required": [
+          "css_variables",
+          "contrast"
+        ],
+        "title": "ThemePreviewResponse",
+        "type": "object"
+      },
       "TokenIssued": {
         "description": "⚠️ Contains the plaintext token. Returned once, stored nowhere.\n\nThe router must keep this body out of any request/response logging, and the\nclient must not put it in Redux or `localStorage` — render it, offer copy,\ndiscard on dismiss.",
         "properties": {
@@ -7147,6 +7280,18 @@
               }
             ],
             "title": "App Short Name"
+          },
+          "brand_color": {
+            "anyOf": [
+              {
+                "maxLength": 7,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Brand Color"
           },
           "chrome_subtitle": {
             "anyOf": [
@@ -15916,6 +16061,66 @@
           }
         },
         "summary": "Update Branding",
+        "tags": [
+          "settings"
+        ]
+      }
+    },
+    "/api/v1/settings/branding/theme-preview": {
+      "post": {
+        "description": "Compute the variables a colour or preset *would* apply. Writes nothing.\n\nSuper-admin like the writes — the audience is whoever is standing at the\nBranding form — but no password confirmation: this is a calculator, and\nprompting for a password to look at a colour would train people to type\ntheir password reflexively, which is the habit that guard exists to protect.\n\nDeclared above `/branding/{asset}` for the same reason as `/branding/themes`\n— the wildcard would swallow it as `asset=\"theme-preview\"` and 422.",
+        "operationId": "preview_theme_api_v1_settings_branding_theme_preview_post",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ThemePreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThemePreviewResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Preview Theme",
         "tags": [
           "settings"
         ]

@@ -20,6 +20,12 @@ class BrandingResponse(BaseModel):
     chrome_subtitle: str
     tagline: str
     theme_preset: str
+    #: The stored custom hex, or None when a preset is in effect. Nullable is
+    #: honest here where it is not for the text fields: "no custom colour" is a
+    #: real state the picker must render, not a gap to paper over.
+    brand_color: str | None = None
+    #: Which of the two actually painted the page — `"custom"` wins while set.
+    theme_source: str = "preset"
     #: Emitted so the client can inline them without knowing the palette.
     theme_css_variables: dict[str, str]
     #: Cache-busted path to the uploaded logo, or None to fall back to the monogram.
@@ -46,6 +52,19 @@ class UpdateBrandingRequest(BaseModel):
     chrome_subtitle: str | None = Field(default=None, max_length=60)
     tagline: str | None = Field(default=None, max_length=200)
     theme_preset: str | None = Field(default=None, max_length=40)
+    #: A custom `#rrggbb`. Format and blank-reset are handled here; the CONTRAST
+    #: rule is enforced in the service via `theme.validate_brand_colour`, because
+    #: its refusal carries structured evidence (the measured ratio and a passing
+    #: suggestion) that a pydantic message string cannot.
+    brand_color: str | None = Field(default=None, max_length=7)
+
+    @field_validator("brand_color")
+    @classmethod
+    def _blank_colour_means_reset(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        trimmed = value.strip()
+        return trimmed or None
 
     @field_validator("theme_preset")
     @classmethod
@@ -107,3 +126,24 @@ class ThemePresetsResponse(BaseModel):
     presets: list[ThemePresetOption]
     #: Which key applies when none is stored, so the picker can mark it.
     default_key: str
+
+
+class ThemePreviewRequest(BaseModel):
+    """Try a colour or a preset without saving anything.
+
+    Exactly one of the two should be set; a custom colour wins when both are,
+    matching the read path's precedence so the preview can never disagree with
+    what saving would do.
+    """
+
+    brand_color: str | None = Field(default=None, max_length=7)
+    theme_preset: str | None = Field(default=None, max_length=40)
+
+
+class ThemePreviewResponse(BaseModel):
+    #: Ready to set on `:root` — same shape the branding read emits.
+    css_variables: dict[str, str]
+    #: The two AA ratios, measured for the derived shades.
+    contrast: dict[str, float]
+    #: The normalised hex actually used (e.g. `#abc` expanded), or None for a preset.
+    brand_color: str | None = None

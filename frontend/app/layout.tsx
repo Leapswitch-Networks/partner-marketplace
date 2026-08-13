@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Montserrat } from "next/font/google";
 import Providers from "@/components/common/Providers";
 import BrandingProvider from "@/components/common/BrandingProvider";
+import TitleSync from "@/components/common/TitleSync";
 import "./globals.css";
 import { getBranding, themeStyleRule } from "@/lib/branding";
 import { APP_NAME, APP_TAGLINE } from "@/lib/utils/constants";
@@ -58,6 +59,7 @@ export default async function RootLayout({
           text that was inheriting Tailwind's 16px default. */}
       <body className="min-h-full flex flex-col font-sans text-sm bg-white dark:bg-night-body text-gray-900 dark:text-gray-100 transition-colors duration-200">
         <BrandingProvider branding={branding}>
+          <TitleSync />
           <Providers>{children}</Providers>
         </BrandingProvider>
       </body>

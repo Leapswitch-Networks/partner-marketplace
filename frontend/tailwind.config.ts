@@ -51,10 +51,16 @@ const config: Config = {
         surface: {
           page: "#f5f7fb",
           card: "#ffffff",
-          border: "#e6edef", // one border colour for the whole light system
+          // ── border/wash/tile were brand-derived percentages flattened to hex
+          // at adoption time (#e6edef / #eaf0ef / #eff3f2) — which is why every
+          // card kept a GREEN wash under a crimson brand. Un-frozen 2026-08-13:
+          // the backend now computes the same relationships per theme
+          // (`core/theme.py css_variables`) and the defaults in `globals.css`
+          // are byte-for-byte the old values, so the teal look is unchanged.
+          border: "rgb(var(--surface-border) / <alpha-value>)", // was brand at 11% over white
           divider: "#efefef",
-          wash: "#eaf0ef", // brand at 10% flattened over white
-          tile: "#eff3f2", // brand at 8% — social tiles
+          wash: "rgb(var(--surface-wash) / <alpha-value>)", // brand at 10% over white
+          tile: "rgb(var(--surface-tile) / <alpha-value>)", // brand at 8% — social tiles
         },
         ink: {
           DEFAULT: "#242934",
@@ -66,19 +72,28 @@ const config: Config = {
         night: {
           body: "#202938", // dark PAGE — lighter than the card, see below
           card: "#111727", // dark CARD — darker than the page. Inverted on purpose
-          border: "#142831", // brand at 20% over the dark card
+          // was #142831 (brand at 20% over the dark card) — 132 dark-mode
+          // borders stayed teal under every other theme. Un-frozen 2026-08-13.
+          border: "rgb(var(--night-border) / <alpha-value>)",
           muted: "#98a6ad",
         },
         // The six semantic tones double as Viho's categorical palette. Adopted
         // as-is including the two odd ones: `success` is a dark primary shade
         // rather than a green, and `info` is grey rather than blue. Both pass
         // contrast; see VIHO_ADOPTION_PLAN.md for why fidelity won here.
+        //
+        // `success` FOLLOWS THE BRAND — owner's decision, 2026-08-13. It was
+        // #1b4c43, which is literally the teal brand darkened 27% and frozen;
+        // the backend now derives the same 27% from whichever brand is active,
+        // so "Active" chips read as the app's own colour under every theme.
+        // `light` was #e6edef, the same tint as surface.border — one variable
+        // serves both, as one hex did.
         tone: {
-          success: "#1b4c43",
+          success: "rgb(var(--tone-success) / <alpha-value>)",
           danger: "#d22d3d",
           warning: "#e2c636",
           info: "#717171",
-          light: "#e6edef",
+          light: "rgb(var(--surface-border) / <alpha-value>)",
           dark: "#2c323f",
         },
 
@@ -124,26 +139,29 @@ const config: Config = {
       // Viho button are pure #ffffff. Viho separates surfaces with borders, not
       // elevation. Don't reintroduce it from the CSS without checking a render.
       keyframes: {
+        // Both pulses read the live brand variable — they were frozen rgba()
+        // literals (emerald 16,185,129 and teal 36,105,92) that stayed green
+        // under every other theme, the exact leak shape the UI_PATTERNS guard
+        // grep is blind to. Un-frozen 2026-08-13 with the rest of the tints.
         "pulse-glow": {
-          "0%, 100%": { 
+          "0%, 100%": {
             opacity: "1",
-            boxShadow: "0 0 0 0 rgba(16, 185, 129, 0.7)",
+            boxShadow: "0 0 0 0 rgb(var(--brand) / 0.7)",
           },
-          "50%": { 
+          "50%": {
             opacity: "0.8",
-            boxShadow: "0 0 0 6px rgba(16, 185, 129, 0)",
+            boxShadow: "0 0 0 6px rgb(var(--brand) / 0)",
           },
         },
-        // Retinted from orange rgba(249,115,22) to brand teal with the palette.
         "pulse-ring": {
           "0%": {
-            boxShadow: "0 0 0 0 rgba(36, 105, 92, 0.4)",
+            boxShadow: "0 0 0 0 rgb(var(--brand) / 0.4)",
           },
           "70%": {
-            boxShadow: "0 0 0 6px rgba(36, 105, 92, 0)",
+            boxShadow: "0 0 0 6px rgb(var(--brand) / 0)",
           },
           "100%": {
-            boxShadow: "0 0 0 0 rgba(36, 105, 92, 0)",
+            boxShadow: "0 0 0 0 rgb(var(--brand) / 0)",
           },
         },
         "bounce-slow": {

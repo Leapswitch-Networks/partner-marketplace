@@ -16,6 +16,10 @@ export type Branding = {
   tagline: string;
   /** Key of the active theme preset. Always resolved — never null. */
   theme_preset: string;
+  /** A stored custom `#rrggbb`, or null while a preset is in effect. */
+  brand_color: string | null;
+  /** Which of the two painted the page — `"custom"` wins while set. */
+  theme_source: "preset" | "custom";
   /**
    * `{"--brand": "36 105 92", …}`, computed by the backend from its preset catalog.
    *
@@ -52,6 +56,8 @@ export const FALLBACK_BRANDING: Branding = {
   // which is exactly the right behaviour when the API is unreachable. Repeating the
   // channels would create a second copy to keep in sync.
   theme_preset: "teal",
+  brand_color: null,
+  theme_source: "preset",
   theme_css_variables: {},
   // No uploaded assets by default: the monogram and the bundled favicon are the
   // fallbacks, and both are complete rather than placeholder states.
@@ -106,6 +112,8 @@ export async function getBranding(): Promise<Branding> {
       chrome_subtitle: data.chrome_subtitle || FALLBACK_BRANDING.chrome_subtitle,
       tagline: data.tagline || FALLBACK_BRANDING.tagline,
       theme_preset: data.theme_preset || FALLBACK_BRANDING.theme_preset,
+      brand_color: data.brand_color ?? null,
+      theme_source: data.theme_source === "custom" ? "custom" : "preset",
       theme_css_variables: data.theme_css_variables ?? {},
       logo_url: data.logo_url ?? null,
       favicon_url: data.favicon_url ?? null,

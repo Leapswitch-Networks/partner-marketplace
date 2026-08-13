@@ -46,7 +46,10 @@ export default function ActivityBadge({
         className={`${sizeClass} ${config.bg} rounded-full ${config.animation}`}
       />
       <div className="absolute inset-0 rounded-full animate-pulse-ring" style={{
-        boxShadow: `0 0 0 2px rgba(${status === 'active' ? '16, 185, 129' : status === 'idle' ? '217, 119, 6' : '107, 114, 128'}, 0.1)`,
+        // "Active" reads the live theme (it was frozen emerald — green under
+        // every brand, caught by the 2026-08-13 leak sweep); idle/offline stay
+        // semantic amber/grey like tone.warning and tone.danger do.
+        boxShadow: `0 0 0 2px ${status === 'active' ? 'rgb(var(--tone-success) / 0.15)' : `rgba(${status === 'idle' ? '217, 119, 6' : '107, 114, 128'}, 0.1)`}`,
       }} />
     </div>
   );

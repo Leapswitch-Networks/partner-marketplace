@@ -6,6 +6,196 @@
 > Update this file as part of the same change as the code. A task that isn't here is invisible to the
 > next person.
 
+## August 13, 2026 — Branding became a real platform feature: any colour, no leaks, derived everything
+
+**The owner's brief: make this section powerful enough to carry future projects — and stop the
+green surviving a colour change.** A two-agent sweep found 21 places the original teal outlived the
+chosen theme, in four classes, and the fix for each class is structural rather than a repaint:
+
+- **Three brand tints were frozen to hex at design time** — `surface.wash` (every card), `night.border`
+  (132 dark-mode borders), `surface.tile`/`tone.light`, plus the shadcn `--muted/--secondary/--border/
+  --input` copies. The backend now computes the exact relationships those hexes encoded (wash = brand
+  at 10% over white, night-border = brand at 20% over the dark card, …) per active theme, and
+  `tailwind.config.ts` reads variables. Defaults in `globals.css` are byte-for-byte the old values —
+  the teal look is pixel-identical.
+- **`tone.success` was literally the old brand darkened 27% and frozen** — owner's decision: success
+  follows the brand, derived the same way. The two emerald/teal pulse keyframes and both inline
+  `rgba()` literals (Sidebar's active ring, ActivityBadge) now read `rgb(var(--brand)/…)`.
+- **The default logo and favicon were green artwork.** The bundled logo now renders INLINE with its
+  square reading the live `--brand` (same artwork, any colour), and with no uploaded favicon the API
+  **generates** an SVG tab icon — monogram on the active brand, cache-keyed by a hash of both.
+- **The one sanctioned leftover:** `global-error.tsx`'s literal teal — the crash screen cannot read
+  branding by design (globals.css may not have loaded); recorded here so nobody re-reports it.
+
+**And the colour space opened — with the solver the original plan demanded.** `theme.py`'s page-long
+argument against a colour picker ended *"a wheel can come later with a contrast validator in front of
+it"*; later arrived. `derive_shades()` builds all five brand channels from one picked hex (dark/darker
+mirror the teal preset's own ratios; on-dark raises HLS lightness until it clears ~6.5:1 on the dark
+card, settling for AA when the hue can't), and `validate_brand_colour()` refuses a pick whose white
+button labels fail AA — the 422 carries the measured ratio and a passing same-hue suggestion the form
+turns into one click. `app_settings.brand_color` (migration `b6e2a91c4d78`) wins over the preset while
+set; clearing it restores the preset, not the factory default. A `theme-preview` endpoint runs the
+same derivation without writing, so the form previews the whole page live before saving — a preview
+computed anywhere else could disagree with Save.
+
+**The form grew into the feature**: native colour picker + hex field with live whole-page preview,
+preset cards now showing their measured WCAG ratios, structured refusals with a "use this instead"
+swatch, and the two dead fields (`chrome_subtitle`, `app_short_name` — nothing renders either) removed
+from the form while the API keeps accepting both. **Emails now use the database app name** (resolved
+by callers; `mail_service` stays DB-free), and **page titles follow the runtime name** via a
+client-side `TitleSync` — DYNAMIC_BRANDING_PLAN phase 5 at zero prerender cost, the trade being a
+pre-hydration flash of the build-time name on an authenticated admin app.
+
+**Plus the shadcn monochrome pair**, owner's request the same day: `shadcn-black` (zinc-900 primary,
+the signature `#fafafa` in dark mode — deliberately not the engine's derived mid-grey, because the
+near-white IS the look) and `shadcn-white` (zinc-700 on paper; a literal white brand is impossible —
+white button labels on white is 1:1, the exact pick the validator refuses, and the preset comment
+says so). Both verified live: the whole app renders as pure monochrome, washes and borders included,
+since a neutral's derived tints are pure greys.
+
+Verified end to end with `#8b1e3f` (crimson) applied to the live app: all 43 routes pass the browser
+harness under it, and the screenshots show no green anywhere — badge, tab icon, washes, borders,
+success chips all crimson-derived. The pale-yellow refusal (`1.43:1`, suggests `#947000`) and the
+generated favicon were probed live. Backend 635 tests (7 new engine + the preset suite now covering
+10 themes), ruff, typecheck, lint, openapi all green. Default teal restored after the proof.
+
+## August 13, 2026 — Sidebar: collapsible sections (closed by default), a menu filter, no subtitle
+
+**All by the owner's instruction, in two rounds the same day.** The sidebar's section headings are
+collapsible again, each with a chevron that turns as the group opens and closes, animated with the
+`grid-rows 0fr ⇄ 1fr` transition — smooth at any content height, unlike a `max-height` guess. This
+*reverses* a documented decision: `NavTree` flattened the sections because the first collapsible
+version hid the current page behind a closed group. The owner then asked for **closed by default**
+— the exact shape that failed before — and what makes it safe this time is one invariant: **the
+section holding the current page is born open and reopens on navigation into it** (render-time
+state adjustment, the pattern `react-hooks/set-state-in-effect` steers toward), so the active row
+can never sit hidden. Navigation is an **accordion**: moving from one heading's page to another's
+closes the group you left as the one you entered opens — each section watches only its own
+"holds the current page" transition, in both directions, so no cross-section coordination exists
+and hand-toggled sections in between are left as the reader set them. `section.collapsible` from
+the navigation API is honoured now instead of ignored, so the per-role setting on the Roles screen
+means something again; a `false` renders an inert always-open heading — which is why Administration
+shows no chevron.
+
+- **A menu filter sits at the top of the nav.** It filters the *menu*, not the data — the header's
+  Global Search owns records. Matching is case-insensitive on item titles; a section whose label
+  matches keeps all its items; a matching parent keeps its children. While a query is live, every
+  surviving section is held open so a match can never be invisible, and clearing restores each
+  section's own state. One query drives both the desktop nav and the mobile drawer. No box in the
+  icon-only rail — no room, and the tooltips already name every icon.
+
+- **"ADMIN PANEL" is gone from the chrome.** The `chrome_subtitle` line came out of all four brand
+  blocks (sidebar desktop/mobile/drawer, top navbar) — the header now shows the project name
+  alone. The Branding screen still edits the field; nothing in the chrome renders it any more,
+  noted at the removal sites so the next person doesn't hunt for a consumer that doesn't exist.
+
+## August 13, 2026 — Every index page now looks like the Users index, to the pixel
+
+**Switching modules no longer changes the page's shape.** The complaint was specific: the Users
+index is the reference, and moving to another module shifted paddings, densities and chrome. A
+class-level census of all 12 index modules against `UsersModule` found the drift, and the biggest
+piece was nowhere near the modules themselves:
+
+- **8 of 12 index routes never got the full-height layout.** `AppShell`'s allowlist covered Users,
+  Roles, Invitations and Activity; Data Access, API Credentials (and Providers), Search, Errors,
+  Feature Flags, Webhooks and Platform API rendered the identical card inside the *padded,
+  scrolling* `<main>` — different padding at every breakpoint (up to `2xl:px-8 2xl:py-8` vs
+  `px-3 pb-3`) and a second scroll container around a table that measures its own height, the
+  nested-scroll failure `AppShell`'s own comment warns about. All eight added to the allowlist;
+  the card now sits at the same offsets on every module.
+- **Row density unified at 30 per page** — the owner's number, set on Users on 2026-08-10. It was
+  25 on six modules, 15 on two, and viewport-measured (`autoPerPage`, so effectively ~10) on
+  Invitations and Activity, where the fixed default and the measuring hook cannot coexist and the
+  hook lost, for the reason recorded on `UsersModule` when the owner chose 30.
+- **Create buttons now all follow the Users pattern** — permission-gated, module icon inside the
+  button. Two were not even gated: Webhooks (`api-token-manage`) and Platform API
+  (`api-consumer-create`) rendered their create button to every viewer and let the API refuse.
+  Both fixed; both also gained the empty-state "first record" CTA the other modules already had.
+- **Header icons now match the sidebar.** Data Access wore Roles' icon; API Credentials,
+  Providers, Search and Feature Flags all wore the Configuration gear; Errors wore Activity's.
+  Every module header now uses its own nav icon, so the page confirms where you are.
+- **Activity's `Details` column sat 80px wide with full cell padding** where every other module's
+  second column (`actionsColumn`) is zero-width shrink — the same column reads identically now.
+- **The retired aliases became real HTTP redirects.** `/dashboard/all-users`, `/add-user`,
+  `/dashboard/profile` and `/settings` relied on a server component's *streamed* `redirect()`,
+  which only applies after hydration — measured today at 4–5 seconds on a busy dev server, and
+  under load it sometimes never applied, parking a signed-in user on a sidebar with an empty main.
+  The middleware now issues an immediate 307; the page stubs stay as fallback.
+- **The browser harness got the patience today's dev server demanded**: a bounded re-read loop
+  (healthy pages never wait), and a `document.body` null-guard that used to abort the entire pass
+  when a read landed mid-navigation. During this work the dev container itself degraded to
+  8–26-second page serves on a 5.5 GB heap after a day of recompiles; a container restart cured
+  it, recorded here because the symptom — random pages stuck on the auth "Loading…" splash — reads
+  exactly like an application bug and is not one.
+
+Verified: 45 PASS, 0 WARN, 0 FAIL across all 43 routes after the changes; typecheck and lint
+clean; screenshots of Users, Providers, Invitations, Activity and Webhooks compared by eye at
+identical offsets. Not changed, deliberately: per-module column headers ("Kind", "State",
+"Access") and badge widths — those carry § 8.1 parity decisions and content-driven sizing, and
+renaming them for symmetry would trade meaning for looks.
+
+## August 13, 2026 — Core 100%: the five swept boxes closed, and the sweep found real holes
+
+**§ 8.2 of `CORE_COMPLETION_PLAN.md` is complete — all nine boxes.** The five that remained were
+each verified by measurement (three parallel read-only sweeps over the backend, the frontend and the
+docs), and three of the five could not be ticked as they stood. What the sweeps found, and what was
+done about it, in order of how much it mattered:
+
+- **Twelve write paths wrote no audit row, and the review list that exists to catch that had not
+  been updated since 2026-08-03.** § 3.4's deliberate arrangement is explicit logging calls plus a
+  list in `AUTHORIZATION.md` a reviewer can check routes against; the calls were added ~40 times
+  across seven modules and the list zero times, so it caught nothing. The twelve: role create,
+  clone, delete and rename; **both invitation-acceptance paths** (one mints an ACTIVE account
+  carrying a role, the other replaces a user's role set and can activate the account — the two
+  events an RBAC trail most exists for); self-registration; self-service password change; both ends
+  of password reset; profile self-edit; **a revoked data-access grant silently restored** by
+  re-granting at the same level (the upsert cleared `deleted_at` without a row, so the trail said
+  the access ended while it quietly resumed); assistant-conversation deletion (metadata only — the
+  transcript stays unreadable to others by design); and the session evictions after a password
+  change or reset, which now record the count a compromise write-up needs. All twelve wired, the
+  `delete_role` and nav-preferences signatures grew the actor they never took, and the
+  `AUTHORIZATION.md` list was rewritten to cover all eight modules — with the deliberately unlogged
+  paths named too, so nobody re-reports them.
+- **The data-visibility ledger is now honest: 20 paths, each verified or flagged.** Eight were
+  already recorded by the § 8.1 audits. Three are now pinned by `tests/test_visibility_paths.py`,
+  probed against the live database: a non-admin asking for someone else's user record gets **404,
+  not 403** (a 403 would confirm the account exists); invitations are narrowed to their sender;
+  and an assistant thread belongs to whoever started it, same 404 reasoning. The rest are recorded
+  here as facts with reasoning: sessions are self-scoped **by construction** (the route passes
+  `current_user.id`, nothing user-controlled reaches the query); the recycle bin and the credential
+  list are permission-gated but deliberately not actor-scoped, matching the reference; Global
+  Search's roles scope restates the registered RBAC divergence. Two findings were worse than
+  unverified — `list_grants`' docstring claimed a DAILY_CHANGES flag **that was never written**
+  (it exists now: the whole delegation graph is visible to any `data-access-view` holder, Staff
+  holds it, and scoping it is the owner's call — PM-5), and the grant-scope helpers
+  (`manageable_user_ids` and friends) are built and tested but **called from nothing** — a grant
+  today changes Global Search results and nothing else. Both recorded under PM-5.
+- **The § 3.1 pipeline box was true in substance and its one real duplication is gone.** All 12
+  sort/search-bearing list endpoints already ran the shared pipeline, and all five § 3.1 safety
+  requirements held (measured, not assumed). But the promised `paginate()` envelope helper had
+  never been built, so 12 routers hand-assembled `{page, per_page, total, pages}` — one of them
+  with its own inline page-count arithmetic. A `page_meta()` helper now exists and all 12 use it;
+  the two oldest response models (`PaginatedUsers`, `PaginatedActivity`) finally subclass `Page[T]`
+  like the six younger ones, wire-identical.
+- **The Index/Form/Show box could never have been ticked, so it was decided instead.** Only Users
+  and Roles have the full § 2.3 route set. Invitations lacks edit because an invitation cannot be
+  edited (sanctioned in-source). Data Access, API Credentials and the Search registry are
+  modal-only — and `UI_PATTERNS.md` claimed universally that "the routes stay". Owner's decision:
+  **modals are the pattern for those three**; registered in § 1.1, the false claim corrected, and
+  the exit criterion stated (a module graduates to routes when a deep-link is actually needed).
+- **`ResourceIndex` holds at 12 of 12 list modules**, and every non-list screen that opts out says
+  why in-source. Nothing to fix; recorded because "verified" and "assumed" read the same in a
+  checklist until someone sweeps.
+- **One piece of drift the sweep caught by accident:** yesterday's Activity Log retention work
+  changed a response model without regenerating `openapi.json`, so CI's contract check was already
+  red. Regenerated, along with the frontend types — which also pick up the two new `Page[T]`
+  docstrings.
+
+Verification: backend 614 passed 4 skipped (611 before the three new visibility tests), `ruff`
+clean, frontend `typecheck` and `lint` clean, `openapi.json` and `types/api.d.ts` in sync with the
+routes. The remaining § 8.2 follow-ups live where they belong: PM-5 for the scoping work, § 1.1 for
+the divergences.
+
 ## August 13, 2026 — Every screen in the app has now been opened, 43 of 43, and all of them render
 
 **The browser pass now covers every route, not just the indexes.** The harness built on 6 August

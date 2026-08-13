@@ -32,6 +32,27 @@ export type UpdateBrandingPayload = {
    * default — see `schemas/settings.py`.
    */
   theme_preset?: string | null;
+  /**
+   * A custom `#rrggbb`. Wins over the preset while set; `null` clears it and the
+   * preset takes back over. The backend refuses a colour whose white-label contrast
+   * fails AA — the 422 detail carries `measured`, `required` and a passing
+   * `suggestion` of the same hue, which the form turns into a one-click fix.
+   */
+  brand_color?: string | null;
+};
+
+/** The 422 detail the contrast gate returns. */
+export type BrandColourRefusal = {
+  message: string;
+  measured: number;
+  required: number;
+  suggestion: string | null;
+};
+
+export type ThemePreviewResponse = {
+  css_variables: Record<string, string>;
+  contrast: { white_on_brand: number; on_dark_on_card: number };
+  brand_color: string | null;
 };
 
 /** One theme, as the catalog endpoint describes it. */
@@ -59,6 +80,14 @@ const settingsApi = {
   /** The theme catalog. Public, and it needs no database. */
   getThemes: () =>
     axiosInstance.get<ThemePresetsResponse>("/settings/branding/themes"),
+
+  /**
+   * Compute what a colour or preset *would* apply — same variables, same
+   * precedence, same refusal as saving, but nothing is written. What powers the
+   * live preview; a preview computed client-side could drift from the save.
+   */
+  previewTheme: (data: { brand_color?: string | null; theme_preset?: string | null }) =>
+    axiosInstance.post<ThemePreviewResponse>("/settings/branding/theme-preview", data),
 
   /**
    * Replace a brand image. Returns the whole updated branding, so a caller never has

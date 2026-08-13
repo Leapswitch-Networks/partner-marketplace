@@ -14,9 +14,11 @@ That is what makes the core reusable: the database is an *override* layer, never
 only source of truth.
 """
 
+import hashlib
 import logging
 from datetime import datetime, timezone
 
+from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core import theme
@@ -28,6 +30,8 @@ from app.schemas.settings import (
     BrandingResponse,
     ThemePresetOption,
     ThemePresetsResponse,
+    ThemePreviewRequest,
+    ThemePreviewResponse,
     UpdateBrandingRequest,
 )
 from app.services import activity_service
@@ -69,6 +73,10 @@ def get_branding(db: Session) -> BrandingResponse:
     # still names it degrades to the default instead of breaking every page.
     stored_preset = getattr(row, "theme_preset", None) if row is not None else None
     preset = theme.resolve(stored_preset)
+    # A stored custom colour wins while set; `css_variables` degrades to the
+    # preset on a colour that no longer validates, and `theme_source` tells the
+    # client which one actually painted the page.
+    brand_color = getattr(row, "brand_color", None) if row is not None else None
 
     # The CSS variables are computed here, not in the client. The frontend inlines
     # them verbatim, which means adding a preset — or changing a shade — needs no
@@ -82,7 +90,9 @@ def get_branding(db: Session) -> BrandingResponse:
     return BrandingResponse(
         **resolved,
         theme_preset=theme.key_for(preset),
-        theme_css_variables=theme.css_variables(stored_preset),
+        brand_color=brand_color,
+        theme_source="custom" if brand_color else "preset",
+        theme_css_variables=theme.css_variables(stored_preset, brand_color),
         logo_url=f"{settings.API_PREFIX}/settings/branding/logo?v={logo_version}" if logo_version is not None else None,
         favicon_url=(
             f"{settings.API_PREFIX}/settings/branding/favicon?v={favicon_version}"
@@ -115,6 +125,47 @@ def get_asset(db: Session, asset: str) -> tuple[bytes, str, int] | None:
     if data is None or mime is None:
         return None
     return data, mime, _asset_version(row, asset) or 0
+
+
+def generated_favicon(db: Session) -> tuple[bytes, str, int]:
+    """A tab icon drawn from the identity itself: the monogram on the brand.
+
+    Serves whenever no favicon has been uploaded (2026-08-13) — the alternative
+    was the bundled artwork with the original green baked in, which stayed
+    green under every theme. Deliberately an SVG assembled from two values that
+    are already sanitised elsewhere: the monogram is a ≤2-char column run
+    through XML-escaping here, and the colour is the *resolved* brand — a hex
+    that either came from `theme.validate_brand_colour` or from a curated
+    preset, never raw input.
+
+    The "version" is a stable hash of the two inputs, so the ETag/cache
+    machinery in the route works unchanged: repaint the brand or rename the
+    monogram and the icon re-fetches; otherwise it 304s like an upload would.
+    """
+    row = get_row(db)
+    monogram = _resolve(row, "monogram", "APP_MONOGRAM")
+    brand_color = getattr(row, "brand_color", None) if row is not None else None
+    brand = brand_color or theme.resolve(
+        getattr(row, "theme_preset", None) if row else None
+    ).brand
+
+    escaped = (
+        monogram[:2]
+        .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+        .replace('"', "&quot;")
+    )
+    svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">'
+        f'<rect width="64" height="64" rx="14" fill="{brand}"/>'
+        '<text x="32" y="34" text-anchor="middle" dominant-baseline="central" '
+        'font-family="system-ui, sans-serif" font-size="30" font-weight="700" '
+        f'fill="#ffffff">{escaped}</text></svg>'
+    ).encode()
+
+    version = int.from_bytes(
+        hashlib.sha256(f"{brand}:{escaped}".encode()).digest()[:4], "big"
+    )
+    return svg, "image/svg+xml", version
 
 
 def set_asset(db: Session, asset: str, image: ValidatedImage, actor: User) -> None:
@@ -212,6 +263,54 @@ def list_theme_presets() -> ThemePresetsResponse:
     )
 
 
+def preview_theme(data: ThemePreviewRequest) -> ThemePreviewResponse:
+    """Derive a colour or resolve a preset without touching the database.
+
+    Exists so the form can paint the whole page in a candidate theme *before*
+    saving — the same variables, the same precedence (a colour wins over a
+    preset), the same refusal with the same structured evidence. A preview that
+    computed anything differently from the write path would be a lie with a
+    Save button under it.
+    """
+    if data.brand_color:
+        try:
+            shades = theme.derive_shades(data.brand_color)
+        except theme.BrandColourError as exc:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "message": str(exc),
+                    "measured": exc.measured,
+                    "required": theme.MIN_CONTRAST,
+                    "suggestion": exc.suggestion,
+                },
+            )
+        return ThemePreviewResponse(
+            css_variables=theme.css_variables(None, shades.brand),
+            contrast=theme.contrast_report(shades),
+            brand_color=shades.brand,
+        )
+
+    # Same write-side strictness as `UpdateBrandingRequest`: previewing a preset
+    # that would be rejected on save would show a theme the Save button then
+    # refuses.
+    key = (data.theme_preset or "").strip() or None
+    if key is not None and key not in theme.THEME_PRESETS:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"message": f"Unknown theme preset {key!r}."},
+        )
+    preset = theme.resolve(key)
+    return ThemePreviewResponse(
+        css_variables=theme.css_variables(key),
+        contrast={
+            "white_on_brand": preset.contrast_white_on_brand,
+            "on_dark_on_card": preset.contrast_on_dark_on_card,
+        },
+        brand_color=None,
+    )
+
+
 def _resolve(row: AppSettings | None, column: str, env_attr: str) -> str:
     stored = getattr(row, column, None) if row is not None else None
     if stored:
@@ -236,6 +335,25 @@ def update_branding(
         db.add(row)
 
     updates = data.model_dump(exclude_unset=True)
+
+    # The contrast gate. Enforced here rather than in the schema because the
+    # refusal carries structure — the measured ratio and a passing shade of the
+    # same hue — that the form turns into a one-click "use this instead". The
+    # colour is also normalised here (`#ABC` → `#aabbcc`), so the column only
+    # ever holds the canonical form the CSS pipeline expects.
+    if updates.get("brand_color") is not None:
+        try:
+            updates["brand_color"] = theme.validate_brand_colour(updates["brand_color"])
+        except theme.BrandColourError as exc:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "message": str(exc),
+                    "measured": exc.measured,
+                    "required": theme.MIN_CONTRAST,
+                    "suggestion": exc.suggestion,
+                },
+            )
 
     # Captured before the write, and compared against the *resolved* value rather
     # than the raw column: clearing an override changes the stored value from a

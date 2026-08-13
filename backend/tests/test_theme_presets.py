@@ -12,6 +12,7 @@ described in a comment.
 
 import pytest
 
+from app.core import theme
 from app.core.theme import (
     DEFAULT_PRESET,
     LIGHT_SURFACE,
@@ -140,13 +141,21 @@ def test_channels_are_space_separated_not_hex():
     assert rgb_channels("#000000") == "0 0 0"
 
 
+#: The full CSS contract: five brand channels plus the derived tint family that
+#: used to be frozen hex in `tailwind.config.ts` (the 2026-08-13 leak fix). A
+#: token missing here means some call site falls back to the compiled default —
+#: green — while its siblings change, which is exactly the bug this pins.
+EXPECTED_VARIABLES = {
+    "--brand", "--brand-dark", "--brand-darker", "--brand-light", "--brand-on-dark",
+    "--surface-wash", "--surface-tile", "--surface-border", "--night-border",
+    "--tone-success",
+}
+
+
 @pytest.mark.parametrize("key", PRESET_KEYS)
 def test_css_variables_cover_every_brand_token(key):
-    """All five, or a call site falls back to the default while its siblings change."""
     variables = css_variables(key)
-    assert set(variables) == {
-        "--brand", "--brand-dark", "--brand-darker", "--brand-light", "--brand-on-dark",
-    }
+    assert set(variables) == EXPECTED_VARIABLES
     for value in variables.values():
         parts = value.split()
         assert len(parts) == 3 and all(0 <= int(p) <= 255 for p in parts)
@@ -154,6 +163,54 @@ def test_css_variables_cover_every_brand_token(key):
 
 def test_accent_is_deliberately_not_themed():
     assert not any("accent" in name for name in css_variables("indigo"))
+
+
+# --- The colour engine (custom brand colours, 2026-08-13) --------------------
+
+
+def test_derived_teal_matches_the_curated_preset_dark_shades():
+    """The derivation ratios were reverse-engineered from the teal preset; if
+    someone retunes them, the curated look silently drifts. dark/darker must
+    stay byte-close to Viho's own values."""
+    shades = theme.derive_shades("#24695c")
+    assert shades.brand == "#24695c"
+    assert shades.brand_dark == "#17433b"
+    # One bit of rounding tolerance on the deepest shade.
+    assert abs(int(shades.brand_darker[1:3], 16) - 0x10) <= 1
+
+
+@pytest.mark.parametrize("colour", ["#8b1e3f", "#4d54b6", "#1a1a1a"])
+def test_derived_shades_clear_both_aa_axes(colour):
+    shades = theme.derive_shades(colour)
+    report = theme.contrast_report(shades)
+    assert report["white_on_brand"] >= theme.MIN_CONTRAST
+    assert report["on_dark_on_card"] >= theme.MIN_CONTRAST
+
+
+def test_a_pale_pick_is_refused_with_evidence_and_a_way_out():
+    with pytest.raises(theme.BrandColourError) as excinfo:
+        theme.validate_brand_colour("#ffd34d")
+    assert excinfo.value.measured < theme.MIN_CONTRAST
+    # The suggestion is a same-hue shade that itself passes.
+    suggestion = excinfo.value.suggestion
+    assert suggestion is not None
+    assert theme.contrast_ratio("#ffffff", suggestion) >= theme.MIN_CONTRAST
+
+
+def test_short_hex_normalises_and_garbage_is_refused():
+    assert theme.validate_brand_colour(" #136 ") == "#113366"
+    with pytest.raises(theme.BrandColourError):
+        theme.validate_brand_colour("teal")
+
+
+def test_custom_colour_wins_over_preset_and_bad_custom_degrades():
+    """Same precedence as the read path promises, including the degrade."""
+    custom = css_variables("indigo", "#8b1e3f")
+    assert custom["--brand"] == "139 30 63"
+    # A stored value that no longer validates must fall back to the preset,
+    # never take rendering down.
+    degraded = css_variables("indigo", "#ffd34d")
+    assert degraded["--brand"] == css_variables("indigo")["--brand"]
 
 
 # --- Resolution -------------------------------------------------------------

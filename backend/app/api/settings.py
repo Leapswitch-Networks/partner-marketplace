@@ -39,6 +39,8 @@ from app.models.user import User
 from app.schemas.settings import (
     BrandingResponse,
     ThemePresetsResponse,
+    ThemePreviewRequest,
+    ThemePreviewResponse,
     UpdateBrandingRequest,
 )
 from app.services import settings_service
@@ -66,6 +68,24 @@ def list_themes() -> ThemePresetsResponse:
     shown next to the choice rather than living only in a test.
     """
     return settings_service.list_theme_presets()
+
+
+@router.post("/branding/theme-preview", response_model=ThemePreviewResponse)
+def preview_theme(
+    data: ThemePreviewRequest,
+    _actor: User = Depends(require_super_admin),
+) -> ThemePreviewResponse:
+    """Compute the variables a colour or preset *would* apply. Writes nothing.
+
+    Super-admin like the writes — the audience is whoever is standing at the
+    Branding form — but no password confirmation: this is a calculator, and
+    prompting for a password to look at a colour would train people to type
+    their password reflexively, which is the habit that guard exists to protect.
+
+    Declared above `/branding/{asset}` for the same reason as `/branding/themes`
+    — the wildcard would swallow it as `asset="theme-preview"` and 422.
+    """
+    return settings_service.preview_theme(data)
 
 
 # ⚠️ ROUTE ORDER MATTERS BELOW THIS LINE.
@@ -110,6 +130,14 @@ def read_asset(
     are what keep a stored image from ever being interpreted as something executable.
     """
     stored = settings_service.get_asset(db, asset)
+    if stored is None and asset == "favicon":
+        # No upload → a GENERATED tab icon: the monogram on the active brand
+        # colour (2026-08-13). Before this, no-upload meant the bundled green
+        # `favicon.ico` — a green tab on a crimson app, the second-worst leak
+        # the branding sweep found. The version is a hash of what it is drawn
+        # from, so changing the brand or the monogram busts the cache exactly
+        # like replacing an upload does.
+        stored = settings_service.generated_favicon(db)
     if stored is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"No {asset} is set.")
 

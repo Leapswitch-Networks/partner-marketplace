@@ -2011,6 +2011,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/settings/branding/theme-preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview Theme
+         * @description Compute the variables a colour or preset *would* apply. Writes nothing.
+         *
+         *     Super-admin like the writes — the audience is whoever is standing at the
+         *     Branding form — but no password confirmation: this is a calculator, and
+         *     prompting for a password to look at a colour would train people to type
+         *     their password reflexively, which is the habit that guard exists to protect.
+         *
+         *     Declared above `/branding/{asset}` for the same reason as `/branding/themes`
+         *     — the wildcard would swallow it as `asset="theme-preview"` and 422.
+         */
+        post: operations["preview_theme_api_v1_settings_branding_theme_preview_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/settings/branding/themes": {
         parameters: {
             query?: never;
@@ -2915,6 +2943,7 @@ export interface components {
             events: components["schemas"]["FilterOption"][];
             /** Log Names */
             log_names: components["schemas"]["FilterOption"][];
+            retention: components["schemas"]["RetentionStatus"];
             /** Sources */
             sources: components["schemas"]["FilterOption"][];
             /** Subject Types */
@@ -3014,6 +3043,8 @@ export interface components {
             app_name: string;
             /** App Short Name */
             app_short_name: string;
+            /** Brand Color */
+            brand_color?: string | null;
             /** Chrome Subtitle */
             chrome_subtitle: string;
             /** Favicon Url */
@@ -3030,6 +3061,11 @@ export interface components {
             };
             /** Theme Preset */
             theme_preset: string;
+            /**
+             * Theme Source
+             * @default preset
+             */
+            theme_source: string;
         };
         /**
          * BulkActionResult
@@ -4528,7 +4564,12 @@ export interface components {
             /** Total */
             total: number;
         };
-        /** PaginatedActivity */
+        /**
+         * PaginatedActivity
+         * @description The standard page envelope. Kept as its own name — `PaginatedActivity`,
+         *     not `Page[ActivityEntry]` — so the OpenAPI schema name and the generated
+         *     frontend types it feeds don't move.
+         */
         PaginatedActivity: {
             /** Items */
             items: components["schemas"]["ActivityEntry"][];
@@ -4541,7 +4582,12 @@ export interface components {
             /** Total */
             total: number;
         };
-        /** PaginatedUsers */
+        /**
+         * PaginatedUsers
+         * @description The standard page envelope. Kept as its own name — `PaginatedUsers`,
+         *     not `Page[UserListItem]` — so the OpenAPI schema name and the generated
+         *     frontend types it feeds don't move.
+         */
         PaginatedUsers: {
             /** Items */
             items: components["schemas"]["UserListItem"][];
@@ -5009,6 +5055,25 @@ export interface components {
             token: string;
         };
         /**
+         * RetentionStatus
+         * @description How far back the trail actually goes.
+         *
+         *     The reference publishes a static `retentionDays` on this screen. Ours reports
+         *     the configured window **and whether the purge has ever run**, because those
+         *     answer different questions and only the second one changes how you read an
+         *     empty result for an old date range.
+         */
+        RetentionStatus: {
+            /** Last Purge At */
+            last_purge_at: string | null;
+            /** Purge Ever Ran */
+            purge_ever_ran: boolean;
+            /** Retention Days */
+            retention_days: number;
+            /** Rows Removed Last Run */
+            rows_removed_last_run: number;
+        };
+        /**
          * RevealRequest
          * @description Which single field to decrypt.
          *
@@ -5154,6 +5219,11 @@ export interface components {
             duration_ms: number;
             /** Groups */
             groups: components["schemas"]["SearchGroup"][];
+            /**
+             * Hidden Areas
+             * @default []
+             */
+            hidden_areas: string[];
             /** Q */
             q: string;
         };
@@ -5467,6 +5537,33 @@ export interface components {
             presets: components["schemas"]["ThemePresetOption"][];
         };
         /**
+         * ThemePreviewRequest
+         * @description Try a colour or a preset without saving anything.
+         *
+         *     Exactly one of the two should be set; a custom colour wins when both are,
+         *     matching the read path's precedence so the preview can never disagree with
+         *     what saving would do.
+         */
+        ThemePreviewRequest: {
+            /** Brand Color */
+            brand_color?: string | null;
+            /** Theme Preset */
+            theme_preset?: string | null;
+        };
+        /** ThemePreviewResponse */
+        ThemePreviewResponse: {
+            /** Brand Color */
+            brand_color?: string | null;
+            /** Contrast */
+            contrast: {
+                [key: string]: number;
+            };
+            /** Css Variables */
+            css_variables: {
+                [key: string]: string;
+            };
+        };
+        /**
          * TokenIssued
          * @description ⚠️ Contains the plaintext token. Returned once, stored nowhere.
          *
@@ -5599,6 +5696,8 @@ export interface components {
             app_name?: string | null;
             /** App Short Name */
             app_short_name?: string | null;
+            /** Brand Color */
+            brand_color?: string | null;
             /** Chrome Subtitle */
             chrome_subtitle?: string | null;
             /** Monogram */
@@ -9849,6 +9948,41 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BrandingResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_theme_api_v1_settings_branding_theme_preview_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ThemePreviewRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ThemePreviewResponse"];
                 };
             };
             /** @description Validation Error */

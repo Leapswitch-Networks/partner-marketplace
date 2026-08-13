@@ -30,6 +30,18 @@
   --accent: 186 137 93; /* #ba895d — Viho --theme-secondary */
   --accent-dark: 160 112 68; /* #a07044 */
   --accent-light: 209 176 147; /* #d1b093 */
+
+  /* The derived tint family, un-frozen 2026-08-13. These defaults are
+   * byte-for-byte the hexes that used to sit in tailwind.config.ts, so the
+   * default teal renders identically; a chosen theme overrides all of them
+   * from `core/theme.py`, which computes the same relationships (wash = brand
+   * at 10% over white, night-border = brand at 20% over the dark card, success
+   * = brand darkened 27%) for whatever brand is active. */
+  --surface-wash: 234 240 239; /* was surface.wash #eaf0ef */
+  --surface-tile: 239 243 242; /* was surface.tile #eff3f2 */
+  --surface-border: 230 237 239; /* was surface.border / tone.light #e6edef */
+  --night-border: 20 40 49; /* was night.border #142831 */
+  --tone-success: 27 76 67; /* was tone.success #1b4c43 */
 }
 
 /* ── shadcn semantic scale, mapped onto Viho ──────────────────────────────────
@@ -56,33 +68,33 @@
 :root {
   --background: 255 255 255; /* surface.card */
   --foreground: 36 41 52; /* ink */
-  --muted: 239 243 242; /* surface.tile — table head, bulk bar */
+  --muted: var(--surface-tile); /* table head, bulk bar — follows the theme */
   --muted-foreground: 89 102 122; /* ink.label, NOT ink.muted: 5.05:1 vs 4.19:1 on the green card */
   --popover: 255 255 255;
   --popover-foreground: 36 41 52;
   --primary: var(--brand);
   --primary-foreground: 255 255 255;
-  --secondary: 239 243 242;
+  --secondary: var(--surface-tile);
   --secondary-foreground: 36 41 52;
   --destructive: 210 45 61; /* tone.danger */
   --destructive-foreground: 255 255 255;
-  --border: 230 237 239; /* surface.border */
-  --input: 230 237 239;
+  --border: var(--surface-border);
+  --input: var(--surface-border);
   --ring: var(--brand);
 }
 
 .dark {
   --background: 17 23 39; /* night.card */
   --foreground: 255 255 255;
-  --muted: 20 40 49; /* night.border */
+  --muted: var(--night-border);
   --muted-foreground: 152 166 173; /* night.muted */
   --popover: 17 23 39;
   --popover-foreground: 255 255 255;
   --primary-foreground: 255 255 255;
-  --secondary: 20 40 49;
+  --secondary: var(--night-border);
   --secondary-foreground: 255 255 255;
-  --border: 20 40 49;
-  --input: 20 40 49;
+  --border: var(--night-border);
+  --input: var(--night-border);
   --ring: var(--brand-on-dark);
 }
 

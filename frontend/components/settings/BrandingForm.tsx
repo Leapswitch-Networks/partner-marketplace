@@ -1,11 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Button from "@/components/common/Button";
 import Input from "@/components/common/Input";
 import { authApi } from "@/lib/api/authApi";
-import settingsApi, { type UpdateBrandingPayload } from "@/lib/api/settingsApi";
+import settingsApi, {
+  type BrandColourRefusal,
+  type UpdateBrandingPayload,
+} from "@/lib/api/settingsApi";
 import BrandAssetUpload from "@/components/settings/BrandAssetUpload";
 import type { Branding, ThemePreset } from "@/lib/branding";
 import usePermissions from "@/lib/hooks/usePermissions";
@@ -31,8 +34,13 @@ import { extractApiError } from "@/lib/utils/apiError";
  * `theme_preset` and `theme_css_variables` — the first is chosen from a list, the
  * second is computed by the backend and must never be editable. Widening this back
  * to `keyof Branding` puts a text box over the palette.
+ *
+ * `chrome_subtitle` and `app_short_name` left this form on 2026-08-13: nothing has
+ * rendered either since the subtitle came out of the chrome the same day, and a
+ * field that edits nothing teaches admins that saving does nothing. The API still
+ * accepts both, so removing the inputs loses no stored data.
  */
-type TextField = "app_name" | "app_short_name" | "monogram" | "chrome_subtitle" | "tagline";
+type TextField = "app_name" | "monogram" | "tagline";
 
 const FIELDS: {
   key: TextField;
@@ -43,26 +51,14 @@ const FIELDS: {
   {
     key: "app_name",
     label: "Application name",
-    hint: "Shown in the sidebar, the top bar and the sign-in screen.",
+    hint: "Shown in the sidebar, the top bar, the browser tab, sign-in and every email.",
     maxLength: 120,
-  },
-  {
-    key: "app_short_name",
-    label: "Short name",
-    hint: "Used where space is tight, such as the collapsed sidebar.",
-    maxLength: 40,
   },
   {
     key: "monogram",
     label: "Monogram",
-    hint: "One or two characters for the square badge. Longer text will clip.",
+    hint: "One or two characters for the square badge and the generated tab icon.",
     maxLength: 2,
-  },
-  {
-    key: "chrome_subtitle",
-    label: "Sidebar subtitle",
-    hint: "The small uppercase line under the name.",
-    maxLength: 60,
   },
   {
     key: "tagline",
@@ -93,6 +89,55 @@ export default function BrandingForm({
   const [pendingAction, setPendingAction] = useState<(() => Promise<void>) | null>(null);
   const [password, setPassword] = useState("");
 
+  // ── The colour engine's client half (2026-08-13) ──────────────────────────
+  // `customHex` is the picker's text; `customActive` says whether a custom
+  // colour (rather than the preset grid) is the current choice. Contrast and
+  // refusal both come from the backend — the preview endpoint runs the same
+  // derivation as saving, so what you see is exactly what Save will do.
+  const [customHex, setCustomHex] = useState(initial.brand_color ?? "#24695c");
+  const [customActive, setCustomActive] = useState(initial.theme_source === "custom");
+  const [contrast, setContrast] = useState<{ white_on_brand: number; on_dark_on_card: number } | null>(null);
+  const [refusal, setRefusal] = useState<BrandColourRefusal | null>(null);
+
+  // The live preview writes the candidate variables as inline styles on <html>,
+  // which override the server's <style> without touching it; reverting is just
+  // removing what we set. A ref, not state: the DOM is the state here, and
+  // re-rendering over a style write would be noise.
+  const previewKeys = useRef<string[]>([]);
+  const applyPreviewVars = (vars: Record<string, string>) => {
+    const root = document.documentElement;
+    for (const key of previewKeys.current) root.style.removeProperty(key);
+    for (const [key, value] of Object.entries(vars)) root.style.setProperty(key, value);
+    previewKeys.current = Object.keys(vars);
+  };
+  const clearPreview = () => {
+    const root = document.documentElement;
+    for (const key of previewKeys.current) root.style.removeProperty(key);
+    previewKeys.current = [];
+  };
+  // Leaving the page must not leave a candidate theme painted on it.
+  useEffect(() => clearPreview, []);
+
+  /** Preview a candidate (colour or preset) through the backend's own derivation. */
+  const preview = async (candidate: { brand_color?: string; theme_preset?: string }) => {
+    setRefusal(null);
+    try {
+      const res = await settingsApi.previewTheme(candidate);
+      applyPreviewVars(res.data.css_variables);
+      setContrast(res.data.contrast);
+      if (res.data.brand_color) setCustomHex(res.data.brand_color);
+    } catch (err: unknown) {
+      const detail = (err as { response?: { status?: number; data?: { detail?: unknown } } })
+        .response;
+      if (detail?.status === 422 && detail.data && typeof detail.data.detail === "object") {
+        setRefusal(detail.data.detail as BrandColourRefusal);
+        setContrast(null);
+      } else {
+        setError(extractApiError(err, "Could not preview that colour."));
+      }
+    }
+  };
+
   /**
    * Adopt a `Branding` the API just returned, and make the change visible.
    *
@@ -118,13 +163,30 @@ export default function BrandingForm({
   const save = async () => {
     // Trimmed-empty is sent as null, which clears the override rather than blanking
     // the application's name. See the component docstring.
-    const payload: UpdateBrandingPayload = { theme_preset: values.theme_preset };
+    const payload: UpdateBrandingPayload = {
+      theme_preset: values.theme_preset,
+      // Explicit null when the grid is the choice: saving a preset must clear a
+      // custom colour, or the colour keeps winning and the preset click lies.
+      brand_color: customActive ? customHex : null,
+    };
     for (const { key } of FIELDS) {
       payload[key] = values[key].trim() || null;
     }
 
-    const res = await settingsApi.updateBranding(payload);
-    applyBranding(res.data);
+    try {
+      const res = await settingsApi.updateBranding(payload);
+      // The server's <style> now says what the inline preview was saying.
+      clearPreview();
+      applyBranding(res.data);
+    } catch (err: unknown) {
+      const detail = (err as { response?: { status?: number; data?: { detail?: unknown } } })
+        .response;
+      if (detail?.status === 422 && detail.data && typeof detail.data.detail === "object") {
+        setRefusal(detail.data.detail as BrandColourRefusal);
+        return;
+      }
+      throw err;
+    }
   };
 
   /**
@@ -223,21 +285,26 @@ export default function BrandingForm({
       <div>
         <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Brand colour</p>
         <p className="mt-0.5 text-xs text-ink-label dark:text-night-muted">
-          A fixed set rather than a colour picker. Each one ships a light counterpart
-          for dark mode, and both halves are contrast-checked — a freely chosen colour
-          would be unreadable in one theme or the other.
+          Pick a preset or any colour of your own. Every shade the interface needs —
+          hovers, dark mode, card washes, borders, success chips — derives from the
+          one you choose, and the derivation refuses a colour whose button labels
+          would be unreadable. Choosing previews the whole page live; nothing changes
+          for anyone else until you save.
         </p>
         <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
           {themes.map((preset) => {
-            const active = values.theme_preset === preset.key;
+            const active = !customActive && values.theme_preset === preset.key;
             return (
               <button
                 key={preset.key}
                 type="button"
                 aria-pressed={active}
+                title={`White on brand ${preset.contrast_white_on_brand}:1 · dark mode ${preset.contrast_on_dark_on_card}:1`}
                 onClick={() => {
                   setValues((current) => ({ ...current, theme_preset: preset.key }));
+                  setCustomActive(false);
                   setSaved(false);
+                  void preview({ theme_preset: preset.key });
                 }}
                 className={`flex items-center gap-2 rounded-[5px] border px-2.5 py-2 text-left text-xs font-medium transition-colors ${
                   active
@@ -255,13 +322,95 @@ export default function BrandingForm({
                     style={{ backgroundColor: preset.brand_on_dark }}
                   />
                 </span>
-                <span className="truncate">{preset.label}</span>
+                <span className="min-w-0">
+                  <span className="block truncate">{preset.label}</span>
+                  <span className="block text-[10px] tabular-nums text-ink-muted dark:text-night-muted">
+                    {preset.contrast_white_on_brand}:1 · {preset.contrast_on_dark_on_card}:1
+                  </span>
+                </span>
               </button>
             );
           })}
         </div>
+
+        {/* ── Custom colour ──────────────────────────────────────────────── */}
+        <div
+          className={`mt-3 flex flex-wrap items-center gap-2 rounded-[5px] border px-2.5 py-2 ${
+            customActive
+              ? "border-brand bg-brand/10 dark:border-brand-on-dark dark:bg-brand/20"
+              : "border-surface-border dark:border-night-border"
+          }`}
+        >
+          <input
+            type="color"
+            aria-label="Pick a custom brand colour"
+            value={/^#[0-9a-fA-F]{6}$/.test(customHex) ? customHex : "#24695c"}
+            onChange={(event) => {
+              setCustomHex(event.target.value);
+              setCustomActive(true);
+              setSaved(false);
+              void preview({ brand_color: event.target.value });
+            }}
+            className="h-8 w-10 cursor-pointer rounded-[3px] border-0 bg-transparent p-0"
+          />
+          {/* A bare input, not the shared `Input`: that component mandates a
+              visible label block, and this field's label is the swatch beside it. */}
+          <input
+            type="text"
+            aria-label="Custom brand colour hex"
+            value={customHex}
+            maxLength={7}
+            spellCheck={false}
+            onChange={(event) => {
+              setCustomHex(event.target.value);
+              setCustomActive(true);
+              setSaved(false);
+              // Only ask the backend once the text is a plausible colour; every
+              // keystroke of "#8" would 422 pointlessly.
+              if (/^#?[0-9a-fA-F]{6}$/.test(event.target.value.trim())) {
+                void preview({ brand_color: event.target.value.trim() });
+              }
+            }}
+            className="w-28 rounded-[5px] border border-surface-border bg-transparent px-2.5 py-1.5 font-mono text-xs text-ink focus:border-brand focus:outline-none dark:border-night-border dark:text-gray-200"
+          />
+          <span className="text-xs text-ink-label dark:text-night-muted">
+            Custom colour {customActive ? "— active" : ""}
+          </span>
+          {contrast && customActive && !refusal && (
+            <span className="text-[10px] tabular-nums text-ink-muted dark:text-night-muted">
+              white on brand {contrast.white_on_brand}:1 · dark mode {contrast.on_dark_on_card}:1
+            </span>
+          )}
+        </div>
+
+        {refusal && (
+          <div className="mt-2 space-y-2 rounded-[5px] border border-tone-danger/40 bg-tone-danger/5 px-3 py-2">
+            <p className="text-xs text-tone-danger" role="alert">
+              {refusal.message}
+            </p>
+            {refusal.suggestion && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  setCustomHex(refusal.suggestion as string);
+                  setCustomActive(true);
+                  void preview({ brand_color: refusal.suggestion as string });
+                }}
+              >
+                <span
+                  className="mr-1.5 inline-block h-3 w-3 rounded-[2px] align-middle"
+                  style={{ backgroundColor: refusal.suggestion }}
+                />
+                Use {refusal.suggestion} instead
+              </Button>
+            )}
+          </div>
+        )}
+
         <p className="mt-2 text-xs text-ink-label dark:text-night-muted">
-          Saving a new colour reloads the page — the theme is applied server-side.
+          The numbers are WCAG contrast — button labels, and brand text in dark mode.
+          4.5:1 is the floor and the form will not let you go under it.
         </p>
       </div>
 
@@ -309,7 +458,20 @@ export default function BrandingForm({
           <Button onClick={() => run(save)} disabled={busy}>
             {busy ? "Saving…" : "Save changes"}
           </Button>
-          <Button variant="outline" onClick={() => setValues(resolved)} disabled={busy}>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setValues(resolved);
+              setCustomHex(resolved.brand_color ?? "#24695c");
+              setCustomActive(resolved.theme_source === "custom");
+              setRefusal(null);
+              setContrast(null);
+              // Drop any candidate theme painted by the live preview — the
+              // server's <style> is the truth again.
+              clearPreview();
+            }}
+            disabled={busy}
+          >
             Reset
           </Button>
         </div>
