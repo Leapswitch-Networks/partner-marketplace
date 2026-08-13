@@ -128,16 +128,35 @@ export function DataTable<T extends { id: RowId }>({
         const calculateHeight = () => {
             if (tableContainerRef.current) {
                 const rect = tableContainerRef.current.getBoundingClientRect();
-                const viewportHeight = window.innerHeight;
-                // Leave 60px for bottom pagination + padding
-                const available = viewportHeight - rect.top - 60;
+                // visualViewport, not innerHeight, where it exists: on mobile
+                // the layout is h-dvh while innerHeight tracks the URL-bar
+                // state, and the mismatch clipped the bottom pager below the
+                // visible area (2026-08-13 responsive audit).
+                const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+                // 76px reserve: mt-2 (8) + a pager row that WRAPS to two lines
+                // on narrow screens (2×28 + 8). The old 60px assumed one line
+                // and clipped the second behind the card's overflow-hidden.
+                const available = viewportHeight - rect.top - 76;
                 setTableMaxHeight(`${Math.max(available, 200)}px`);
             }
         };
 
         calculateHeight();
         window.addEventListener('resize', calculateHeight);
-        return () => window.removeEventListener('resize', calculateHeight);
+        window.visualViewport?.addEventListener('resize', calculateHeight);
+        // Re-measure when anything ABOVE the table changes height — filters
+        // wrapping, the bulk bar mounting, a stat row loading in. `rect.top`
+        // moves 30-60px on each of those, and a resize listener alone left the
+        // stored height stale (the audit's #3).
+        const observer = new ResizeObserver(calculateHeight);
+        if (tableContainerRef.current?.parentElement) {
+            observer.observe(tableContainerRef.current.parentElement);
+        }
+        return () => {
+            window.removeEventListener('resize', calculateHeight);
+            window.visualViewport?.removeEventListener('resize', calculateHeight);
+            observer.disconnect();
+        };
     }, [fitContent, maxBodyHeight]);
 
     // Sync local selection with prop (compare by content to avoid infinite loops)
@@ -215,6 +234,14 @@ export function DataTable<T extends { id: RowId }>({
     const PaginationBar = () => (
         <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-4">
+                {/* Phones get the count in short form rather than nothing —
+                    "how many results" is exactly the question a filter answers,
+                    and hiding it below sm made a phone user page blind
+                    (2026-08-13, the responsive pass). The long form and the
+                    per-page control stay sm+. */}
+                <p className="whitespace-nowrap text-xs text-muted-foreground sm:hidden">
+                    {data.from}–{data.to} of {data.total}
+                </p>
                 <p className="hidden whitespace-nowrap text-xs text-muted-foreground sm:block 2xl:text-sm">
                     Showing {data.from} to {data.to} of {data.total}{' '}
                     results
@@ -298,17 +325,29 @@ export function DataTable<T extends { id: RowId }>({
 
                         return (
                             <>
+                                {/* Touch sizing: 36px minimum below sm (the 28px
+                                    buttons were the app's worst touch targets),
+                                    settling to the compact 28px from sm up. */}
                                 <Button
                                     variant="ghost"
                                     size="sm"
-                                    className="h-7 border-transparent bg-brand/10 px-2.5 text-xs font-semibold text-brand transition-colors hover:bg-brand hover:text-white disabled:cursor-not-allowed disabled:opacity-40 dark:bg-brand/20 dark:text-brand-on-dark dark:hover:bg-brand dark:hover:text-white"
+                                    className="h-9 min-w-9 border-transparent bg-brand/10 px-2.5 text-xs font-semibold text-brand transition-colors hover:bg-brand hover:text-white disabled:cursor-not-allowed disabled:opacity-40 sm:h-7 sm:min-w-0 dark:bg-brand/20 dark:text-brand-on-dark dark:hover:bg-brand dark:hover:text-white"
                                     onClick={() => prevLink.url && onPageChange(prevLink.url)}
                                     disabled={!prevLink.url}
                                     dangerouslySetInnerHTML={{ __html: prevLink.label }}
                                 />
+                                {/* Numbered window is sm+ only. Nine 28px buttons
+                                    need ~380px the pager doesn't have on a phone —
+                                    they wrapped into a second line that the card's
+                                    overflow-hidden then CLIPPED, making the last
+                                    pages unreachable (audit #2). Phones get
+                                    prev / "n of m" / next, which always fits. */}
+                                <span className="flex items-center px-1.5 text-xs tabular-nums text-muted-foreground sm:hidden">
+                                    {(pageLinks.findIndex((l) => l.active) + 1) || 1} / {totalPages || 1}
+                                </span>
                                 {visibleIndices.map((item, i) =>
                                     item === 'ellipsis' ? (
-                                        <span key={`ellipsis-${i}`} className="flex items-center px-1.5 text-xs text-muted-foreground">
+                                        <span key={`ellipsis-${i}`} className="hidden items-center px-1.5 text-xs text-muted-foreground sm:flex">
                                             &hellip;
                                         </span>
                                     ) : (
@@ -316,7 +355,7 @@ export function DataTable<T extends { id: RowId }>({
                                             key={item}
                                             variant="ghost"
                                             size="sm"
-                                            className={pageLinks[item].active ? 'h-7 border-transparent bg-brand/10 px-2.5 text-xs font-bold text-brand dark:bg-brand/20 dark:text-brand-on-dark' : 'h-7 border-transparent bg-transparent px-2.5 text-xs font-semibold text-ink transition-colors hover:bg-brand/10 hover:text-brand dark:text-white dark:hover:bg-brand/20 dark:hover:text-brand-on-dark'}
+                                            className={`hidden sm:inline-flex ${pageLinks[item].active ? 'h-7 border-transparent bg-brand/10 px-2.5 text-xs font-bold text-brand dark:bg-brand/20 dark:text-brand-on-dark' : 'h-7 border-transparent bg-transparent px-2.5 text-xs font-semibold text-ink transition-colors hover:bg-brand/10 hover:text-brand dark:text-white dark:hover:bg-brand/20 dark:hover:text-brand-on-dark'}`}
                                             onClick={() => pageLinks[item].url && onPageChange(pageLinks[item].url!)}
                                             disabled={!pageLinks[item].url}
                                         >
@@ -327,7 +366,7 @@ export function DataTable<T extends { id: RowId }>({
                                 <Button
                                     variant="ghost"
                                     size="sm"
-                                    className="h-7 border-transparent bg-brand/10 px-2.5 text-xs font-semibold text-brand transition-colors hover:bg-brand hover:text-white disabled:cursor-not-allowed disabled:opacity-40 dark:bg-brand/20 dark:text-brand-on-dark dark:hover:bg-brand dark:hover:text-white"
+                                    className="h-9 min-w-9 border-transparent bg-brand/10 px-2.5 text-xs font-semibold text-brand transition-colors hover:bg-brand hover:text-white disabled:cursor-not-allowed disabled:opacity-40 sm:h-7 sm:min-w-0 dark:bg-brand/20 dark:text-brand-on-dark dark:hover:bg-brand dark:hover:text-white"
                                     onClick={() => nextLink.url && onPageChange(nextLink.url)}
                                     disabled={!nextLink.url}
                                     dangerouslySetInnerHTML={{ __html: nextLink.label }}
@@ -594,9 +633,11 @@ export function DataTable<T extends { id: RowId }>({
                 </Table>
             </div>
 
-            {/* Bottom Pagination */}
+            {/* Bottom Pagination. pr-12 clears the assistant's floating button,
+                which sits fixed at bottom-right exactly over this bar's "next"
+                control on every index page (audit #14). */}
             {!isEmpty && !hidePagination && (
-                <div className="mt-2">
+                <div className="mt-2 pr-12">
                     <PaginationBar />
                 </div>
             )}

@@ -480,10 +480,13 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
         </button>
         {/* Just the name — the chrome_subtitle line ("Admin Panel") came out of
             all three brand blocks on the owner's instruction, 2026-08-13. */}
-        <div className="ml-2.5">
-          <p className="text-sm font-bold text-gray-900 dark:text-white">{branding.app_name}</p>
+        {/* `min-w-0 flex-1` + `truncate`: a long app_name used to push the
+            controls below off the right edge, taking the hamburger — the only
+            way to open the nav — with it. 2026-08-13 audit. */}
+        <div className="ml-2.5 min-w-0 flex-1">
+          <p className="truncate text-sm font-bold text-gray-900 dark:text-white">{branding.app_name}</p>
         </div>
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ml-auto flex shrink-0 items-center gap-1">
           <ThemeToggle />
           <button
             type="button"
@@ -519,13 +522,15 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
               >
                 <BrandMark />
               </button>
-              <div className="ml-2.5">
-                <p className="text-sm font-bold text-gray-900 dark:text-white">{branding.app_name}</p>
+              {/* Same overflow fix as the mobile top bar above — a long
+                  app_name must not push the close button off the drawer. */}
+              <div className="ml-2.5 min-w-0 flex-1">
+                <p className="truncate text-sm font-bold text-gray-900 dark:text-white">{branding.app_name}</p>
               </div>
               <button
                 type="button"
                 onClick={closeMobile}
-                className="ml-auto flex h-8 w-8 items-center justify-center rounded-[5px] text-ink-muted hover:bg-brand/10 hover:text-brand dark:text-gray-500 dark:hover:bg-brand/20 dark:hover:text-brand-on-dark"
+                className="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-[5px] text-ink-muted hover:bg-brand/10 hover:text-brand dark:text-gray-500 dark:hover:bg-brand/20 dark:hover:text-brand-on-dark"
                 aria-label="Close menu"
               >
                 {navIcons.close}
@@ -548,7 +553,10 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
 
       {/* ── Desktop / tablet sidebar (hidden below md) ── */}
       <aside
-        className={`hidden md:flex flex-col shrink-0 bg-surface-wash border-r border-brand/20 h-screen transition-[width] duration-300 ease-in-out 2xl:transition-none dark:bg-night-card dark:border-night-border animate-slide-in-left ${
+        // `h-dvh`, not `h-screen`: 100vh on mobile is the large viewport, not the
+        // visible one — dvh tracks what's actually on screen, same fix as the
+        // (app) layout, 2026-08-13.
+        className={`hidden md:flex flex-col shrink-0 bg-surface-wash border-r border-brand/20 h-dvh transition-[width] duration-300 ease-in-out 2xl:transition-none dark:bg-night-card dark:border-night-border animate-slide-in-left ${
           collapsed
             ? "w-[68px]"
             : "w-64 2xl:w-72"

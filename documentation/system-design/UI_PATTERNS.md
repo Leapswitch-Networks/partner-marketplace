@@ -831,6 +831,34 @@ Rules:
 
 ---
 
+## Responsive Contract
+
+**Written 2026-08-13, after the audit that found 28 breakpoint defects.** The app must work from a
+360px phone to a 2560px desktop. These are the rules that closed the defects; a new component obeys
+them or documents why not.
+
+| Rule | Why it exists (the defect it closed) |
+|---|---|
+| **Viewport height is `dvh`, never `vh`/`h-screen`, and JS measures `visualViewport.height`, never `innerHeight`** | 100vh on mobile is the URL-bar-hidden height; the app's bottom edge — carrying every pager — sat below the visible screen |
+| **Never let a later `py-*` share an element with an earlier responsive `pt-*`** — spell `pt-`/`pb-` separately | `py-6 pt-20 sm:py-6` compiled with `sm:py-6` later in the sheet, so 640–767px lost the mobile-header offset and content slid under the fixed bar. Invisible in JSX; only the cascade knows |
+| **Fixed-position surfaces clamp to the viewport**: widths `min(Npx, calc(100vw-2rem))`, heights `min(Nrem, calc(100dvh-Mrem))` | 380px toasts clipped off a 360px screen; the 28rem assistant panel covered the mobile header on short viewports |
+| **Anything with a `minWidth` stacks `w-full` below `sm`** and dropdown-like controls cap (`sm:max-w-[320px]`) above it | Filters wrapped wherever min-width landed (orphaned Reset/Cols rows on phones); a ten-character select stretched to 400px at 2560px |
+| **Touch targets ≥36px below `sm`** (`h-9 … sm:h-7` on compact controls); the kebab and pager were the worst offenders | The only path to edit/delete on a phone was 28×28px |
+| **Numbered pager windows are `sm+`; phones get prev / "n / m" / next** | Nine 28px buttons need ~380px; on a phone they wrapped into a line the card's `overflow-hidden` clipped — last pages unreachable |
+| **A full-height (viewport-locked) page must be in `AppShell`'s allowlist** — and this is the third drift; consider deriving it | Four modules ran an inner scroll region inside the outer scrolling panel, the nested-scroll failure `AppShell` itself warns about |
+| **Self-measuring components re-measure on `ResizeObserver` of their parent, not only window `resize`** | The table's height went stale whenever filters wrapped or the bulk bar mounted, clipping the bottom pager |
+| **Page-level forms cap at `max-w-4xl`, show pages at `max-w-6xl`, both `mx-auto`** — tables stay full-bleed | 1100px-wide "First name" inputs at 2560px. Data tables genuinely use the width; forms do not |
+| **Brand blocks and other user-supplied text rows: `min-w-0` + `truncate` on the text, `shrink-0` on the controls beside it** | A long app name pushed the hamburger off a phone's right edge — the nav became unopenable |
+| **Fixed overlays must not cover interactive chrome**: the assistant FAB's slot is paid for by `pr-12` on the bottom pager | The FAB sat exactly on "next page" on every index page |
+| **Grids give a single-column base**: `grid gap-* sm:grid-cols-2`, never a bare `grid-cols-2` | Sign-up's name fields had 58px of text room at 360px |
+| **Popovers clamp both axes against the viewport** (flip upward when the list would leave the screen) | A combobox opened low rendered its list off-screen |
+
+The one deliberate exception: **the crash screen (`global-error.tsx`) and data tables** — the first
+cannot read anything, the second scrolls horizontally inside its own frame by design
+(`whitespace-nowrap` cells are the point; a wrapped table row is unreadable).
+
+---
+
 ## New Component Checklist
 
 - [ ] Does a `components/common/` primitive already do this? Extend it rather than fork it

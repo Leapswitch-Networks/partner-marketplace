@@ -64,6 +64,16 @@ const FULL_HEIGHT_PREFIXES = [
   "/dashboard/users",
   "/dashboard/roles",
   "/dashboard/invitations",
+  // Security, Health, Configuration and Recycle Bin build the same
+  // viewport-locked card internally but were never listed here, so they ran
+  // an inner scroll region inside the outer scrolling panel — the exact
+  // nested-scroll failure the comment above describes, found by the
+  // 2026-08-13 responsive audit. Third round of this list drifting; if a
+  // fourth happens, derive membership from the page instead of a list.
+  "/dashboard/security",
+  "/dashboard/health",
+  "/dashboard/configuration",
+  "/dashboard/recycle-bin",
   // The other eight ResourceIndex routes, added 2026-08-13. They render the
   // exact same viewport-locked Card as Users, but only the three above were
   // ever listed — so switching from Users to any of these swapped the page
@@ -156,12 +166,21 @@ export default function AppShell({
       <div className="flex min-w-0 flex-1 flex-col bg-surface-wash dark:bg-night-body">
         <TopNav />
 
+        {/* Scrolling branch: vertical padding is spelled as separate pt and pb
+            on purpose. The old `py-6 pt-20 sm:py-6` relied on cascade order —
+            `sm:py-6` sits later in the compiled sheet than `pt-20`, so from
+            640-767px (landscape phones, small tablets, where the fixed mobile
+            header still shows) the top padding collapsed to 24px and content
+            slid under the header. Found by the 2026-08-13 responsive audit;
+            invisible in the JSX. `scrollbar-thin` rather than `scrollbar-hide`:
+            this is the app's primary scroll container, and hiding its only
+            scroll affordance was a cost with no payer. */}
         {isFullHeight ? (
           <main className="flex min-h-0 flex-1 flex-col overflow-hidden bg-surface-wash px-3 pb-3 pt-20 sm:px-4 md:pt-3 dark:bg-night-body">
             {children}
           </main>
         ) : (
-          <main className="scrollbar-hide scroll-smooth flex-1 overflow-y-auto bg-surface-wash px-4 py-6 pt-20 sm:px-6 sm:py-6 md:pt-4 lg:px-6 dark:bg-night-body 2xl:px-8 2xl:py-8">
+          <main className="scrollbar-thin scroll-smooth flex-1 overflow-y-auto bg-surface-wash px-4 pb-6 pt-20 sm:px-6 md:pt-4 lg:px-6 dark:bg-night-body 2xl:px-8 2xl:pb-8 2xl:pt-8">
             {children}
           </main>
         )}

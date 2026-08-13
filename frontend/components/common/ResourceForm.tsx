@@ -127,7 +127,12 @@ export default function ResourceForm<T, V extends FieldValues>({
   }, [firstError, setFocus]);
 
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    // `mx-auto w-full max-w-4xl`: this shell only ever renders the full page
+    // form — every caller with an `asModal` flag switches to `FormModal`
+    // instead of rendering this — so the cap is safe here with no gating.
+    // Without it a page form stretches to the full column width, 1100px+ of
+    // input on a wide monitor.
+    <div className="mx-auto flex h-full min-h-0 w-full max-w-4xl flex-col">
       <form
         onSubmit={handleSubmit(onSubmit)}
         noValidate

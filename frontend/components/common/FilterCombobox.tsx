@@ -110,7 +110,14 @@ export default function FilterCombobox({
 
   const openMenu = () => {
     const rect = triggerRef.current?.getBoundingClientRect();
-    if (rect) setCoords({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+    if (rect) {
+      // 240 = the list's `max-h-60`. Opened low on a short viewport, below the
+      // trigger it would render off-screen — flip upward instead, the same
+      // clamp `RowActions` does horizontally.
+      let top = rect.bottom + 4;
+      if (top + 240 > window.innerHeight) top = Math.max(8, rect.top - 4 - 240);
+      setCoords({ top, left: rect.left, width: rect.width });
+    }
     setQuery("");
     setActive(0);
     setOpen(true);

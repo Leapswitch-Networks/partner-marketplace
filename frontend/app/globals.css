@@ -251,7 +251,11 @@ body {
 
 /* Optimize button interactions */
 button {
-  @apply transition-all duration-200;
+  /* transition-colors, deliberately not -all: -all animates width/height/
+     padding, so every responsive reflow (drawer opening, filters wrapping,
+     the pager re-laying-out on rotate) animated its geometry instead of
+     snapping — the interface felt like it was wobbling on phones. */
+  @apply transition-colors duration-200;
 }
 
 /* Enhanced focus states */

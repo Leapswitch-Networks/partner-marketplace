@@ -147,7 +147,19 @@ export default function FilterBar<F extends FilterValues>({
         return (
           <div
             key={key}
-            className="flex-1"
+            // Three sizes of screen, three behaviours (2026-08-13, the
+            // responsive pass):
+            //  - phone (<sm): `w-full` stacks each filter on its own row —
+            //    before this they wrapped wherever min-width happened to land,
+            //    leaving Reset and Cols orphaned mid-row;
+            //  - laptop: `flex-1` shares the row, `minWidth` stops a long
+            //    placeholder collapsing a neighbour;
+            //  - big desktops: dropdowns CAP at 320px. Uncapped `flex-1` gave a
+            //    ten-character "All Status" a 400px control at 2560px. The text
+            //    search stays uncapped — a wide search box is actually useful.
+            className={`w-full sm:w-auto sm:flex-1 ${
+              filter.type === "text" ? "" : "sm:max-w-[320px]"
+            }`}
             style={{ minWidth: `${width}px` }}
           >
             {filter.type === "date" ? (

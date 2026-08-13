@@ -123,7 +123,9 @@ export default function AssistantWidget() {
       {open && (
         <section
           aria-label="AI assistant"
-          className="fixed bottom-20 right-4 z-40 flex h-[28rem] w-[min(24rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-[8px] border border-brand/20 bg-white shadow-xl dark:border-night-border dark:bg-night-card"
+          // Capped against the viewport, not just a fixed 28rem: on a short
+          // mobile screen 28rem can run under the mobile header at the top.
+          className="fixed bottom-20 right-4 z-40 flex h-[min(28rem,calc(100dvh-8rem))] w-[min(24rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-[8px] border border-brand/20 bg-white shadow-xl dark:border-night-border dark:bg-night-card"
         >
           <header className="flex items-center justify-between gap-2 border-b border-brand/15 px-3 py-2 dark:border-night-border">
             <p className="text-xs font-semibold text-ink dark:text-gray-100">Assistant</p>
@@ -225,6 +227,7 @@ export default function AssistantWidget() {
         type="button"
         onClick={() => setOpen((value) => !value)}
         aria-label={open ? "Close the assistant" : "Open the assistant"}
+        title={open ? "Close the assistant" : "Open the assistant"}
         aria-expanded={open}
         className="fixed bottom-4 right-4 z-40 flex h-12 w-12 items-center justify-center rounded-full bg-brand text-white shadow-lg transition hover:bg-brand/90"
       >

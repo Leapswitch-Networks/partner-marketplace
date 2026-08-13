@@ -78,7 +78,9 @@ export default function RowActions({ actions }: { actions: RowAction[] }) {
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label="Row actions"
-        className="flex h-7 w-7 items-center justify-center rounded-[5px] text-ink-label transition-colors hover:bg-brand/10 hover:text-brand dark:text-night-muted dark:hover:bg-brand/20 dark:hover:text-brand-on-dark"
+        // 36px touch target on phones — the kebab is the only path to edit/delete
+        // there, and 7 (28px) is well under the 44px floor. Compact from `sm`.
+        className="flex h-9 w-9 items-center justify-center rounded-[5px] text-ink-label transition-colors hover:bg-brand/10 hover:text-brand dark:text-night-muted dark:hover:bg-brand/20 dark:hover:text-brand-on-dark sm:h-7 sm:w-7"
       >
         <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
           <circle cx="12" cy="5" r="1.8" />

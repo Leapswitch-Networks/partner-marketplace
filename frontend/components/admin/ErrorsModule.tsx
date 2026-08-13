@@ -326,11 +326,14 @@ function ErrorDetailModal({
 
       <dl className="mb-4 grid grid-cols-[auto,1fr] gap-x-4 gap-y-1 text-xs">
         <dt className="text-ink-label dark:text-night-muted">Where</dt>
-        <dd className="font-mono text-ink dark:text-gray-200">
+        {/* `break-all`: a long file path or trace id has no natural break point
+            and otherwise overflows the column — matches WebhooksModule's
+            signing-secret `<code>`. */}
+        <dd className="break-all font-mono text-ink dark:text-gray-200">
           {group.file}:{group.line}
         </dd>
         <dt className="text-ink-label dark:text-night-muted">Route</dt>
-        <dd className="font-mono text-ink dark:text-gray-200">
+        <dd className="break-all font-mono text-ink dark:text-gray-200">
           {group.method ?? ""} {group.path ?? "—"}
         </dd>
         <dt className="text-ink-label dark:text-night-muted">First seen</dt>

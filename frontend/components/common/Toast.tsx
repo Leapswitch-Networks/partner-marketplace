@@ -233,7 +233,10 @@ function ToastItem({
       onMouseEnter={() => setPaused(true)}
       onMouseLeave={() => setPaused(false)}
       className={cn(
-        "pointer-events-auto flex min-w-[380px] max-w-[420px] items-start gap-3 rounded-xl border border-night-border bg-night-card p-4 shadow-lg transition-all duration-300 ease-out",
+        // min() keeps the fixed footprint on desktop and yields to the viewport
+        // on phones — 380px flat clipped every toast's first words off the left
+        // edge of a 360px screen (2026-08-13 responsive audit #3).
+        "pointer-events-auto flex min-w-[min(380px,calc(100vw-2rem))] max-w-[min(420px,calc(100vw-2rem))] items-start gap-3 rounded-xl border border-night-border bg-night-card p-4 shadow-lg transition-all duration-300 ease-out",
         visible && !exiting ? "translate-x-0 opacity-100" : "translate-x-full opacity-0"
       )}
     >

@@ -84,8 +84,10 @@ function StatCard({ label, value, tone }: { label: string; value: number; tone: 
     <div className="flex-1 rounded-[5px] border border-brand/20 px-3 py-2 dark:border-night-border">
       <p className="text-lg font-bold tabular-nums text-ink dark:text-gray-100">{value}</p>
       <p className="flex items-center gap-1.5 text-[11px] text-ink-label dark:text-night-muted">
-        <span className={`inline-block h-1.5 w-1.5 rounded-full ${tone.replace("text-", "bg-")}`} />
-        {label}
+        <span className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${tone.replace("text-", "bg-")}`} />
+        {/* Cards go 2-up under 640px (below) — truncate so a narrow card
+            shrinks the label instead of overflowing it. */}
+        <span className="truncate">{label}</span>
       </p>
     </div>
   );
@@ -304,7 +306,9 @@ export default function InvitationsModule() {
       ]}
       filterExtras={
         stats ? (
-          <div className="flex w-full shrink-0 gap-2 sm:w-auto">
+          // 2x2 grid under 640px — a 4-up flex row left each card ~55px, too
+          // narrow for its label. Reverts to a single row from `sm`.
+          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
             <StatCard label="Pending" value={stats.pending} tone="text-tone-warning" />
             <StatCard label="Accepted" value={stats.accepted} tone="text-tone-success" />
             <StatCard label="Expired" value={stats.expired} tone="text-ink-label" />

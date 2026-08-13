@@ -41,7 +41,11 @@ import AppShell from "@/components/common/AppShell";
 export default function AppAreaLayout({ children }: { children: React.ReactNode }) {
   return (
     <AuthInitializer>
-      <div className="flex h-screen bg-surface-wash dark:bg-night-body">
+      {/* h-dvh, not h-screen: 100vh on mobile is the LARGE viewport (URL bar
+          hidden), so the app's bottom edge — carrying every table's pager —
+          sat below the visible screen while the bar showed. dvh tracks the
+          real visible height (2026-08-13 responsive audit). */}
+      <div className="flex h-dvh bg-surface-wash dark:bg-night-body">
         <AppShell>{children}</AppShell>
       </div>
     </AuthInitializer>

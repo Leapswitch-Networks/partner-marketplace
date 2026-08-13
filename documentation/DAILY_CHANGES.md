@@ -6,6 +6,52 @@
 > Update this file as part of the same change as the code. A task that isn't here is invisible to the
 > next person.
 
+## August 13, 2026 — One codebase, every screen size: the responsive pass
+
+**The owner's brief: nobody from a phone to a big desktop should hit a style error.** Measured
+first, fixed second: a 28-defect code audit plus real screenshots at 360/768/1366/1920/2560 across
+five screens, with per-element horizontal-overflow detection. The baseline was better than feared —
+zero document-level overflow anywhere — but the audit found real breakage the harness's single
+1440px viewport could never see:
+
+- **The worst bug lived in cascade order, invisible in JSX.** `py-6 pt-20 sm:py-6` compiles with
+  `sm:py-6` *later* in the sheet than `pt-20`, so from 640–767px — landscape phones, small tablets,
+  where the fixed mobile header still shows — the main content's top padding collapsed to 24px and
+  every page heading slid under the header. Fixed by never letting a responsive `py` share an
+  element with a `pt`; the rule is now in UI_PATTERNS § Responsive Contract.
+- **Phones could not reach the last pages of any table.** Nine 28px pager buttons need ~380px; on a
+  360px screen they wrapped into a second line that the card's `overflow-hidden` clipped. Phones now
+  get prev / "n / m" / next at 36px touch size; the numbered window is `sm+`. The pager also regained
+  the result count below `sm` (paging blind), and the bottom bar pads around the assistant's floating
+  button, which sat exactly on "next page" at every width.
+- **The viewport maths was lying on mobile.** The layout was `h-screen` (the URL-bar-hidden height)
+  while the table measured `window.innerHeight` (the current visible height) — the bottom pager sat
+  below the screen while the table under-sized itself. Now `h-dvh` + `visualViewport`, with a
+  `ResizeObserver` re-measuring when filters wrap or the bulk bar mounts, and a reserve that survives
+  a two-line pager. Four more routes (Security, Health, Configuration, Recycle Bin) joined the
+  full-height allowlist they had silently drifted out of — the third drift of that list.
+- **Fixed-size surfaces now clamp**: 380px toasts no longer clip off a 360px screen, the form-modal
+  body can't push its Save button off a landscape phone, the assistant panel can't cover the mobile
+  header, and a long app name can't shove the hamburger — the only way to open the nav — off the
+  right edge.
+- **Small-screen layout**: filters stack one per row below `sm` (they used to wrap wherever
+  min-width landed, orphaning Reset), the Invitations stat cards form a 2×2 grid, sign-up's name
+  fields get a single-column base, the row-actions kebab is 36px on touch, long trace ids break
+  instead of overflowing, and comboboxes flip upward when the list would leave the screen.
+- **Big screens stop wasting the width**: dropdown filters cap at 320px (a ten-character "All
+  Status" stretched to 400px at 2560px), page forms cap at `max-w-4xl`, show pages at `max-w-6xl` —
+  tables deliberately stay full-bleed, they're the one thing that earns the width.
+- **Feel**: the global `transition-all` on buttons became `transition-colors`, so responsive
+  reflows snap instead of animating their own geometry; the app's main scroll container got its
+  scrollbar back (`scrollbar-thin`, was `scrollbar-hide` — an affordance hidden with no payer).
+
+The rules are codified in `UI_PATTERNS.md` § Responsive Contract — thirteen rules, each tied to the
+defect that created it. Verified: zero horizontal overflow at all 25 viewport/page combinations
+after the changes, proof screenshots at the 700px band / 360px / 2560px, the full 43-route browser
+pass green, typecheck and lint clean. Known remaining (recorded, not hidden): the role matrix is
+functional but cramped on phones, and `PermissionPicker` uses viewport breakpoints inside
+fixed-width dialogs — both cosmetic, both in the audit table for whoever picks them up.
+
 ## August 13, 2026 — Branding became a real platform feature: any colour, no leaks, derived everything
 
 **The owner's brief: make this section powerful enough to carry future projects — and stop the

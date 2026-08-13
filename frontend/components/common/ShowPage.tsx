@@ -139,7 +139,10 @@ export function ShowPageHeader({
  * proportion at every size.
  */
 export function ShowPageGrid({ children }: { children: ReactNode }) {
-  return <div className="grid gap-4 lg:grid-cols-3">{children}</div>;
+  // Capped at `max-w-6xl`: uncapped, the two-thirds/one-third split still
+  // stretches on an ultra-wide monitor and the sidebar column gets wider than
+  // anything it holds needs to be.
+  return <div className="mx-auto grid w-full max-w-6xl gap-4 lg:grid-cols-3">{children}</div>;
 }
 
 export function ShowPageMain({ children }: { children: ReactNode }) {

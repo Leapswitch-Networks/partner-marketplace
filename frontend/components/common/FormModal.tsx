@@ -159,7 +159,14 @@ export default function FormModal({
 
         {/* 60vh, theirs exactly: tall enough for a real form, short enough that
             the header and footer stay on screen on a laptop. */}
-        <div className="overflow-y-auto p-6 scrollbar-thin" style={{ maxHeight: "60vh" }}>
+        {/* min() so the header+footer always fit: flat 60vh left the Save
+            button clipped on short viewports (landscape phones), where 60vh of
+            body plus ~120px of chrome exceeded the screen. 100dvh tracks the
+            real visible height under mobile URL bars. */}
+        <div
+          className="overflow-y-auto p-6 scrollbar-thin"
+          style={{ maxHeight: "min(60vh, calc(100dvh - 180px))" }}
+        >
           {children}
         </div>
 

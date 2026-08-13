@@ -125,7 +125,9 @@ export default function SignUpForm() {
         <legend className="mb-[5px] text-sm font-semibold text-ink dark:text-white">
           Your Name
         </legend>
-        <div className="grid grid-cols-2 gap-[15px]">
+        {/* Single column below `sm` — two-up at 360px left ~58px per name
+            field, too narrow to type into. */}
+        <div className="grid gap-[15px] sm:grid-cols-2">
           <Input
             label=""
             id="first-name"
