@@ -6,6 +6,39 @@
 > Update this file as part of the same change as the code. A task that isn't here is invisible to the
 > next person.
 
+## August 13, 2026 — Every screen in the app has now been opened, 43 of 43, and all of them render
+
+**The browser pass now covers every route, not just the indexes.** The harness built on 6 August
+walked twenty-four signed-in screens — every one an index. The forms, the detail screens, the edit
+screens and the entire signed-out surface had still never been opened, which is the wrong half to
+skip: an index that throws shows an empty table, while a form that throws loses whatever was typed
+into it. `scripts/browser-check.mjs` now runs four passes over all 43 routes: the 28 static
+signed-in screens, 4 redirect aliases, 4 detail/edit screens with **real record ids resolved from
+the live API** (a hardcoded id that stops existing renders the "not found" branch, which loads
+cleanly and proves nothing), and 7 signed-out pages visited after the cookie is dropped — earlier
+would be meaningless, since every one of them redirects to the dashboard while a session exists.
+
+- **This work was started on 12 August and stopped by its own design.** The expanded list treated
+  `/dashboard/profile`, `/settings`, `/dashboard/add-user` and `/dashboard/all-users` as screens,
+  but each is a pure `redirect()` alias — and "ended up on a different URL" is the harness's
+  session-loss check, a hard FAIL. The fix is an `expect` option: for an alias the redirect target
+  **is** the pass condition, because an alias that stops forwarding is a broken bookmark. The root
+  path `/` (middleware-redirected to `/sign-in`, unconditionally) joined the signed-out pass the
+  same way, closing the census at 43 of 43.
+- **The result: 45 PASS, 0 warnings, 0 failures.** The 18 screens that had never been opened —
+  every form, both detail screens, both edit screens, all six public pages — all render with
+  content, no console errors and no failed requests. Screenshots of the create-user form, a
+  populated edit-user form and the sign-up page were inspected by eye as well; real screens, not
+  shells that cleared a text floor.
+- **§ 8.2 of `CORE_COMPLETION_PLAN.md` updated to match reality.** "Every screen has been opened in
+  a browser" is ticked by this work. Two boxes that were already true but never ticked now cite
+  their evidence: the lint/CI box (closed by `c6b3154`; `ci.yml` runs ruff, pytest, typecheck, lint
+  and build with no `continue-on-error`) and the route-gating box (proven by `0d611ad`, which tests
+  that every gated route refuses a stranger, in CI). The code-sweep boxes — § 3.1 pipeline,
+  `ResourceIndex`, activity-log-by-construction, recorded data-visibility verifications — stay
+  open: nobody has swept for them, and ticking them on plausibility is the drift this plan warns
+  about.
+
 ## August 12, 2026 — All eight core modules audited; the last one had a guard and no test
 
 **Audit 3 of 8 — Data Access — and with it § 8.1 is complete for the core scope.**

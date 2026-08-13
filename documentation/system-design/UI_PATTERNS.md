@@ -851,9 +851,12 @@ Rules:
 
 > **✅ Closed 2026-08-12 — every screen has now been opened in a browser.** The warning below stood
 > from 2026-08-06 and was repeated in every writeup since. `scripts/browser-check.mjs` drives headless
-> Chrome over all twenty-four signed-in screens; all twenty-four render, with no console errors, no
-> failed requests and no empty shells. Run it after any change to a shared component — the whole point
-> of the warning was that a shared piece is a mistake in every page at once.
+> Chrome over **all 43 routes** — every signed-in screen including forms, detail and edit screens on
+> live record ids, the redirect aliases, and the signed-out pages (the first pass, on 2026-08-12,
+> covered only the twenty-four indexes; the census was completed on 2026-08-13). All render, with no
+> console errors, no failed requests and no empty shells. Run it after any change to a shared
+> component — the whole point of the warning was that a shared piece is a mistake in every page at
+> once.
 >
 > What it does **not** cover, and what still needs eyes: contrast ratios, the exact stripe and hover
 > shades, and how anything looks in light mode. The harness proves a page *renders*; it does not have

@@ -442,11 +442,16 @@ CHECK_EMAIL=root@example.com CHECK_PASSWORD=... \
   node --experimental-websocket scripts/browser-check.mjs
 ```
 
-It signs in, visits all 24 signed-in screens, and fails on any that redirects to
-the login page, renders no sidebar, produces a console error, makes a failing
-request, or comes back with almost no text — **a client-rendered page that throws
-during hydration leaves an empty shell, which is exactly what fetching the HTML
-cannot see.** Screenshots go to `/tmp/pmp-browser-check` unless you set `SHOTS`.
+It covers all 43 routes in four passes: the signed-in screens (indexes *and*
+forms), the redirect aliases (asserted to land on their target — an alias that
+stops forwarding is a broken bookmark), the detail and edit screens on record
+ids resolved from the live API, and finally — after dropping the session — the
+signed-out pages, which would silently redirect to the dashboard if visited any
+earlier. A screen fails if it redirects unexpectedly, renders no sidebar,
+produces a console error, makes a failing request, or comes back with almost no
+text — **a client-rendered page that throws during hydration leaves an empty
+shell, which is exactly what fetching the HTML cannot see.** Screenshots go to
+`/tmp/pmp-browser-check` unless you set `SHOTS`.
 
 `--experimental-websocket` is only needed on Node 20; 22 and later have the
 WebSocket global as standard.

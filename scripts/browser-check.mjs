@@ -1,5 +1,7 @@
 /**
- * A browser pass over every signed-in screen.
+ * A browser pass over every screen — all 43 routes: signed-in indexes and
+ * forms, redirect aliases, detail/edit screens on live record ids, and the
+ * signed-out pages (visited last, after the session is dropped).
  *
  * `UI_PATTERNS.md` has said since 2026-08-06 that nothing has been checked on
  * screen since the Viho migration, and every entry in DAILY_CHANGES since has
@@ -72,6 +74,65 @@ const PAGES = [
   ["/settings/profile", "Profile"],
   ["/settings/password", "Password"],
   ["/settings/appearance", "Appearance"],
+  // --- Added 2026-08-12 by the "core 100%" audit -------------------------
+  // The list above covered 24 of the app's 43 routes, and every one it covered
+  // was an index. **The forms and detail screens had still never been opened**
+  // — which is the wrong half to skip: an index that throws shows an empty
+  // table, while a form that throws loses whatever was typed into it.
+  ["/dashboard/users/new", "User"],
+  ["/dashboard/roles/new", "Role"],
+  ["/dashboard/roles/matrix", "Matrix"],
+  ["/dashboard/invitations/new", "Invit"],
+];
+
+/**
+ * Routes that render nothing of their own — each is a `redirect()` to a real
+ * screen, kept for old bookmarks and muscle memory.
+ *
+ * They cannot sit in PAGES: "ended up on a different URL" is a FAIL there,
+ * because for a real screen it means the session broke. Here the redirect
+ * target IS the pass condition — an alias that stops forwarding is a broken
+ * bookmark. The text probe matches the *destination* page, since that is the
+ * only thing the browser ever shows.
+ */
+const ALIASES = [
+  ["/dashboard/profile", "/settings/profile", "Profile"],
+  ["/settings", "/settings/profile", "Profile"],
+  ["/dashboard/add-user", "/dashboard/users/new", "User"],
+  ["/dashboard/all-users", "/dashboard/users", "User"],
+];
+
+/**
+ * Screens whose URL contains a real record id, resolved after sign-in.
+ *
+ * Hardcoding an id would make the pass depend on a particular database, and a
+ * seeded id that no longer exists renders the "not found" branch — which is a
+ * page that loads cleanly and proves nothing about the page under test.
+ */
+const DYNAMIC = [
+  ["/dashboard/users/{user}", "User"],
+  ["/dashboard/users/{user}/edit", "User"],
+  ["/dashboard/roles/{role}", "Role"],
+  ["/dashboard/roles/{role}/edit", "Role"],
+];
+
+/**
+ * Signed-out screens, visited **before** the session exists.
+ *
+ * They cannot go in the list above: every one of them redirects to the
+ * dashboard once a cookie is present, so a pass that ran them after sign-in
+ * would report success without ever rendering them.
+ */
+const PUBLIC_PAGES = [
+  // The root path is a middleware redirect to /sign-in — unconditionally, so
+  // this pass (not the signed-in one) is where it can be observed.
+  ["/", "Sign", "/sign-in"],
+  ["/sign-in", "Sign"],
+  ["/sign-up", "Sign"],
+  ["/forgot-password", "Password"],
+  ["/reset-password", "Password"],
+  ["/verify-email", "Verif"],
+  ["/accept-invitation", "Invit"],
 ];
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -210,8 +271,16 @@ try {
   record("sign in", "PASS", `${login.status} as ${EMAIL}`);
 
   // --- Every page ----------------------------------------------------------
-  console.log("\n--- pages ---");
-  for (const [path, expected] of PAGES) {
+  // Extracted from the loop below when the public and dynamic passes were added
+  // (2026-08-12), so all three run *identical* checks. Three copies of this that
+  // drifted would be worse than not checking the extra screens at all: the pass
+  // would still be green while quietly testing less.
+  //
+  // `signedOut` relaxes the two assertions that only hold behind the sidebar —
+  // a login form legitimately has no sidebar and little text. `expect` is for
+  // routes whose whole job is to land somewhere else: the URL assertion checks
+  // the destination instead of the requested path.
+  async function check(path, expected, { signedOut = false, expect = path } = {}) {
     cdp.drain();
     const failedRequests = [];
     const consoleErrors = [];
@@ -252,9 +321,11 @@ try {
     writeFileSync(join(SHOTS, path.replace(/[^a-zA-Z0-9]+/g, "_") + ".png"), Buffer.from(shot.data, "base64"));
 
     const problems = [];
-    if (state.url !== path) problems.push(`redirected to ${state.url}`);
-    if (!state.hasSidebar) problems.push("no sidebar");
-    if (state.text.length < 120) problems.push(`only ${state.text.length} chars of text`);
+    if (state.url !== expect) problems.push(`redirected to ${state.url}`);
+    if (!signedOut && !state.hasSidebar) problems.push("no sidebar");
+    // A sign-in form is legitimately sparse; an authenticated screen is not.
+    const floor = signedOut ? 30 : 120;
+    if (state.text.length < floor) problems.push(`only ${state.text.length} chars of text`);
     if (!state.text.toLowerCase().includes(expected.toLowerCase()))
       problems.push(`"${expected}" not on the page`);
     if (consoleErrors.length) problems.push(`${consoleErrors.length} console error(s): ${consoleErrors[0]}`);
@@ -265,6 +336,48 @@ try {
     } else {
       record(path, problems.some((p) => p.includes("redirect") || p.includes("no sidebar") || p.includes("chars of text")) ? "FAIL" : "WARN", problems.join(" | "));
     }
+  }
+
+  console.log("\n--- pages ---");
+  for (const [path, expected] of PAGES) {
+    await check(path, expected);
+  }
+
+  // --- Redirect aliases -----------------------------------------------------
+  console.log("\n--- redirect aliases ---");
+  for (const [path, destination, expected] of ALIASES) {
+    await check(path, expected, { expect: destination });
+  }
+
+  // --- Screens that need a real record id ----------------------------------
+  console.log("\n--- detail and edit screens ---");
+  const ids = await cdp.evaluate(`
+    Promise.all([
+      fetch("${API}/users?per_page=1", { credentials: "include" }).then(r => r.json()),
+      fetch("${API}/roles", { credentials: "include" }).then(r => r.json()),
+    ]).then(([users, roles]) => ({
+      user: (users.items || users.data || [])[0]?.id ?? null,
+      role: (Array.isArray(roles) ? roles : roles.items || [])[0]?.id ?? null,
+    }))
+  `);
+  if (!ids.user || !ids.role) {
+    record("resolve ids", "WARN", `could not resolve a user/role id (${JSON.stringify(ids)})`);
+  } else {
+    record("resolve ids", "PASS", `user ${String(ids.user).slice(0, 8)} · role ${ids.role}`);
+    for (const [template, expected] of DYNAMIC) {
+      await check(template.replace("{user}", ids.user).replace("{role}", ids.role), expected);
+    }
+  }
+
+  // --- Signed out ----------------------------------------------------------
+  // Last, and after the cookie is dropped: every one of these redirects to the
+  // dashboard while a session exists, so running them earlier would report a
+  // pass without ever rendering the page.
+  console.log("\n--- signed out ---");
+  await cdp.evaluate(`fetch("${API}/auth/logout", { method: "POST", credentials: "include" }).then(r => r.status)`);
+  await cdp.send("Network.clearBrowserCookies");
+  for (const [path, expected, destination] of PUBLIC_PAGES) {
+    await check(path, expected, { signedOut: true, expect: destination ?? path });
   }
 } catch (err) {
   console.error("\nHARNESS ERROR:", err.message);

@@ -620,13 +620,17 @@ The core is complete when **all** of these hold:
 - [ ] All 8 modules exist with Index, Form (create+update) and Show, on the § 2.3 routes
 - [ ] Every list endpoint goes through the § 3.1 pipeline — no hand-rolled filter chains remain
 - [ ] Every index page is built from `ResourceIndex` — none approaches LeapDesk's 936 lines
-- [ ] All 14 permissions seeded, every route gated by `require_permission`
+- [x] All 14 permissions seeded, every route gated by `require_permission` — proven by `0d611ad`
+      (2026-08-11): a CI test walks every gated route and confirms a stranger is refused
 - [ ] Every module writes to the activity log by construction, not by remembering
-- [ ] `npm run build`, `npm run typecheck` and `ruff check` pass; `npm run lint` is at **0** and
-      `continue-on-error` is deleted from `ci.yml`
+- [x] `npm run build`, `npm run typecheck` and `ruff check` pass; `npm run lint` is at **0** and
+      `continue-on-error` is deleted from `ci.yml` — closed by `c6b3154` (2026-08-11); `ci.yml`
+      runs ruff, pytest, typecheck, lint and build, none of them soft-failing
 - [ ] Every data-visibility path has a recorded verification in `DAILY_CHANGES.md`
-- [ ] **Every screen has been opened in a browser.** `UI_PATTERNS.md` § Pending notes no component
-      has been visually verified since the Viho migration — that gap must not survive this plan
+- [x] **Every screen has been opened in a browser** — completed 2026-08-13. All 43 routes:
+      28 static signed-in screens, 4 redirect aliases (asserted to land on their target),
+      4 detail/edit screens on live record ids, 7 signed-out pages. 45 PASS, 0 WARN, 0 FAIL.
+      The 18 screens opened for the first time all render; see `DAILY_CHANGES.md` 2026-08-13
 
 ---
 
