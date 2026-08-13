@@ -79,8 +79,9 @@ export default function DataAccessModule() {
     debounced: ["search"],
     defaultSortBy: "created_at",
     defaultSortOrder: "desc",
-    // 25, matching the reference's `per_page` default for this controller.
-    defaultPerPage: 25,
+    // 30, matching Users' owner-set default so switching modules keeps the
+    // same density (2026-08-13).
+    defaultPerPage: 30,
   });
 
   const list = useResourceList<DataAccessGrant>({
@@ -195,12 +196,15 @@ export default function DataAccessModule() {
 
   return (
     <ResourceIndex<DataAccessGrant, typeof q.filters>
-      icon={navIcon("roles")}
+      icon={navIcon("dataAccess")}
       title="Data Access"
       description="Delegate who can see and manage another user's records"
       actions={
         canManage ? (
-          <Button onClick={() => modal.open("create")}>Grant Data Access</Button>
+          <Button onClick={() => modal.open("create")}>
+            {navIcon("dataAccess")}
+            Grant Data Access
+          </Button>
         ) : undefined
       }
       query={q}

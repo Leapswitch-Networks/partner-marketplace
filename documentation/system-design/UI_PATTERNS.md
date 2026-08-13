@@ -275,10 +275,18 @@ table wrote to one Set and the handler read another. Bulk actions read `q.select
 One component, two shells: the schema, the fetch and the payload are shared and only the chrome
 differs. **A second component per mode is not allowed**; that is how two spellings of one form appear.
 
-**The routes stay.** `/dashboard/{module}/new`, `/{id}` and `/{id}/edit` still exist and still render
-the full-page shells. They are the deep-linkable, bookmarkable version and the target of links from
-elsewhere in the app. The modal is the path *from the table*, where losing your filters and scroll
-position to change one field is the thing being fixed.
+**The routes stay — for Users and Roles.** Their `/dashboard/{module}/new`, `/{id}` and `/{id}/edit`
+routes exist and render the full-page shells: the deep-linkable, bookmarkable version and the target
+of links from elsewhere in the app. The modal is the path *from the table*, where losing your filters
+and scroll position to change one field is the thing being fixed.
+
+> ⚠️ **This paragraph used to claim the routes exist for every module. They do not**, and never did:
+> Data Access, API Credentials and the Search registry are modal-only, with no `/new`, `/{id}` or
+> `/{id}/edit` at all. Caught by the § 8.2 sweep on 2026-08-13 and **registered as a sanctioned
+> divergence** in `CORE_COMPLETION_PLAN.md` § 1.1 (owner's decision, same day): those three are
+> low-field-count admin modules whose create/edit fit a modal. If one of them ever needs a
+> deep-linkable form — an email that says "review this grant" — that is the moment to build its
+> routes, Users-style, not a reason to have built them speculatively.
 
 A modal that is still loading renders its skeleton **inside** the modal. Returned bare it lands
 wherever the module mounts its children — under the table, not in a dialog.
@@ -652,9 +660,26 @@ instruction** — the identity already lives in the header's account menu, and t
 real source. Sign-out moved to the header for the same reason. **The mobile drawer keeps its sign-out**,
 because `TopNav` is `hidden md:flex` and dropping it there would leave phone users unable to log out.
 
-**Chevrons belong to nav items, not section headings.** Sections are inert labels whose items are
-always visible. A collapsible heading is indistinguishable from a static one at this type size, and it
-hid a whole group behind a chevron on first load.
+**Section headings collapse, and start collapsed — owner's instructions, 2026-08-13.** The rule here
+used to be the opposite ("sections are inert labels whose items are always visible"), adopted because
+the first collapsible version hid the current page behind a chevron on first load. What makes
+closed-by-default safe this time is one invariant: **the section holding the current page is born
+open and reopens on navigation into it** — the active row can never sit hidden inside a closed
+group. Navigation behaves as an **accordion**: entering another heading's page closes the group you
+left as the new one opens (each section syncs to its own holds-current transition, both
+directions); outside of that, a collapse is only ever the reader's own click. The chevron sits at the heading's right edge
+and rotates from down (open) to right (closed); the body animates via `grid-rows 0fr ⇄ 1fr`, never
+`max-height`. The server's `section.collapsible` flag is honoured — `false` renders an inert,
+always-open heading — so the per-role setting on the Roles screen is live.
+
+**A menu filter sits above the nav** (`NavFilter` in `Sidebar.tsx`): it filters the *menu*, not the
+data — `GlobalSearch` in the header owns records. While a query is live every matching section is
+held open regardless of its collapsed state, a section whose label matches keeps all its items, and
+clearing the query restores each section's own state. No filter box in the icon-only rail — no room
+for an input, and the tooltips already name every icon.
+
+The brand block above the nav shows **the app name alone**; the `chrome_subtitle` branding field is
+no longer rendered anywhere in the chrome (same instruction, same day).
 
 ---
 

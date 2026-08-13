@@ -53,7 +53,9 @@ export default function RolesModule() {
     debounced: ["search"],
     defaultSortBy: "name",
     defaultSortOrder: "asc",
-    defaultPerPage: 25,
+    // 30, matching Users' owner-set default so switching modules keeps the
+    // same density (2026-08-13).
+    defaultPerPage: 30,
   });
 
   const modal = useModalState<ModalMode, Role>();

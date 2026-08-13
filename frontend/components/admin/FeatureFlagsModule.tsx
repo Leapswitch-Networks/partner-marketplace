@@ -74,7 +74,9 @@ export default function FeatureFlagsModule() {
     // flag is looked up by name, not discovered by recency.
     defaultSortBy: "name",
     defaultSortOrder: "asc",
-    defaultPerPage: 25,
+    // 30, matching Users' owner-set default so switching modules keeps the
+    // same density (2026-08-13).
+    defaultPerPage: 30,
   });
 
   const list = useResourceList<FeatureFlag>({
@@ -221,13 +223,16 @@ export default function FeatureFlagsModule() {
 
   return (
     <ResourceIndex<FeatureFlag, typeof q.filters>
-      icon={navIcon("settings")}
+      icon={navIcon("featureFlags")}
       title="Feature Flags"
       // The reference's description, verbatim.
       description="Staged rollout without a code change. Target roles or people before going to everyone."
       actions={
         canManage ? (
-          <Button onClick={() => modal.open("create")}>New flag</Button>
+          <Button onClick={() => modal.open("create")}>
+            {navIcon("featureFlags")}
+            New flag
+          </Button>
         ) : undefined
       }
       query={q}

@@ -64,6 +64,20 @@ const FULL_HEIGHT_PREFIXES = [
   "/dashboard/users",
   "/dashboard/roles",
   "/dashboard/invitations",
+  // The other eight ResourceIndex routes, added 2026-08-13. They render the
+  // exact same viewport-locked Card as Users, but only the three above were
+  // ever listed — so switching from Users to any of these swapped the page
+  // padding (px-3 pb-3 → px-4 py-6, up to 2xl:px-8 2xl:py-8) and wrapped the
+  // self-measuring table in a second scroll container, the nested-scroll
+  // failure the comment above warns about. Same card, same table, two looks.
+  // `/dashboard/api-credentials` also covers `/providers` by prefix.
+  "/dashboard/data-access",
+  "/dashboard/api-credentials",
+  "/dashboard/search",
+  "/dashboard/errors",
+  "/dashboard/feature-flags",
+  "/dashboard/webhooks",
+  "/dashboard/api-consumers",
 ];
 
 function ownsViewportHeight(pathname: string): boolean {

@@ -72,7 +72,9 @@ export default function SearchEntitiesModule() {
     // section appears first in the results, so the table shows that order.
     defaultSortBy: "sort_order",
     defaultSortOrder: "asc",
-    defaultPerPage: 25,
+    // 30, matching Users' owner-set default so switching modules keeps the
+    // same density (2026-08-13).
+    defaultPerPage: 30,
   });
 
   const [canManage, setCanManage] = useState(false);
@@ -208,12 +210,15 @@ export default function SearchEntitiesModule() {
 
   return (
     <ResourceIndex<SearchableEntity, typeof q.filters>
-      icon={navIcon("settings")}
+      icon={navIcon("search")}
       title="Search"
       description="Choose which records the global search box looks in"
       actions={
         canManage ? (
-          <Button onClick={() => modal.open("create")}>Add entity</Button>
+          <Button onClick={() => modal.open("create")}>
+            {navIcon("search")}
+            Add entity
+          </Button>
         ) : undefined
       }
       query={q}

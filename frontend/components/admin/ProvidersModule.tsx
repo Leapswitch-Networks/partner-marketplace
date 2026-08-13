@@ -59,7 +59,9 @@ export default function ProvidersModule() {
     debounced: ["search"],
     defaultSortBy: "display_order",
     defaultSortOrder: "asc",
-    defaultPerPage: 25,
+    // 30, matching Users' owner-set default so switching modules keeps the
+    // same density (2026-08-13).
+    defaultPerPage: 30,
   });
 
   const [canManage, setCanManage] = useState(false);
@@ -200,12 +202,15 @@ export default function ProvidersModule() {
 
   return (
     <ResourceIndex<ApiProvider, typeof q.filters>
-      icon={navIcon("settings")}
+      icon={navIcon("apiCredentials")}
       title="API Providers"
       description="Third parties we hold credentials for, and the fields each one needs"
       actions={
         canManage ? (
-          <Button onClick={() => modal.open("create")}>Add provider</Button>
+          <Button onClick={() => modal.open("create")}>
+            {navIcon("apiCredentials")}
+            Add provider
+          </Button>
         ) : undefined
       }
       query={q}

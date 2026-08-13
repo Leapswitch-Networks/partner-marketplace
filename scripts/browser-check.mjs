@@ -309,13 +309,32 @@ try {
       }
     }
 
-    const state = await cdp.evaluate(`(() => ({
+    // `document.body?.` because the read can land mid-navigation, where there is
+    // no body yet — that crashed the whole pass, not just the page under test.
+    const readState = () =>
+      cdp.evaluate(`(() => ({
       url: location.pathname,
       title: document.title,
-      text: (document.body.innerText || "").trim(),
+      text: (document.body?.innerText || "").trim(),
       hasSidebar: !!document.querySelector("aside, nav"),
       headings: Array.from(document.querySelectorAll("h1,h2")).map(h => h.innerText.trim()).slice(0, 4),
     }))()`);
+
+    let state = await readState();
+    // Poll before judging — up to three more reads, 2.5s apart. A dev server
+    // compiling a cold route serves the shell late, and a streamed redirect()
+    // swaps the URL only after hydration; measured on 2026-08-13, the alias
+    // redirect landed between 4s and 5s on a freshly restarted dev server. A
+    // real failure fails identically on every reading, and a healthy page
+    // passes the first check, so green runs never wait.
+    for (
+      let attempt = 0;
+      attempt < 3 && (state.url !== expect || state.text.length < (signedOut ? 30 : 120));
+      attempt++
+    ) {
+      await sleep(2500);
+      state = await readState();
+    }
 
     const shot = await cdp.send("Page.captureScreenshot", { format: "png" });
     writeFileSync(join(SHOTS, path.replace(/[^a-zA-Z0-9]+/g, "_") + ".png"), Buffer.from(shot.data, "base64"));

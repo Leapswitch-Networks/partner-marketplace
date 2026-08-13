@@ -43,16 +43,11 @@ export default function Navbar() {
             <BrandMark />
           </span>
           <div className="hidden sm:block">
-            <p className="text-sm font-bold text-gray-900 leading-tight dark:text-gray-100">{branding.app_name}</p>
-            {/* `chrome_subtitle`, matching the sidebar's brand block. This was a
-                hardcoded "Super Admin" — a ROLE label rendered to every user
-                regardless of their actual role, so a Partner saw it too. It sits in
-                the brand block beside the monogram and name, which is the branding
-                subtitle's place; the role, if it belongs anywhere, belongs on the
-                account menu. */}
-            <p className="text-[10px] font-medium text-brand dark:text-brand-on-dark uppercase tracking-widest leading-tight">
-              {branding.chrome_subtitle}
-            </p>
+            {/* Name only. This block once carried a hardcoded "Super Admin", then
+                the branding `chrome_subtitle` — removed with the sidebar's copies
+                on the owner's instruction, 2026-08-13. The setting still exists in
+                the Branding screen; nothing in the chrome renders it any more. */}
+            <p className="text-sm font-bold text-gray-900 dark:text-gray-100">{branding.app_name}</p>
           </div>
         </Link>
 

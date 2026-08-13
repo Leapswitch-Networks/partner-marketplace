@@ -30,6 +30,7 @@ import {
 import { extractApiError } from "@/lib/utils/apiError";
 import { formatDateTime } from "@/lib/utils/format";
 import useModalState from "@/lib/hooks/useModalState";
+import usePermissions from "@/lib/hooks/usePermissions";
 import useResourceList from "@/lib/hooks/useResourceList";
 import useResourceQuery from "@/lib/hooks/useResourceQuery";
 
@@ -65,6 +66,7 @@ function stateOf(row: WebhookEndpoint): { label: string; tone: "success" | "dang
 }
 
 export default function WebhooksModule() {
+  const { can } = usePermissions();
   const { toasts, show, dismiss } = useToast();
   const modal = useModalState<ModalMode, WebhookEndpoint>();
 
@@ -77,7 +79,9 @@ export default function WebhooksModule() {
     debounced: ["search"],
     defaultSortBy: "created_at",
     defaultSortOrder: "desc",
-    defaultPerPage: 15,
+    // 30, matching Users' owner-set default so switching modules keeps the
+    // same density (2026-08-13).
+    defaultPerPage: 30,
   });
 
   const list = useResourceList<WebhookEndpoint>({
@@ -180,8 +184,15 @@ export default function WebhooksModule() {
       icon={navIcon("webhooks")}
       title="Webhooks"
       description="Where we post events, and what happened when we did"
+      actions={
+        can("api-token-manage") ? (
+          <Button onClick={() => modal.open("create")}>
+            {navIcon("webhooks")}
+            Add a webhook
+          </Button>
+        ) : undefined
+      }
       query={q}
-      actions={<Button onClick={() => modal.open("create")}>Add a webhook</Button>}
       filters={[
         {
           type: "text",
@@ -211,7 +222,16 @@ export default function WebhooksModule() {
       table="vendor"
       rowNoun="webhook"
       emptyTitle="No webhooks yet"
-      emptyHint="Add one when a registered system wants to be told about events as they happen."
+      emptyHint={
+        <>
+          Add one when a registered system wants to be told about events as they happen.
+          {can("api-token-manage") && (
+            <Button size="sm" className="mt-2 block" onClick={() => modal.open("create")}>
+              Add a webhook
+            </Button>
+          )}
+        </>
+      }
     >
       {(modal.is("create") || modal.is("edit")) && (
         <WebhookForm

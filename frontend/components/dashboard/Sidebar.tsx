@@ -210,11 +210,57 @@ function IconButton({
              was the last holdout. Keep literals out of this comment so the guard
              stays clean. */
           <span className="absolute inset-0 rounded-[5px] animate-pulse-ring" style={{
-            boxShadow: "inset 0 0 0 1px rgba(36, 105, 92, 0.2)",
+            // rgb(var(--brand)/…) not a literal: this was the frozen teal the
+            // comment above describes, surviving every theme change (found by
+            // the 2026-08-13 branding leak sweep — inline styles are exactly
+            // where the guard grep cannot look).
+            boxShadow: "inset 0 0 0 1px rgb(var(--brand) / 0.2)",
           }} />
         )}
       </button>
     </Tooltip>
+  );
+}
+
+// ── Nav filter box ────────────────────────────────────────────────────────────
+/**
+ * Filters the menu, not the data — `GlobalSearch` in the header owns records;
+ * this owns "where is that screen again?". Lives above the scrolling nav, so it
+ * stays put while a long menu scrolls beneath it.
+ */
+function NavFilter({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="relative px-3 pt-3">
+      <svg
+        className="pointer-events-none absolute left-6 top-1/2 mt-1.5 h-4 w-4 -translate-y-1/2 text-ink-muted dark:text-night-muted"
+        fill="none"
+        viewBox="0 0 24 24"
+        stroke="currentColor"
+        strokeWidth={2}
+      >
+        <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M17 11a6 6 0 11-12 0 6 6 0 0112 0z" />
+      </svg>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="Search menu…"
+        aria-label="Search navigation"
+        className="w-full rounded-[5px] border border-brand/20 bg-transparent py-2 pl-9 pr-8 text-xs text-ink placeholder:text-ink-muted focus:border-brand focus:outline-none dark:border-night-border dark:text-gray-200 dark:placeholder:text-night-muted dark:focus:border-brand-on-dark"
+      />
+      {value && (
+        <button
+          type="button"
+          onClick={() => onChange("")}
+          aria-label="Clear navigation search"
+          className="absolute right-5 top-1/2 mt-1.5 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded-[3px] text-ink-muted hover:bg-brand/10 hover:text-brand dark:text-night-muted dark:hover:bg-brand/20 dark:hover:text-brand-on-dark"
+        >
+          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -223,11 +269,13 @@ function NavItems({
   collapsed,
   large,
   sections,
+  query,
   onNavigateHref,
 }: {
   collapsed: boolean;
   large?: boolean;
   sections: NavigationSection[];
+  query?: string;
   onNavigateHref: (href: string) => void;
 }) {
   return (
@@ -245,6 +293,7 @@ function NavItems({
       <NavTree
         sections={sections}
         collapsed={collapsed}
+        query={query}
         onNavigate={onNavigateHref}
         renderButton={({ active, label, icon, onClick }) =>
           collapsed ? (
@@ -313,6 +362,10 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobileVisible, setMobileVisible] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  // One query serves both the desktop nav and the mobile drawer — they are two
+  // renderings of the same menu, and a filter typed in one should mean the same
+  // thing in the other.
+  const [navQuery, setNavQuery] = useState("");
 
   // The nav tree, built and permission-filtered by the API.
   const { sections } = useNavigation();
@@ -408,8 +461,9 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
     onNavigate,
     collapsed,
     setCollapsed,
-        navIcons,
-      sections,
+    navIcons,
+    sections,
+    query: navQuery,
     onNavigateHref,
   };
 
@@ -424,11 +478,10 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
         >
           <BrandMark />
         </button>
+        {/* Just the name — the chrome_subtitle line ("Admin Panel") came out of
+            all three brand blocks on the owner's instruction, 2026-08-13. */}
         <div className="ml-2.5">
-          <p className="text-sm font-bold text-gray-900 leading-tight dark:text-white">{branding.app_name}</p>
-          <p className="text-[10px] font-medium text-brand dark:text-brand-on-dark uppercase tracking-widest leading-tight">
-            {branding.chrome_subtitle}
-          </p>
+          <p className="text-sm font-bold text-gray-900 dark:text-white">{branding.app_name}</p>
         </div>
         <div className="ml-auto flex items-center gap-1">
           <ThemeToggle />
@@ -467,10 +520,7 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
                 <BrandMark />
               </button>
               <div className="ml-2.5">
-                <p className="text-sm font-bold text-gray-900 leading-tight dark:text-white">{branding.app_name}</p>
-                <p className="text-[10px] font-medium text-brand dark:text-brand-on-dark uppercase tracking-widest leading-tight">
-                  {branding.chrome_subtitle}
-                </p>
+                <p className="text-sm font-bold text-gray-900 dark:text-white">{branding.app_name}</p>
               </div>
               <button
                 type="button"
@@ -481,6 +531,7 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
                 {navIcons.close}
               </button>
             </div>
+            <NavFilter value={navQuery} onChange={setNavQuery} />
             <nav className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-hide scroll-smooth px-3 py-4 space-y-1">
               <NavItems {...navItemsProps} collapsed={false} />
             </nav>
@@ -503,7 +554,11 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
             : "w-64 2xl:w-72"
         }`}
       >
-        <div className="flex h-14 items-center border-b border-brand/20 px-3 transition-colors duration-200 flex-shrink-0 dark:border-night-border">
+        {/* No bottom border — owner's call, 2026-08-13: the nav's search box
+            sits right under this block, and the rule between them read as
+            clutter. The collapsed rail keeps its divider (below), where the
+            expand button needs the separation. */}
+        <div className="flex h-14 items-center px-3 flex-shrink-0">
           <button
             type="button"
             onClick={() => onNavigate("dashboard")}
@@ -518,10 +573,7 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
               collapsed ? "w-0 opacity-0" : "w-full opacity-100"
             }`}
           >
-            <p className="truncate text-sm font-bold text-gray-900 leading-tight 2xl:text-base dark:text-white">{branding.app_name}</p>
-            <p className="truncate text-[10px] font-medium text-brand dark:text-brand-on-dark uppercase tracking-widest leading-tight">
-              {branding.chrome_subtitle}
-            </p>
+            <p className="truncate text-sm font-bold text-gray-900 2xl:text-base dark:text-white">{branding.app_name}</p>
           </div>
 
           {!collapsed && (
@@ -552,6 +604,9 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
             </button>
           </div>
         )}
+        {/* No filter box in the icon-only rail — there is no room for an input,
+            and the tooltips already name every icon. */}
+        {!collapsed && <NavFilter value={navQuery} onChange={setNavQuery} />}
         <nav className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-hide scroll-smooth px-3 py-4 space-y-1 2xl:py-5 2xl:space-y-1.5">
           <NavItems {...navItemsProps} large={false} />
         </nav>

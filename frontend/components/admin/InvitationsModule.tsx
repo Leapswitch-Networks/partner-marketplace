@@ -17,7 +17,6 @@ import ResourceIndex from "@/components/common/ResourceIndex";
 import Toast, { useToast } from "@/components/common/Toast";
 import { navIcon } from "@/components/dashboard/navIcons";
 import { invitationApi } from "@/lib/api/rbacApi";
-import useAutoPerPage from "@/lib/hooks/useAutoPerPage";
 import useModalState from "@/lib/hooks/useModalState";
 import usePermissions from "@/lib/hooks/usePermissions";
 import useResourceList from "@/lib/hooks/useResourceList";
@@ -95,7 +94,6 @@ function StatCard({ label, value, tone }: { label: string; value: number; tone: 
 export default function InvitationsModule() {
   const { can } = usePermissions();
   const { toasts, show, dismiss } = useToast();
-  const autoPerPage = useAutoPerPage();
 
   const [stats, setStats] = useState<Record<string, number> | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -106,7 +104,11 @@ export default function InvitationsModule() {
     debounced: ["search"],
     defaultSortBy: "created_at",
     defaultSortOrder: "desc",
-    autoPerPage,
+    // Fixed 30, matching Users' owner-set default — `autoPerPage` removed
+    // 2026-08-13 because the two cannot coexist: it recomputes on every
+    // resize until the user picks a size, so a seeded default alongside it
+    // would silently resize back to whatever fits.
+    defaultPerPage: 30,
   });
 
   const list = useResourceList<Invitation>({

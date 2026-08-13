@@ -8,7 +8,6 @@ import { badgeColumn, dateColumn, numberColumn } from "@/components/common/colum
 import { type Column } from "@/components/common/DataTable";
 import Modal from "@/components/common/Modal";
 import { navIcon } from "@/components/dashboard/navIcons";
-import useAutoPerPage from "@/lib/hooks/useAutoPerPage";
 import useModalState from "@/lib/hooks/useModalState";
 import useResourceList from "@/lib/hooks/useResourceList";
 import useResourceQuery from "@/lib/hooks/useResourceQuery";
@@ -86,7 +85,6 @@ const NO_OPTIONS: ActivityFilterOptions = {
 };
 
 export default function ActivityModule() {
-  const autoPerPage = useAutoPerPage();
   const [options, setOptions] = useState<ActivityFilterOptions>(NO_OPTIONS);
 
   /** One mode. Same hook as the others so all four modules read the same way. */
@@ -110,7 +108,12 @@ export default function ActivityModule() {
     debounced: ["search"],
     defaultSortBy: "id",
     defaultSortOrder: "desc",
-    autoPerPage,
+    // Fixed 30 to match Users — the owner's number, 2026-08-10 — so switching
+    // modules keeps the same row density. `autoPerPage` went with the change
+    // (2026-08-13): it recomputes on every resize until the user picks a size,
+    // so it and a seeded default cannot both own this number, which is exactly
+    // why this screen used to open at a different count than every other.
+    defaultPerPage: 30,
   });
 
   /*
@@ -189,7 +192,8 @@ export default function ActivityModule() {
         header: "Details",
         cell: (row) =>
           row.properties ? (
-            <div className="flex justify-center">
+            // px-2 keeps a hit area now that the cell itself has none.
+            <div className="flex justify-center px-2">
               <button
                 type="button"
                 onClick={() => modal.open("detail", row)}
@@ -199,8 +203,11 @@ export default function ActivityModule() {
               </button>
             </div>
           ) : null,
-        className: "text-center",
-        headerClassName: "w-[80px] text-center",
+        // Same classes as `actionsColumn`, which this column stands in for —
+        // it had `w-[80px]` plus the default cell padding, so on this one
+        // screen the second column sat wider than everywhere else.
+        className: "text-center !px-0 w-0",
+        headerClassName: "text-center !px-0 w-0",
         hideable: false,
       },
       badgeColumn<ActivityEntry>({

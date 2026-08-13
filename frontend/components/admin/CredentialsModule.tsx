@@ -63,7 +63,9 @@ export default function CredentialsModule() {
     debounced: ["search"],
     defaultSortBy: "created_at",
     defaultSortOrder: "desc",
-    defaultPerPage: 25,
+    // 30, matching Users' owner-set default so switching modules keeps the
+    // same density (2026-08-13).
+    defaultPerPage: 30,
   });
 
   const [canManage, setCanManage] = useState(false);
@@ -218,12 +220,15 @@ export default function CredentialsModule() {
 
   return (
     <ResourceIndex<ApiCredential, typeof q.filters>
-      icon={navIcon("settings")}
+      icon={navIcon("apiCredentials")}
       title="API Credentials"
       description="Encrypted credentials for third-party integrations, per environment"
       actions={
         canManage ? (
-          <Button onClick={() => modal.open("create")}>Add credential</Button>
+          <Button onClick={() => modal.open("create")}>
+            {navIcon("apiCredentials")}
+            Add credential
+          </Button>
         ) : undefined
       }
       query={q}

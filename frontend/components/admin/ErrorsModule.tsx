@@ -73,7 +73,9 @@ export default function ErrorsModule() {
     // itself to the top and push today's regression off the first screen.
     defaultSortBy: "last_seen_at",
     defaultSortOrder: "desc",
-    defaultPerPage: 25,
+    // 30, matching Users' owner-set default so switching modules keeps the
+    // same density (2026-08-13).
+    defaultPerPage: 30,
   });
 
   const list = useResourceList<ErrorGroup>({
@@ -208,7 +210,7 @@ export default function ErrorsModule() {
 
   return (
     <ResourceIndex<ErrorGroup, typeof q.filters>
-      icon={navIcon("activity")}
+      icon={navIcon("errors")}
       title="Error Tracking"
       description="Distinct application errors, grouped. Fixing one row fixes every sighting behind it."
       query={q}

@@ -74,9 +74,11 @@ export interface ResourceIndexProps<T extends { id: RowId }, F extends FilterVal
    * Which table renders the rows.
    *
    * `"default"` is ours. `"vendor"` is the reference implementation's, copied in
-   * on 2026-08-10 and adapted by `VendorDataTable` — **opt-in per module, on
-   * purpose.** It is proven on Users only; the other modules stay on ours until
-   * that one has been looked at in a browser and signed off.
+   * on 2026-08-10 and adapted by `VendorDataTable`. This began as opt-in,
+   * proven on Users only — as of 2026-08-13 **all twelve index modules pass
+   * `"vendor"`**, so the default arm is live code with no consumer. It stays:
+   * removing the escape hatch is how the next visual regression becomes
+   * unrevertable per-module.
    */
   table?: "default" | "vendor";
 

@@ -49,6 +49,24 @@ const PROTECTED = ["/admin", "/dashboard", "/settings"];
  * the 401, and the user never notices. Only when **both** cookies are absent is the
  * visitor actually signed out.
  */
+/**
+ * Retired routes, kept alive as real HTTP redirects.
+ *
+ * Each of these also has a page stub calling `redirect()`, but a server
+ * component's redirect is *streamed*: the shell renders first and the URL only
+ * swaps when hydration finishes applying the RSC redirect instruction. On a
+ * busy dev server that is seconds late — and observed 2026-08-13, sometimes it
+ * never applies at all, leaving a signed-in user parked on a sidebar with an
+ * empty main. A 307 issued here is immediate and depends on nothing. The page
+ * stubs stay as the fallback for any path that bypasses the middleware matcher.
+ */
+const RETIRED: Record<string, string> = {
+  "/dashboard/all-users": "/dashboard/users",
+  "/dashboard/add-user": "/dashboard/users/new",
+  "/dashboard/profile": "/settings/profile",
+  "/settings": "/settings/profile",
+};
+
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const accessToken = request.cookies.get("access_token")?.value;
@@ -60,6 +78,15 @@ export function middleware(request: NextRequest) {
   if (pathname === "/") {
     const url = request.nextUrl.clone();
     url.pathname = "/sign-in";
+    return NextResponse.redirect(url);
+  }
+
+  const retired = RETIRED[pathname];
+  if (retired) {
+    const url = request.nextUrl.clone();
+    url.pathname = retired;
+    // The auth check still runs: the request re-enters this middleware at the
+    // destination, which is a PROTECTED path.
     return NextResponse.redirect(url);
   }
 

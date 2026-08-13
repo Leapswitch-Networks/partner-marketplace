@@ -30,6 +30,7 @@ import {
 import { extractApiError } from "@/lib/utils/apiError";
 import { formatDateTime } from "@/lib/utils/format";
 import useModalState from "@/lib/hooks/useModalState";
+import usePermissions from "@/lib/hooks/usePermissions";
 import useResourceList from "@/lib/hooks/useResourceList";
 import useResourceQuery from "@/lib/hooks/useResourceQuery";
 import useRowAction from "@/lib/hooks/useRowAction";
@@ -81,6 +82,7 @@ function tokenState(consumer: ApiConsumer): { label: string; tone: "success" | "
 }
 
 export default function ApiConsumersModule() {
+  const { can } = usePermissions();
   const { toasts, show, dismiss } = useToast();
   const modal = useModalState<ModalMode, ApiConsumer>();
 
@@ -92,7 +94,9 @@ export default function ApiConsumersModule() {
     debounced: ["search"],
     defaultSortBy: "created_at",
     defaultSortOrder: "desc",
-    defaultPerPage: 15,
+    // 30, matching Users' owner-set default so switching modules keeps the
+    // same density (2026-08-13).
+    defaultPerPage: 30,
   });
 
   const list = useResourceList<ApiConsumer>({
@@ -192,10 +196,15 @@ export default function ApiConsumersModule() {
       icon={navIcon("platformApi")}
       title="Platform API"
       description="Systems permitted to call our API, and the tokens they hold"
-      query={q}
       actions={
-        <Button onClick={() => modal.open("create")}>Register a system</Button>
+        can("api-consumer-create") ? (
+          <Button onClick={() => modal.open("create")}>
+            {navIcon("platformApi")}
+            Register a system
+          </Button>
+        ) : undefined
       }
+      query={q}
       filters={[
         {
           type: "text",
@@ -236,7 +245,16 @@ export default function ApiConsumersModule() {
       table="vendor"
       rowNoun="system"
       emptyTitle="No systems registered"
-      emptyHint="Register one when a machine needs standing access to this API."
+      emptyHint={
+        <>
+          Register one when a machine needs standing access to this API.
+          {can("api-consumer-create") && (
+            <Button size="sm" className="mt-2 block" onClick={() => modal.open("create")}>
+              Register a system
+            </Button>
+          )}
+        </>
+      }
     >
       {(modal.is("create") || modal.is("edit")) && (
         <ConsumerForm
