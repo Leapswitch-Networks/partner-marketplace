@@ -459,6 +459,24 @@ def accept_with_credentials(
     db.commit()
     db.refresh(user)
 
+    # The causer is the invitee: nobody else was at the keyboard. The row exists
+    # because this path mints an ACTIVE account carrying a role with no admin in
+    # the loop at redemption time — `invited_by` is who vouched, and the trail
+    # must be able to answer "where did this account come from?".
+    activity_service.record(
+        db,
+        description=f"{user.email} accepted an invitation — account created ACTIVE",
+        event="invitation_accepted",
+        subject_type="User",
+        subject_id=user.id,
+        actor=user,
+        properties={
+            "invitation_id": invitation.id,
+            "role": invitation.role.name if invitation.role is not None else None,
+            "invited_by": invitation.invited_by,
+        },
+    )
+
     # After the commit. `emit` never raises, so a webhook receiver cannot fail an
     # acceptance that has already created the account — the invitee would be left
     # with a working password and an error page.
@@ -498,17 +516,39 @@ def apply_to_google_user(db: Session, token: str, user: User) -> bool:
         # Someone is trying to redeem an invitation meant for another address.
         return False
 
+    roles_before = sorted(r.name for r in user.roles)
     if invitation.role is not None:
         # Replace rather than append: the invitation states the intended role.
         user.roles = [invitation.role]
 
     # An invited staff member is vouched for, so skip the approval queue.
-    if user.status == "INACTIVE":
+    activated = user.status == "INACTIVE"
+    if activated:
         user.status = "ACTIVE"
 
     _mark_accepted(invitation, user)
     db.commit()
     db.refresh(user)
+
+    # This path *replaces* the role set and can flip INACTIVE to ACTIVE — the
+    # two changes the trail exists for — and until this row it did both
+    # invisibly. Before/after by name, matching `record_roles_changed`'s rule
+    # that an audit row is read by a person.
+    activity_service.record(
+        db,
+        description=f"{user.email} redeemed a staff invitation via Google",
+        event="invitation_accepted",
+        subject_type="User",
+        subject_id=user.id,
+        actor=user,
+        properties={
+            "invitation_id": invitation.id,
+            "roles_before": roles_before,
+            "roles_after": sorted(r.name for r in user.roles),
+            "activated": activated,
+            "invited_by": invitation.invited_by,
+        },
+    )
     return True
 
 

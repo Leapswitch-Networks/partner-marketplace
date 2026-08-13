@@ -32,7 +32,7 @@ from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db, require_permission
 from app.core.permissions import DATA_ACCESS_MANAGE, DATA_ACCESS_VIEW
-from app.core.query import page_count
+from app.core.query import page_meta
 from app.models.data_access_grant import SCOPE_ALL, DataAccessGrant
 from app.models.user import User
 from app.schemas.auth import MessageResponse
@@ -130,10 +130,7 @@ def list_data_access_grants(
 
     return DataAccessListResponse(
         items=[_to_response(g) for g in grants],
-        total=total,
-        page=page,
-        per_page=per_page,
-        pages=page_count(total, per_page),
+        **page_meta(page, per_page, total),
         # Recomputed from the same constant the write routes are guarded on, so
         # the flag and the guard cannot disagree.
         can_manage=actor.has_permission(DATA_ACCESS_MANAGE),

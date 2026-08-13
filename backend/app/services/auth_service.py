@@ -35,7 +35,7 @@ from app.schemas.auth import (
     RegisterRequest,
     UpdateProfileRequest,
 )
-from app.services import activity_service, mail_service
+from app.services import activity_service, mail_service, settings_service
 from app.services.rbac_service import get_role_by_name
 
 #: Deliberately identical for "no such user" and "wrong password".
@@ -128,6 +128,22 @@ def register_partner(db: Session, data: RegisterRequest) -> User:
     db.add(user)
     db.commit()
     db.refresh(user)
+
+    # Self-registration was the one way an account could enter the system with
+    # no trail at all — the admin paths log in `user_service`, invitations log
+    # on redemption. The causer is the registrant; there is nobody else.
+    activity_service.record(
+        db,
+        description=f"{user.email} registered a partner account",
+        event="registered",
+        subject_type="User",
+        subject_id=user.id,
+        actor=user,
+        properties={
+            "status": user.status,
+            "roles": sorted(r.name for r in user.roles),
+        },
+    )
     return user
 
 
@@ -242,6 +258,13 @@ def update_own_profile(db: Session, user: User, data: UpdateProfileRequest) -> U
     """
     updates = data.model_dump(exclude_unset=True)
 
+    _PROFILE_FIELDS = (
+        "first_name", "last_name", "designation", "employee_id",
+        "personal_mobile_number", "personal_email", "company_name",
+        "timezone_preference",
+    )
+    before = {f: getattr(user, f) for f in _PROFILE_FIELDS}
+
     for field in ("first_name", "last_name"):
         if field in updates and updates[field] is not None:
             setattr(user, field, updates[field].strip())
@@ -263,6 +286,19 @@ def update_own_profile(db: Session, user: User, data: UpdateProfileRequest) -> U
     user.updated_by = user.id
     db.commit()
     db.refresh(user)
+
+    # Same diff treatment as the admin edit in `user_service.update_user` — the
+    # trail should not depend on *who* changed the record. `record_change`
+    # writes nothing when the submit was a no-op.
+    activity_service.record_change(
+        db,
+        subject_type="User",
+        subject_id=user.id,
+        before=before,
+        after={f: getattr(user, f) for f in _PROFILE_FIELDS},
+        actor=user,
+        label=user.email,
+    )
     return user
 
 
@@ -302,7 +338,10 @@ def send_password_otp(db: Session, user: User) -> None:
     db.commit()
 
     delivered = mail_service.send_password_otp(
-        user.email, code, settings.PASSWORD_OTP_TTL_MINUTES
+        user.email,
+        code,
+        settings.PASSWORD_OTP_TTL_MINUTES,
+        app_name=settings_service.get_branding(db).app_name,
     )
     if not delivered:
         # Clear the code rather than leaving one the user never received — a
@@ -425,6 +464,21 @@ def change_own_password(db: Session, user: User, data: ChangePasswordRequest) ->
     user.updated_by = user.id
     db.commit()
 
+    # The admin-set path logs in `user_service.update_user`; until this row the
+    # holder changing their *own* password was invisible — the wrong half to
+    # skip, since a hijacked session changing the password is exactly the event
+    # an investigation reaches for. `via` says which proof was presented.
+    activity_service.record(
+        db,
+        description=f"{user.email} changed their password",
+        event="password_changed",
+        log_name=activity_service.LOG_AUTH,
+        subject_type="User",
+        subject_id=user.id,
+        actor=user,
+        properties={"via": "email_otp" if via_otp else "current_password"},
+    )
+
 
 # --- Email verification (PM-35) ---------------------------------------------
 
@@ -497,6 +551,19 @@ def begin_password_reset(db: Session, email: str) -> tuple[User, str] | None:
         hours=PASSWORD_RESET_TTL_HOURS
     )
     db.commit()
+
+    # No causer: the requester is unauthenticated and has proved nothing yet —
+    # naming the account holder as the actor would put words in their mouth.
+    # The row still matters, because a burst of these against one address is a
+    # takeover attempt in progress.
+    activity_service.record(
+        db,
+        description=f"A password reset was requested for {user.email}",
+        event="password_reset_requested",
+        log_name=activity_service.LOG_AUTH,
+        subject_type="User",
+        subject_id=user.id,
+    )
     return user, token
 
 
@@ -520,4 +587,17 @@ def complete_password_reset(db: Session, token: str, new_password: str) -> User:
     user.locked_until = None
     db.commit()
     db.refresh(user)
+
+    # The causer here *has* proved control of the mailbox — unlike the request
+    # row above. Recorded because a reset both replaces the credential and
+    # clears a lockout, and either alone would deserve the row.
+    activity_service.record(
+        db,
+        description=f"{user.email} reset their password via an emailed link",
+        event="password_reset_completed",
+        log_name=activity_service.LOG_AUTH,
+        subject_type="User",
+        subject_id=user.id,
+        actor=user,
+    )
     return user

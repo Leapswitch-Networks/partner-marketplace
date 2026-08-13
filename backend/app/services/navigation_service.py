@@ -42,6 +42,7 @@ from app.core.permissions import (
     USER_VIEW,
 )
 from app.models.user import User
+from app.services import activity_service
 
 #: Sections an admin may configure as collapsible or always-open, per role, from
 #: the role permissions page. Keys are the slugs stored in `roles.nav_preferences`;
@@ -452,7 +453,7 @@ def role_nav_preferences(role: Any) -> list[dict[str, Any]]:
 
 
 def set_role_nav_preferences(
-    db: Session, role: Any, preferences: dict[str, dict[str, bool]]
+    db: Session, role: Any, preferences: dict[str, dict[str, bool]], actor: User
 ) -> list[dict[str, Any]]:
     """Replace a role's preferences, keeping only catalog-known sections.
 
@@ -468,8 +469,21 @@ def set_role_nav_preferences(
         if key in COLLAPSIBLE_SECTION_CATALOG and "collapsible" in flags
     }
 
+    before = role.nav_preferences or {}
     role.nav_preferences = clean
     db.commit()
     db.refresh(role)
+
+    # Cosmetic, but it is still a write to a Role by whoever holds
+    # `role-update`, and `record_change` costs nothing when nothing changed.
+    activity_service.record_change(
+        db,
+        subject_type="Role",
+        subject_id=str(role.id),
+        before={"nav_preferences": before},
+        after={"nav_preferences": clean},
+        actor=actor,
+        label=role.display_name or role.name,
+    )
 
     return role_nav_preferences(role)

@@ -30,7 +30,7 @@ from app.core.permissions import (
     PARTNER_VERIFY,
     PARTNER_VIEW,
 )
-from app.core.query import page_count
+from app.core.query import page_meta
 from app.models.user import User
 from app.schemas.common import Page
 from app.schemas.partner import (
@@ -104,10 +104,7 @@ def list_partners_endpoint(
     )
     return Page(
         items=items,
-        total=total,
-        page=page,
-        per_page=per_page,
-        pages=page_count(total, per_page),
+        **page_meta(page, per_page, total),
     )
 
 

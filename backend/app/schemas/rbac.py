@@ -6,6 +6,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 from app.schemas.auth import RoleSummary, validate_password_strength
+from app.schemas.common import Page
 
 AccountType = Literal["staff", "partner"]
 #: Must stay identical to `app.schemas.auth.UserStatus` — see the note there.
@@ -139,12 +140,11 @@ class UserDetailResponse(UserListItem):
     updated_at: datetime
 
 
-class PaginatedUsers(BaseModel):
-    items: list[UserListItem]
-    total: int
-    page: int
-    per_page: int
-    pages: int
+class PaginatedUsers(Page[UserListItem]):
+    """The standard page envelope. Kept as its own name — `PaginatedUsers`,
+    not `Page[UserListItem]` — so the OpenAPI schema name and the generated
+    frontend types it feeds don't move.
+    """
 
 
 class CreateUserRequest(BaseModel):

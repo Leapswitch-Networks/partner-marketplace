@@ -27,6 +27,7 @@ from app.core.permissions import (
     USER_UPDATE,
     USER_VIEW,
 )
+from app.core.query import page_meta
 from app.models.user import User
 from app.schemas.auth import MessageResponse
 from app.schemas.rbac import (
@@ -74,10 +75,7 @@ def list_users(
     items = [
         UserListItem.model_validate(user_service.decorate(user, actor)) for user in users
     ]
-    pages = (total + per_page - 1) // per_page if total else 0
-    return PaginatedUsers(
-        items=items, total=total, page=page, per_page=per_page, pages=pages
-    )
+    return PaginatedUsers(items=items, **page_meta(page, per_page, total))
 
 
 @router.post("/{user_id}/email", response_model=SendUserEmailResult)

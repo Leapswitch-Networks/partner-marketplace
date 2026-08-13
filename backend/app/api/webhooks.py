@@ -14,7 +14,7 @@ from app.core.permissions import (
     API_CONSUMER_VIEW,
     API_TOKEN_MANAGE,
 )
-from app.core.query import page_count
+from app.core.query import page_meta
 from app.models.user import User
 from app.schemas.auth import MessageResponse
 from app.schemas.common import Page
@@ -56,10 +56,7 @@ def list_endpoints(
     )
     return Page[WebhookResponse](
         items=[WebhookResponse.model_validate(row) for row in rows],
-        total=total,
-        page=page,
-        per_page=per_page,
-        pages=page_count(total, per_page),
+        **page_meta(page, per_page, total),
     )
 
 

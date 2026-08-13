@@ -25,8 +25,9 @@ from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db, require_permission
 from app.core.permissions import ACTIVITY_VIEW
-from app.core.query import page_count
+from app.core.query import page_meta
 from app.models.user import User
+from app.schemas.activity import ActivityEntry, PaginatedActivity
 from app.services import activity_service
 
 router = APIRouter(prefix="/activity", tags=["activity"])
@@ -65,39 +66,6 @@ class ActivityFilterOptions(BaseModel):
     #: is already the index's one metadata call, and a second round trip to say
     #: "nothing has been deleted" would not earn its request.
     retention: RetentionStatus
-
-
-class ActivityEntry(BaseModel):
-    id: int
-    log_name: str | None
-    #: `log_name` as a person reads it — 'auth' is 'Authentication' on screen.
-    #: Resolved here rather than in the client so the label cannot differ between
-    #: the table, the filter dropdown and the CSV.
-    module_label: str
-    description: str
-    event: str | None
-    subject_type: str | None
-    subject_id: str | None
-    #: Where to click through to, or None when the record has no page. The client
-    #: must not build this itself: it would need a copy of the route map, and a
-    #: renamed route would then produce a link to nowhere rather than no link.
-    subject_url: str | None
-    causer_id: str | None
-    #: Resolved display name for `causer_id`, or None for an unauthenticated
-    #: actor. Sent alongside the id because the id alone means nothing on screen,
-    #: and resolving it per row in the client would be N requests per page.
-    causer_name: str | None
-    properties: dict | None
-    batch_uuid: str | None
-    created_at: datetime
-
-
-class PaginatedActivity(BaseModel):
-    items: list[ActivityEntry]
-    total: int
-    page: int
-    per_page: int
-    pages: int
 
 
 @router.get("", response_model=PaginatedActivity)
@@ -177,14 +145,12 @@ def list_activity(
             )
             for row in rows
         ],
-        total=total,
-        page=page,
-        per_page=per_page,
-        # Was `max(1, ...)`, which reported one page for an empty trail and made
-        # the pager render "1 / 1" above no rows. `/users` already returned 0 in
-        # that case and `DataTable.tsx` branches on `pages === 0`, so 0 is the
-        # contract the frontend is written against; this endpoint was the odd one.
-        pages=page_count(total, per_page),
+        # `pages` was `max(1, ...)` here, which reported one page for an empty
+        # trail and made the pager render "1 / 1" above no rows. `/users`
+        # already returned 0 in that case and `DataTable.tsx` branches on
+        # `pages === 0`, so 0 is the contract the frontend is written against;
+        # this endpoint was the odd one. `page_meta` carries that fix forward.
+        **page_meta(page, per_page, total),
     )
 
 

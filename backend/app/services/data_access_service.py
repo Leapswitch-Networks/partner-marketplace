@@ -228,9 +228,10 @@ def list_grants(
     **Not scoped to the caller**, matching the reference — any holder of
     `data-access-view` sees the whole delegation graph. That is defensible only
     while the permission is narrowly held, and ours is not narrowly held: Staff
-    has `data-access-view`. Flagged in DAILY_CHANGES rather than silently
-    diverged, because scoping it is a visible behaviour change and the owner's
-    call.
+    has `data-access-view`. Flagged in DAILY_CHANGES (2026-08-13) and PM-5
+    rather than silently diverged, because scoping it is a visible behaviour
+    change and the owner's call. This sentence claimed that flag for a month
+    before the § 8.2 sweep noticed nobody had written it — the flag now exists.
 
     ## Why the search is built here and not by `ListSpec.searchable`
 
@@ -385,6 +386,7 @@ def create_grant(
 
     if existing is not None:
         previous = existing.access_level
+        was_binned = existing.deleted_at is not None
         existing.access_level = access_level
         existing.granted_by = actor.id
         # Revive it if it was in the recycle bin. Without this line the row is
@@ -406,7 +408,27 @@ def create_grant(
                 subject_id=existing.id,
                 actor=actor,
                 properties={"old": {"access_level": previous},
-                            "attributes": {"access_level": access_level}},
+                            "attributes": {"access_level": access_level},
+                            "restored": was_binned},
+            )
+        elif was_binned:
+            # Same level, but the row came back from the bin: a revoked grant
+            # started granting again, which is a grant in every way that
+            # matters. Until this branch the trail said the grant ended at the
+            # revocation, while the access quietly resumed.
+            activity_service.record(
+                db,
+                description=(
+                    f"Restored {existing.grantee.email}'s {access_level} access to "
+                    f"{existing.subject.email}'s records ({scope})"
+                ),
+                event="data_access_granted",
+                subject_type="DataAccessGrant",
+                subject_id=existing.id,
+                actor=actor,
+                properties={"attributes": {"access_level": access_level,
+                                           "scope": scope},
+                            "restored": True},
             )
         return existing
 

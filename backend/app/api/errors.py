@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db, require_permission
 from app.core.permissions import ERROR_MANAGE, ERROR_VIEW
-from app.core.query import page_count
+from app.core.query import page_meta
 from app.models.error_group import ERROR_STATUSES
 from app.models.user import User
 from app.schemas.auth import MessageResponse
@@ -61,10 +61,7 @@ def list_errors(
     )
     return Page[ErrorGroupResponse](
         items=[ErrorGroupResponse.model_validate(r) for r in rows],
-        total=total,
-        page=page,
-        per_page=per_page,
-        pages=page_count(total, per_page),
+        **page_meta(page, per_page, total),
     )
 
 

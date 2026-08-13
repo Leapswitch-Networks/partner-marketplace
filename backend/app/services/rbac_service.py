@@ -345,6 +345,23 @@ def clone_role(db: Session, role_id: int, data: CloneRoleRequest, actor: User) -
     db.add(clone)
     db.commit()
     db.refresh(clone)
+
+    # `cloned_from` is the field that matters: a clone carries a whole
+    # permission set in one action, and "copied from Admin" explains a grant
+    # list that an ordinary create would have had to justify item by item.
+    activity_service.record_created(
+        db,
+        subject_type="Role",
+        subject_id=str(clone.id),
+        values={
+            "name": clone.name,
+            "display_name": clone.display_name,
+            "cloned_from": source.name,
+            "permissions": sorted(p.name for p in clone.permissions),
+        },
+        actor=actor,
+        label=clone.display_name or clone.name,
+    )
     return clone
 
 
@@ -409,6 +426,22 @@ def create_role(db: Session, data: CreateRoleRequest, actor: User) -> Role:
     db.add(role)
     db.commit()
     db.refresh(role)
+
+    # The grants ride in the creation snapshot rather than through
+    # `_apply_permissions`: on a brand-new role "changed from nothing" and
+    # "created with" are the same fact, and one row reads better than two.
+    activity_service.record_created(
+        db,
+        subject_type="Role",
+        subject_id=str(role.id),
+        values={
+            "name": role.name,
+            "display_name": role.display_name,
+            "permissions": sorted(p.name for p in role.permissions),
+        },
+        actor=actor,
+        label=role.display_name or role.name,
+    )
     return role
 
 
@@ -423,10 +456,12 @@ def update_role(db: Session, role_id: int, data: UpdateRoleRequest, actor: User)
             "Only a super admin may modify a super-admin role",
         )
 
+    before = {"display_name": role.display_name, "description": role.description}
     if data.display_name is not None:
         role.display_name = data.display_name.strip()
     if data.description is not None:
         role.description = data.description.strip() or None
+    after = {"display_name": role.display_name, "description": role.description}
 
     if data.permission_ids is not None:
         # The conditional check survives alongside `set_role_permissions`'s
@@ -438,6 +473,19 @@ def update_role(db: Session, role_id: int, data: UpdateRoleRequest, actor: User)
     role.updated_by = actor.id
     db.commit()
     db.refresh(role)
+
+    # Grants are `_apply_permissions`' row; this one covers the rename path,
+    # which used to be the only role edit the trail could not see.
+    # `record_change` writes nothing when the diff is empty.
+    activity_service.record_change(
+        db,
+        subject_type="Role",
+        subject_id=str(role.id),
+        before=before,
+        after=after,
+        actor=actor,
+        label=role.display_name or role.name,
+    )
     return role
 
 
@@ -461,7 +509,7 @@ def set_role_permissions(
     return role
 
 
-def delete_role(db: Session, role_id: int) -> None:
+def delete_role(db: Session, role_id: int, actor: User) -> None:
     role = get_role_or_404(db, role_id)
 
     if role.is_protected:
@@ -479,5 +527,24 @@ def delete_role(db: Session, role_id: int) -> None:
             f"{assigned} user(s) still hold this role. Reassign them first.",
         )
 
+    # Snapshot taken before the delete: this is a hard delete, so the audit row
+    # is the only place the role's grant list survives.
+    snapshot = {
+        "name": role.name,
+        "display_name": role.display_name,
+        "description": role.description,
+        "permissions": sorted(p.name for p in role.permissions),
+    }
+    label = role.display_name or role.name
+
     db.delete(role)
     db.commit()
+
+    activity_service.record_deleted(
+        db,
+        subject_type="Role",
+        subject_id=str(role_id),
+        values=snapshot,
+        actor=actor,
+        label=label,
+    )

@@ -223,6 +223,21 @@ parameter precisely because no ownership check happens. There is **no pattern an
 leaks across tenants. Design it centrally — see
 [`MARKETPLACE_DOMAIN_PLAN.md`](./MARKETPLACE_DOMAIN_PLAN.md) § Required Regardless.
 
+**2026-08-13, from the § 8.2 data-visibility sweep — two PM-5-adjacent facts, recorded so they are
+decisions rather than surprises:**
+
+- **The Data Access grant-scope helpers are built, tested, and wired to nothing.**
+  `manageable_user_ids`, `can_manage_data_of` and `narrow_to_creators` in `data_access_service.py`
+  have zero production call sites — the grants admins create today change what `accessible_user_ids`
+  answers, but no list endpoint asks it yet. That is PM-5's other half: the seam exists at
+  `get_or_404` and the helpers exist here, and the wiring between them is the actual work. Until
+  then a data-access grant affects Global Search results and nothing else.
+- **`list_grants` shows the whole delegation graph to any `data-access-view` holder — and Staff
+  holds it.** Faithful to the reference, and defensible only while the permission is narrowly held,
+  which ours is not. Scoping it is a visible behaviour change and therefore the owner's call —
+  flagged in `DAILY_CHANGES.md` 2026-08-13 (the service docstring had claimed this flag existed
+  since the module shipped; it hadn't, which the sweep also caught).
+
 ---
 
 ### PM-6 — Six `admin_users` columns are never written ✅ RESOLVED

@@ -51,7 +51,7 @@ from app.core.permissions import (
     API_PROVIDER_UPDATE,
     API_PROVIDER_VIEW,
 )
-from app.core.query import page_count
+from app.core.query import page_meta
 from app.models.api_credential import ApiCredential, ApiServiceProvider
 from app.models.user import User
 from app.schemas.api_credential import (
@@ -141,10 +141,7 @@ def list_providers(
     counts = credential_service.credential_counts(db)
     return ProviderPage(
         items=[_provider_response(p, counts.get(p.id, 0)) for p in providers],
-        total=total,
-        page=page,
-        per_page=per_page,
-        pages=page_count(total, per_page),
+        **page_meta(page, per_page, total),
         can_manage=actor.has_permission(API_PROVIDER_UPDATE),
         categories=credential_service.list_categories(db),
     )
@@ -233,10 +230,7 @@ def list_credentials(
     )
     return CredentialPage(
         items=[_credential_response(c) for c in credentials],
-        total=total,
-        page=page,
-        per_page=per_page,
-        pages=page_count(total, per_page),
+        **page_meta(page, per_page, total),
         can_manage=actor.has_permission(API_CREDENTIAL_UPDATE),
         # Reveal additionally requires a password confirmation, which this flag
         # cannot know about — it gates whether the button is offered, not whether

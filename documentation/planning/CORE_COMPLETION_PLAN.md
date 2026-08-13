@@ -71,6 +71,7 @@ decision — not drift.
 | Users | **Email has no attachments** | The reference accepts 25MB of pdf/doc/xls/image. Needs upload plumbing the endpoint does not have. **Genuine gap, not a decision** — build it when attachments are asked for |
 | Users | **Per-page offers 15 as well as 10/25/50/100** | Ours is a superset; 15 is the reference's default but not one of its options, which means its own default is unselectable. Keeping it selectable is strictly better |
 | Users | **Extra row actions: Clear lockout, Reset 2FA** | Ours has account lockout and 2FA; the reference does not. Additive, so no behaviour of theirs is lost |
+| Data Access, API Credentials, Search registry | **Modal-only create/edit — no `/new`, `/{id}`, `/{id}/edit` routes** (§ 2.3 waived for these three) | Owner's decision, 2026-08-13, when the § 8.2 sweep found the routes missing and nothing sanctioning it. These are low-field-count admin modules whose create/edit fit a modal; Users and Roles keep the full route set, and any of the three graduates to routes the day a deep-link is actually needed. `UI_PATTERNS.md` § modals carried a universal "the routes stay" claim that this decision corrects |
 
 #### Users index — § 8.1 audit, 2026-08-10
 
@@ -617,16 +618,40 @@ Before marking any module complete, with LeapDesk's version of the screen **open
 The core is complete when **all** of these hold:
 
 - [x] All 8 modules pass their § 8.1 parity audit — completed 2026-08-12
-- [ ] All 8 modules exist with Index, Form (create+update) and Show, on the § 2.3 routes
-- [ ] Every list endpoint goes through the § 3.1 pipeline — no hand-rolled filter chains remain
-- [ ] Every index page is built from `ResourceIndex` — none approaches LeapDesk's 936 lines
+- [x] All 8 modules exist with Index, Form (create+update) and Show, on the § 2.3 routes —
+      **resolved by divergence, 2026-08-13**: Users and Roles carry the full set; Invitations has
+      no edit because an invitation cannot be edited (sanctioned in-source); Data Access, API
+      Credentials and the Search registry are modal-only by the owner's decision, registered in
+      § 1.1. The § 8.2 sweep found this box could never have been ticked as written
+- [x] Every list endpoint goes through the § 3.1 pipeline — verified 2026-08-13. All 12
+      sort/search-bearing endpoints run `core/query.py`'s `run_list`, and all five § 3.1
+      requirements hold (allowlist fallback, clamp, OR-grouped search, one count + one page query,
+      mandatory tiebreak). Named deviations: the module is `query.py` not `listing.py`; the
+      envelope helper (`page_meta`) was only built during this sweep, replacing 12 hand-assembled
+      copies; `GET /roles/{id}/users` is unbounded (docstring acknowledges); three services
+      deliberately pre-apply a wider search and pass `search=None` (commented in each)
+- [x] Every index page is built from `ResourceIndex` — verified 2026-08-13: 12 of 12 list modules.
+      AI Assistant is not a list and opts out with its reason in-source; so do the five other
+      non-list screens (Configuration, Health, Recycle Bin, Matrix, the search box)
 - [x] All 14 permissions seeded, every route gated by `require_permission` — proven by `0d611ad`
       (2026-08-11): a CI test walks every gated route and confirms a stranger is refused
-- [ ] Every module writes to the activity log by construction, not by remembering
+- [x] Every module writes to the activity log — closed 2026-08-13 under § 3.4's arrangement
+      (explicit calls + the `AUTHORIZATION.md` list as the review surface), not "by construction",
+      which § 3.4 explicitly rejected. The sweep found the arrangement had rotted: the list was
+      last touched 2026-08-03 and **twelve write paths logged nothing** — role create/clone/delete
+      and rename, both invitation-acceptance paths, self-registration, self-service password
+      change, both ends of password reset, profile self-edit, a revoked grant silently restored by
+      re-granting, assistant-conversation deletion, and post-password-change/reset session
+      evictions. All twelve wired the same day; the list rewritten to cover all eight modules
 - [x] `npm run build`, `npm run typecheck` and `ruff check` pass; `npm run lint` is at **0** and
       `continue-on-error` is deleted from `ci.yml` — closed by `c6b3154` (2026-08-11); `ci.yml`
       runs ruff, pytest, typecheck, lint and build, none of them soft-failing
-- [ ] Every data-visibility path has a recorded verification in `DAILY_CHANGES.md`
+- [x] Every data-visibility path has a recorded verification in `DAILY_CHANGES.md` — closed
+      2026-08-13. The sweep enumerated 20 paths: 8 already recorded by the § 8.1 audits, 3 newly
+      pinned by `tests/test_visibility_paths.py` (Users 404-not-403, Invitations sender-narrowing,
+      assistant-thread ownership), and the rest recorded with reasoning in the 2026-08-13 entry —
+      including the three that are deliberately unscoped (recycle bin, credential listing, the
+      grant graph, the last flagged to the owner via PM-5)
 - [x] **Every screen has been opened in a browser** — completed 2026-08-13. All 43 routes:
       28 static signed-in screens, 4 redirect aliases (asserted to land on their target),
       4 detail/edit screens on live record ids, 7 signed-out pages. 45 PASS, 0 WARN, 0 FAIL.

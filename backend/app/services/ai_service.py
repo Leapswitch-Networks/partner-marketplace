@@ -18,7 +18,7 @@ import logging
 from typing import Any
 
 from fastapi import HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.ai import client, guard, registry
@@ -228,8 +228,30 @@ def get_messages(db: Session, actor: User, conversation_id: str) -> list[AgentCo
 
 def delete_conversation(db: Session, actor: User, conversation_id: str) -> None:
     conversation = _conversation_for(db, actor, conversation_id)
+    # Counted before the delete cascades the messages away. Metadata only, no
+    # content: conversations are deliberately unreadable to other users (see the
+    # registry's denylist note), and an audit row is admin-visible — copying the
+    # transcript into it would reopen the hole the denylist closes.
+    message_count = db.scalar(
+        select(func.count())
+        .select_from(AgentConversationMessage)
+        .where(AgentConversationMessage.conversation_id == conversation.id)
+    )
+    started_at = conversation.created_at
     db.delete(conversation)
     db.commit()
+    activity_service.record(
+        db,
+        description=f"{actor.email} deleted an assistant conversation",
+        event="deleted",
+        subject_type="AgentConversation",
+        subject_id=conversation_id,
+        actor=actor,
+        properties={
+            "message_count": message_count,
+            "started_at": started_at.isoformat() if started_at else None,
+        },
+    )
 
 
 # --- The exchange -----------------------------------------------------------

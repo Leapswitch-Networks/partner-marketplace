@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db, require_permission
 from app.core.permissions import FEATURE_FLAG_MANAGE, FEATURE_FLAG_VIEW
-from app.core.query import page_count
+from app.core.query import page_meta
 from app.models.feature_flag import FeatureFlag
 from app.models.user import User
 from app.schemas.auth import MessageResponse
@@ -82,10 +82,7 @@ def list_feature_flags(
     )
     return FeatureFlagPage(
         items=[_to_response(f) for f in flags],
-        total=total,
-        page=page,
-        per_page=per_page,
-        pages=page_count(total, per_page),
+        **page_meta(page, per_page, total),
         can_manage=actor.has_permission(FEATURE_FLAG_MANAGE),
     )
 

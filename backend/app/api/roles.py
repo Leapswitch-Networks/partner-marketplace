@@ -173,9 +173,9 @@ def update_role(
 def delete_role(
     role_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission(ROLE_DELETE)),
+    actor: User = Depends(require_permission(ROLE_DELETE)),
 ) -> MessageResponse:
-    rbac_service.delete_role(db, role_id)
+    rbac_service.delete_role(db, role_id, actor)
     return MessageResponse(message="Role deleted")
 
 
@@ -208,12 +208,12 @@ def update_role_nav_preferences(
     role_id: int,
     data: UpdateNavPreferencesRequest,
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission(ROLE_UPDATE)),
+    actor: User = Depends(require_permission(ROLE_UPDATE)),
 ) -> NavPreferencesResponse:
     """Replace this role's preferences. Unknown sections are rejected."""
     role = rbac_service.get_role_or_404(db, role_id)
     return NavPreferencesResponse(
         sections=navigation_service.set_role_nav_preferences(
-            db, role, data.preferences
+            db, role, data.preferences, actor
         )
     )

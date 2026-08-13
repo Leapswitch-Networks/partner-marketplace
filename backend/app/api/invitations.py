@@ -20,7 +20,7 @@ from app.core.permissions import (
     INVITATION_RESEND,
     INVITATION_VIEW,
 )
-from app.core.query import page_count
+from app.core.query import page_meta
 from app.models.user import User
 from app.models.user_invitation import UserInvitation
 from app.schemas.auth import MessageResponse
@@ -33,14 +33,14 @@ from app.schemas.rbac import (
     InvitationStats,
     SkippedInvitation,
 )
-from app.services import invitation_service, mail_service
+from app.services import invitation_service, mail_service, settings_service
 
 logger = logging.getLogger("app.invitations")
 
 router = APIRouter(prefix="/invitations", tags=["invitations"])
 
 
-def _deliver(invitation: UserInvitation, accept_url: str) -> dict:
+def _deliver(db: Session, invitation: UserInvitation, accept_url: str) -> dict:
     """Email the invitation, and decide what the response should expose.
 
     The link is withheld from the response only when a real email was delivered.
@@ -57,6 +57,7 @@ def _deliver(invitation: UserInvitation, accept_url: str) -> dict:
         # what the column comment has always promised. Both were being dropped.
         role_name=invitation.role.display_name if invitation.role else None,
         note=invitation.note,
+        app_name=settings_service.get_branding(db).app_name,
     )
     delivered = sent and settings.MAIL_BACKEND.lower() != "console"
     payload = _to_response(invitation, None if delivered else accept_url)
@@ -156,10 +157,7 @@ def list_invitations(
     )
     return Page[InvitationResponse](
         items=[InvitationResponse(**_to_response(i)) for i in invitations],
-        total=total,
-        page=page,
-        per_page=per_page,
-        pages=page_count(total, per_page),
+        **page_meta(page, per_page, total),
     )
 
 
@@ -200,7 +198,7 @@ def create_invitation(
     actor: User = Depends(require_permission(INVITATION_CREATE)),
 ) -> InvitationCreatedResponse:
     invitation, accept_url = invitation_service.create_invitation(db, data, actor)
-    return InvitationCreatedResponse(**_deliver(invitation, accept_url))
+    return InvitationCreatedResponse(**_deliver(db, invitation, accept_url))
 
 
 @router.post(
@@ -248,7 +246,7 @@ def create_invitations(
                 )
             )
         else:
-            created.append(InvitationCreatedResponse(**_deliver(invitation, accept_url)))
+            created.append(InvitationCreatedResponse(**_deliver(db, invitation, accept_url)))
 
     return BulkInvitationResult(
         requested=len(data.invitations),
@@ -265,7 +263,7 @@ def resend_invitation(
 ) -> InvitationCreatedResponse:
     """Rotates the token, so the previous link stops working."""
     invitation, accept_url = invitation_service.resend_invitation(db, invitation_id, actor)
-    return InvitationCreatedResponse(**_deliver(invitation, accept_url))
+    return InvitationCreatedResponse(**_deliver(db, invitation, accept_url))
 
 
 @router.delete("/{invitation_id}", response_model=MessageResponse)

@@ -43,11 +43,6 @@ T = TypeVar("T")
 
 SortOrder = Literal["asc", "desc"]
 
-#: Mirrors the frontend's per-page selector. A value outside this set is not an
-#: error — it is silently clamped, because a bad `?per_page=` should not 422 a
-#: page the user can otherwise read.
-PER_PAGE_OPTIONS: tuple[int, ...] = (10, 15, 25, 50, 100)
-
 
 @dataclass(frozen=True)
 class ListSpec:
@@ -221,3 +216,28 @@ def page_count(total: int, per_page: int) -> int:
     if per_page <= 0 or total <= 0:
         return 0
     return -(-total // per_page)
+
+
+def page_meta(page: int, per_page: int, total: int) -> dict[str, int]:
+    """The four meta fields every list response repeats: `page`, `per_page`,
+    `total`, `pages`.
+
+    § 3.1 promised a `paginate()` helper that assembled the `Page[T]` envelope;
+    it was never built, so all twelve list routers hand-rolled this dict
+    themselves — `users.py` even recomputed `pages` inline instead of calling
+    `page_count`. This is that helper, minus `items`: a router already has its
+    own item list by the time it gets here, so `Model(items=..., **page_meta(...))`
+    works regardless of the concrete response class.
+
+    `page` and `per_page` pass straight through rather than being re-clamped.
+    Every caller has already bounded them — via its own `Query(..., ge=1,
+    le=...)` declaration, ahead of `run_list` — so there is nothing left to
+    clamp here, and re-clamping would silently paper over a caller that stopped
+    doing so.
+    """
+    return {
+        "page": page,
+        "per_page": per_page,
+        "total": total,
+        "pages": page_count(total, per_page),
+    }

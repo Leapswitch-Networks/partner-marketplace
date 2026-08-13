@@ -25,7 +25,7 @@ from app.core.permissions import (
     API_CONSUMER_VIEW,
     API_TOKEN_MANAGE,
 )
-from app.core.query import page_count
+from app.core.query import page_meta
 from app.models.user import User
 from app.schemas.api_consumer import (
     AbilityOption,
@@ -79,10 +79,7 @@ def list_consumers(
     )
     return Page[ConsumerResponse](
         items=[_to_response(row) for row in rows],
-        total=total,
-        page=page,
-        per_page=per_page,
-        pages=page_count(total, per_page),
+        **page_meta(page, per_page, total),
     )
 
 

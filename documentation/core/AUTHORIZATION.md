@@ -342,12 +342,46 @@ every session `last_seen_at` touch, burying the role grants in noise. The trade-
 calls is that they *can* be forgotten, so the wired paths are listed here and a reviewer can check this
 list against the routes.
 
+> **Rewritten 2026-08-13.** The list below was written for PM-32 and then not touched while seven
+> modules shipped their own logging — exactly the drift it exists to catch, caught by the § 8.2
+> sweep rather than by a reader. The same sweep found **twelve write paths that logged nothing**
+> (role create/clone/delete and rename, both invitation-acceptance paths, self-registration,
+> self-service password change, both ends of password reset, profile self-edit, a revoked
+> data-access grant silently restored by re-granting, assistant-conversation deletion, and the
+> session evictions after a password change or reset); all were wired the same day. When you add a
+> write path, add its row here **in the same change** — this note is the precedent for what happens
+> otherwise.
+
+### Auth and sessions (`log_name: auth`)
+
 | Action | Event | Where |
 |---|---|---|
 | Sign-in succeeded | `login` | `api/auth.login`, after the session exists |
 | Sign-in failed | `failed_login` | `auth_service.authenticate` — 4 reasons: unknown email, bad password, locked, status-blocked |
 | Wrong 2FA code | `failed_login` | `api/auth.two_factor_challenge` |
 | Sign-out | `logout` | `api/auth.logout`, only when a session was actually revoked |
+| Self-registration | `registered` | `auth_service.register_partner` — the causer is the registrant |
+| Own profile edited | `updated` | `auth_service.update_own_profile`, same diff treatment as the admin edit |
+| Own password changed | `password_changed` | `auth_service.change_own_password`, with `via`: current password or email OTP |
+| Password reset requested | `password_reset_requested` | `auth_service.begin_password_reset` — **no causer**: the requester has proved nothing yet |
+| Password reset completed | `password_reset_completed` | `auth_service.complete_password_reset` — also notes the lockout it clears |
+| Password OTP sent / failed / verified | `password_otp_*` | `auth_service` OTP flow |
+| Session revoked (one) | `session_revoked` | `api/auth` `/me/sessions/{id}` |
+| Sessions revoked (bulk) | `sessions_revoked` | `api/auth`: revoke-others button, password change (spares the current session), password reset (spares nothing) — each with the count |
+| Refresh anomaly | — | `api/auth.refresh` |
+| 2FA enrolled / enabled / disabled | `two_factor_*` | `api/auth` 2FA routes |
+| Recovery code used | `recovery_code_used` | `api/auth.two_factor_challenge` |
+| Email verified / link sent | `email_verified`, `email_verification_sent` | `api/auth` |
+
+Admin-triggered mass evictions (`revoked_by_admin` on suspend/delete, `password_change` on an
+admin-set password) deliberately do **not** write their own row: each rides inside an action that
+already logs (`status_changed`, `deleted`, `password_changed`), and a second row per action is the
+noise this design rejects.
+
+### Users
+
+| Action | Event | Where |
+|---|---|---|
 | Account created | `created` | `user_service.create_user` |
 | Account edited | `updated` | `user_service.update_user`, with a before/after diff |
 | Account deleted | `deleted` | `delete_user` and `bulk_delete`, **with a snapshot** — after a hard delete there is nothing left to describe |
@@ -355,13 +389,50 @@ list against the routes.
 | **Roles granted or revoked** | `roles_changed` | `update_user`, with explicit `granted`/`revoked` lists |
 | Lockout cleared | `lockout_cleared` | `unlock_user` |
 | Password set by an admin | `password_changed` | `update_user` |
-| 2FA enrolled / enabled / disabled | `two_factor_*` | `api/auth` 2FA routes |
 | 2FA reset by an admin | `two_factor_reset_by_admin` | `user_service.reset_two_factor` |
-| Recovery code used | `recovery_code_used` | `api/auth.two_factor_challenge` |
-| Email verified / link sent | `email_verified`, `email_verification_sent` | `api/auth` |
+| Email sent to a user | — | `user_service.send_user_email` |
 
 `roles_changed` gets its own event rather than hiding inside an `updated` diff, because in an RBAC system
 a role grant is the change most likely to be the subject of *"who did that, and when?"*.
+
+### Roles
+
+| Action | Event | Where |
+|---|---|---|
+| Role created / cloned | `created` | `rbac_service.create_role`, `clone_role` — the clone records `cloned_from` |
+| **Grants changed** | `permissions_changed` | `rbac_service._apply_permissions` — all three writers funnel through it. Before/after by **name**. ⚠️ Gated on the `security.audit.permission_changes` setting |
+| Role renamed / re-described | `updated` | `rbac_service.update_role` |
+| Role deleted | `deleted` | `rbac_service.delete_role`, with a grant-list snapshot |
+| Nav preferences changed | `updated` | `navigation_service.set_role_nav_preferences` |
+
+### Invitations
+
+| Action | Event | Where |
+|---|---|---|
+| Created / resent / cancelled | `invitation_*` | `invitation_service` |
+| **Accepted** | `invitation_accepted` | both paths: `accept_with_credentials` (mints an ACTIVE account + role) and `apply_to_google_user` (replaces the role set, may activate) — the causer is the invitee |
+
+### Data Access
+
+| Action | Event | Where |
+|---|---|---|
+| Granted / level changed / revoked | `data_access_*` | `data_access_service` |
+| **Revoked grant restored by re-granting** | `data_access_granted` with `restored: true` | `create_grant`'s upsert — the un-binning that used to happen silently |
+
+### Everything else
+
+| Module | What logs | Where |
+|---|---|---|
+| API Credentials | provider + credential CRUD; **every reveal** (`credential_revealed`, ⚠️ gated on `security.audit.credential_decrypt`) | `credential_service` |
+| Global Search registry | entity create / update / toggle / delete. Queries themselves go to `search_logs`, a separate table, by design | `search_service` |
+| AI Assistant | enable/disable; conversation deletion (**metadata only** — content stays unreadable to others by design) | `ai_service` |
+| Recycle bin | restore, purge | `recycle_bin_service` |
+| Settings & branding | every write | `settings_service`, `setting_service` |
+| Feature flags / webhooks / API consumers / partners | CRUD and state changes | each module's service |
+
+**Deliberately unlogged**, so nobody re-reports them: invitation expiry sweeps (a timer, not an
+actor), assistant feedback thumbs, per-message assistant chat (the conversation tables are the
+record), and worker runs (`worker_runs` is its own table).
 
 ### Reading it
 

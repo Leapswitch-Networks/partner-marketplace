@@ -182,6 +182,11 @@ def send_invitation(
     *,
     role_name: str | None = None,
     note: str | None = None,
+    # The caller resolves this, not us: this module stays free of database
+    # imports, but the name shown here must be the branding-screen override
+    # (`app_settings.app_name`), not the build-time env constant. Falls back to
+    # `settings.APP_NAME` when a caller has no DB session to resolve it from.
+    app_name: str | None = None,
 ) -> bool:
     """The invitation email.
 
@@ -198,8 +203,9 @@ def send_invitation(
     "expires in 7 days" as a literal, which becomes wrong the moment the window
     changes.
     """
+    name = app_name or settings.APP_NAME
     lines = [
-        f"You have been invited to {settings.APP_NAME}"
+        f"You have been invited to {name}"
         f"{f' by {inviter_name}' if inviter_name else ''}.",
     ]
     if role_name:
@@ -215,12 +221,19 @@ def send_invitation(
         f"\nThe link expires in {expires_days} day{'s' if expires_days != 1 else ''}. "
         "If you were not expecting this, you can ignore this message."
     )
-    return send(to, f"You have been invited to {settings.APP_NAME}", "\n".join(lines) + "\n")
+    return send(to, f"You have been invited to {name}", "\n".join(lines) + "\n")
 
 
-def send_email_verification(to: str, verify_url: str, expires_hours: int) -> bool:
+def send_email_verification(
+    to: str,
+    verify_url: str,
+    expires_hours: int,
+    *,
+    app_name: str | None = None,  # see send_invitation's app_name for why the caller resolves this
+) -> bool:
+    name = app_name or settings.APP_NAME
     body = (
-        f"Please confirm this email address for your {settings.APP_NAME} account.\n\n"
+        f"Please confirm this email address for your {name} account.\n\n"
         f"Confirm your address:\n{verify_url}\n\n"
         f"The link expires in {expires_hours} hour{'s' if expires_hours != 1 else ''}.\n\n"
         "If you did not create this account, you can ignore this message — nothing "
@@ -229,17 +242,29 @@ def send_email_verification(to: str, verify_url: str, expires_hours: int) -> boo
     return send(to, "Confirm your email address", body)
 
 
-def send_password_reset(to: str, reset_url: str, expires_hours: int) -> bool:
+def send_password_reset(
+    to: str,
+    reset_url: str,
+    expires_hours: int,
+    *,
+    app_name: str | None = None,  # see send_invitation's app_name for why the caller resolves this
+) -> bool:
     body = (
         "A password reset was requested for this address.\n\n"
         f"Reset your password:\n{reset_url}\n\n"
         f"The link expires in {expires_hours} hour{'s' if expires_hours != 1 else ''}. "
         "If you did not request this, no action is needed — your password has not changed.\n"
     )
-    return send(to, f"Reset your {settings.APP_NAME} password", body)
+    return send(to, f"Reset your {app_name or settings.APP_NAME} password", body)
 
 
-def send_password_otp(to: str, code: str, expires_minutes: int) -> bool:
+def send_password_otp(
+    to: str,
+    code: str,
+    expires_minutes: int,
+    *,
+    app_name: str | None = None,  # see send_invitation's app_name for why the caller resolves this
+) -> bool:
     """A 6-digit code proving the recipient controls this address.
 
     Deliberately carries **no link**. This code is requested from inside an
@@ -247,8 +272,9 @@ def send_password_otp(to: str, code: str, expires_minutes: int) -> bool:
     code with no accompanying URL cannot be turned into a phishing landing page by
     whoever forwards the mail.
     """
+    name = app_name or settings.APP_NAME
     body = (
-        f"Use this code to change your {settings.APP_NAME} password:\n\n"
+        f"Use this code to change your {name} password:\n\n"
         f"    {code}\n\n"
         f"It expires in {expires_minutes} minute{'s' if expires_minutes != 1 else ''} "
         "and can be used once.\n\n"

@@ -57,6 +57,7 @@ from app.services import (
     mail_service,
     rbac_service,
     session_service,
+    settings_service,
     two_factor_service,
 )
 
@@ -249,7 +250,10 @@ def _send_verification(db: Session, user: User) -> None:
     if url is None:
         return
     mail_service.send_email_verification(
-        to=user.email, verify_url=url, expires_hours=settings.EMAIL_VERIFICATION_TTL_HOURS
+        to=user.email,
+        verify_url=url,
+        expires_hours=settings.EMAIL_VERIFICATION_TTL_HOURS,
+        app_name=settings_service.get_branding(db).app_name,
     )
     activity_service.record(
         db,
@@ -603,6 +607,22 @@ def change_password(
         )
 
     if evicted:
+        # Same row the "sign out everywhere else" button writes: the eviction is
+        # the security half of the password change, and "how many sessions did
+        # the compromise hold?" is the first question an investigation asks.
+        activity_service.record(
+            db,
+            log_name="auth",
+            description=(
+                f"{current_user.full_name} signed out {evicted} other "
+                f"session(s) by changing their password"
+            ),
+            event="sessions_revoked",
+            subject_type="User",
+            subject_id=current_user.id,
+            actor=current_user,
+            properties={"count": evicted, "reason": "password_change"},
+        )
         return MessageResponse(
             message=(
                 f"Password updated. {evicted} other "
@@ -1008,6 +1028,7 @@ def forgot_password(
             to=user.email,
             reset_url=f"{settings.FRONTEND_URL.rstrip('/')}/reset-password?token={token}",
             expires_hours=auth_service.PASSWORD_RESET_TTL_HOURS,
+            app_name=settings_service.get_branding(db).app_name,
         )
     return MessageResponse(
         message="If an account exists for that address, a reset link has been sent."
@@ -1029,5 +1050,19 @@ def reset_password(
     unauthenticated.
     """
     user = auth_service.complete_password_reset(db, data.token, data.password)
-    session_service.revoke_all(db, user.id, reason="password_reset")
+    evicted = session_service.revoke_all(db, user.id, reason="password_reset")
+    if evicted:
+        # The reset row itself is written in the service; this one carries the
+        # count, because "the attacker's session died here" is the fact a
+        # compromise write-up needs and the reset row cannot know it.
+        activity_service.record(
+            db,
+            log_name="auth",
+            description=f"{user.full_name} signed out {evicted} session(s) by resetting their password",
+            event="sessions_revoked",
+            subject_type="User",
+            subject_id=user.id,
+            actor=user,
+            properties={"count": evicted, "reason": "password_reset"},
+        )
     return MessageResponse(message="Password reset. You can now sign in.")
