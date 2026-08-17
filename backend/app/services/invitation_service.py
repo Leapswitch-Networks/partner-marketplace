@@ -27,9 +27,22 @@ from app.models.user import User
 from app.models.user_invitation import UserInvitation
 from app.schemas.auth import AcceptInvitationRequest
 from app.schemas.rbac import CreateInvitationRequest
-from app.services import activity_service, webhook_service
+from app.services import activity_service, scoping, webhook_service
 from app.services.auth_service import email_exists, normalise_email
 from app.services.rbac_service import get_role_or_404
+
+# An invitation belongs to the organisation the invitee is being invited INTO —
+# the column phase 2 added when it closed the write-path hole.
+#
+# Registered even though `list_invitations` does not call `apply_scope`: its own
+# rule (`invited_by == actor.id`) is **stricter** than tenancy for every actor,
+# so composing a wall on top would only risk hiding an invitation from the person
+# who sent it. What registration buys is that the model is not *missing* — a
+# future endpoint listing an organisation's invitations gets a considered answer
+# instead of a `LookupError`, and `test_scoping.py`'s coverage check can see it.
+#
+# No `public_predicate`: an invitation is never public.
+scoping.register_scope(UserInvitation, owner_column=UserInvitation.organisation_id)
 
 INVITATION_TTL_DAYS = 7
 

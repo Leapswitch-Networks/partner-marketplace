@@ -23,6 +23,7 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import delete, select
 
+from app.core.permissions import all_permission_names
 from app.core.security import hash_password
 from app.db.session import SessionLocal
 from app.main import app
@@ -326,3 +327,160 @@ class TestAnInvitationCannotOutrankItsSender:
             db.commit()
         finally:
             db.close()
+
+
+class TestTheEnforcementMatrixIsPinned:
+    """**Which routes are ungated is a decision, so it is written down.**
+
+    `TestNoRouteIsOpenByAccident` proves that everything *declaring* a permission
+    refuses a stranger. It cannot see the failure that matters more: a route
+    shipped with **no guard at all**. That route declares no permission, so it is
+    not in that test's sample, and the suite stays green while the endpoint answers
+    the internet.
+
+    This closes it by inverting the question. Rather than testing the gated
+    routes, it pins the ungated ones. Adding a public endpoint now means editing a
+    list in a test file with `SECURITY` in the assertion message, which is a
+    conversation; forgetting a guard means a red build.
+
+    Two tiers, because "ungated" is two different decisions:
+
+    | Tier | Means | Example |
+    |---|---|---|
+    | `PUBLIC` | no credentials at all | `POST /auth/login`, `GET /settings/branding` |
+    | `AUTH_ONLY` | signed in, no specific permission | `GET /auth/me` — the subject is the caller |
+
+    `AUTH_ONLY` is legitimate for two shapes and no others: routes acting on the
+    caller's **own** account (`/auth/me/…`, where a permission would be asking
+    whether you may administer yourself), and routes whose authority is checked in
+    the body rather than declared — the branding writes are gated on
+    `require_super_admin`, which `api_docs_service.ENFORCED_ELSEWHERE` records and
+    verifies. Anything else appearing here is a missing `require_permission`.
+    """
+
+    #: No credentials required. Every entry is either the login/recovery surface
+    #: (which cannot require a session to obtain one) or deliberately public
+    #: branding read for the sign-in screen.
+    PUBLIC: frozenset[tuple[str, str]] = frozenset({
+        ("POST", "/api/v1/auth/accept-invitation"),
+        ("POST", "/api/v1/auth/forgot-password"),
+        ("GET", "/api/v1/auth/google/authorize"),
+        ("GET", "/api/v1/auth/google/callback"),
+        ("GET", "/api/v1/auth/google/redirect"),
+        ("POST", "/api/v1/auth/login"),
+        ("POST", "/api/v1/auth/logout"),
+        ("POST", "/api/v1/auth/refresh"),
+        ("POST", "/api/v1/auth/register"),
+        ("POST", "/api/v1/auth/resend-verification"),
+        ("POST", "/api/v1/auth/reset-password"),
+        ("POST", "/api/v1/auth/two-factor-challenge"),
+        ("POST", "/api/v1/auth/verify-email"),
+        # Reads an invitation by TOKEN, which is the credential. An invitee has no
+        # account yet, so requiring one would make the link unusable.
+        ("GET", "/api/v1/invitations/preview"),
+        # The sign-in screen renders branding before anybody is signed in.
+        ("GET", "/api/v1/settings/branding"),
+        ("GET", "/api/v1/settings/branding/themes"),
+        ("GET", "/api/v1/settings/branding/{asset}"),
+        ("GET", "/health"),
+        ("GET", "/health/ready"),
+    })
+
+    #: Signed in, no declared permission. Everything under `/auth/me` acts on the
+    #: caller's own account; the branding writes are gated on
+    #: `require_super_admin` (see `ENFORCED_ELSEWHERE`); navigation and search
+    #: return only what the caller may already see.
+    AUTH_ONLY: frozenset[tuple[str, str]] = frozenset({
+        ("GET", "/api/v1/auth/me"),
+        ("PATCH", "/api/v1/auth/me"),
+        ("POST", "/api/v1/auth/me/change-password"),
+        ("POST", "/api/v1/auth/me/confirm-password"),
+        ("POST", "/api/v1/auth/me/password-otp/send"),
+        ("POST", "/api/v1/auth/me/password-otp/verify"),
+        ("GET", "/api/v1/auth/me/sessions"),
+        ("POST", "/api/v1/auth/me/sessions/revoke-others"),
+        ("DELETE", "/api/v1/auth/me/sessions/{session_id}"),
+        ("DELETE", "/api/v1/auth/me/two-factor"),
+        ("GET", "/api/v1/auth/me/two-factor"),
+        ("POST", "/api/v1/auth/me/two-factor"),
+        ("POST", "/api/v1/auth/me/two-factor/confirm"),
+        ("POST", "/api/v1/auth/me/two-factor/recovery-codes"),
+        ("GET", "/api/v1/navigation"),
+        ("GET", "/api/v1/search"),
+        ("PUT", "/api/v1/settings/branding"),
+        ("POST", "/api/v1/settings/branding/theme-preview"),
+        ("DELETE", "/api/v1/settings/branding/{asset}"),
+        ("POST", "/api/v1/settings/branding/{asset}"),
+    })
+
+    @pytest.fixture(scope="class")
+    def catalogue(self):
+        return api_docs_service.build_catalogue(app)
+
+    def test_no_route_became_public_without_a_decision(self, catalogue):
+        found = {(op.method, op.path) for op in catalogue if op.is_public}
+        unexpected = sorted(found - self.PUBLIC)
+        assert not unexpected, (
+            "SECURITY: these routes require no credentials and are not on the "
+            f"reviewed list: {unexpected}. Add `require_permission(...)`, or — if "
+            "being public is genuinely intended — add it to PUBLIC here with the "
+            "reason, so the decision is reviewable."
+        )
+
+    def test_no_route_became_auth_only_without_a_decision(self, catalogue):
+        found = {
+            (op.method, op.path)
+            for op in catalogue
+            if op.requires_auth and not op.permissions
+        }
+        unexpected = sorted(found - self.AUTH_ONLY)
+        assert not unexpected, (
+            "SECURITY: these routes are reachable by ANY signed-in account with no "
+            f"permission check: {unexpected}. Unless the route acts on the caller's "
+            "own record, or enforces its authority in the body (record it in "
+            "`api_docs_service.ENFORCED_ELSEWHERE`), it needs a permission."
+        )
+
+    def test_the_pinned_lists_have_no_stale_entries(self, catalogue):
+        """A pin for a route that no longer exists is a hole waiting to be reused.
+
+        Delete an endpoint, add a different one at the same path later, and the
+        stale pin silently exempts it.
+        """
+        live = {(op.method, op.path) for op in catalogue}
+        stale = sorted((self.PUBLIC | self.AUTH_ONLY) - live)
+        assert not stale, (
+            f"pinned routes that no longer exist: {stale}. Remove them — a pin "
+            "outliving its route exempts whatever is added at that path next."
+        )
+
+    def test_every_declared_permission_exists_in_the_catalog(self, catalogue):
+        """A typo'd permission name is an ungated route with a guard on it.
+
+        `has_permission("user-updat")` is False for everybody, so the route is
+        merely broken — but the mirror case is the dangerous one, and both are
+        caught by requiring every declared name to be a real one.
+        """
+        known = set(all_permission_names())
+        unknown = sorted({
+            perm
+            for op in catalogue
+            for perm in op.permissions
+            if perm not in known
+        })
+        assert not unknown, f"routes declare permissions that do not exist: {unknown}"
+
+    def test_the_three_tiers_account_for_every_route(self, catalogue):
+        """No route falls between the categories, and the totals are stated so a
+        large jump in either direction is visible in the diff."""
+        gated = [op for op in catalogue if op.permissions]
+        public = [op for op in catalogue if op.is_public]
+        auth_only = [op for op in catalogue if op.requires_auth and not op.permissions]
+
+        assert len(gated) + len(public) + len(auth_only) == len(catalogue)
+        assert len(public) == len(self.PUBLIC)
+        assert len(auth_only) == len(self.AUTH_ONLY)
+        assert len(gated) > 100, (
+            f"only {len(gated)} routes declare a permission, of {len(catalogue)} — "
+            "that is a suspicious drop, not a refactor"
+        )

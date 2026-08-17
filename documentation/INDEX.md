@@ -75,6 +75,7 @@ it and another register disagree, it says so and names the one that is stale.
 | `planning/CORE_COMPLETION_PLAN.md` | **How the core gets to 100%.** The Index/Form/Show contract every module follows, the shared backend and frontend layers to build first, module-by-module state, build order, and what we deliberately do *not* copy from LeapDesk | **Live — 2026-08-07** |
 | `planning/LEAPDESK_PARITY_PLAN.md` | Port spec for LeapDesk's core: **18 modules + Recycle Bin** — schemas, endpoints, permissions, build order. Modules 1–10 are business objects; **11–18 are operations surfaces and most are not CRUD** — read that section before assuming the Users shape applies | **Spec — 18 modules as of 2026-08-11.** Progress table re-audited against code that day. Module 16 (Queue Monitor) is **blocked**: we have no queue |
 | `planning/MODULE_PARITY_PLAN.md` | **Bringing every module to the Users index.** All 57 changes made to Users on 10–11 August as a checklist, a measured matrix of which module has each one, and the order to apply them. § 4 records the three structural decisions as taken; § 5 is the caution that matters | **Steps 1–4 done 2026-08-11** — Roles, Invitations and Activity are on the Users structure. `ProfileForm` sections and the sort-key audit remain |
+| `planning/FRONTEND_PLAN.md` | **The one register of frontend routes.** Every page across the four surfaces — public directory, auth, partner back office, staff admin — with who sees it, what phase it lands in, whether it is built, and where its spec lives. **43 pages built today, 29 to come, 72 at the end.** § 8 records four things measured in the tree that the directory plan gets wrong | **New — 2026-08-17.** Statuses measured, not copied |
 | `planning/PARTNER_DIRECTORY_PLAN.md` | **"Justdial, but only for our partners"** — the directory/listing product: research on Justdial's actual mechanics, comparable curated partner directories, a listing + enquiry domain model, the public-surface and scoping consequences, and the ten decisions the owner has to make. **Read § 0.1 first — the decisions, as taken.** § 7.1 explains why the actor type is a core decision, not a directory one | **Decided in shape 2026-08-10** — directory · public · 300+ partners. Six decisions still open; nothing built |
 | `planning/MARKETPLACE_DOMAIN_PLAN.md` | Marketplace domain model — partners, tiers, customers, catalog, quotes | **Partly superseded 2026-08-10.** Its `partners` / `partner_tiers` / scoping foundation is adopted; the catalog, quotes and quote machine are **shelved** |
 | `planning/SCAFFOLD_CLEANUP_PLAN.md` | Retiring the inherited test-platform domain | **Tiers 2–3 executed 2026-08-06** — the domain is gone. Tier 1 housekeeping remains |
@@ -120,14 +121,14 @@ documentation/
 │   ├── VIHO_THEME_REFERENCE.md
 │   ├── LOGO_BRIEF.md            ← hand-off spec for a logo designer
 │   └── assets/screenshots/  ← owner-supplied screenshots (+ its own README)
-├── planning/                ← Domain plan, cleanup plan, tech debt
+├── planning/                ← Domain plan, frontend page register, cleanup plan, tech debt
 ├── architecture.md          ← inherited (stale)
 ├── instruction.md           ← inherited (stale)
 ├── phases.md                ← inherited (stale)
 └── planning.md              ← inherited (stale)
 ```
 
-**31 `.md` files live under `documentation/`.** The root `README.md` carries a one-line-per-file
+**32 `.md` files live under `documentation/`.** The root `README.md` carries a one-line-per-file
 version of the tables above; this index stays the detailed one. Keep both in step when adding a doc.
 
 > **Only three `.md` files live outside this folder** — `README.md`, `CLAUDE.md` and `AGENTS.md` at
@@ -145,5 +146,8 @@ version of the tables above; this index stays the detailed one. Keep both in ste
 4. **If a file is >500 lines**, read only the sections relevant to your task
 5. **Planning docs are reference only** — don't treat them as current state; check the actual code
 6. **Never cite the inherited test-platform docs** as how this project works
-7. **This project is NOT the Next.js you know** — per `../AGENTS.md`, read
-   `node_modules/next/dist/docs/` before writing Next.js code
+7. **This project is NOT the Next.js you know** — it is **14.2.35**, not 15 or 16. ⚠️ **Corrected
+   2026-08-17:** this line used to say *"read `node_modules/next/dist/docs/`"*. **That directory does
+   not exist** — Next ships bundled agent docs from 16.x only. The root `AGENTS.md` corrected the
+   same instruction on 2026-08-11; this copy outlived it. Verify against the installed tree instead:
+   `node -e "console.log(require('./frontend/node_modules/next/package.json').version)"`

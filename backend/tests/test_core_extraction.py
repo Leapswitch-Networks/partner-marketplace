@@ -35,6 +35,12 @@ from app.core.roles import CORE_ROLE_DESCRIPTIONS, ROLE_STAFF, ROLE_USER
 BACKEND = pathlib.Path(__file__).resolve().parents[1]
 CORE_DIR = BACKEND / "app" / "core"
 DOMAIN_DIR = BACKEND / "app" / "domain"
+MODELS_INIT = BACKEND / "app" / "models" / "__init__.py"
+
+#: The comment that opens the "a second project DELETES this" block in
+#: `models/__init__.py`. Matched as a substring; if it is reworded, the test
+#: below fails rather than silently checking nothing.
+DOMAIN_BLOCK_MARKER = "--- Domain models"
 
 #: The word that means "this is the partner directory" rather than "this is a
 #: platform concept". Matched case-insensitively against IDENTIFIERS only.
@@ -174,6 +180,70 @@ class TestNoDomainVocabularyInCore:
         leftovers = [p.name for p in _python_files(CORE_DIR) if DOMAIN_TOKEN in p.name.lower()]
         assert leftovers == [], (
             f"domain-named files under app/core/: {leftovers}. Move them under app/domain/."
+        )
+
+
+class TestTheDeleteThisBlockContainsOnlyDomainModels:
+    """`models/__init__.py`'s labelled block is an instruction to delete code.
+
+    Everything under `# --- Domain models` is documented as "what a second
+    project built on this core DELETES". A **platform** model whose import lands
+    in there is therefore worse than untidy: `db/migrations/env.py` — a protected
+    file — imports this module to discover metadata, and its own comment warns
+    that a model missing from the import graph can produce a migration that
+    **drops its table**. Following the instruction would drop a live table.
+
+    That is not hypothetical. `WorkerJobRun` sat in the block from `3b9946d`
+    until 2026-08-17, and `retention_policies`, `worker_service` and
+    `activity_service` all read `worker_job_runs`. It got there mechanically:
+    isort appends new imports *below* a `# isort: split` marker, so any model
+    added after the block was labelled inherits the label. Nothing in review
+    looks at which side of a split an import landed on — hence a test.
+
+    Deliberately asserted in both directions. A platform model below the marker
+    means deleting the block breaks the platform; a domain model **above** it
+    means deleting the block leaves the domain half-registered, which surfaces as
+    a mapper that resolves a table the project has no migration for.
+    """
+
+    def _imports_by_side(self) -> tuple[list[str], list[str]]:
+        source = MODELS_INIT.read_text(encoding="utf-8")
+        lines = source.splitlines()
+        marker_line = next(
+            (i + 1 for i, line in enumerate(lines) if DOMAIN_BLOCK_MARKER in line),
+            None,
+        )
+        assert marker_line is not None, (
+            f"{MODELS_INIT.name} no longer contains {DOMAIN_BLOCK_MARKER!r}. If the block was "
+            "reworded, update DOMAIN_BLOCK_MARKER; if it was removed, the domain models are no "
+            "longer marked as deletable and CORE_EXTRACTION_PLAN.md § 1 needs revisiting."
+        )
+
+        above: list[str] = []
+        below: list[str] = []
+        for node in ast.walk(ast.parse(source)):
+            if isinstance(node, ast.ImportFrom) and node.module:
+                (below if node.lineno > marker_line else above).append(node.module)
+        return above, below
+
+    def test_no_platform_model_sits_in_the_deletable_block(self):
+        _above, below = self._imports_by_side()
+        strays = sorted(m for m in below if DOMAIN_TOKEN not in m.lower())
+        assert not strays, (
+            f"platform models imported below {DOMAIN_BLOCK_MARKER!r}: {strays}. That block is "
+            "documented as safe to delete, so a second project would drop their tables. Move the "
+            "import ABOVE the `# isort: split` marker — isort appends below it by default."
+        )
+
+    def test_the_domain_models_are_in_the_block_and_not_above_it(self):
+        above, below = self._imports_by_side()
+        assert sorted(below) == ["app.models.partner", "app.models.partner_tier"], (
+            f"expected exactly the two partner models below the marker, got {sorted(below)}"
+        )
+        misplaced = sorted(m for m in above if DOMAIN_TOKEN in m.lower())
+        assert not misplaced, (
+            f"domain models imported above {DOMAIN_BLOCK_MARKER!r}: {misplaced}. Deleting the "
+            "block would leave them registered in a project that has no partner tables."
         )
 
 

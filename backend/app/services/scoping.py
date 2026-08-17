@@ -183,6 +183,74 @@ def apply_scope(stmt: Select, model: type, actor: Principal | User | None) -> Se
     return stmt.where(scope.public_predicate)
 
 
+def apply_tenant_wall(stmt: Select, model: type, actor: Principal | User | None) -> Select:
+    """Forbid an organisation-bound actor from seeing another organisation's rows.
+
+    **This is a wall, not a grant. It never widens a query and it is never
+    sufficient on its own.** Read that twice before using it: an actor with no
+    organisation — internal staff, a machine, the anonymous internet — comes back
+    from here *unnarrowed*, because tenancy has nothing to say about them. Used
+    alone as "the scoping call" it would serve every row to the public.
+
+    `apply_scope` is the function that decides what a caller may see. This one
+    only removes what tenancy forbids, and exists because two rules in this
+    codebase already decide visibility on a *different* axis and are stricter
+    than tenancy in the common case:
+
+    | Rule | Axis | Where |
+    |---|---|---|
+    | delegated access | which *users* a grant names | `list_users` |
+    | authorship | who sent the invitation | `list_invitations` |
+
+    Neither consults the organisation, so a grant written across two
+    organisations — reachable today, `data-access-manage` does not check —
+    produces exactly the cross-tenant read the directory's 404 rule exists to
+    prevent. Composing this wall with those rules closes that without replacing
+    them, and keeps the conservative answer they already give internal accounts.
+
+    The composition, in `list_users`:
+
+        stmt = stmt.where(User.id.in_(accessible_user_ids(...)))   # who
+        stmt = apply_tenant_wall(stmt, User, actor)                # and never across tenants
+    """
+    scope = scope_for(model)
+    principal = _as_principal(actor)
+
+    if not isinstance(principal, UserPrincipal):
+        return stmt
+
+    user = principal.user
+    if user.has_admin_access or user.organisation_id is None:
+        return stmt
+    return stmt.where(scope.owner_column == user.organisation_id)
+
+
+def assert_within_tenant(obj: Any, model: type, actor: Principal | User | None) -> None:
+    """Raise `404` when an organisation-bound actor reaches another tenant's row.
+
+    The object-level mirror of `apply_tenant_wall`, and it carries the same
+    warning: **passing is not permission.** It answers only "tenancy does not
+    forbid this", so an internal account, a machine and the anonymous internet all
+    pass. Whatever rule decides what the caller may actually reach still has to
+    run.
+
+    Mirrored by hand rather than derived from `apply_tenant_wall`, for the reason
+    `can_read` gives: the two answer different shapes, and a shared
+    implementation would make the security rule harder to read than to trust.
+    """
+    scope = scope_for(model)
+    principal = _as_principal(actor)
+
+    if not isinstance(principal, UserPrincipal):
+        return
+
+    user = principal.user
+    if user.has_admin_access or user.organisation_id is None:
+        return
+    if getattr(obj, scope.owner_column.key) != user.organisation_id:
+        raise NOT_FOUND
+
+
 def can_read(obj: Any, model: type, actor: Principal | User | None) -> bool:
     """Whether `actor` may see this already-loaded row.
 
@@ -224,6 +292,8 @@ __all__ = [
     "scope_for",
     "reset_for_tests",
     "apply_scope",
+    "apply_tenant_wall",
+    "assert_within_tenant",
     "can_read",
     "assert_can_read",
     "NOT_FOUND",

@@ -1019,6 +1019,13 @@ It exists so the size of the thing is visible in one place rather than inferred 
 >
 > § 15 is the one to work from day to day. If it and § 11 ever disagree, § 11's phase boundaries win
 > and § 15 is wrong.
+>
+> ⚠️ **Since 2026-08-17 there is a fourth register, and for the frontend it is the one to trust.**
+> [`FRONTEND_PLAN.md`](./FRONTEND_PLAN.md) consolidates the page tables in § 14.2, § 14.3, § 14.4,
+> § 20.3, § 20.6.1 and § 20.6.3 into a single route register with **measured** build statuses. The
+> tables below are kept because they carry the phase and module mapping — but where one of them says
+> a page is or is not built, **`FRONTEND_PLAN.md` wins**; where they say what a page must *contain*,
+> § 20 still wins. Two rows in § 14.4 were already stale when the measurement was taken.
 
 Legend used throughout:
 
@@ -1129,11 +1136,11 @@ owner's *"we will monitor all things"*.
 
 | Route | Page | Backend module | Phase | Status |
 |---|---|---|:---:|:---:|
-| `/dashboard/partners` | **Partners index** — status, verification, tier, listing count | 1 | 1 | 🟡 *(API ✅)* |
-| `/dashboard/partners/new` | **Onboard a partner** | 1 | 1 | 🟡 *(API ✅)* |
-| `/dashboard/partners/[id]` | **Partner detail** — with activate / suspend / verify / publish as distinct actions, because they are distinct permissions | 1 | 1 | 🟡 *(API ✅)* |
-| `/dashboard/partners/[id]/edit` | **Edit a partner** — cannot reach status, verification or listing | 1 | 1 | 🟡 *(API ✅)* |
-| `/dashboard/partners/tiers` | **Tier entitlements** | 2 | 1 | 🟡 *(API ✅)* |
+| `/dashboard/partners` | **Partners index** — status, verification, tier, listing count | 1 | 1 | ✅ *(listing-count column still to add)* |
+| `/dashboard/partners/new` | **Onboard a partner** | 1 | 1 | ✅ |
+| `/dashboard/partners/[id]` | **Partner detail** — with activate / suspend / verify / publish as distinct actions, because they are distinct permissions | 1 | 1 | ✅ |
+| `/dashboard/partners/[id]/edit` | **Edit a partner** — cannot reach status, verification or listing | 1 | 1 | ✅ |
+| **`/dashboard/partner-tiers`** | **Tier entitlements** | 2 | 1 | ✅ *(entitlement columns still to add)* |
 | `/dashboard/categories` | **Taxonomy admin** — the tree, reordering, activation. Leapswitch owns this table and partners never write to it (§ 6.2) | 5 | 3 | 🟡 |
 | `/dashboard/moderation` | **The review queue.** § 4 and § 13 both warn: a queue nobody drains turns a curated directory into an open one with extra steps | 10 | 4 | 🟡 |
 | `/dashboard/listings` | **All listings** — oversight across every partner | 6 | 4 | 🟡 |
@@ -1146,6 +1153,12 @@ owner's *"we will monitor all things"*.
 **The staff surface is the cheapest of the three**, and that is worth saying plainly: rows 1–5 already
 have their API, and the rest are `ListSpec`-driven index pages of the kind this codebase now builds
 repeatably. The expensive surfaces are §14.2 (new architecture) and the listing authoring form.
+
+> **Corrected 2026-08-17 — rows 1–5 are further along than "they have their API".** All five pages
+> are built and wired to `PartnersModule`, `PartnerForm`, `PartnerShow` and `PartnerTiersModule` in
+> `components/admin/`; the statuses above said otherwise until they were measured. The tier route is
+> **`/dashboard/partner-tiers`**, not `/dashboard/partners/tiers` as this table and § 20.6.3 both
+> wrote it. Both fixed above; § 20.6.3's copy still carries the old path.
 
 ### 14.5 What is deliberately NOT on these lists
 
@@ -2426,6 +2439,11 @@ architecture this codebase has never produced. § 14.2–14.4 listed the pages; 
 Read alongside `system-design/NEXTJS_STANDARDS.md` (composition) and `system-design/UI_PATTERNS.md`
 (atoms). Neither is restated here — where this section is silent, they decide.
 
+> **This section stays authoritative for what a page must contain, forbid, and show when empty.** For
+> *which* pages exist and *whether* they are built, use [`FRONTEND_PLAN.md`](./FRONTEND_PLAN.md) —
+> added 2026-08-17, statuses measured against `frontend/app/`. It does not duplicate the specs below;
+> it points at them.
+
 ### 20.1 Two things to settle before writing a single page
 
 **① Public pages MUST render on the server, and the pattern already exists.**
@@ -2517,6 +2535,20 @@ frontend/app/
 ⚠️ **`middleware.ts` must be edited before any of this renders** (§ 15 step 20). Every route today is
 protected. Add an explicit public allowlist — **the default must remain protected**, so a new route is
 private until someone says otherwise.
+
+> **Corrected 2026-08-17 — the first two sentences are wrong, and in the direction that matters.**
+> `middleware.ts`'s matcher is `["/", "/admin/:path*", "/dashboard/:path*", "/dashboard",
+> "/settings/:path*", "/settings"]`. **A route outside those six patterns never reaches the middleware
+> at all**, so `/partners` and `/services/*` are public the moment the files exist — no allowlist, no
+> edit. The default today is *open*, not protected.
+>
+> The rule this section states is still the right one; the code just does not implement it. Treat
+> "make the default protected" as its own piece of work, not as a prerequisite for the public pages.
+>
+> **What the public surface genuinely does need from the middleware** is narrower: the
+> `pathname === "/"` branch and the `"/"` matcher entry both have to go, together with
+> `app/page.tsx`'s `redirect("/sign-in")` — two redirects, and removing one leaves the other.
+> Measured in the tree; see [`FRONTEND_PLAN.md`](./FRONTEND_PLAN.md) § 8.
 
 > **On "this is not the Next.js you know":** `AGENTS.md` says to read `node_modules/next/dist/docs/`
 > first. **That directory does not exist** in this install — checked on host and in the container on
@@ -2801,7 +2833,7 @@ discards unsaved media · validation that only fires on submit.
 | `/dashboard/partners/new` | Onboard an organisation. Always creates `PENDING` | A status selector |
 | `/dashboard/partners/[id]` | **Partner show**, and the four state actions as **four distinct buttons** — Activate/Suspend, Set verification, Publish/Unpublish, Delete — each gated on its own permission and each explaining its consequence. Suspension warns that it **signs out every user in the organisation** | The four actions collapsed into one status dropdown (§ 19.9) |
 | `/dashboard/partners/[id]/edit` | Edit details only | Any field that reaches status, verification or listing |
-| `/dashboard/partners/tiers` | Tier entitlements, editable. Shows partners on each tier | An editable `name` — it is the key the code references (§ 17.3) |
+| **`/dashboard/partner-tiers`** *(corrected 2026-08-17 — not `/dashboard/partners/tiers`)* | Tier entitlements, editable. Shows partners on each tier | An editable `name` — it is the key the code references (§ 17.3) |
 | `/dashboard/categories` | **Taxonomy admin.** Two-level tree, drag to reorder, activate/deactivate, live `listing_count`, and **the § 8 indexing threshold shown per category** so staff can see which are publicly visible | A third level — 409 (§ 19.12) · deleting a parent with children (FK is `RESTRICT`) |
 | `/dashboard/moderation` | **The review queue.** Oldest first. Renders the listing **exactly as the public would see it**, beside the partner's verification level. Approve, or reject with a **mandatory reason the partner will read**. Queue age visible — § 16.2 measures it | A bulk approve. The whole value of curation is that somebody looked |
 | `/dashboard/listings` | All listings across partners. Same route as the partner's, unscoped | A second component |

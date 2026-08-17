@@ -10,7 +10,6 @@ from fastapi import (
     Depends,
     File,
     Form,
-    HTTPException,
     Query,
     UploadFile,
     status,
@@ -132,13 +131,13 @@ def get_user(
     db: Session = Depends(get_db),
     actor: User = Depends(require_permission(USER_VIEW)),
 ) -> UserDetailResponse:
-    target = user_service.get_user_or_404(db, user_id)
-
-    # Visibility: without admin access you may only read your own record.
-    # 404 rather than 403, so the response does not confirm the account exists.
-    if not actor.has_admin_access and target.id != actor.id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "User not found")
-
+    # Visibility lives in the service, with the same rule the list uses — see
+    # `user_service.get_visible_user_or_404`. It used to be four lines here
+    # reading "without admin access you may only read your own record", which was
+    # both business logic in a router and **stricter than the list**: a
+    # view-granted subject appeared in `list_users` and then 404'd when clicked.
+    # A grant that half works is the failure mode this module keeps hitting.
+    target = user_service.get_visible_user_or_404(db, user_id, actor)
     return UserDetailResponse.model_validate(user_service.decorate(target, actor))
 
 

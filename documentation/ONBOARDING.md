@@ -78,26 +78,30 @@ Default branch is **`main`**. There are no submodules — a single flat repo.
 
 ---
 
-## 2. ⚠️ Delete the Inherited Virtualenvs First
+## 2. The Inherited Virtualenvs — deleted 2026-08-17
 
-> **Path B only.** On Path A the backend never touches a host virtualenv — skip to § 3. The two
-> directories are still dead weight (~93 MB) and worth deleting either way.
+**Nothing to do here any more.** This section used to open with "delete these first". Both are gone,
+so a fresh clone has neither and this is history rather than a step. Kept because the *symptoms* they
+caused are still the ones a newcomer meets if they rebuild a venv the wrong way, and § 12's
+troubleshooting table points here.
 
-The repo arrived with **two** committed-then-ignored virtualenvs, and **neither works**:
+The repo arrived with two committed-then-ignored virtualenvs (211 MB between them, both gitignored, so
+removing them changed nothing in git) and **neither worked**:
 
-| Path | Built on | Why it's dead |
-|------|----------|---------------|
-| `.venv/` (project root) | Windows, Python 3.14.3, via `uv` | `Scripts/` + `Lib/` layout with `.exe` shims — cannot run on Linux/macOS at all |
-| `backend/.venv/` | Linux, Python 3.12.3 | Its `bin/python` now resolves to a newer system Python (3.14), so its `site-packages` no longer loads. `import fastapi` fails. |
+| Path | Built on | Why it was dead |
+|------|----------|-----------------|
+| `.venv/` (project root) | Windows, Python 3.14.3, via `uv` | `Scripts/` + `Lib/` layout with `.exe` shims — could not run on Linux/macOS at all |
+| `backend/.venv/` | Linux, Python 3.12.3 | Its `bin/python` resolved to a newer system Python (3.14), so its `site-packages` no longer loaded. `import fastapi` failed — verified again on the day it was deleted. |
 
-Both are gitignored, so removing them affects nothing in git:
+If you have an older clone, they may still be sitting there:
 
 ```bash
 rm -rf .venv backend/.venv
 ```
 
-The root `README.md` tells you to run `source .venv/bin/activate` — that path **does not exist**
-(the Windows venv has `Scripts/activate`, not `bin/activate`). Ignore it.
+The root `README.md` tells you to run `source .venv/bin/activate`. That path does not exist and never
+did on Linux (the Windows venv had `Scripts/activate`); on Path A the backend never touches a host
+virtualenv at all. Build your own with an explicit version — § 9 — rather than reviving one of these.
 
 ---
 

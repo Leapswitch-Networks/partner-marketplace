@@ -212,6 +212,7 @@ def _name_or_email_matches(alias, term: str):
 
 def list_grants(
     db: Session,
+    actor: User,
     *,
     search: str | None = None,
     grantee_id: str | None = None,
@@ -223,15 +224,35 @@ def list_grants(
     page: int = 1,
     per_page: int = 25,
 ) -> tuple[list[DataAccessGrant], int]:
-    """Every grant, searchable and filterable by either party.
+    """Grants the actor may see, searchable and filterable by either party.
 
-    **Not scoped to the caller**, matching the reference — any holder of
-    `data-access-view` sees the whole delegation graph. That is defensible only
-    while the permission is narrowly held, and ours is not narrowly held: Staff
-    has `data-access-view`. Flagged in DAILY_CHANGES (2026-08-13) and PM-5
-    rather than silently diverged, because scoping it is a visible behaviour
-    change and the owner's call. This sentence claimed that flag for a month
-    before the § 8.2 sweep noticed nobody had written it — the flag now exists.
+    ## Scoped to the caller since 2026-08-17, diverging from the reference
+
+    It used to return **every** grant to any holder of `data-access-view`, which
+    the reference does and which is defensible only while that permission is
+    narrowly held. Ours is not narrowly held — **Staff has it** — so the whole
+    delegation graph was readable by an ordinary internal role: who has been given
+    access to whom, across the entire installation. That is an organisational chart
+    of trust, and it is exactly the kind of thing a directory's 404 rule exists to
+    keep quiet about.
+
+    The divergence was flagged rather than silently taken (`DAILY_CHANGES.md`
+    2026-08-13, PM-5), because narrowing a list anybody might be relying on is a
+    visible behaviour change. Closed on the stated recommendation.
+
+    **The rule is `has_admin_access`, not a new permission.** A dedicated
+    "see the whole graph" permission was the other candidate and was rejected: it
+    adds vocabulary to the catalog and a seeding step to say something the codebase
+    already says four other ways — `list_users`, `list_invitations`,
+    `narrow_to_creators` and `apply_scope` all key visibility off
+    `has_admin_access`. A fifth spelling of the same idea is a fifth thing to keep
+    in agreement.
+
+    So: administrators see everything, and everyone else sees the grants they are
+    **a party to** — as grantee or as subject. Being the subject matters as much as
+    being the grantee: "who can see my records" is a question you should be able to
+    answer about yourself, and hiding it would make the feature feel like
+    surveillance rather than delegation.
 
     ## Why the search is built here and not by `ListSpec.searchable`
 
@@ -255,6 +276,16 @@ def list_grants(
         .join(subject_user, DataAccessGrant.subject_id == subject_user.id)
         .where(DataAccessGrant.deleted_at.is_(None))
     )
+
+    # Applied before the filters, so `?grantee_id=<someone else>` cannot be used
+    # to probe around the scope — it narrows within what is already visible.
+    if not actor.has_admin_access:
+        stmt = stmt.where(
+            or_(
+                DataAccessGrant.grantee_id == actor.id,
+                DataAccessGrant.subject_id == actor.id,
+            )
+        )
 
     if search and search.strip():
         term = f"%{search.strip().lower()}%"

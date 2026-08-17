@@ -287,6 +287,123 @@ class TestAssertCanRead:
         scoping.assert_can_read(row, ScopedThing, _user(org="org-1", admin=False))
 
 
+class TestApplyTenantWall:
+    """The wall narrows an organisation-bound actor and nobody else.
+
+    **Every assertion here is also a warning.** `apply_tenant_wall` is the one
+    function in this module that can return a query *unnarrowed*, because it
+    answers "what does tenancy forbid" rather than "what may this caller see".
+    The tests that look like they are asserting a hole — anonymous and machine
+    coming back unchanged — are pinning exactly that, so the next reader meets it
+    here rather than discovering it in production.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _registered(self, isolated_registry):
+        # Depends on `isolated_registry` rather than sitting beside it — see the
+        # note in `TestApplyScope`. Getting this wrong fails as a `LookupError`
+        # from the fixture, which reads like the rule is broken rather than the
+        # ordering.
+        scoping.register_scope(ScopedThing, owner_column=ScopedThing.organisation_id)
+
+    def test_a_member_is_narrowed_to_their_own_organisation(self):
+        stmt = scoping.apply_tenant_wall(select(ScopedThing), ScopedThing, _user(org="a", admin=False))
+        assert "organisation_id = 'a'" in _sql(stmt)
+
+    def test_admin_access_is_not_narrowed(self):
+        stmt = scoping.apply_tenant_wall(select(ScopedThing), ScopedThing, _user(org="a", admin=True))
+        assert "WHERE" not in _sql(stmt)
+
+    def test_a_human_with_no_organisation_is_not_narrowed(self):
+        """**The asymmetry with `apply_scope`, and the reason this function
+        exists.** There, no organisation means no rows; here it means tenancy has
+        nothing to say — an internal account's visibility is decided by the rule
+        this wall composes with (delegation, authorship), which is stricter.
+        Narrowing them here would have hidden internal staff from themselves.
+        """
+        stmt = scoping.apply_tenant_wall(select(ScopedThing), ScopedThing, _user(org=None, admin=False))
+        assert "WHERE" not in _sql(stmt)
+
+    def test_anonymous_and_machine_pass_through_untouched(self):
+        """Pinned as a hazard, not as a feature. This function must never be the
+        only scoping applied to a query a machine or the public can reach —
+        `apply_scope` is what fails closed for them."""
+        for principal in (ANONYMOUS, MachinePrincipal("c", "slug", "t", "pfx")):
+            stmt = scoping.apply_tenant_wall(select(ScopedThing), ScopedThing, principal)
+            assert "WHERE" not in _sql(stmt)
+
+    def test_it_only_ever_narrows_an_existing_filter(self):
+        """Composition, which is the whole point: the caller's own rule survives
+        and the wall is ANDed onto it."""
+        base = select(ScopedThing).where(ScopedThing.id.in_(["x", "y"]))
+        sql = _sql(scoping.apply_tenant_wall(base, ScopedThing, _user(org="a", admin=False)))
+        assert "IN ('x', 'y')" in sql
+        assert "organisation_id = 'a'" in sql
+
+    def test_an_unregistered_model_raises_here_too(self):
+        scoping.reset_for_tests()
+        with pytest.raises(LookupError):
+            scoping.apply_tenant_wall(select(ScopedThing), ScopedThing, _user(org="a", admin=False))
+
+
+class TestEveryTenantOwnedTableIsRegistered:
+    """**The check that finds the table nobody scoped.**
+
+    `scoping.py` chose registration over a naming convention because a convention
+    fails silently in the direction that matters — add a table, forget the
+    column, and it is unscoped with nothing to notice. That argument has a hole
+    in the other direction: add a table *with* the column and forget to register
+    it, and the failure is equally silent until someone calls `apply_scope` and
+    gets a `LookupError` in production.
+
+    This closes it by inverting the question. Rather than asking whether the
+    registered models are right, it asks the database schema which tables carry a
+    tenant column, and requires each to have been registered by somebody.
+    """
+
+    def _models_with_an_organisation_column(self) -> list[type]:
+        import app.models  # noqa: F401  (imports every mapped class)
+        from app.db.base import Base
+
+        return sorted(
+            (
+                mapper.class_
+                for mapper in Base.registry.mappers
+                if "organisation_id" in mapper.class_.__table__.columns
+            ),
+            key=lambda model: model.__name__,
+        )
+
+    def test_the_check_is_looking_at_something(self):
+        """A guard whose query silently returns nothing passes forever."""
+        found = {model.__name__ for model in self._models_with_an_organisation_column()}
+        assert {"User", "UserInvitation"} <= found, (
+            f"expected the core tenant-owned tables among {sorted(found)}; if a column was "
+            "renamed, this whole check has been quietly disabled"
+        )
+
+    def test_every_table_with_an_organisation_id_has_a_registered_scope(self):
+        # Importing the services is what runs their `register_scope` calls.
+        from app.services import invitation_service, user_service  # noqa: F401
+
+        try:
+            from app.services import partner_service  # noqa: F401
+        except ImportError:  # pragma: no cover - a project that deleted the domain
+            pass
+
+        registered = scoping.scoped_models()
+        missing = [
+            model.__name__
+            for model in self._models_with_an_organisation_column()
+            if model not in registered
+        ]
+        assert not missing, (
+            f"tables carrying `organisation_id` with no registered scope: {missing}. "
+            "Call scoping.register_scope() in the service that owns each — an unregistered "
+            "model raises LookupError the first time anything tries to scope it."
+        )
+
+
 class TestTheRealRegistrationsAreInPlace:
     """The registry has to actually be populated in the running application.
 

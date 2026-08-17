@@ -40,12 +40,23 @@ from app.services import (
     data_access_service,
     mail_service,
     recycle_bin_service,
+    scoping,
     session_service,
     two_factor_service,
     webhook_service,
 )
 from app.services.auth_service import email_exists, normalise_email
 from app.services.rbac_service import resolve_roles
+
+# A user belongs to the organisation named on their row. Registered here rather
+# than in `scoping.py` for the same reason `Partner` is registered in
+# `partner_service` — a model's scope is declared by the service that owns it.
+#
+# **No `public_predicate`, and that is a decision.** There is no such thing as a
+# publicly readable user: omitting it means an anonymous or machine caller
+# reaching `apply_scope` on this model gets nothing, by construction rather than
+# by anyone remembering to check.
+scoping.register_scope(User, owner_column=User.organisation_id)
 
 _LIST_SPEC = ListSpec(
     sortable={
@@ -116,10 +127,97 @@ def get_user_or_404(db: Session, user_id: str) -> User:
     A binned user answers 404 here even though the row exists — otherwise every
     detail and write endpoint would still operate on a deleted account, and
     "deleted" would mean nothing but "hidden from one list".
+
+    **Says nothing about who may see the row.** Callers acting on behalf of an
+    actor must use `get_visible_user_or_404`; this one is for paths that have
+    already established the right to reach any user.
     """
     user = get_or_404(db, User, user_id)
     if user.deleted_at is not None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "That user does not exist.")
+    return user
+
+
+def get_visible_user_or_404(db: Session, user_id: str, actor: User) -> User:
+    """One live user the actor may actually see, or 404.
+
+    **This closes a privilege-escalation path, and the shape of it is worth
+    keeping in mind for every future module.** `list_users` was scoped and every
+    write path was not: they loaded their target with `get_user_or_404` and gated
+    on `can_edit`, which is `has_permission("user-update")` plus the super-admin
+    protection — **no visibility check at all**. So an actor could not *see* a row
+    in the list and could still `PATCH` it by id.
+
+    That is not theoretical. `has_admin_access` is derived from role *names* while
+    `user-update` is grantable from the Roles screen, so the two sets diverge the
+    moment anybody builds a custom role — which is what the Roles screen is for.
+    Such a role could change another account's `email` (that field is not
+    admin-gated; `status`, `roles` and `account_type` are) and then drive a
+    password reset to it. `tests/test_data_access.py` had already made this exact
+    argument about a different guard; the same divergence applies here.
+
+    **404 rather than 403**, matching `scoping.assert_can_read`: a 403 confirms
+    the row exists, and the message is identical to a genuinely missing user.
+
+    Both axes are applied, because they answer different questions and either
+    alone leaves a hole:
+
+    | Axis | Rule | Missing it means |
+    |---|---|---|
+    | delegation | `accessible_user_ids` — self plus grants | writing a stranger's row |
+    | tenancy | `scoping.assert_within_tenant` | writing across organisations |
+    """
+    user = get_user_or_404(db, user_id)
+
+    # Admin access means "sees all data", so there is nothing to narrow. Checked
+    # first and explicitly: `accessible_user_ids` does NOT short-circuit on it —
+    # it would return `[self]` for an administrator — so omitting this would lock
+    # every admin out of every user but themselves.
+    if actor.has_admin_access:
+        return user
+
+    if user.id not in data_access_service.accessible_user_ids(db, actor, scope="users"):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "That user does not exist.")
+
+    scoping.assert_within_tenant(user, User, actor)
+    return user
+
+
+def get_writable_user_or_404(db: Session, user_id: str, actor: User) -> User:
+    """One user the actor may see **and** administer, or 404/403.
+
+    Visibility and write authority are two questions and this answers both in the
+    order that discloses least:
+
+    | Failure | Status | Why that one |
+    |---|---|---|
+    | cannot see the row | **404** | a 403 would confirm the account exists |
+    | can see it, may not administer it | **403** | they already know it exists |
+
+    The second gate is `data_access_service.can_manage_data_of`, and this is its
+    **first production call site** — it and `manageable_user_ids` were written,
+    tested against the reference's semantics, and called by nothing, which meant a
+    `manage`-level grant was indistinguishable from a `view`-level one anywhere it
+    mattered. An admin could create one, see it listed as active, and it changed
+    nothing. The module's own docstring names that risk: *"a module that never
+    calls it has no data-access enforcement at all."*
+
+    **Self is allowed explicitly**, and not by accident of the helper: a
+    non-delegate's `manageable_user_ids` is `[]` by design (rule 3), so relying on
+    it alone would stop an ordinary account holding `user-update` from editing its
+    own record. The reference's own reading agrees — a manage grant "confers
+    self-administration" — so naming self here matches it rather than diverging.
+    """
+    user = get_visible_user_or_404(db, user_id, actor)
+
+    if actor.has_admin_access or user.id == actor.id:
+        return user
+
+    if not data_access_service.can_manage_data_of(db, actor, user.id, scope="users"):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            "You do not have permission to administer this account.",
+        )
     return user
 
 
@@ -173,6 +271,22 @@ def list_users(
         stmt = stmt.where(
             User.id.in_(data_access_service.accessible_user_ids(db, actor, scope="users"))
         )
+
+        # **And never across organisations, whatever the grant said.**
+        #
+        # `accessible_user_ids` decides *which users*, on the delegation axis. It
+        # does not consult the organisation, and nothing stops an admin writing a
+        # grant whose grantee and subject sit in different ones —
+        # `data_access_service.create_grant` checks self-elevation, not tenancy.
+        # One such grant let an external user read a row belonging to another
+        # organisation, which is precisely what the directory's 404 rule exists
+        # to prevent.
+        #
+        # The wall is applied *after* the delegation filter and only narrows it,
+        # so an internal account with no organisation still sees exactly what it
+        # saw before — itself, plus anyone granted to it. See
+        # `scoping.apply_tenant_wall` for why that asymmetry is deliberate.
+        stmt = scoping.apply_tenant_wall(stmt, User, actor)
 
     # Filters needing a join stay here — `run_list` owns only what is identical
     # for every resource (search, sort allowlist, tiebreak, clamping, count).
@@ -253,7 +367,7 @@ def send_user_email(
     can be down for reasons that are nothing to do with this request, and a 500
     here would read as "the user does not exist" to anyone debugging from the UI.
     """
-    target = get_user_or_404(db, user_id)
+    target = get_visible_user_or_404(db, user_id, actor)
 
     body = (
         f"{data.message}\n\n"
@@ -407,7 +521,7 @@ def create_user(db: Session, data: CreateUserRequest, actor: User) -> User:
 
 
 def update_user(db: Session, user_id: str, data: UpdateUserRequest, actor: User) -> User:
-    target = get_user_or_404(db, user_id)
+    target = get_writable_user_or_404(db, user_id, actor)
 
     if not can_edit(actor, target):
         raise HTTPException(
@@ -546,7 +660,7 @@ def update_user(db: Session, user_id: str, data: UpdateUserRequest, actor: User)
 
 
 def delete_user(db: Session, user_id: str, actor: User) -> str:
-    target = get_user_or_404(db, user_id)
+    target = get_writable_user_or_404(db, user_id, actor)
 
     if target.id == actor.id:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "You cannot delete your own account.")
@@ -606,7 +720,7 @@ def approve_user(
     user cannot receive. The override is recorded distinctly in the audit trail, so
     "who approved an unverified account" stays answerable.
     """
-    target = get_user_or_404(db, user_id)
+    target = get_writable_user_or_404(db, user_id, actor)
 
     if target.status == "ACTIVE":
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "This account is already active.")
@@ -669,7 +783,7 @@ def toggle_status(db: Session, user_id: str, actor: User) -> User:
     has nothing left to refuse: every account is now toggleable, and the
     permission check above is the only gate.
     """
-    target = get_user_or_404(db, user_id)
+    target = get_writable_user_or_404(db, user_id, actor)
 
     if not can_toggle_status(actor, target):
         raise HTTPException(
@@ -709,7 +823,7 @@ def toggle_status(db: Session, user_id: str, actor: User) -> User:
 
 def unlock_user(db: Session, user_id: str, actor: User) -> User:
     """Clear a failed-login lockout without waiting for it to expire."""
-    target = get_user_or_404(db, user_id)
+    target = get_writable_user_or_404(db, user_id, actor)
     if not can_edit(actor, target):
         raise HTTPException(status.HTTP_403_FORBIDDEN, "You cannot modify this account.")
 
@@ -742,7 +856,7 @@ def reset_two_factor(db: Session, user_id: str, actor: User) -> User:
     live session on that device — clearing only the secret would remove the second
     factor and leave the attacker signed in, which is worse than doing nothing.
     """
-    target = get_user_or_404(db, user_id)
+    target = get_writable_user_or_404(db, user_id, actor)
 
     # Same rule as an edit, so a non-super-admin cannot strip a super-admin's 2FA.
     if not can_edit(actor, target):
@@ -780,7 +894,7 @@ def reset_two_factor(db: Session, user_id: str, actor: User) -> User:
 
 
 def bulk_delete(db: Session, user_ids: list[str], actor: User) -> tuple[int, int, list[str]]:
-    targets = _load_bulk_targets(db, user_ids)
+    targets = _load_bulk_targets(db, user_ids, actor)
     skipped: list[str] = []
     deleted = 0
 
@@ -828,7 +942,7 @@ def bulk_delete(db: Session, user_ids: list[str], actor: User) -> tuple[int, int
 def bulk_set_status(
     db: Session, user_ids: list[str], new_status: str, actor: User
 ) -> tuple[int, int, list[str]]:
-    targets = _load_bulk_targets(db, user_ids)
+    targets = _load_bulk_targets(db, user_ids, actor)
     skipped: list[str] = []
     deactivated: list[str] = []
     changes: list[dict] = []
@@ -882,9 +996,31 @@ def bulk_set_status(
     return updated, len(skipped), skipped
 
 
-def _load_bulk_targets(db: Session, user_ids: list[str]) -> list[User]:
+def _load_bulk_targets(db: Session, user_ids: list[str], actor: User) -> list[User]:
+    """The requested users the actor may actually act on.
+
+    Filtered the same way `list_users` filters, so a bulk operation cannot reach
+    what the list would not show. An id the actor may not see simply does not
+    load, and `_missing_ids` then reports it as `not found` — which is the right
+    disclosure: "you may not touch this" and "there is no such user" must be
+    indistinguishable, exactly as the single-target paths return 404 for both.
+
+    **`deleted_at IS NULL` is new here too.** This loader took any row with a
+    matching id, so a bulk delete could re-stamp an already-binned account and
+    count it as deleted, and a bulk status change could edit one. Every
+    single-target path has guarded that since `get_user_or_404` was written; this
+    one never did.
+    """
     unique = list(dict.fromkeys(user_ids))
-    return list(db.scalars(select(User).where(User.id.in_(unique))).unique())
+    stmt: Select = select(User).where(User.id.in_(unique), User.deleted_at.is_(None))
+
+    if not actor.has_admin_access:
+        stmt = stmt.where(
+            User.id.in_(data_access_service.accessible_user_ids(db, actor, scope="users"))
+        )
+        stmt = scoping.apply_tenant_wall(stmt, User, actor)
+
+    return list(db.scalars(stmt).unique())
 
 
 def _missing_ids(requested: list[str], found: list[User]) -> list[str]:

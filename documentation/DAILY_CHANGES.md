@@ -6,6 +6,155 @@
 > Update this file as part of the same change as the code. A task that isn't here is invisible to the
 > next person.
 
+## August 17, 2026 — You could not see the shape of the frontend without reading six tables
+
+**Every page this product will have is now in one file.** The owner's framing was that the frontend
+is what clients and the public judge the company on, and asked for the pages to be documented before
+the build starts. The finding on the way in was that they already were — just not anywhere you could
+see them.
+
+The page inventory was spread across six tables in five sections of a **2,847-line** document:
+§ 14.2 listed the public routes, § 14.3 the partner's, § 14.4 the staff's, § 20.3 drew a route tree,
+and §§ 20.6.1 and 20.6.3 listed the back office again with different columns. Nobody reading any one
+of them could answer "how many pages is this, and how many exist today".
+
+`documentation/planning/FRONTEND_PLAN.md` is now that register, and the answer is **43 pages built,
+29 to come, 72 at the end** — with the public directory at **zero of thirteen**. It carries the
+route, the surface, the audience, the status and a pointer to the spec, and **deliberately does not
+restate what any page contains**: the moment it did, it would start drifting from § 20 and one of the
+two would become a lie. Where they disagree on *built*, the new file wins — its statuses were
+measured against `frontend/app/` rather than copied. Where they disagree on *contents*, § 20 wins.
+
+**Four things the measurement contradicted, each of which would have cost time to rediscover:**
+
+- **The middleware default is open, not protected — the opposite of what the plan states.** § 20.3
+  says every route today is protected and a public allowlist must be added before the public surface
+  can render. The matcher covers six patterns; a route outside them never reaches the middleware at
+  all. So the public pages are *not* blocked on it — but the plan's principle is the right one and
+  the code does not implement it, which is a real gap logged on its own terms rather than folded into
+  public-surface work. The backend guards every request independently, so this is about which shell
+  gets served, not an authorization hole.
+- **`/` redirects to `/sign-in` in two places**, not one — the middleware and `app/page.tsx`. Both
+  have to go before a public home page renders; removing either alone leaves the other.
+- **The five staff partner pages are built.** § 14.4 still marks them "not built, API ✅". They are
+  wired to `PartnersModule`, `PartnerForm`, `PartnerShow` and `PartnerTiersModule`.
+- **The route is `/dashboard/partner-tiers`**, which two sections write as `/dashboard/partners/tiers`.
+
+The build order in § 9 ends on the useful part: **step 0 is unblocked today.** Every other frontend
+step waits on a table that does not exist, but the `(public)` shell and its eleven components do not
+wait on anything, and the five static pages need only a compliance owner for terms and privacy —
+which is lead time, not build time, and worth starting now rather than at step 7.
+
+`INDEX.md` gained the row. It also lost a stale instruction while open: its agent notes still told
+readers to consult `node_modules/next/dist/docs/`, a directory that does not exist in a 14.2.35
+install. The root `AGENTS.md` corrected the same line on 11 August; this copy outlived it by six days.
+
+## August 17, 2026 — The user list was locked and the user *writes* were not
+
+**Anyone who could be given permission to edit users could edit every user — including ones the
+system refused to show them.** That is the headline of a run through the backend's pending list, and
+it was found by looking for something else entirely.
+
+The task was to give three built-but-unused delegation helpers a real job. Finding an honest place to
+call them meant reading the paths that edit an account, and those paths turned out to load their
+target **without asking whether the caller was allowed to see it**. The list of users was carefully
+narrowed. The edit, delete, approve, suspend, unlock and two-factor-reset paths were not. They
+checked only "does this person hold the edit permission", and then trusted an id supplied by the
+caller.
+
+**Why that is a break-in and not an untidiness.** Most of the sensitive fields on an account are
+already reserved for administrators — status, roles, account type. The email address is not. So an
+account with edit rights but no administrator standing could change a colleague's email address to
+one it controlled, ask for a password reset, and receive it. No administrator role required at any
+point. The gap only exists because "sees all data" is decided by which named role you hold, while
+"may edit users" is a checkbox anyone can put on a custom role from the Roles screen — and the Roles
+screen exists precisely so people build custom roles.
+
+The same hole existed in the bulk versions, which used their own lookup, and those also never
+excluded already-deleted accounts — so a bulk delete could re-delete a binned account and report it
+as newly deleted.
+
+**Every one of those paths now answers two separate questions**, and the order matters because it
+controls what a refusal gives away:
+
+- *May you see this account at all?* If not, the answer is "no such account" — the same response as a
+  genuinely wrong id, so the refusal reveals nothing.
+- *May you administer it?* If you can see it but have not been given authority over it, the answer
+  says so plainly. Pretending it does not exist would be a lie the caller can already disprove.
+
+The second question is where a **manage**-level delegation finally means something. Until today an
+administrator could grant "manage this person's records", see it listed as active, and it behaved
+exactly like a view grant everywhere it counted.
+
+**A grant could also reach across organisations.** Delegation asks *whose records*; tenancy asks
+*which organisation*. Nothing joined the two, and the module's own documentation had claimed since it
+shipped that a grant "may only ever widen visibility within a tenant, never across one". One grant
+written between two organisations produced a genuine cross-tenant read. There is now a wall that
+composes onto the delegation rule and narrows it, deliberately kept separate from the main scoping
+rule because the two must disagree about internal staff: for a partner's records "no organisation"
+means *see nothing*, and for staff it means *tenancy has no opinion — the other rules decide*.
+Collapsing them would have hidden internal staff from themselves.
+
+**The delegation graph was also readable by ordinary staff.** The grants screen returned every grant
+between every pair of people to anyone holding the view permission, and Staff holds it — an
+organisational chart of who trusts whom. Administrators still see all of it; everyone else now sees
+grants they are a party to, as either side. Being the *subject* counts: "who can see my records" is a
+question you should be able to answer about yourself.
+
+**Two smaller things behave better as a result.** Opening a user from the list used to fail with "not
+found" if you could only see them through a grant — the list showed them and the page refused them.
+And that rule has moved out of the route handler into the service, so the list and the detail page
+cannot drift apart again.
+
+**A new test refuses to let an unguarded endpoint ship.** The existing suite checks that every route
+*declaring* a permission turns away a stranger, which cannot see the dangerous case: a route with no
+guard declares nothing, so it is not examined, and the build stays green while the endpoint answers
+the public internet. The check is now inverted — the ungated routes are listed by name, nineteen
+public and twenty sign-in-only out of a hundred and fifty-nine, each with its reason written beside
+it. Adding a public endpoint means editing that list; forgetting a guard fails the build. It was
+verified by planting an unguarded route and watching it fail.
+
+**The pending-work register was itself wrong**, which is worth as much as any of the above. Three
+items marked open had been fixed for eleven days, the row-level-scoping entry pointed at two files
+deleted weeks ago, and the testing entry still read "no test suite exists" next to 765 passing tests
+and a CI pipeline. All corrected, with a note that the register and the plan are updated together or
+neither can be trusted.
+
+**Also done:** the rate limiter's counters now sit behind a swappable store, so making them shared
+across processes later is a new class rather than surgery — the limitation itself is unchanged and the
+code says so, because an interface like that reads as a fix if you let it. And 211 MB of two dead
+inherited virtualenvs are gone, each confirmed broken first rather than on the register's word.
+
+**Verified:** 782 backend tests pass, type checking and linting clean. The security tests were checked
+the only way that means anything — by restoring the old code and confirming they fail.
+
+## August 17, 2026 — The "delete this" block had a live table in it
+
+**A platform table was sitting in the list of things a second project is told to delete.** Asked
+whether the core is now liftable into another project, the answer was checked rather than recalled —
+and the check found one thing worth fixing.
+
+`app/models/__init__.py` ends with a block labelled *"everything below belongs to the partner
+directory and is what a second project built on this core DELETES"*. Three imports were in it. Two
+were the partner models. The third was `WorkerJobRun` — the background-jobs table that
+`retention_policies`, `worker_service` and `activity_service` all read.
+
+Deleting the block as instructed would have taken a live platform table with it, and the consequence
+is worse than a missing import: the migration tooling discovers tables by importing this module, and
+a model that is absent from it can generate a migration that **drops the table**. That warning is
+written in the migration environment's own comments; this would have been the first thing to walk
+into it.
+
+It got there by machinery, not by judgement. Import sorting appends new entries *below* a split
+marker, so the worker model — added in a later, unrelated task — inherited a label written for the
+partner directory. Nobody reviews which side of a blank line an import landed on, which is why the
+fix is a test rather than a tidier comment. `tests/test_core_extraction.py` now asserts the block in
+both directions: no platform model inside it, and no domain model above it. The assertions were
+confirmed to fail on the old arrangement before the fix was kept.
+
+Everything else about the lift held up: the platform assembles with no domain package at all, and
+the full gate is green — 743 backend tests, clean type check, clean lint.
+
 ## August 17, 2026 — One stat tile, where there were three
 
 **Every index page's headline counts now come from one component.** The owner asked for the stat

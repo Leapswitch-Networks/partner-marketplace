@@ -41,6 +41,7 @@ from app.models.user import User
 from app.models.user_invitation import UserInvitation
 from app.models.user_session import UserSession
 from app.models.webhook import WebhookDelivery, WebhookEndpoint
+from app.models.worker_run import WorkerJobRun
 
 # isort: split
 # --- Domain models ---------------------------------------------------------
@@ -54,9 +55,15 @@ from app.models.webhook import WebhookDelivery, WebhookEndpoint
 # whose comment warns that a model missing from the import graph can produce a
 # migration that DROPS ITS TABLE. One labelled block here is safer than a second
 # discovery path.
+#
+# ⚠️ Keep this block to domain models ONLY, and check new imports land ABOVE the
+# split. `WorkerJobRun` sat here from 3b9946d until 2026-08-17 because isort
+# appends below a split marker: a platform model, inside the block that says
+# "delete this", whose table `retention_policies`, `worker_service` and
+# `activity_service` all read. Deleting it as instructed would have dropped
+# `worker_job_runs` — exactly the failure `env.py` warns about.
 from app.models.partner import Partner
 from app.models.partner_tier import PartnerTier
-from app.models.worker_run import WorkerJobRun
 
 __all__ = [
     # Core identity + RBAC

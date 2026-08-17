@@ -47,13 +47,13 @@ since 2026-07-31 — only the documentation was wrong, and wrong in a way that b
 | [PM-2](#pm-2--auth-cookies-set-with-securefalse--resolved) | ✅ | ~~Auth cookies set with `secure=False`~~ | Auth |
 | [PM-3](#pm-3--any-admin-can-create-a-super-admin--resolved) | ✅ | ~~Any admin can create a super-admin~~ | Authz |
 | [PM-4](#pm-4--seed-credentials-in-a-public-repo--resolved) | ✅ | ~~Seed credentials in a public repo~~ | Auth |
-| [PM-5](#pm-5--no-row-level-scoping-pattern-exists) | 🟠 | No row-level scoping pattern exists | Authz |
+| [PM-5](#pm-5--row-level-scoping--resolved-2026-08-17) | ✅ | ~~No row-level scoping pattern exists~~ — `services/scoping.py`, wired | Authz |
 | [PM-6](#pm-6--six-admin_users-columns-are-never-written--resolved) | ✅ | ~~Six `admin_users` columns are never written~~ | Data |
 | [PM-7](#pm-7--three-auth-guards-are-defined-but-unused--resolved) | ✅ | ~~Three auth guards are defined but unused~~ | Authz |
 | [PM-8](#pm-8--no-rate-limiting-and-no-lockout--partially-resolved) | ✅ | ~~No rate limiting and no lockout~~ — both now exist (PM-26) | Auth |
 | [PM-9](#pm-9--cors-origins-hardcoded-to-localhost--resolved) | ✅ | ~~CORS origins hardcoded to localhost~~ | Infra |
 | [PM-10](#pm-10--no-error-logging-or-monitoring--logging-done-monitoring-still-open) | 🟡 | ~~No error logging~~; **no monitoring or alerting** | Infra |
-| [PM-11](#pm-11--no-automated-tests) | 🟠 | No automated tests | Quality |
+| [PM-11](#pm-11--test-coverage--floor-laid-coverage-still-open) | ⏳ | ~~No automated tests~~ — 765 tests + CI; **coverage** still open | Quality |
 | [PM-12](#pm-12--root-readmemd-is-wrong-in-twelve-places--resolved) | ✅ | ~~Root `README.md` is wrong in twelve places~~ | Docs |
 | [PM-13](#pm-13--token-decoding-duplicated-in-routers--resolved) | ✅ | ~~Token decoding duplicated in routers~~ | Auth |
 | [PM-14](#pm-14--inconsistent-password-validation-rules--resolved) | ✅ | ~~Inconsistent password validation rules~~ | Schemas |
@@ -92,11 +92,17 @@ an ordering that only reads correctly together.
 | PM-37 | 🔴 | No environment concept — every deployment-safety rule unenforced | ✅ closed 2026-08-06 |
 | PM-38 | 🟠 | No transaction boundary: 49 commits, a session that never rolls back | ✅ closed 2026-08-06 |
 | PM-39 | 🟠 | Nothing mechanical verifies anything — no tests, no CI | ⏳ floor laid 2026-08-06 |
-| PM-40 | 🟠 | 56 routes are unversioned | Open |
-| PM-41 | 🟠 | The frontend has no data layer and does no server-side fetching | Open |
-| PM-42 | 🟡 | The API contract is hand-copied into TypeScript | Open |
-| PM-43 | 🟡 | Two purge functions exist and nothing runs them | Open |
-| PM-44 | 🟡 | Three pieces of state live in process memory | Open |
+| PM-40 | 🟠 | ~~56 routes are unversioned~~ — `API_PREFIX = "/api/v1"` | ✅ closed 2026-08-06 |
+| PM-41 | 🟠 | The frontend has no data layer and does no server-side fetching | ⏳ partial — RTK Query wired, only the partner modules consume it |
+| PM-42 | 🟡 | ~~The API contract is hand-copied into TypeScript~~ — generated + drift-asserted | ✅ closed 2026-08-06 |
+| PM-43 | 🟡 | ~~Two purge functions exist and nothing runs them~~ — `worker.py` + `db/maintenance.py` | ✅ closed 2026-08-06 |
+| PM-44 | 🟡 | Three pieces of state live in process memory | Open — deferred to the production topology |
+
+> **This table was wrong for eleven days and that is worth a line.** PM-40, PM-42 and PM-43 were
+> closed in `CORE_HARDENING_PLAN.md` on 2026-08-06 and still read "Open" here on 2026-08-17, found by
+> checking each against the code rather than trusting either document. A register that overstates
+> what is broken gets re-litigated by the next reader; one that overstates what is fixed is worse.
+> **Both files are updated together or neither is trustworthy.**
 
 **Two of those change how items already in this register should be read:**
 
@@ -211,17 +217,41 @@ ONBOARDING § 5.2 still published `Abc@1234` as the password the seeder creates.
 
 ## 🟠 High
 
-### PM-5 — No row-level scoping pattern exists
+### PM-5 — Row-level scoping ✅ RESOLVED 2026-08-17
 
-**Where:** `backend/app/api/candidate.py`, `backend/app/api/category.py`
+**The original entry pointed at `backend/app/api/candidate.py` and `backend/app/api/category.py`.
+Both files were part of the deleted scaffold and have not existed for weeks** — a reminder that a
+"where" line is the first part of an entry to rot. What follows is the current state, checked against
+code.
 
-Every authenticated admin has full CRUD over every row. The guards are bound to a throwaway `_`
-parameter precisely because no ownership check happens. There is **no pattern anywhere** for
-"see only your own records".
+**`app/services/scoping.py` is the pattern**, written 2026-08-17 with three rules it enforces by
+construction rather than by convention: anonymous is the most restrictive branch (a model must *opt
+in* to being publicly readable, and an unregistered model raises rather than returning every row);
+every refusal is **404, never 403**, because a 403 confirms the row exists; and the filter reaches
+SQL, so the count matches the page.
 
-**Why it's high:** the marketplace needs partner-scoped data. Improvising this per-route is how data
-leaks across tenants. Design it centrally — see
-[`MARKETPLACE_DOMAIN_PLAN.md`](./MARKETPLACE_DOMAIN_PLAN.md) § Required Regardless.
+**Closed in two passes.** The first landed the module and the partner directory's two call sites. The
+second (`BACKEND_CORE_PUNCHLIST.md` T1–T5) closed what that left, and every item below was a real
+hole rather than tidying:
+
+| Gap | What it allowed |
+|---|---|
+| `users` and `user_invitations` carried `organisation_id` and were unregistered | the central rule governed neither |
+| **no visibility check on any user write path** | an actor who could not *see* a row could `PATCH` it by id, change the `email` (not admin-gated) and drive a password reset — escalation from a custom role holding `user-update` |
+| bulk paths loaded targets with their own query | the same hole with an `s`, plus writes to already-binned rows |
+| grants never consulted the organisation | one admin-written cross-organisation grant produced a genuine cross-tenant read |
+| `manage` and `view` grants were indistinguishable on writes | `can_manage_data_of` and `manageable_user_ids` had no call site, so a manage grant changed nothing |
+| `list_grants` was unscoped | Staff holds `data-access-view`, so the whole delegation graph was readable |
+
+Enforced by `tests/test_scoping.py` (the rule, plus a guard that asks the mapper registry which tables
+carry `organisation_id` and requires each to be registered) and `tests/test_visibility_paths.py` (the
+routes and services, written attacker-first and confirmed to fail against the pre-fix code).
+
+**Still deliberately open:** `narrow_to_creators` has no call site. Nothing in this codebase has
+creator-owned rows governed by delegation — the tables carrying `created_by` are administrative
+objects governed by permissions — so wiring it anywhere today would be inventing a policy rather than
+enforcing one. See [`MARKETPLACE_DOMAIN_PLAN.md`](./MARKETPLACE_DOMAIN_PLAN.md) § Required Regardless
+for where it becomes real.
 
 **2026-08-13, from the § 8.2 data-visibility sweep — two PM-5-adjacent facts, recorded so they are
 decisions rather than surprises:**
@@ -404,10 +434,21 @@ its absence confirmed (`404`, and gone from the source).
 
 ---
 
-### PM-11 — No automated tests
+### PM-11 — Test coverage ⏳ FLOOR LAID, COVERAGE STILL OPEN
 
-No test suite, no test runner configured, no CI. Nothing verifies that a change doesn't break auth.
-Given PM-1's fix will touch every login path, tests should land first.
+**The original text — "no test suite, no test runner configured, no CI" — has been wrong since
+2026-08-06.** As of 2026-08-17 there are **765 tests across 31 files** and a CI workflow
+(`.github/workflows/ci.yml`) that blocks on the same gate as local work. PM-39 laid that floor.
+
+What stays open is the distinction PM-39 was careful about: **a floor is not coverage.** The suites
+that exist are deep where a mistake is a breach — scoping, tenancy, RBAC hierarchy, token types,
+session lifetime, retention — and thin everywhere else. The specific gap worth naming:
+
+- **Permission enforcement is not asserted route by route.** `test_route_enforcement.py` proves a
+  stranger is refused and that the schema matches the models; nothing asserts *which* permission each
+  route requires, so a new route shipped without a guard passes CI. Being closed by
+  `BACKEND_CORE_PUNCHLIST.md` T7.
+- **No frontend tests at all.** Type checking and lint are the only automated gate there.
 
 ---
 

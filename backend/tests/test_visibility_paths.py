@@ -31,10 +31,12 @@ from app.core.security import hash_password
 from app.db.session import SessionLocal
 from app.main import app
 from app.models.ai_conversation import AgentConversation
+from app.models.data_access_grant import DataAccessGrant
 from app.models.permission import Permission
 from app.models.role import Role
 from app.models.user import User
-from app.services import ai_service, invitation_service
+from app.schemas.rbac import UpdateUserRequest
+from app.services import ai_service, invitation_service, user_service
 
 pytestmark = pytest.mark.db
 
@@ -107,9 +109,12 @@ class TestAnotherPersonsRecordIsNotFoundNotForbidden:
     """`GET /users/{id}` for a stranger's id must be a 404.
 
     A 403 would answer the question the caller was really asking — "does an
-    account with this id exist?" — and a 200 would be the actual leak. The rule
-    lives inline in the router (`api/users.py`), which is why no service-level
-    test could cover it.
+    account with this id exist?" — and a 200 would be the actual leak.
+
+    The rule used to live inline in the router and now lives in
+    `user_service.get_visible_user_or_404`, which is what the write paths were
+    missing entirely. This test stays at the HTTP level regardless: it is the one
+    that proves the route is actually wired to the rule.
     """
 
     def test_stranger_404_own_200(self, client, viewer):
@@ -180,6 +185,514 @@ class TestAssistantThreadsBelongToWhoStartedThem:
             assert owner_rows == []
         finally:
             row = db.get(AgentConversation, conversation_id)
+            if row:
+                db.delete(row)
+            db.commit()
+            db.close()
+
+
+# ---------------------------------------------------------------------------
+# The write paths — added 2026-08-17, BACKEND_CORE_PUNCHLIST T3/T4.
+#
+# Everything above tests reads. The sweep that wrote it stopped there, and the
+# gap that left was the more dangerous half: `list_users` was scoped, the detail
+# route was scoped, and **every write path loaded its target with no visibility
+# check at all** — `get_user_or_404` plus `can_edit`, which is
+# `has_permission("user-update")` and the super-admin protection.
+#
+# So an account that could not see a row in the list could still PATCH it by id.
+# The tests below are written from the attacker's side first (the 404s), then the
+# legitimate paths they must not break.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def editor():
+    """A non-admin who really can edit users: `user-view` + `user-update`.
+
+    The shape that makes the escalation reachable. `has_admin_access` is derived
+    from role *names* while these permissions come from the Roles screen, so this
+    account holds genuine write authority and scopes like a stranger — and no
+    seeded roster contains it, which is why nothing had probed it.
+    """
+    db = SessionLocal()
+    perms = db.scalars(
+        select(Permission).where(Permission.name.in_([USER_VIEW, "user-update"]))
+    ).all()
+    if len(perms) < 2:
+        db.close()
+        pytest.skip("permissions are not seeded")
+
+    suffix = uuid.uuid4().hex[:8]
+    role = Role(name=f"ZZTestEditor{suffix}", display_name="Test editor", is_system=False)
+    role.permissions = list(perms)
+    user = User(
+        email=f"zz-editor-{suffix}@example.com",
+        password=hash_password(PASSWORD),
+        first_name="Eddie",
+        last_name="Editor",
+        account_type="internal",
+        status="ACTIVE",
+        auth_provider="password",
+    )
+    db.add(role)
+    db.flush()
+    user.roles.append(role)
+    db.add(user)
+    db.commit()
+    email, user_id, role_id = user.email, user.id, role.id
+    db.close()
+
+    yield {"email": email, "id": user_id}
+
+    db = SessionLocal()
+    target = db.get(User, user_id)
+    if target:
+        target.roles = []
+        db.delete(target)
+    role_row = db.get(Role, role_id)
+    if role_row:
+        db.delete(role_row)
+    db.commit()
+    db.close()
+
+
+@pytest.fixture
+def bystander():
+    """A plain account the editor has no relationship to whatsoever."""
+    db = SessionLocal()
+    suffix = uuid.uuid4().hex[:8]
+    user = User(
+        email=f"zz-bystander-{suffix}@example.com",
+        password=hash_password(PASSWORD),
+        first_name="Bea",
+        last_name="Bystander",
+        account_type="internal",
+        status="ACTIVE",
+        auth_provider="password",
+    )
+    db.add(user)
+    db.commit()
+    user_id = user.id
+    db.close()
+
+    yield user_id
+
+    db = SessionLocal()
+    row = db.get(User, user_id)
+    if row:
+        db.delete(row)
+    db.commit()
+    db.close()
+
+
+@pytest.fixture
+def grant_factory():
+    """Insert grants directly and remove them afterwards.
+
+    Direct rows rather than `create_grant`: that function carries the
+    self-elevation guard this file is not testing, and going through it would
+    make every setup here depend on a rule that is deliberately restrictive.
+    """
+    created: list[str] = []
+
+    def _make(grantee_id: str, subject_id: str, level: str) -> str:
+        db = SessionLocal()
+        row = DataAccessGrant(
+            grantee_id=grantee_id,
+            subject_id=subject_id,
+            scope="*",
+            access_level=level,
+        )
+        db.add(row)
+        db.commit()
+        created.append(row.id)
+        db.close()
+        return row.id
+
+    yield _make
+
+    db = SessionLocal()
+    for grant_id in created:
+        row = db.get(DataAccessGrant, grant_id)
+        if row:
+            db.delete(row)
+    db.commit()
+    db.close()
+
+
+class TestAWriteCannotReachARowTheActorCannotSee:
+    """**The privilege-escalation path, from the attacker's side.**
+
+    An editor who sees only themselves in the list must not be able to write
+    anybody else. The dangerous field is `email`: `status`, `role_ids` and
+    `account_type` are all admin-gated, and `email` is not — so changing a
+    stranger's address and then driving a password reset to it was a takeover
+    that needed no admin role at any point.
+    """
+
+    def test_patching_a_bystander_is_404_not_403(self, editor, bystander):
+        db = SessionLocal()
+        try:
+            actor = db.get(User, editor["id"])
+            with pytest.raises(HTTPException) as excinfo:
+                user_service.update_user(
+                    db, bystander, UpdateUserRequest(first_name="Owned"), actor
+                )
+            assert excinfo.value.status_code == 404, (
+                "a non-admin just wrote (or was told about) an account it cannot see"
+            )
+        finally:
+            db.close()
+
+    def test_the_bystander_row_is_untouched(self, editor, bystander):
+        """The refusal has to happen before any mutation, not after."""
+        db = SessionLocal()
+        try:
+            actor = db.get(User, editor["id"])
+            with pytest.raises(HTTPException):
+                user_service.update_user(
+                    db, bystander, UpdateUserRequest(first_name="Owned"), actor
+                )
+            db.rollback()
+            assert db.get(User, bystander).first_name == "Bea"
+        finally:
+            db.close()
+
+    def test_editing_your_own_record_still_works(self, editor):
+        """The guard must not lock an ordinary account out of itself.
+
+        This is why `get_writable_user_or_404` names `self` explicitly rather than
+        leaning on `manageable_user_ids`, which returns `[]` for a non-delegate.
+        """
+        db = SessionLocal()
+        try:
+            actor = db.get(User, editor["id"])
+            updated = user_service.update_user(
+                db, editor["id"], UpdateUserRequest(first_name="Edwina"), actor
+            )
+            assert updated.first_name == "Edwina"
+        finally:
+            db.rollback()
+            db.close()
+
+    def test_a_bulk_operation_cannot_reach_it_either(self, editor, bystander):
+        """Bulk paths loaded targets through their own query, so fixing the
+        single-target paths alone would have left the same hole with an `s`."""
+        db = SessionLocal()
+        try:
+            actor = db.get(User, editor["id"])
+            affected, skipped, reasons = user_service.bulk_set_status(
+                db, [bystander], "INACTIVE", actor
+            )
+            assert affected == 0
+            assert skipped == 1
+            assert reasons and "not found" in reasons[0], reasons
+            assert db.get(User, bystander).status == "ACTIVE"
+        finally:
+            db.rollback()
+            db.close()
+
+
+class TestViewAndManageGrantsDifferOnWrites:
+    """A `manage` grant has to mean something more than a `view` grant.
+
+    Both helpers exercised here — `manageable_user_ids` and `can_manage_data_of`
+    — were written, tested against the reference, and called by **nothing** until
+    this change, which meant the two access levels were indistinguishable
+    wherever it counted. An administrator could create a manage grant, see it
+    listed as active, and it changed nothing.
+    """
+
+    def test_a_view_grant_opens_the_detail_but_not_the_write(
+        self, editor, bystander, grant_factory
+    ):
+        grant_factory(editor["id"], bystander, "view")
+        db = SessionLocal()
+        try:
+            actor = db.get(User, editor["id"])
+
+            # Readable — and this is a fix in its own right. The detail route
+            # used to refuse any id but your own, so a granted subject appeared
+            # in the list and 404'd the moment it was clicked.
+            assert user_service.get_visible_user_or_404(db, bystander, actor).id == bystander
+
+            # Not writable: `view` is not `manage`.
+            with pytest.raises(HTTPException) as excinfo:
+                user_service.update_user(
+                    db, bystander, UpdateUserRequest(first_name="Nope"), actor
+                )
+            assert excinfo.value.status_code == 403, (
+                "403 rather than 404 here on purpose — the actor can already see "
+                "this row, so refusing with 404 would be a lie rather than a "
+                "non-disclosure"
+            )
+        finally:
+            db.rollback()
+            db.close()
+
+    def test_a_manage_grant_permits_the_write(self, editor, bystander, grant_factory):
+        grant_factory(editor["id"], bystander, "manage")
+        db = SessionLocal()
+        try:
+            actor = db.get(User, editor["id"])
+            updated = user_service.update_user(
+                db, bystander, UpdateUserRequest(first_name="Managed"), actor
+            )
+            assert updated.first_name == "Managed"
+        finally:
+            db.rollback()
+            db.close()
+
+
+class TestTheTenantWallBeatsAGrant:
+    """**A grant may widen visibility within a tenant, never across one.**
+
+    `data_access_service`'s docstring has stated that rule since the module
+    shipped and nothing enforced it: `accessible_user_ids` never consults the
+    organisation, and `create_grant` checks self-elevation but not tenancy. So one
+    admin-written grant spanning two organisations produced a genuine cross-tenant
+    read — the exact disclosure the directory's 404 rule exists to prevent.
+    """
+
+    @pytest.fixture
+    def two_organisations(self):
+        from app.models.partner import Partner
+
+        db = SessionLocal()
+        suffix = uuid.uuid4().hex[:8]
+        orgs = []
+        for label in ("alpha", "beta"):
+            org = Partner(
+                name=f"ZZ Test {label} {suffix}",
+                slug=f"zz-test-{label}-{suffix}",
+                status="ACTIVE",
+            )
+            db.add(org)
+            orgs.append(org)
+        db.flush()
+
+        members = []
+        for org, label in zip(orgs, ("alpha", "beta")):
+            member = User(
+                email=f"zz-{label}-{suffix}@example.com",
+                password=hash_password(PASSWORD),
+                first_name=label.title(),
+                last_name="Member",
+                account_type="external",
+                status="ACTIVE",
+                auth_provider="password",
+                organisation_id=org.id,
+            )
+            db.add(member)
+            members.append(member)
+        db.commit()
+
+        ids = {
+            "alpha_user": members[0].id,
+            "beta_user": members[1].id,
+            "org_ids": [orgs[0].id, orgs[1].id],
+        }
+        db.close()
+
+        yield ids
+
+        db = SessionLocal()
+        for key in ("alpha_user", "beta_user"):
+            row = db.get(User, ids[key])
+            if row:
+                row.roles = []
+                db.delete(row)
+        db.commit()
+        for org_id in ids["org_ids"]:
+            row = db.get(Partner, org_id)
+            if row:
+                db.delete(row)
+        db.commit()
+        db.close()
+
+    def test_a_cross_organisation_grant_does_not_expose_the_row(
+        self, two_organisations, grant_factory
+    ):
+        grant_factory(
+            two_organisations["alpha_user"], two_organisations["beta_user"], "view"
+        )
+        db = SessionLocal()
+        try:
+            actor = db.get(User, two_organisations["alpha_user"])
+            with pytest.raises(HTTPException) as excinfo:
+                user_service.get_visible_user_or_404(
+                    db, two_organisations["beta_user"], actor
+                )
+            assert excinfo.value.status_code == 404
+        finally:
+            db.close()
+
+    def test_the_list_excludes_it_too(self, two_organisations, grant_factory):
+        """The detail refusal and the list filter must agree, or the count is a
+        disclosure of its own."""
+        grant_factory(
+            two_organisations["alpha_user"], two_organisations["beta_user"], "view"
+        )
+        db = SessionLocal()
+        try:
+            actor = db.get(User, two_organisations["alpha_user"])
+            rows, _total = user_service.list_users(db, actor)
+            assert two_organisations["beta_user"] not in {row.id for row in rows}
+        finally:
+            db.close()
+
+    def test_the_grant_still_works_inside_one_organisation(
+        self, two_organisations, grant_factory
+    ):
+        """The wall must narrow across tenants and not break delegation within
+        one — otherwise this would be a feature switched off rather than fixed."""
+        db = SessionLocal()
+        suffix = uuid.uuid4().hex[:8]
+        colleague = User(
+            email=f"zz-colleague-{suffix}@example.com",
+            password=hash_password(PASSWORD),
+            first_name="Cass",
+            last_name="Colleague",
+            account_type="external",
+            status="ACTIVE",
+            auth_provider="password",
+            organisation_id=db.get(User, two_organisations["alpha_user"]).organisation_id,
+        )
+        db.add(colleague)
+        db.commit()
+        colleague_id = colleague.id
+        db.close()
+
+        grant_factory(two_organisations["alpha_user"], colleague_id, "view")
+        db = SessionLocal()
+        try:
+            actor = db.get(User, two_organisations["alpha_user"])
+            found = user_service.get_visible_user_or_404(db, colleague_id, actor)
+            assert found.id == colleague_id
+        finally:
+            row = db.get(User, colleague_id)
+            if row:
+                db.delete(row)
+            db.commit()
+            db.close()
+
+    def test_a_member_of_one_organisation_cannot_read_another(self, two_organisations):
+        """The other half of T4: `users` is not the only scoped table.
+
+        `Partner` is the canonical tenant row — a partner *is* the organisation —
+        and `partner_service.get_partner_for` goes through
+        `scoping.assert_can_read`. This exercises it with a genuinely
+        authenticated wrong-tenant caller, which is the case
+        `test_route_enforcement.py` does not cover: that suite proves a
+        *stranger* is refused, not a valid session from the wrong organisation.
+        """
+        from app.services import partner_service
+
+        db = SessionLocal()
+        try:
+            actor = db.get(User, two_organisations["alpha_user"])
+            own, other = two_organisations["org_ids"]
+
+            assert partner_service.get_partner_for(db, own, actor).id == own
+
+            with pytest.raises(HTTPException) as excinfo:
+                partner_service.get_partner_for(db, other, actor)
+            assert excinfo.value.status_code == 404, (
+                "a partner user reached another organisation's row — or was told "
+                "it exists, which is the disclosure the 404 rule prevents"
+            )
+        finally:
+            db.close()
+
+
+class TestTheDelegationGraphIsNotPublicToStaff:
+    """`list_grants` returned every grant to any `data-access-view` holder.
+
+    **Staff holds that permission**, so an ordinary internal role could read who
+    has been given access to whom across the whole installation — an
+    organisational chart of trust. Faithful to the reference, which is why it was
+    flagged (2026-08-13) rather than silently changed, and closed here.
+    """
+
+    def test_a_non_admin_sees_only_grants_it_is_a_party_to(
+        self, viewer, bystander, grant_factory
+    ):
+        from app.services import data_access_service as das
+
+        # One grant the viewer is party to, one entirely unrelated to it.
+        grant_factory(viewer["id"], bystander, "view")
+
+        db = SessionLocal()
+        suffix = uuid.uuid4().hex[:8]
+        third = User(
+            email=f"zz-third-{suffix}@example.com",
+            password=hash_password(PASSWORD),
+            first_name="Thea",
+            last_name="Third",
+            account_type="internal",
+            status="ACTIVE",
+            auth_provider="password",
+        )
+        db.add(third)
+        db.commit()
+        third_id = third.id
+        db.close()
+
+        grant_factory(third_id, bystander, "view")
+
+        db = SessionLocal()
+        try:
+            actor = db.get(User, viewer["id"])
+            rows, _total = das.list_grants(db, actor)
+            outsiders = [
+                g for g in rows
+                if actor.id not in (g.grantee_id, g.subject_id)
+            ]
+            assert outsiders == [], (
+                f"{len(outsiders)} grant(s) between other people were visible to "
+                "a non-admin — that is the delegation graph leaking"
+            )
+            assert rows, "the viewer's own grant should still be listed"
+        finally:
+            row = db.get(User, third_id)
+            if row:
+                db.delete(row)
+            db.commit()
+            db.close()
+
+    def test_being_the_subject_counts_as_being_a_party(self, viewer, grant_factory):
+        """"Who can see my records" is a question you should be able to answer
+        about yourself; hiding it would make delegation feel like surveillance."""
+        from app.services import data_access_service as das
+
+        db = SessionLocal()
+        suffix = uuid.uuid4().hex[:8]
+        grantee = User(
+            email=f"zz-grantee-{suffix}@example.com",
+            password=hash_password(PASSWORD),
+            first_name="Gary",
+            last_name="Grantee",
+            account_type="internal",
+            status="ACTIVE",
+            auth_provider="password",
+        )
+        db.add(grantee)
+        db.commit()
+        grantee_id = grantee.id
+        db.close()
+
+        grant_factory(grantee_id, viewer["id"], "view")
+
+        db = SessionLocal()
+        try:
+            actor = db.get(User, viewer["id"])
+            rows, _total = das.list_grants(db, actor)
+            assert any(g.subject_id == actor.id for g in rows), (
+                "a grant OVER the actor's own records was hidden from them"
+            )
+        finally:
+            row = db.get(User, grantee_id)
             if row:
                 db.delete(row)
             db.commit()

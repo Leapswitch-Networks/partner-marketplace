@@ -33,6 +33,7 @@ from __future__ import annotations
 import time
 from collections import defaultdict, deque
 from threading import Lock
+from typing import Protocol, runtime_checkable
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
@@ -84,13 +85,55 @@ SENSITIVE_PATHS: frozenset[str] = frozenset(
 EXEMPT_PREFIXES: tuple[str, ...] = ("/health",)
 
 
+@runtime_checkable
+class RateLimitStore(Protocol):
+    """Where the counters live.
+
+    **The seam, not the fix.** PM-44 is closed by a *shared* store; this is the
+    interface that stops adding one from touching the middleware, the tier table
+    or any call site. Deliberately narrow — two methods — because every member
+    here is something a Redis implementation would be obliged to provide.
+
+    Note what the signature does **not** include: a clock. `hit` takes a window
+    length, never a timestamp, so each implementation owns its own notion of time.
+    That is what makes a shared store possible at all: this one uses
+    `time.monotonic()`, which is per-process and meaningless between machines, and
+    a Redis version must use wall-clock (or Redis's own `TIME`). An interface that
+    passed `now` in would have quietly frozen that mistake in place.
+
+    A conforming implementation must preserve three behaviours the in-process one
+    documents and tests depend on:
+
+    1. **Sliding log, not a fixed window** — otherwise the full allowance can be
+       spent either side of a boundary, at twice the intended rate.
+    2. **A rejected request records nothing**, so being throttled cannot extend
+       the throttle and a client retrying in a loop can recover.
+    3. **`remaining` is the allowance left after this request**, and is `0` on a
+       rejection — the `X-RateLimit-Remaining` header is derived from it directly.
+    """
+
+    def hit(self, key: str, limit: int, window_seconds: int) -> tuple[bool, int, int]:
+        """Record a request against `key`; return `(allowed, remaining, retry_after)`."""
+        ...
+
+    def reset(self) -> None:
+        """Forget every counter."""
+        ...
+
+
 class SlidingWindowCounter:
-    """Per-key sliding window over request timestamps.
+    """Per-key sliding window over request timestamps. The default `RateLimitStore`.
 
     A sliding log rather than a fixed window: a fixed window lets a caller send
     the full allowance at 0:59 and again at 1:01, which is twice the intended
     rate at exactly the boundary an attacker would find. Memory is bounded by
     ``limit`` entries per active key, which at these limits is trivial.
+
+    **Per process, and that is still PM-44.** Extracting the interface above did
+    not fix the limitation and is not meant to look like it did: N workers still
+    multiply every limit by N, because these counters are in this process's
+    memory. What changed is the cost of fixing it — a shared store is now a new
+    class and one line in `main.py` rather than surgery on the middleware.
     """
 
     def __init__(self) -> None:
@@ -207,7 +250,10 @@ def _sensitive_shape_bucket(path: str) -> str | None:
 #: walk the whole key set each time; 1000 keeps it amortised to nothing.
 _SWEEP_EVERY = 1000
 
-counter = SlidingWindowCounter()
+#: The process-wide default store. Kept as a module-level name because
+#: `tests/` and the admin reset path already reference it; the middleware no
+#: longer reads it directly, so swapping a store does not mean reassigning this.
+counter: RateLimitStore = SlidingWindowCounter()
 
 
 def _tier_for(path: str) -> tuple[str, int, int] | None:
@@ -253,7 +299,19 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     leaves CORS outside it — which matters because a ``429`` without
     ``Access-Control-Allow-Origin`` is unreadable to the browser, and the user
     would see an opaque network error instead of "too many attempts".
+
+    ``store`` defaults to the module-level in-process counter, so existing
+    registrations are unchanged. Passing one is how PM-44 gets closed:
+
+        app.add_middleware(RateLimitMiddleware, store=RedisRateLimitStore(url))
     """
+
+    def __init__(self, app, store: RateLimitStore | None = None) -> None:
+        super().__init__(app)
+        # Resolved once at construction rather than read from the module on every
+        # request: a middleware whose behaviour depends on when a global was last
+        # reassigned is a middleware nobody can reason about under test.
+        self._store: RateLimitStore = store if store is not None else counter
 
     async def dispatch(self, request: Request, call_next) -> Response:
         if not settings.RATE_LIMIT_ENABLED:
@@ -269,7 +327,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         name, limit, window = tier
-        allowed, remaining, retry_after = counter.hit(
+        allowed, remaining, retry_after = self._store.hit(
             f"{name}:{get_client_ip(request)}", limit, window
         )
 

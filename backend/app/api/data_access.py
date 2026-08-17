@@ -110,7 +110,12 @@ def list_data_access_grants(
     db: Session = Depends(get_db),
     actor: User = Depends(require_permission(DATA_ACCESS_VIEW)),
 ) -> DataAccessListResponse:
-    """Every grant, newest first.
+    """The grants this caller may see, newest first.
+
+    Administrators see the whole delegation graph; everyone else sees the grants
+    they are a party to. It returned *every* grant to any `data-access-view`
+    holder until 2026-08-17, and Staff holds that permission — see
+    `data_access_service.list_grants` for why that changed and what was rejected.
 
     `sort_by` outside `scope` / `access_level` / `created_at` falls back to
     `created_at` rather than erroring — the allowlist lives in the service's
@@ -119,6 +124,7 @@ def list_data_access_grants(
     """
     grants, total = data_access_service.list_grants(
         db,
+        actor,
         search=search,
         scope=scope,
         access_level=access_level,
