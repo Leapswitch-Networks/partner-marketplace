@@ -49,6 +49,62 @@ which is lead time, not build time, and worth starting now rather than at step 7
 readers to consult `node_modules/next/dist/docs/`, a directory that does not exist in a 14.2.35
 install. The root `AGENTS.md` corrected the same line on 11 August; this copy outlived it by six days.
 
+## August 17, 2026 — Going live no longer means pasting secrets into a screen
+
+**A deployment can now seed its integration credentials with one command, and the credentials are
+still not in the repository.** Those two halves are the whole change.
+
+The gap was real. Roles, permissions, the root account, partner tiers, the staff roster and the list
+of integration providers all had seeders already. What none of them covered was the *values* — the
+Anthropic key, the Google OAuth pair, the SMTP login, the Slack webhook. So a go-live meant somebody
+opening the Integrations screen and typing secrets in by hand, which is slow, unrepeatable, and
+impossible to do identically twice.
+
+**What was asked for was the reference system's approach: copy the eleven live secrets out of
+LeapDesk's seeder and hardcode them here.** That was declined, and the reasoning is worth recording
+because it will come up again. Rotating a secret does not remove it from git history. Every developer
+with repository access would hold production credentials for billing, CRM, mail, four Slack
+integrations and two AI providers, whether their work needs them or not — and revoking someone's
+repository access does not revoke the credentials they already read. It is also the defect **PM-4**
+was closed to remove, and this project has already paid that bill once: the one item still open under
+PM-1 is rotating credentials that were readable before the rebuild.
+
+The deciding argument, though, is that **the encrypted credential store already exists**. Values are
+held as ciphertext, written behind a permission, and every decryption is audited. Putting the same
+secrets in plaintext in a source file would bypass the mechanism the project built on purpose.
+
+So the seeder holds the *shape* and the deployment holds the *values*, exactly as the staff-roster
+seeder already worked. Values come from `SEED_CRED_<PROVIDER>_<FIELD>` environment variables — which
+is what Docker and Kubernetes secrets are for — or from a JSON file pointed at somewhere outside the
+repository. An environment variable wins over the file, because that is the direction a deployment
+overrides a default and never the reverse.
+
+**Four behaviours make it safe to run repeatedly on a real system:**
+
+- **It refuses to read a credentials file that git tracks.** Not a warning — a refusal. The mistake
+  is made at `git add`, and by then a warning printed earlier has not helped. The message says the
+  secret needs rotating rather than deleting, because deleting a committed file does not unpublish it.
+- **A field you do not supply is left alone**, so re-running with only the Slack webhook set rotates
+  that one secret and disturbs nothing else. A provider with nothing supplied is skipped entirely
+  rather than creating a half-configured row that looks configured on the screen.
+- **Placeholder values are refused outright in production.** A fake secret that seeds cleanly is
+  worse than a missing one, because the screen then says it is set. The rules come from the same list
+  the startup environment audit uses, so the two cannot drift into disagreeing.
+- **Nothing it prints is a value.** Every line names the provider and the field *key* and what
+  happened to it — operators paste this output into tickets. `--dry-run` shows the whole plan without
+  touching anything.
+
+Writes go through the existing credential service rather than the tables, so encryption, the
+one-credential-per-provider-per-environment rule and the audit entry all stay in one place.
+
+**One limitation recorded rather than papered over:** the placeholder check is a fixed word list, so
+a fake value nobody anticipated still passes — `xxxxxxxx` does. It catches the common mistakes and is
+not proof that a seeded value is real. A test pins that, so the next reader meets it as a known
+boundary instead of assuming a guarantee.
+
+**Verified:** 819 backend tests pass (37 new), ruff clean, and a dry run against the running stack
+reports the two fields it was given by key without echoing either value.
+
 ## August 17, 2026 — The user list was locked and the user *writes* were not
 
 **Anyone who could be given permission to edit users could edit every user — including ones the

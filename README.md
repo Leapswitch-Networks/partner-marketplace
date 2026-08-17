@@ -315,6 +315,37 @@ docker compose run --rm backend python -m app.db.seed_users
 `seed_users.json` is gitignored on purpose — it holds real addresses, and **this repository is
 public**.
 
+And on a real deployment, fill in the integration secrets so nobody has to paste them into the
+Integrations screen by hand:
+
+```bash
+# The providers and their field schemas (no secrets — labels and placeholders only).
+docker compose run --rm backend python -m app.db.seed_api_providers
+
+# The values. Supplied by the environment, never by a file in this repo.
+docker compose run --rm \
+  -e SEED_CRED_ANTHROPIC_API_KEY \
+  -e SEED_CRED_GOOGLE_CLIENT_ID -e SEED_CRED_GOOGLE_CLIENT_SECRET \
+  -e SEED_CRED_MAIL_HOST -e SEED_CRED_MAIL_USERNAME -e SEED_CRED_MAIL_PASSWORD \
+  backend python -m app.db.seed_api_credentials
+
+# Or check what it would write first — prints field KEYS, never values.
+docker compose run --rm backend python -m app.db.seed_api_credentials --dry-run
+```
+
+Values may also come from a JSON file via `SEED_API_CREDENTIALS_FILE`, pointed **outside** this
+repository — `backend/seed_api_credentials.example.json` shows the shape with deliberately fake
+values. The seeder **refuses to read a credentials file that git tracks**, and refuses placeholder
+values entirely when `APP_ENV=production`. A field you do not supply is left as it is, so re-running
+to rotate one secret does not disturb the others; a provider with nothing supplied is skipped rather
+than created half-configured.
+
+**Why the values are not committed** — the pattern LeapDesk's `ApiCredentialsSeeder.php` uses, with
+every live secret inline: rotating a secret does not remove it from git history, and every developer
+with repository access holds production credentials for every integration whether they need them or
+not. That is the defect PM-4 was closed to remove. The values belong in the deployment's secret
+store; the *shape* belongs here.
+
 ### Step 5 — Verify it came up
 
 ```bash
