@@ -12,7 +12,7 @@ from pydantic import BaseModel, EmailStr, Field, field_validator, model_validato
 
 from app.core.config import settings
 
-AccountType = Literal["staff", "partner"]
+AccountType = Literal["internal", "external"]
 #: Two values, matching `UserStatusEnum` — see the note on it in models/user.py.
 #: Keep this in step with `app.schemas.rbac.UserStatus`, which is the same type
 #: declared twice so the two modules do not import each other.
@@ -179,6 +179,10 @@ class CurrentUserResponse(BaseModel):
     personal_email: str | None
     company_name: str | None
     account_type: str
+    #: Organisation membership. NULL means an internal, first-party account.
+    #: Added 2026-08-17 with the write path (CORE_EXTRACTION_PLAN.md phase 2) —
+    #: a column the UI cannot read is a column an admin cannot verify they set.
+    organisation_id: str | None = None
     status: str
     auth_provider: str
     timezone_preference: str

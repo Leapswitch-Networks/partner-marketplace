@@ -83,6 +83,10 @@ const PAGES = [
   ["/dashboard/roles/new", "Role"],
   ["/dashboard/roles/matrix", "Matrix"],
   ["/dashboard/invitations/new", "Invit"],
+  // Partner Directory staff UI — added with the module, 2026-08-13.
+  ["/dashboard/partners", "Partner"],
+  ["/dashboard/partners/new", "Partner"],
+  ["/dashboard/partner-tiers", "Tier"],
 ];
 
 /**
@@ -114,6 +118,11 @@ const DYNAMIC = [
   ["/dashboard/users/{user}/edit", "User"],
   ["/dashboard/roles/{role}", "Role"],
   ["/dashboard/roles/{role}/edit", "Role"],
+  // Resolved from the live API like the others; when no partner exists yet the
+  // resolve step records a WARN and these two are skipped rather than testing
+  // the not-found branch, which loads cleanly and proves nothing.
+  ["/dashboard/partners/{partner}", "Partner"],
+  ["/dashboard/partners/{partner}/edit", "Partner"],
 ];
 
 /**
@@ -374,16 +383,28 @@ try {
     Promise.all([
       fetch("${API}/users?per_page=1", { credentials: "include" }).then(r => r.json()),
       fetch("${API}/roles", { credentials: "include" }).then(r => r.json()),
-    ]).then(([users, roles]) => ({
+      fetch("${API}/partners?per_page=1", { credentials: "include" }).then(r => r.json()).catch(() => ({})),
+    ]).then(([users, roles, partners]) => ({
       user: (users.items || users.data || [])[0]?.id ?? null,
       role: (Array.isArray(roles) ? roles : roles.items || [])[0]?.id ?? null,
+      partner: (partners.items || [])[0]?.id ?? null,
     }))
   `);
   if (!ids.user || !ids.role) {
     record("resolve ids", "WARN", `could not resolve a user/role id (${JSON.stringify(ids)})`);
   } else {
-    record("resolve ids", "PASS", `user ${String(ids.user).slice(0, 8)} · role ${ids.role}`);
+    record("resolve ids", "PASS", `user ${String(ids.user).slice(0, 8)} · role ${ids.role} · partner ${ids.partner ?? "none"}`);
     for (const [template, expected] of DYNAMIC) {
+      if (template.includes("{partner}")) {
+        // A fresh install has no partner rows; skip rather than render the
+        // not-found branch, which loads cleanly and proves nothing.
+        if (ids.partner == null) {
+          record(template, "WARN", "no partner exists to resolve — screen not exercised");
+          continue;
+        }
+        await check(template.replace("{partner}", ids.partner), expected);
+        continue;
+      }
       await check(template.replace("{user}", ids.user).replace("{role}", ids.role), expected);
     }
   }

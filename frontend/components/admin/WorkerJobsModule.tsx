@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import Badge, { type BadgeTone } from "@/components/common/Badge";
 import Button from "@/components/common/Button";
 import { Card, CardContent } from "@/components/common/Card";
+import StatTiles from "@/components/common/StatTiles";
 import { navIcon } from "@/components/dashboard/navIcons";
 import {
   workerApi,
@@ -154,39 +155,39 @@ export default function WorkerJobsModule() {
         </div>
       )}
 
+      {/* Tones track the actual state rather than the label: a page whose banner
+          says the worker is down should not print `Unhealthy 4` in the same ink
+          as `Jobs 5`. Zero is not a problem, so each tone is conditional — a
+          permanently red tile is a badge that can never clear, which this
+          codebase has already decided is worse than no badge. */}
       {summary && (
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-          {[
+        <StatTiles
+          items={[
             { label: "Jobs", value: summary.jobs, hint: `${summary.enabled} enabled` },
-            { label: "Unhealthy", value: summary.unhealthy, hint: "failing or overdue" },
+            {
+              label: "Unhealthy",
+              value: summary.unhealthy,
+              tone: summary.unhealthy > 0 ? "danger" : "success",
+              hint: "failing or overdue",
+            },
             { label: "Runs, 24h", value: summary.runs_24h, hint: "across every job" },
-            { label: "Failures, 24h", value: summary.failed_24h, hint: "runs that raised" },
+            {
+              label: "Failures, 24h",
+              value: summary.failed_24h,
+              tone: summary.failed_24h > 0 ? "warning" : "success",
+              hint: "runs that raised",
+            },
             {
               label: "Last activity",
               value: summary.last_seen_at ? formatDateTime(summary.last_seen_at) : "—",
+              tone: summary.worker_seen_recently ? "success" : "danger",
               hint: summary.worker_seen_recently ? "worker is alive" : "worker looks stopped",
-              wide: true,
+              // A timestamp, not a figure — at display size it sets the row's
+              // column width on its own and still wraps.
+              textual: true,
             },
-          ].map((card) => (
-            <Card key={card.label}>
-              <CardContent>
-                <p
-                  className={
-                    card.wide
-                      ? "py-1 text-xs font-semibold text-ink dark:text-gray-100"
-                      : "py-1 text-xl font-semibold text-ink dark:text-gray-100"
-                  }
-                >
-                  {card.value}
-                </p>
-                <p className="text-xs font-medium text-ink dark:text-gray-200">{card.label}</p>
-                <p className="pb-1 text-[11px] text-ink-label dark:text-night-muted">
-                  {card.hint}
-                </p>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+          ]}
+        />
       )}
 
       <Card>

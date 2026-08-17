@@ -26,7 +26,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.permissions import DEFAULT_STAFF_ROLE
+from app.core.permissions import DEFAULT_INTERNAL_ROLE
 from app.core.security import TokenError, decode_typed_token
 from app.models.user import User
 from app.services.rbac_service import get_role_by_name
@@ -212,7 +212,7 @@ def find_or_create_from_google(db: Session, profile: dict) -> User:
         user.google_id = google_id
         user.google_avatar = avatar
         user.auth_provider = "google"
-        user.account_type = "staff"
+        user.account_type = "internal"
         if user.email_verified_at is None:
             user.email_verified_at = datetime.now(timezone.utc)
         db.commit()
@@ -231,11 +231,11 @@ def find_or_create_from_google(db: Session, profile: dict) -> User:
         email_verified_at=datetime.now(timezone.utc),
         first_name=given,
         last_name=family,
-        account_type="staff",
+        account_type="internal",
         status=settings.NEW_USER_DEFAULT_STATUS,
     )
 
-    default_role = get_role_by_name(db, DEFAULT_STAFF_ROLE)
+    default_role = get_role_by_name(db, DEFAULT_INTERNAL_ROLE)
     if default_role:
         user.roles.append(default_role)
 

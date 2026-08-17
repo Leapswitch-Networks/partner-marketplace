@@ -129,7 +129,7 @@ def list_invitations(
         default=None, alias="status"
     ),
     
-    account_type: Literal["staff", "partner"] | None = Query(default=None),
+    account_type: Literal["internal", "external"] | None = Query(default=None),
     search: str | None = Query(default=None, description="Matches email or note"),
     sort_by: str = Query(default="created_at"),
     sort_order: str = Query(default="desc", pattern="^(asc|desc)$"),
@@ -187,7 +187,7 @@ def preview_invitation(
         account_type=invitation.account_type,
         expires_at=invitation.expires_at,
         # Staff must complete via Google; partners set a password.
-        requires_google=invitation.account_type == "staff",
+        requires_google=invitation.account_type == "internal",
     )
 
 

@@ -20,7 +20,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.permissions import DEFAULT_PARTNER_ROLE
+from app.core.permissions import DEFAULT_EXTERNAL_ROLE
 from app.core.security import (
     TokenError,
     create_email_verification_token,
@@ -90,7 +90,7 @@ def register_partner(db: Session, data: RegisterRequest) -> User:
         a staff account with a self-chosen password and bypass SSO entirely
       * registration can be switched off wholesale via config
     """
-    if not settings.ALLOW_PARTNER_SELF_REGISTRATION:
+    if not settings.ALLOW_EXTERNAL_SELF_REGISTRATION:
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
             "Self-registration is disabled. Please ask an administrator for an invitation.",
@@ -116,12 +116,12 @@ def register_partner(db: Session, data: RegisterRequest) -> User:
         last_name=data.last_name.strip(),
         company_name=(data.company_name or "").strip() or None,
         personal_mobile_number=(data.personal_mobile_number or "").strip() or None,
-        account_type="partner",
+        account_type="external",
         auth_provider="password",
         status=settings.NEW_USER_DEFAULT_STATUS,
     )
 
-    default_role = get_role_by_name(db, DEFAULT_PARTNER_ROLE)
+    default_role = get_role_by_name(db, DEFAULT_EXTERNAL_ROLE)
     if default_role:
         user.roles.append(default_role)
 

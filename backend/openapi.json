@@ -1291,10 +1291,10 @@
       "CreateInvitationRequest": {
         "properties": {
           "account_type": {
-            "default": "partner",
+            "default": "external",
             "enum": [
-              "staff",
-              "partner"
+              "internal",
+              "external"
             ],
             "title": "Account Type",
             "type": "string"
@@ -1315,6 +1315,18 @@
               }
             ],
             "title": "Note"
+          },
+          "organisation_id": {
+            "anyOf": [
+              {
+                "maxLength": 36,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Organisation Id"
           },
           "role_id": {
             "anyOf": [
@@ -1609,10 +1621,10 @@
         "description": "Admin-created account. Password optional — omit it for an SSO-only staff\naccount, in which case `password` stays NULL and only Google can sign in.",
         "properties": {
           "account_type": {
-            "default": "partner",
+            "default": "external",
             "enum": [
-              "staff",
-              "partner"
+              "internal",
+              "external"
             ],
             "title": "Account Type",
             "type": "string"
@@ -1669,6 +1681,18 @@
             "minLength": 1,
             "title": "Last Name",
             "type": "string"
+          },
+          "organisation_id": {
+            "anyOf": [
+              {
+                "maxLength": 36,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Organisation Id"
           },
           "password": {
             "anyOf": [
@@ -2290,6 +2314,17 @@
           "last_name": {
             "title": "Last Name",
             "type": "string"
+          },
+          "organisation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Organisation Id"
           },
           "password_otp_grace": {
             "default": false,
@@ -7656,7 +7691,7 @@
         "type": "object"
       },
       "UpdatePartnerTierRequest": {
-        "description": "Change what a tier grants. Name and display order are seeded, not edited.\n\n`name` is deliberately absent: it is the key `core/partner_tiers.py` and\nevery future entitlement check reference, and renaming it here would make the\ndatabase disagree with the code until the next seed silently renamed it back.",
+        "description": "Change what a tier grants. Name and display order are seeded, not edited.\n\n`name` is deliberately absent: it is the key `domain/partners/tiers.py` and\nevery future entitlement check reference, and renaming it here would make the\ndatabase disagree with the code until the next seed silently renamed it back.",
         "properties": {
           "description": {
             "anyOf": [
@@ -7889,8 +7924,8 @@
             "anyOf": [
               {
                 "enum": [
-                  "staff",
-                  "partner"
+                  "internal",
+                  "external"
                 ],
                 "type": "string"
               },
@@ -7973,6 +8008,18 @@
               }
             ],
             "title": "Last Name"
+          },
+          "organisation_id": {
+            "anyOf": [
+              {
+                "maxLength": 36,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Organisation Id"
           },
           "password": {
             "anyOf": [
@@ -8209,6 +8256,17 @@
             ],
             "title": "Locked Until"
           },
+          "organisation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Organisation Id"
+          },
           "personal_email": {
             "anyOf": [
               {
@@ -8382,6 +8440,17 @@
               }
             ],
             "title": "Last Login At"
+          },
+          "organisation_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Organisation Id"
           },
           "roles": {
             "items": {
@@ -12797,8 +12866,8 @@
               "anyOf": [
                 {
                   "enum": [
-                    "staff",
-                    "partner"
+                    "internal",
+                    "external"
                   ],
                   "type": "string"
                 },
@@ -17566,6 +17635,22 @@
                 }
               ],
               "title": "Role Id"
+            }
+          },
+          {
+            "in": "query",
+            "name": "organisation_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Organisation Id"
             }
           },
           {

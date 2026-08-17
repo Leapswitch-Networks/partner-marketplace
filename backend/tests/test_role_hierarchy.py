@@ -29,7 +29,6 @@ from app.core.permissions import (
     ROLE_ADMIN,
     ROLE_BACKEND_DEVELOPER,
     ROLE_DESCRIPTIONS,
-    ROLE_PARTNER,
     ROLE_PERMISSION_MATRIX,
     ROLE_ROOT,
     ROLE_SALES,
@@ -38,6 +37,12 @@ from app.core.permissions import (
     ROLE_USER,
     SUPER_ADMIN_ROLES,
 )
+
+# `Partner` is a DOMAIN role and is imported from the domain that registers it —
+# `core/roles.py` ships only the seven platform roles (CORE_EXTRACTION_PLAN.md
+# phase 1). It still appears in the assembled matrix below, which is the point:
+# the hierarchy this file pins is the assembled one, core plus domain.
+from app.domain.partners.permissions import ROLE_PARTNER
 
 
 class TestTheBypassTier:

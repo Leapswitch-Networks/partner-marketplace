@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import Badge from "@/components/common/Badge";
 import { Card, CardContent } from "@/components/common/Card";
+import StatTiles from "@/components/common/StatTiles";
 import Input from "@/components/common/Input";
 import { navIcon } from "@/components/dashboard/navIcons";
 import { apiDocsApi, type ApiOperation, type CatalogueSummary } from "@/lib/api/apiDocsApi";
@@ -102,27 +103,24 @@ export default function ApiDocsModule() {
 
       {summary && (
         <>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-            {[
+          {/* `Public` carries a tone because it is the one number here that is a
+              finding rather than a fact — an unexpected public route is the thing
+              this page exists to catch, and the banner below reports on the same
+              set. The other four are neutral counts. */}
+          <StatTiles
+            items={[
               { label: "Operations", value: summary.operations, hint: `${summary.paths} paths` },
-              { label: "Permission-gated", value: summary.permission_gated, hint: "require a named permission" },
+              { label: "Permission-gated", value: summary.permission_gated, tone: "success", hint: "require a named permission" },
               { label: "Signed in only", value: summary.auth_only, hint: "authenticated, no specific permission" },
-              { label: "Public", value: summary.public, hint: "reachable by anyone" },
+              {
+                label: "Public",
+                value: summary.public,
+                tone: summary.unexpected_public.length > 0 ? "danger" : "warning",
+                hint: "reachable by anyone",
+              },
               { label: "Sections", value: summary.tags, hint: "grouped by module" },
-            ].map((card) => (
-              <Card key={card.label}>
-                <CardContent>
-                  <p className="py-1 text-xl font-semibold text-ink dark:text-gray-100">
-                    {card.value}
-                  </p>
-                  <p className="text-xs font-medium text-ink dark:text-gray-200">{card.label}</p>
-                  <p className="pb-1 text-[11px] text-ink-label dark:text-night-muted">
-                    {card.hint}
-                  </p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
+            ]}
+          />
 
           {summary.unexpected_public.length > 0 ? (
             <div

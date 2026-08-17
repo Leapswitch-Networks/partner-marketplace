@@ -25,6 +25,12 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
+from app.core.nav import (
+    collapsible_sections,
+    nav_item,
+    register_collapsible_section,
+    registered_sections as _registered_nav_sections,
+)
 from app.core.permissions import (
     ACTIVITY_VIEW,
     API_CONSUMER_VIEW,
@@ -44,19 +50,51 @@ from app.core.permissions import (
 from app.models.user import User
 from app.services import activity_service
 
-#: Sections an admin may configure as collapsible or always-open, per role, from
-#: the role permissions page. Keys are the slugs stored in `roles.nav_preferences`;
-#: values are the labels `build_sections` emits.
+#: `nav_item` moved to `core/nav.py` on 2026-08-17 so a domain package can build
+#: entries without importing this service — `CORE_EXTRACTION_PLAN.md` phase 1, and
+#: the layering note in `core/registry.py`. Aliased rather than renamed at every
+#: call site below: the body of `build_sections` is otherwise unchanged, which is
+#: what makes the refactor reviewable.
+_item = nav_item
+
+#: The core's own collapsible sections, registered at import so they land in the
+#: same catalog a domain registers into. `register_nav_section` adds a domain's
+#: entry automatically when its section declares `collapsible`.
 #:
-#: Single source of truth for three things that would otherwise drift: the seeder
-#: defaults, the toggle list the UI renders, and the overlay step in
-#: `get_navigation`. The unlabelled Dashboard section is deliberately absent — it
-#: has no label and is never a candidate for collapsing.
-COLLAPSIBLE_SECTION_CATALOG: dict[str, str] = {
-    "user-management": "User Management",
-    "system-settings": "System Settings",
-    "operations": "Operations",
+#: Registered in the order `build_sections` emits them, so the toggle list on the
+#: role page reads top-to-bottom like the sidebar it configures. Lookups are by
+#: key, so the order is presentation only — but letting it drift is exactly the
+#: drift this catalog exists to prevent. The unlabelled Dashboard section is
+#: deliberately absent: it has no label and is never a candidate for collapsing.
+for _key, _label in (
+    ("user-management", "User Management"),
+    ("system-settings", "System Settings"),
+    ("operations", "Operations"),
+):
+    register_collapsible_section(_key, _label)
+
+
+#: Where each core section sits. Spaced by ten so a domain can slot between two
+#: without renumbering — `app/domain/partners/navigation.py` registers at 15,
+#: which puts Partner Directory second, under Dashboard and above User Management
+#: (owner's call, 2026-08-17).
+CORE_SECTION_ORDER: dict[str, int] = {
+    "administration": 10,
+    "user-management": 20,
+    "system-settings": 30,
+    "operations": 40,
 }
+
+
+def collapsible_section_catalog() -> dict[str, str]:
+    """Core sections plus every section a domain registered.
+
+    **A function, where this used to be a module-level dict.** A domain's entry
+    is added during `import app.domain`, which `core/permissions.py` triggers —
+    and a dict frozen at this module's import time could be read before that had
+    run, silently dropping the domain's sections from the role-preferences UI.
+    """
+    return collapsible_sections()
 
 
 def default_nav_preferences() -> dict[str, dict[str, bool]]:
@@ -65,7 +103,7 @@ def default_nav_preferences() -> dict[str, dict[str, bool]]:
     Used by the seeder to backfill existing roles, and by `get_navigation` as the
     fallback when none of a user's roles carry preferences.
     """
-    return {key: {"collapsible": True} for key in COLLAPSIBLE_SECTION_CATALOG}
+    return {key: {"collapsible": True} for key in collapsible_section_catalog()}
 
 
 def _section_key_from_label(label: str) -> str:
@@ -100,46 +138,26 @@ def resolve_nav_preferences(user: User) -> dict[str, dict[str, bool]]:
     return merged
 
 
-def _item(
-    title: str,
-    href: str,
-    icon: str,
-    permission: str | list[str] | None = None,
-    *,
-    exact: bool = False,
-    active_prefixes: list[str] | None = None,
-    items: list[dict[str, Any]] | None = None,
-) -> dict[str, Any]:
-    """One nav entry.
-
-    `permission` accepts a list, meaning *any of* — a landing page that several
-    permissions can reach should appear for all of them.
-
-    `active_prefixes` exists because "which item is highlighted" is not always
-    "which href matches": `/dashboard/all-users` and `/dashboard/add-user` are two
-    routes under one conceptual Users item.
-    """
-    entry: dict[str, Any] = {
-        "title": title,
-        "href": href,
-        "icon": icon,
-        "permission": permission,
-        "exact": exact,
-        "active_prefixes": active_prefixes or ([href] if href != "#" else []),
-    }
-    if items is not None:
-        entry["items"] = items
-    return entry
-
-
 def build_sections(user: User) -> list[dict[str, Any]]:
-    """Assemble every section, before permission filtering.
+    """Assemble every section — the core's own, plus every domain's — before
+    permission filtering.
 
-    Order and grouping follow LeapDesk: an unlabelled Dashboard section first, then
-    labelled groups. `collapsible` here is the default; `get_navigation` overlays
-    the per-role preference on top.
+    Grouping follows LeapDesk; the ORDER no longer does. **Order is now a number,
+    not a list position**: `CORE_SECTION_ORDER` places the core's four, and a
+    domain calls `register_nav_section(..., order=N)` to slot in between them.
+    That is what lets `app/domain/partners` put Partner Directory second (15,
+    between Dashboard's 10 and User Management's 20) without editing this file —
+    `CORE_EXTRACTION_PLAN.md` phase 1.
+
+    `collapsible` here is the default; `get_navigation` overlays the per-role
+    preference on top.
+
+    ⚠️ The rule at the top of this file — *to add or remove a nav item, edit ONLY
+    this file* — now reads: edit this file for a **core** item, or the owning
+    domain's `navigation.py` for a domain item. There are still exactly two
+    places a nav entry can come from, and both are named here.
     """
-    return [
+    core_sections: list[dict[str, Any]] = [
         {
             # Labelled "Administration" here rather than left null.
             #
@@ -152,7 +170,7 @@ def build_sections(user: User) -> list[dict[str, Any]]:
             # a lone "Administration" over empty space.
             #
             # Not collapsible, and deliberately absent from
-            # COLLAPSIBLE_SECTION_CATALOG, so having a label does not make it a
+            # the collapsible catalog, so having a label does not make it a
             # candidate for the per-role collapse preference.
             "label": "Administration",
             "key": "administration",
@@ -351,6 +369,20 @@ def build_sections(user: User) -> list[dict[str, Any]]:
         },
     ]
 
+    # Merge the core's sections with every registered domain section, by order.
+    #
+    # `sorted` is stable, so two sections sharing an order keep core-before-domain
+    # — deterministic rather than dependent on import timing. A core section with
+    # no entry in CORE_SECTION_ORDER would sort to the end rather than raise:
+    # losing a section from the sidebar is a worse failure than showing it last,
+    # and the merge is not the right place to police the core's own table.
+    ordered: list[tuple[int, dict[str, Any]]] = [
+        (CORE_SECTION_ORDER.get(section.get("key", ""), 999), section)
+        for section in core_sections
+    ]
+    ordered.extend(_registered_nav_sections())
+    return [section for _order, section in sorted(ordered, key=lambda pair: pair[0])]
+
 
 def _permitted(user: User, permission: str | list[str] | None) -> bool:
     """Does the user satisfy this item's permission requirement?
@@ -448,7 +480,7 @@ def role_nav_preferences(role: Any) -> list[dict[str, Any]]:
                 stored.get(key, {}).get("collapsible", defaults[key]["collapsible"])
             ),
         }
-        for key, label in COLLAPSIBLE_SECTION_CATALOG.items()
+        for key, label in collapsible_section_catalog().items()
     ]
 
 
@@ -466,7 +498,7 @@ def set_role_nav_preferences(
     clean = {
         key: {"collapsible": bool(flags["collapsible"])}
         for key, flags in preferences.items()
-        if key in COLLAPSIBLE_SECTION_CATALOG and "collapsible" in flags
+        if key in collapsible_section_catalog() and "collapsible" in flags
     }
 
     before = role.nav_preferences or {}

@@ -26,10 +26,18 @@ from app.models.associations import user_roles
 #: belongs, not in a column that has to be branched on forever.
 UserStatusEnum = Enum("INACTIVE", "ACTIVE", name="user_status")
 
-#: Staff are domain-gated and may use Google SSO; partners self-register with
-#: credentials. The distinction drives the signup policy, not authorization —
-#: what an account may *do* is decided entirely by its roles.
-AccountTypeEnum = Enum("staff", "partner", name="account_type")
+#: INTERNAL accounts are email-domain-gated and may use Google SSO; EXTERNAL
+#: accounts self-register with credentials. The distinction drives the signup
+#: policy, not authorization — what an account may *do* is decided entirely by
+#: its roles.
+#:
+#: **Renamed from `staff | partner` on 2026-08-17** (migration `c9a71f4e2b60`,
+#: `CORE_EXTRACTION_PLAN.md` phase 2). "Partner" is this project's domain word
+#: for an external account; the enum is core and now names the account *class*,
+#: so it survives into a project with clinics or suppliers instead. The values
+#: were renamed in place with `ALTER TYPE ... RENAME VALUE`, so no row changed
+#: identity.
+AccountTypeEnum = Enum("internal", "external", name="account_type")
 
 #: How the account authenticates. A 'google' account has password = NULL.
 #: Values match LeapDesk's enum exactly — 'password', not 'credentials'.
@@ -95,23 +103,27 @@ class User(Base):
     )
     company_name: Mapped[str | None] = mapped_column(
         String(255), nullable=True,
-        comment="Free-text organisation name. Superseded by partner_id — see below",
+        comment="Free-text organisation name. Superseded by organisation_id — see below",
     )
-    partner_id: Mapped[str | None] = mapped_column(
+    #: The tenant boundary. **Named for the concept, not for this project's
+    #: domain** — the FK points at `partners` because that is what the domain
+    #: calls its organisation table, but the core only ever knows this as an
+    #: organisation. See `core/tenancy.py`.
+    organisation_id: Mapped[str | None] = mapped_column(
         String(36),
-        # SET NULL, not CASCADE: deleting a partner organisation must not delete
-        # the people in it. They become unaffiliated and an administrator decides
+        # SET NULL, not CASCADE: deleting an organisation must not delete the
+        # people in it. They become unaffiliated and an administrator decides
         # what happens next — silently removing accounts would destroy the audit
         # trail that references them.
         ForeignKey("partners.id", ondelete="SET NULL"),
         nullable=True,
         index=True,
-        comment="Organisation membership. NULL means Leapswitch staff",
+        comment="Organisation membership. NULL means an internal (first-party) account",
     )
 
     # --- Classification & status --------------------------------------------
     account_type: Mapped[str] = mapped_column(
-        AccountTypeEnum, nullable=False, default="partner", index=True
+        AccountTypeEnum, nullable=False, default="external", index=True
     )
     status: Mapped[str] = mapped_column(
         UserStatusEnum, nullable=False, default="INACTIVE", index=True,
@@ -204,16 +216,21 @@ class User(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
-    # joined, because `get_current_user` reads `partner.status` on EVERY
+    # joined, because `get_current_user` reads `organisation.status` on EVERY
     # authenticated request to enforce the organisation gate. A lazy load there
-    # would be one extra query per request for every partner user.
+    # would be one extra query per request for every external user.
     #
     # foreign_keys is required: this table points at `partners` once for
     # membership, and `partners` points back at this one four times for audit
     # (verified_by, onboarded_by, created_by, updated_by).
-    partner: Mapped["Partner | None"] = relationship(  # noqa: F821
+    #
+    # The attribute is `organisation`; the target class is the domain's
+    # `Partner`. That split is the point — core code reads `user.organisation`
+    # and satisfies `core.tenancy.Organisation`, so a second project swaps the
+    # target without touching a guard.
+    organisation: Mapped["Partner | None"] = relationship(  # noqa: F821
         back_populates="users",
-        foreign_keys=[partner_id],
+        foreign_keys=[organisation_id],
         lazy="joined",
     )
 

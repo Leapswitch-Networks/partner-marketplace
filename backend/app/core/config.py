@@ -1,8 +1,15 @@
 import logging
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 logger = logging.getLogger("app.config")
+
+#: What `STAFF_EMAIL_DOMAINS` ships as. Compared against in `audit_environment`
+#: so a deployment that never changed it is warned in production. A literal
+#: mirror rather than a reference to the field default, because reading a
+#: Pydantic field default at runtime is indirection for one string.
+_SHIPPED_STAFF_DOMAINS = "leapswitch.com"
 
 #: Distinctive placeholder strings, matched as a SUBSTRING.
 #:
@@ -174,12 +181,33 @@ class Settings(BaseSettings):
     RATE_LIMIT_DEFAULT_WINDOW_SECONDS: int = 60
 
     # --- Signup policy ------------------------------------------------------
-    # Staff are domain-gated and may use Google SSO. Anyone else may register
-    # with credentials as a partner and lands INACTIVE pending approval.
+    # INTERNAL accounts are domain-gated and may use Google SSO. Anyone else may
+    # register with credentials as an EXTERNAL account and lands INACTIVE pending
+    # approval.
     #
     # Comma-separated so one env var can carry several domains.
+    #: **Deployment configuration that ships with this project's value.**
+    #: `_SHIPPED_STAFF_DOMAINS` mirrors it so the production audit can warn when
+    #: a second installation has not changed it. Left non-empty rather than
+    #: blanked, because an empty value silently turns off the internal-account
+    #: gate and would let a staff address self-register as external.
     STAFF_EMAIL_DOMAINS: str = "leapswitch.com"
-    ALLOW_PARTNER_SELF_REGISTRATION: bool = True
+    #: Renamed from `ALLOW_PARTNER_SELF_REGISTRATION` on 2026-08-17
+    #: (`CORE_EXTRACTION_PLAN.md` phase 1). "Partner" is this project's domain
+    #: word for an external account; the core setting is named for the account
+    #: class so it survives into a project with clinics or suppliers instead.
+    #:
+    #: The old env name still works — `AliasChoices` accepts both — because a
+    #: deployed `.env` carrying the old key must not silently flip a signup policy
+    #: back to its default. It is not set in this repo's `.env`, so nothing here
+    #: depended on it; the alias is for deployments, not for us.
+    ALLOW_EXTERNAL_SELF_REGISTRATION: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "ALLOW_EXTERNAL_SELF_REGISTRATION",
+            "ALLOW_PARTNER_SELF_REGISTRATION",
+        ),
+    )
     # Every new account starts INACTIVE. An admin must approve before first
     # login. This is the single most important control inherited from LeapDesk —
     # a valid Google account alone grants nothing.
@@ -204,12 +232,65 @@ class Settings(BaseSettings):
     # An admin who has vouched out-of-band can still override per request.
     REQUIRE_VERIFIED_EMAIL_FOR_APPROVAL: bool = True
 
-    # --- Audit log retention (PM-32) ------------------------------------------
-    # A DEFAULT for whoever runs the purge, not an active policy — nothing calls it
-    # on a schedule, because there is no scheduler and because how long
-    # who-did-what is kept is a decision rather than a constant. Two years is a
-    # common floor for access records; change it deliberately.
+    # --- Log retention: age AND size -----------------------------------------
+    #
+    # **Two limits per table, because age alone does not bound a database.** A
+    # 90-day window says nothing about how many rows arrive in 90 days, and the
+    # tables that grow fastest grow fastest exactly when something is wrong — a
+    # retry loop, an incident, a webhook receiver refusing everything. `*_MAX_ROWS`
+    # is the limit that actually caps disk; `*_DAYS` is the policy about how far
+    # back questions can be answered. See `core/retention.py`.
+    #
+    # `0` disables either limit individually.
+
+    # Audit trail. Two years is a common floor for access records.
     ACTIVITY_LOG_RETENTION_DAYS: int = 730
+    #: **Off by default, and this is the one deliberate exception.** Every other
+    #: table here is telemetry; this one is evidence. `activity_service` and
+    #: `db/maintenance.py` both say in as many words that how long who-did-what is
+    #: kept is a policy decision — legal, contractual, or simply how far back you
+    #: want to be able to answer questions — and that a default must not quietly
+    #: start deleting it. A row cap would do exactly that, and would drop the
+    #: OLDEST evidence first, which is the half an investigation needs.
+    #:
+    #: Set it if the audit trail genuinely threatens disk, and know that you are
+    #: choosing a size budget over an answerable history.
+    ACTIVITY_LOG_MAX_ROWS: int = 0
+
+    # API traffic. The comment on the job that trims it is worth repeating: this
+    # table grows fastest when something is wrong.
+    API_REQUEST_LOG_RETENTION_DAYS: int = 90
+    API_REQUEST_LOG_MAX_ROWS: int = 500_000
+
+    # Webhook delivery attempts. One row per attempt, and a failing receiver is
+    # retried — so a single broken endpoint is the worst case here.
+    WEBHOOK_DELIVERY_RETENTION_DAYS: int = 30
+    WEBHOOK_DELIVERY_MAX_ROWS: int = 200_000
+
+    # Error occurrences. One row per raised error; an incident is a burst.
+    # The GROUPS are kept — they are the triage surface and there are few of
+    # them. Only the individual occurrences are trimmed.
+    ERROR_OCCURRENCE_RETENTION_DAYS: int = 90
+    ERROR_OCCURRENCE_MAX_ROWS: int = 200_000
+
+    # Search queries. Useful for "what are people looking for", worthless at
+    # eighteen months old.
+    SEARCH_LOG_RETENTION_DAYS: int = 90
+    SEARCH_LOG_MAX_ROWS: int = 200_000
+
+    # The worker's own run history. Every table that only grows needs an answer,
+    # including the monitoring one.
+    WORKER_RUN_RETENTION_DAYS: int = 30
+    WORKER_RUN_MAX_ROWS: int = 50_000
+
+    #: Rows deleted per statement. A single `DELETE` over millions of rows takes a
+    #: long lock and one enormous transaction; batching keeps the table available
+    #: between passes and makes an interrupted sweep still count.
+    RETENTION_BATCH_SIZE: int = 5_000
+    #: Batches per policy per run. Bounds one sweep so a wildly oversized table
+    #: cannot make the worker's tick take an hour — the next tick continues.
+    #: 200 × 5,000 = one million rows per table per run.
+    RETENTION_MAX_BATCHES: int = 200
 
     # --- Refresh-token rotation (PM-31) --------------------------------------
     # How long the immediately-superseded refresh token is still honoured. Without
@@ -281,7 +362,14 @@ class Settings(BaseSettings):
     # a reset link in a log file is a working credential for anyone who can read
     # logs. Listed in DEPLOYMENT § 0.
     MAIL_BACKEND: str = "console"
-    MAIL_FROM: str = "no-reply@leapswitch.com"
+    #: Empty means "derive from the first staff domain" — see `model_post_init`,
+    #: the same treatment `TWO_FACTOR_ISSUER` and `MAIL_FROM_NAME` already get.
+    #:
+    #: It used to be the literal `no-reply@leapswitch.com`, which is a fossil in
+    #: any project built on this core: the next installation would send mail
+    #: from a company it has nothing to do with, and the bounce would go
+    #: somewhere nobody was watching. `CORE_EXTRACTION_PLAN.md` phase 5.
+    MAIL_FROM: str = ""
     #: Empty means "follow APP_NAME" — see TWO_FACTOR_ISSUER.
     MAIL_FROM_NAME: str = ""
     SMTP_HOST: str = ""
@@ -334,6 +422,18 @@ class Settings(BaseSettings):
     def google_oauth_configured(self) -> bool:
         return bool(self.GOOGLE_CLIENT_ID and self.GOOGLE_CLIENT_SECRET and self.GOOGLE_REDIRECT_URI)
 
+    @property
+    def primary_domain(self) -> str:
+        """The first configured staff domain, or a neutral placeholder.
+
+        Used to derive `MAIL_FROM` and the seeder's default root address, so a
+        new installation sets ONE value and both follow. `localhost` rather than
+        a real-looking fallback: an address at a domain nobody owns bounces
+        loudly, which is the correct outcome for an unconfigured installation.
+        """
+        domains = self.staff_domains
+        return domains[0] if domains else "localhost"
+
     def is_staff_email(self, email: str) -> bool:
         """True when the address belongs to one of the configured staff domains."""
         addr = email.strip().lower()
@@ -361,6 +461,11 @@ class Settings(BaseSettings):
             self.TWO_FACTOR_ISSUER = self.APP_NAME
         if not self.MAIL_FROM_NAME.strip():
             self.MAIL_FROM_NAME = self.APP_NAME
+        # Addresses derive from the configured domain rather than being written
+        # into the code. One setting decides the installation's identity, which
+        # is what makes the core liftable — CORE_EXTRACTION_PLAN.md phase 5.
+        if not self.MAIL_FROM.strip():
+            self.MAIL_FROM = f"no-reply@{self.primary_domain}"
 
         problems, warnings = self.audit_environment()
 
@@ -427,6 +532,20 @@ class Settings(BaseSettings):
         if self.ALGORITHM.strip().lower() in {"none", ""}:
             problems.append(
                 f"ALGORITHM is {self.ALGORITHM!r}, which disables token signing. Use HS256."
+            )
+
+        # --- Installation identity -------------------------------------------
+        # A warning, not a problem: `leapswitch.com` is correct for THIS
+        # deployment and wrong for every other one built on this core. Shipping
+        # it as a code default means a second installation domain-gates its SSO
+        # against a company it has no relationship with, and the symptom is
+        # "nobody can sign in with Google" — which nobody would trace back here.
+        if self.STAFF_EMAIL_DOMAINS.strip() == _SHIPPED_STAFF_DOMAINS:
+            warnings.append(
+                f"STAFF_EMAIL_DOMAINS is still the shipped default "
+                f"({_SHIPPED_STAFF_DOMAINS!r}). Set it to this installation's own "
+                "domain(s) — it decides who may sign in with SSO, and it is also "
+                "where MAIL_FROM and the seeded root address derive from."
             )
 
         # --- Cookies ---------------------------------------------------------

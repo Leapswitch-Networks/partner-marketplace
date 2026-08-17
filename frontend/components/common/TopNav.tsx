@@ -58,7 +58,13 @@ function HeaderIcon({
   );
 }
 
-export default function TopNav() {
+export default function TopNav({
+  sidebarCollapsed,
+  onToggleSidebar,
+}: {
+  sidebarCollapsed: boolean;
+  onToggleSidebar: () => void;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const inSettings = pathname.startsWith("/settings");
@@ -90,7 +96,25 @@ export default function TopNav() {
   }, []);
 
   return (
-    <header className="hidden h-16 shrink-0 items-center justify-end gap-2 border-b border-brand/20 bg-surface-wash px-4 sm:px-6 md:flex lg:px-8 dark:border-night-border dark:bg-night-card">
+    <header className="hidden h-16 shrink-0 items-center justify-between gap-2 border-b border-brand/20 bg-surface-wash px-4 sm:px-3 md:flex lg:px-2 dark:border-night-border dark:bg-night-card">
+      {/* Left corner: the sidebar toggle, moved out of the sidebar's own header
+          on 2026-08-17. It reads the collapsed state but does not own it —
+          `AppShell` does, because the thing being resized is this header's
+          sibling. Only rendered at `md+`, same as this whole bar and the desktop
+          sidebar; below that the sidebar is a drawer with its own hamburger. */}
+      <HeaderIcon
+        label={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+        onClick={onToggleSidebar}
+      >
+        <svg className={ICON} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+          {sidebarCollapsed ? (
+            <path strokeLinecap="round" strokeLinejoin="round" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+          ) : (
+            <path strokeLinecap="round" strokeLinejoin="round" d="M11 19l-7-7 7-7M19 19l-7-7 7-7" />
+          )}
+        </svg>
+      </HeaderIcon>
+
       <div className="flex shrink-0 items-center gap-2">
         <HeaderIcon label="Fullscreen" onClick={toggleFullscreen}>
           <svg className={ICON} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>

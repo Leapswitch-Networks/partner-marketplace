@@ -7,6 +7,7 @@ import DataTable, { type Column } from "@/components/common/DataTable";
 import type { RowId } from "@/components/vendor-datatable/types";
 import VendorDataTable from "@/components/common/VendorDataTable";
 import FilterBar, { type FilterDef } from "@/components/common/FilterBar";
+import StatTiles, { type StatTile } from "@/components/common/StatTiles";
 import type { FilterValues, ResourceQuery } from "@/lib/hooks/useResourceQuery";
 
 /**
@@ -41,9 +42,28 @@ export interface ResourceIndexProps<T extends { id: RowId }, F extends FilterVal
   /** Header-right actions — normally the create button, permission-gated. */
   actions?: ReactNode;
 
+  /**
+   * Headline counts, rendered as a `StatTiles` row between the header and the
+   * table. **This is the only place an index page puts stats** — before
+   * 2026-08-17 `InvitationsModule` passed its tiles through `filterExtras`,
+   * which put four numbers inside the filter row and left them competing with
+   * Reset and the column picker for the same line.
+   *
+   * It costs table height, and that is the real trade-off: `DataTable` sizes its
+   * scroll box from `getBoundingClientRect().top`, so the rows re-measure
+   * correctly, but chrome above the table is still rows you cannot see. Pass this
+   * when the numbers answer a question the table cannot; leave it off otherwise.
+   */
+  stats?: StatTile[];
+  /** Renders `stats` as skeletons. Pass the list's own loading flag. */
+  statsLoading?: boolean;
+
   query: ResourceQuery<F>;
   filters: FilterDef<F>[];
-  /** Extra controls in the filter row, before Reset. */
+  /**
+   * Extra controls in the filter row, before Reset. **Controls** — if it does not
+   * take a click, it belongs in `stats` or in the header description.
+   */
   filterExtras?: ReactNode;
 
   columns: Column<T>[];
@@ -108,6 +128,8 @@ export default function ResourceIndex<T extends { id: RowId }, F extends FilterV
   emptyHint,
   rowNoun,
   table = "default",
+  stats,
+  statsLoading,
   children,
 }: ResourceIndexProps<T, F>) {
   const Table = table === "vendor" ? VendorDataTable : DataTable;
@@ -120,6 +142,13 @@ export default function ResourceIndex<T extends { id: RowId }, F extends FilterV
         <CardHeader title={title} description={description} icon={icon} actions={actions} />
 
         <CardContent>
+          {/* Above the toolbar, below the heading — the one place stats go. The
+              margin is on the tiles rather than the table so an index without
+              stats keeps exactly the spacing it had. */}
+          {stats && stats.length > 0 && (
+            <StatTiles items={stats} loading={statsLoading} className="mb-2 shrink-0" />
+          )}
+
           {/*
             The filters go *into* the table's toolbar row rather than above it, so
             they share the line with the column picker. See the note in

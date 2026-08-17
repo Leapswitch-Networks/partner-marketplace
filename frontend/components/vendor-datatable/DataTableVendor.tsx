@@ -32,6 +32,8 @@ import {
     Settings2,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+// PATCHED: ours, not the reference's — the reference has no back-to-top.
+import ScrollToTop from '@/components/common/ScrollToTop';
 import type { DataTableProps, RowId } from './types';
 
 // PATCHED: RowId, not number — see types.ts
@@ -641,6 +643,12 @@ export function DataTable<T extends { id: RowId }>({
                     <PaginationBar />
                 </div>
             )}
+
+            {/* PATCHED: back-to-top, scrolling `tableContainerRef` rather than the
+                window — on an index page the window never scrolls. Mounted here so
+                the vendor table and ours behave the same; `DataTable` mounts the
+                identical component against its own scroll box. */}
+            <ScrollToTop scrollRef={tableContainerRef} />
         </div>
     );
 }

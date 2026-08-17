@@ -3382,10 +3382,10 @@ export interface components {
         CreateInvitationRequest: {
             /**
              * Account Type
-             * @default partner
+             * @default external
              * @enum {string}
              */
-            account_type: "staff" | "partner";
+            account_type: "internal" | "external";
             /**
              * Email
              * Format: email
@@ -3393,6 +3393,8 @@ export interface components {
             email: string;
             /** Note */
             note?: string | null;
+            /** Organisation Id */
+            organisation_id?: string | null;
             /** Role Id */
             role_id?: number | null;
         };
@@ -3471,10 +3473,10 @@ export interface components {
         CreateUserRequest: {
             /**
              * Account Type
-             * @default partner
+             * @default external
              * @enum {string}
              */
-            account_type: "staff" | "partner";
+            account_type: "internal" | "external";
             /** Company Name */
             company_name?: string | null;
             /** Designation */
@@ -3490,6 +3492,8 @@ export interface components {
             first_name: string;
             /** Last Name */
             last_name: string;
+            /** Organisation Id */
+            organisation_id?: string | null;
             /** Password */
             password?: string | null;
             /** Personal Email */
@@ -3723,6 +3727,8 @@ export interface components {
             last_login_at: string | null;
             /** Last Name */
             last_name: string;
+            /** Organisation Id */
+            organisation_id?: string | null;
             /**
              * Password Otp Grace
              * @default false
@@ -5802,7 +5808,7 @@ export interface components {
          * UpdatePartnerTierRequest
          * @description Change what a tier grants. Name and display order are seeded, not edited.
          *
-         *     `name` is deliberately absent: it is the key `core/partner_tiers.py` and
+         *     `name` is deliberately absent: it is the key `domain/partners/tiers.py` and
          *     every future entitlement check reference, and renaming it here would make the
          *     database disagree with the code until the next seed silently renamed it back.
          */
@@ -5881,7 +5887,7 @@ export interface components {
          */
         UpdateUserRequest: {
             /** Account Type */
-            account_type?: ("staff" | "partner") | null;
+            account_type?: ("internal" | "external") | null;
             /** Company Name */
             company_name?: string | null;
             /** Designation */
@@ -5894,6 +5900,8 @@ export interface components {
             first_name?: string | null;
             /** Last Name */
             last_name?: string | null;
+            /** Organisation Id */
+            organisation_id?: string | null;
             /** Password */
             password?: string | null;
             /** Personal Email */
@@ -5968,6 +5976,8 @@ export interface components {
             last_name: string;
             /** Locked Until */
             locked_until: string | null;
+            /** Organisation Id */
+            organisation_id?: string | null;
             /** Personal Email */
             personal_email: string | null;
             /** Personal Mobile Number */
@@ -6043,6 +6053,8 @@ export interface components {
             initials: string;
             /** Last Login At */
             last_login_at: string | null;
+            /** Organisation Id */
+            organisation_id?: string | null;
             /** Roles */
             roles: components["schemas"]["RoleSummary"][];
             /** Status */
@@ -8273,7 +8285,7 @@ export interface operations {
         parameters: {
             query?: {
                 status?: ("pending" | "accepted" | "expired" | "cancelled") | null;
-                account_type?: ("staff" | "partner") | null;
+                account_type?: ("internal" | "external") | null;
                 /** @description Matches email or note */
                 search?: string | null;
                 sort_by?: string;
@@ -10727,6 +10739,7 @@ export interface operations {
                 status?: string | null;
                 account_type?: string | null;
                 role_id?: number | null;
+                organisation_id?: string | null;
                 sort_by?: string;
                 sort_order?: string;
                 page?: number;

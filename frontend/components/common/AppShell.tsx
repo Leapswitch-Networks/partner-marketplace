@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Sidebar, {
   type AdminSection,
@@ -74,6 +74,9 @@ const FULL_HEIGHT_PREFIXES = [
   "/dashboard/health",
   "/dashboard/configuration",
   "/dashboard/recycle-bin",
+  // Partner Directory staff UI (PARTNER_DIRECTORY_PLAN § 15 row 2), 2026-08-13.
+  "/dashboard/partners",
+  "/dashboard/partner-tiers",
   // The other eight ResourceIndex routes, added 2026-08-13. They render the
   // exact same viewport-locked Card as Users, but only the three above were
   // ever listed — so switching from Users to any of these swapped the page
@@ -145,6 +148,18 @@ export default function AppShell({
   const isFullHeight = ownsViewportHeight(pathname);
 
   /**
+   * Sidebar collapse. The state lives here rather than inside `Sidebar` because
+   * the control that flips it now sits in `TopNav` — the two are siblings, so
+   * this is their nearest common owner. `Sidebar` reads it; `TopNav` toggles it.
+   *
+   * Deliberately one toggle, not the old collapse-here / expand-there pair: the
+   * button no longer lives on the thing it resizes, so a control that vanished
+   * on collapse and reappeared somewhere else would be a moving target.
+   */
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const toggleSidebar = useCallback(() => setSidebarCollapsed((c) => !c), []);
+
+  /**
    * Sidebar clicks. Everything routes — there are no URL-less sections left now
    * that the inherited authoring group is deleted.
    */
@@ -161,10 +176,14 @@ export default function AppShell({
 
   return (
     <>
-      <Sidebar activeSection={section} onNavigate={handleNavigate} />
+      <Sidebar
+        activeSection={section}
+        onNavigate={handleNavigate}
+        collapsed={sidebarCollapsed}
+      />
 
       <div className="flex min-w-0 flex-1 flex-col bg-surface-wash dark:bg-night-body">
-        <TopNav />
+        <TopNav sidebarCollapsed={sidebarCollapsed} onToggleSidebar={toggleSidebar} />
 
         {/* Scrolling branch: vertical padding is spelled as separate pt and pb
             on purpose. The old `py-6 pt-20 sm:py-6` relied on cascade order —

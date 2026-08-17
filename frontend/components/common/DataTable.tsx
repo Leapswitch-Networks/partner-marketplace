@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import Badge from "./Badge";
 import ColumnPicker, { useHiddenColumns } from "./ColumnPicker";
+import ScrollToTop from "./ScrollToTop";
 import Select from "./Select";
 
 /**
@@ -426,6 +427,11 @@ export default function DataTable<T>({
       </div>
 
       {pager}
+
+      {/* Scrolls the box above, not the window — see `ScrollToTop`. Mounted here
+          rather than per module so every index page gets it from one place, the
+          same argument `ResourceIndex` itself is built on. */}
+      <ScrollToTop scrollRef={scrollRef} />
     </div>
   );
 }

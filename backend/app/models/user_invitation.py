@@ -11,9 +11,13 @@ InvitationStatusEnum = Enum(
     "pending", "accepted", "expired", "cancelled", name="invitation_status"
 )
 
-#: Mirrors User.account_type so an invitation can onboard staff or a partner.
+#: Mirrors User.account_type so an invitation can onboard either account class.
+#: Renamed from `staff | partner` on 2026-08-17 with `account_type` itself —
+#: migration `c9a71f4e2b60`. The two MUST stay in step: `accept_invitation`
+#: copies one into the other, so a drift here becomes an invalid enum value on
+#: the users table.
 InvitationAccountTypeEnum = Enum(
-    "staff", "partner", name="invitation_account_type"
+    "internal", "external", name="invitation_account_type"
 )
 
 
@@ -43,7 +47,22 @@ class UserInvitation(Base):
         InvitationStatusEnum, nullable=False, default="pending", index=True
     )
     account_type: Mapped[str] = mapped_column(
-        InvitationAccountTypeEnum, nullable=False, default="partner"
+        InvitationAccountTypeEnum, nullable=False, default="external"
+    )
+
+    #: Which organisation the invitee joins. Added 2026-08-17 — until then there
+    #: was **no way at all** to attach a person to an organisation through the
+    #: application, so the org gate in `get_current_user` governed zero users.
+    #: `CORE_EXTRACTION_PLAN.md` phase 2, task 2.6.
+    #:
+    #: SET NULL, matching `users.organisation_id`: deleting an organisation must
+    #: not delete the record that someone was invited into it.
+    organisation_id: Mapped[str | None] = mapped_column(
+        String(36),
+        ForeignKey("partners.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+        comment="Organisation the invitee joins. NULL means an internal account",
     )
 
     role_id: Mapped[int | None] = mapped_column(

@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.permissions import (
     PERMISSION_CATALOG,
     ROLE_DESCRIPTIONS,
@@ -39,7 +40,14 @@ from app.models.user import User
 
 ROOT_EMAIL_ENV = "ROOT_EMAIL"
 ROOT_PASSWORD_ENV = "ROOT_PASSWORD"
-DEFAULT_ROOT_EMAIL = "root@leapswitch.com"
+
+#: Derived from `STAFF_EMAIL_DOMAINS` rather than hardcoded, so a second project
+#: seeds a root account at its OWN domain (`CORE_EXTRACTION_PLAN.md` phase 5).
+#: It used to be the literal `root@leapswitch.com`, which would have created an
+#: account at another company's domain in every installation built on this core
+#: — and the root account is the one nobody notices is wrong until they need it.
+def default_root_email() -> str:
+    return f"root@{settings.primary_domain}"
 
 
 def seed_permissions(db: Session) -> dict[str, Permission]:
@@ -134,7 +142,7 @@ def seed_root_user(db: Session, roles: dict[str, Role]) -> None:
         _report_rootless(db)
         return
 
-    email = os.environ.get(ROOT_EMAIL_ENV, DEFAULT_ROOT_EMAIL).strip().lower()
+    email = os.environ.get(ROOT_EMAIL_ENV, default_root_email()).strip().lower()
     password = os.environ.get(ROOT_PASSWORD_ENV, "").strip()
     generated = False
 
@@ -148,7 +156,7 @@ def seed_root_user(db: Session, roles: dict[str, Role]) -> None:
         password=hash_password(password),
         first_name="Root",
         last_name="User",
-        account_type="staff",
+        account_type="internal",
         auth_provider="password",
         status="ACTIVE",
         email_verified_at=datetime.now(timezone.utc),

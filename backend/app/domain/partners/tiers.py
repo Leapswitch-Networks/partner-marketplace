@@ -1,5 +1,10 @@
 """Partner tier reference data, as a constant the seeder writes from.
 
+Moved from `app/core/partner_tiers.py` on 2026-08-17
+(`CORE_EXTRACTION_PLAN.md` phase 1). It was the last whole file of directory
+domain data sitting in the platform layer — a project with no partner
+directory inherited a tier catalogue it had no table for.
+
 Same pattern as `permissions.py`: the code names tiers, the database mirrors the
 code, and nothing hardcodes a tier string anywhere else. A tier renamed here is
 renamed everywhere on the next seed.

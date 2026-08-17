@@ -14,22 +14,23 @@ ownership afterwards means backfilling it everywhere.
     rather than waiting for their access tokens to expire
   * a partner with users cannot be deleted
 
-## ⚠️ Row scoping is NOT implemented here — PM-5 is still open
+## Row scoping — PM-5, closed 2026-08-17
 
-`list_partners` and `get_partner_for` filter on `actor.partner_id` **by hand**,
-which `MARKETPLACE_DOMAIN_PLAN.md` § Row-Level Scoping rule 1 explicitly tells
-you not to do: *"never write `where(partner_id == ...)` in a service."* The rule
-is right and this code breaks it, because the module it names —
-`app/services/scoping.py` — does not exist yet.
+`list_partners` and `get_partner_for` used to filter on the actor's organisation
+**by hand**, which `MARKETPLACE_DOMAIN_PLAN.md` § Row-Level Scoping rule 1
+explicitly forbids: *"never write `where(organisation_id == ...)` in a
+service."* The rule was right and unenforceable, because the module it named did
+not exist.
 
-It is written this way rather than left unscoped because an unscoped list would
-show every partner to every partner user today. When `scoping.py` lands (phase
-2), **these two call sites are the ones to replace**, and they are marked with
-`# PM-5` so they can be found. Nothing else in this module filters by ownership.
+It does now. This module **registers** its ownership rule with
+`app/services/scoping.py` (see below) and both call sites go through
+`apply_scope` / `assert_can_read`. Nothing here compares an organisation id
+itself any more, and `tests/test_scoping.py` covers every branch the hand-rolled
+version spelled out.
 
-The filter reaches the SQL rather than post-filtering the page, which is the
-half of the rule that matters most: post-filtering corrupts the count and the
-caller is told there are 40 rows and handed 12 (`FASTAPI_STANDARDS.md` § 12).
+The filter still reaches the SQL rather than post-filtering the page, which is
+the half of the rule that matters most: post-filtering corrupts the count and
+the caller is told there are 40 rows and handed 12 (`FASTAPI_STANDARDS.md` § 12).
 """
 
 from __future__ import annotations
@@ -38,19 +39,19 @@ import re
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, and_, func, select
 from sqlalchemy.orm import Session
 
 from app.core.crud import get_or_404
-from app.core.partner_tiers import DEFAULT_PARTNER_TIER
-from app.core.permissions import (
+from app.core.query import ListParams, ListSpec, run_list
+from app.domain.partners.permissions import (
     PARTNER_APPROVE,
     PARTNER_DELETE,
     PARTNER_PUBLISH,
     PARTNER_UPDATE,
     PARTNER_VERIFY,
 )
-from app.core.query import ListParams, ListSpec, run_list
+from app.domain.partners.tiers import DEFAULT_PARTNER_TIER
 from app.models.activity_log import (
     EVENT_STATUS_CHANGED,
     EVENT_UPDATED,
@@ -64,7 +65,7 @@ from app.schemas.partner import (
     UpdatePartnerRequest,
     UpdatePartnerTierRequest,
 )
-from app.services import activity_service, session_service, webhook_service
+from app.services import activity_service, scoping, session_service, webhook_service
 
 _LIST_SPEC = ListSpec(
     sortable={
@@ -87,6 +88,25 @@ _LIST_SPEC = ListSpec(
         Partner.public_email,
     ),
 )
+
+# --- Row scoping (PM-5) ------------------------------------------------------
+#
+# **A partner IS the organisation**, so its own primary key is the owner column.
+# Not a special case: the organisation's row is owned by the organisation.
+#
+# The public predicate requires BOTH `is_listed` and `status == ACTIVE`, matching
+# `Partner.publicly_visible`. Either alone publishes the wrong rows — `is_listed`
+# on a SUSPENDED organisation leaves a row claiming to be published that is not,
+# and ACTIVE alone would publish every partner the moment it was activated.
+#
+# Registered here rather than in `scoping.py` so the core module names no domain
+# model; `tests/test_core_extraction.py` enforces that.
+scoping.register_scope(
+    Partner,
+    owner_column=Partner.id,
+    public_predicate=and_(Partner.is_listed.is_(True), Partner.status == "ACTIVE"),
+)
+
 
 #: Statuses a partner may move to from each current status. PENDING is reachable
 #: only as a starting state — reverting an activated organisation to "not yet
@@ -136,7 +156,7 @@ def can_edit(actor: User, partner: Partner) -> bool:
 
 def can_delete(actor: User, partner: Partner) -> bool:
     # A partner user can never delete their own organisation, whatever they hold.
-    if actor.partner_id == partner.id:
+    if actor.organisation_id == partner.id:
         return False
     return actor.has_permission(PARTNER_DELETE)
 
@@ -144,13 +164,13 @@ def can_delete(actor: User, partner: Partner) -> bool:
 def can_change_status(actor: User, partner: Partner) -> bool:
     # Changing your own organisation's status is self-approval, and the ACTIVE
     # case would let a partner lift their own suspension.
-    if actor.partner_id == partner.id:
+    if actor.organisation_id == partner.id:
         return False
     return actor.has_permission(PARTNER_APPROVE)
 
 
 def can_verify(actor: User, partner: Partner) -> bool:
-    if actor.partner_id == partner.id:
+    if actor.organisation_id == partner.id:
         return False
     return actor.has_permission(PARTNER_VERIFY)
 
@@ -178,9 +198,9 @@ def _user_counts(db: Session, partner_ids: list[str]) -> dict[str, int]:
     if not partner_ids:
         return {}
     rows = db.execute(
-        select(User.partner_id, func.count(User.id))
-        .where(User.partner_id.in_(partner_ids))
-        .group_by(User.partner_id)
+        select(User.organisation_id, func.count(User.id))
+        .where(User.organisation_id.in_(partner_ids))
+        .group_by(User.organisation_id)
     ).all()
     return {partner_id: count for partner_id, count in rows}
 
@@ -194,9 +214,10 @@ def get_partner_for(db: Session, partner_id: str, actor: User) -> Partner:
     """
     partner = get_or_404(db, Partner, partner_id, label="Partner")
 
-    # PM-5: replace with `scoping.assert_can_read(partner, actor)`.
-    if not actor.has_admin_access and actor.partner_id != partner.id:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "Partner not found")
+    # PM-5 closed 2026-08-17: one rule, in `scoping.py`, instead of a hand-rolled
+    # comparison here. It raises 404 rather than 403 for the same reason the old
+    # code did — a 403 confirms the row exists.
+    scoping.assert_can_read(partner, Partner, actor)
 
     counts = _user_counts(db, [partner.id])
     return decorate(partner, actor, user_count=counts.get(partner.id, 0))
@@ -219,17 +240,11 @@ def list_partners(
     """Paginated partners, scoped to what the actor may see."""
     stmt: Select = select(Partner)
 
-    # PM-5: replace with `scoping.apply_scope(stmt, Partner, actor)`. A partner
-    # user sees exactly their own organisation and nothing else.
-    if not actor.has_admin_access:
-        if actor.partner_id is None:
-            # Staff without admin access have no organisation of their own, so
-            # scoping them to `partner_id` would return everything. Return
-            # nothing instead: this is the conservative branch, and it is the
-            # same choice `list_users` makes for the same reason.
-            stmt = stmt.where(Partner.id.is_(None))
-        else:
-            stmt = stmt.where(Partner.id == actor.partner_id)
+    # PM-5 closed 2026-08-17. Every branch this used to spell out by hand — admin
+    # sees all, a member sees their own organisation, an internal account without
+    # admin access sees NOTHING rather than everything — now lives in one place
+    # and is covered by `tests/test_scoping.py`.
+    stmt = scoping.apply_scope(stmt, Partner, actor)
 
     if status_filter:
         stmt = stmt.where(Partner.status == status_filter)
@@ -406,7 +421,7 @@ def change_status(
     revoked = 0
     if data.status == "SUSPENDED":
         member_ids = list(
-            db.scalars(select(User.id).where(User.partner_id == partner.id))
+            db.scalars(select(User.id).where(User.organisation_id == partner.id))
         )
         for member_id in member_ids:
             revoked += session_service.revoke_all(
@@ -534,7 +549,7 @@ def delete_partner(db: Session, partner_id: str, actor: User) -> None:
 
     Refuses while any user still belongs to it. The FK is `ON DELETE SET NULL`,
     so the database would happily orphan them into looking like Leapswitch staff
-    — `partner_id IS NULL` is exactly what "staff" means — which is a privilege
+    — `organisation_id IS NULL` is exactly what an internal account is — a privilege
     change disguised as a cleanup.
     """
     partner = get_or_404(db, Partner, partner_id, label="Partner")
@@ -546,7 +561,7 @@ def delete_partner(db: Session, partner_id: str, actor: User) -> None:
 
     member_count = (
         db.scalar(
-            select(func.count(User.id)).where(User.partner_id == partner.id)
+            select(func.count(User.id)).where(User.organisation_id == partner.id)
         )
         or 0
     )

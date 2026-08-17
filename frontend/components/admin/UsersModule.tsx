@@ -27,7 +27,13 @@ import usePermissions from "@/lib/hooks/usePermissions";
 import useResourceList from "@/lib/hooks/useResourceList";
 import useResourceQuery from "@/lib/hooks/useResourceQuery";
 import useRowAction, { useBulkAction } from "@/lib/hooks/useRowAction";
-import type { ManagedUser, Role, UserStatus } from "@/types";
+import {
+  ACCOUNT_TYPE_LABELS,
+  type AccountType,
+  type ManagedUser,
+  type Role,
+  type UserStatus,
+} from "@/types";
 
 /**
  * The Status column holds two values and no others — owner's call, 2026-08-11.
@@ -49,8 +55,8 @@ const STATUS_OPTIONS = [
 ];
 
 const ACCOUNT_TYPE_OPTIONS = [
-  { value: "staff", label: "Staff" },
-  { value: "partner", label: "Partner" },
+  { value: "internal", label: "Staff" },
+  { value: "external", label: "Partner" },
 ];
 
 /** Create, edit and view are modals again — owner's call, 2026-08-10. */
@@ -119,7 +125,7 @@ export default function UsersModule({ initialModal }: { initialModal?: ModalMode
         .listUsers({
           search: q.applied.search || undefined,
           status: (q.applied.status as UserStatus) || undefined,
-          account_type: (q.applied.account_type as "staff" | "partner") || undefined,
+          account_type: (q.applied.account_type as AccountType) || undefined,
           role_id: q.applied.role_id ? Number(q.applied.role_id) : undefined,
           sort_by: q.sortBy,
           sort_order: q.sortOrder,
@@ -304,8 +310,8 @@ export default function UsersModule({ initialModal }: { initialModal?: ModalMode
         id: "account_type",
         header: "Type",
         sortKey: "account_type",
-        tone: (row) => (row.account_type === "staff" ? "info" : "neutral"),
-        label: (row) => (row.account_type === "staff" ? "Staff" : "Partner"),
+        tone: (row) => (row.account_type === "internal" ? "info" : "neutral"),
+        label: (row) => ACCOUNT_TYPE_LABELS[row.account_type],
         width: "w-[90px]",
       }),
       badgeColumn<ManagedUser>({

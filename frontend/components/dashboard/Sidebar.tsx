@@ -54,6 +54,12 @@ export function urlForSection(section: AdminSection): string | null {
 interface SidebarProps {
   activeSection: AdminSection;
   onNavigate: (section: AdminSection) => void;
+  /**
+   * Owned by `AppShell`, not by this component. The toggle that flips it lives in
+   * `TopNav`, which is a sibling — so the state had to move up to the parent both
+   * of them share. The sidebar is now a pure reader of its own width.
+   */
+  collapsed: boolean;
 }
 
 
@@ -351,14 +357,13 @@ const BottomExpanded = memo(function BottomExpanded({
 
 
 //Sidebar
-export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
+export default function Sidebar({ activeSection, onNavigate, collapsed }: SidebarProps) {
   const router = useRouter();
   const dispatch = useAppDispatch();
   // The three `branding.app_name` call sites below had the import but no hook
   // call, which failed the type check. Runtime branding, so the sidebar name
   // follows `/api/settings/branding` rather than a build-time constant.
   const branding = useBranding();
-  const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [mobileVisible, setMobileVisible] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
@@ -460,7 +465,6 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
     activeSection,
     onNavigate,
     collapsed,
-    setCollapsed,
     navIcons,
     sections,
     query: navQuery,
@@ -559,13 +563,15 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
         className={`hidden md:flex flex-col shrink-0 bg-surface-wash border-r border-brand/20 h-dvh transition-[width] duration-300 ease-in-out 2xl:transition-none dark:bg-night-card dark:border-night-border animate-slide-in-left ${
           collapsed
             ? "w-[68px]"
-            : "w-64 2xl:w-72"
+            : "w-60"
         }`}
       >
         {/* No bottom border — owner's call, 2026-08-13: the nav's search box
             sits right under this block, and the rule between them read as
-            clutter. The collapsed rail keeps its divider (below), where the
-            expand button needs the separation. */}
+            clutter. This used to add "the collapsed rail keeps its divider
+            (below), where the expand button needs the separation" — that strip
+            went with the expand button on 2026-08-17, so both states are now
+            borderless here and there is nothing left to separate. */}
         <div className="flex h-14 items-center px-3 flex-shrink-0">
           <button
             type="button"
@@ -584,34 +590,14 @@ export default function Sidebar({ activeSection, onNavigate }: SidebarProps) {
             <p className="truncate text-sm font-bold text-gray-900 2xl:text-base dark:text-white">{branding.app_name}</p>
           </div>
 
-          {!collapsed && (
-            <button
-              type="button"
-              onClick={() => setCollapsed(true)}
-              title="Collapse sidebar"
-              className="ml-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-ink-muted transition-all duration-200 hover:bg-brand/10 hover:text-brand dark:text-gray-500 dark:hover:bg-brand/20 dark:hover:text-brand-on-dark"
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M11 19l-7-7 7-7M19 19l-7-7 7-7" />
-              </svg>
-            </button>
-          )}
+          {/* The collapse/expand control used to live here — `«` in this header
+              when expanded, `»` in a bordered strip below it when collapsed.
+              Moved to `TopNav`'s left corner on 2026-08-17: two buttons in two
+              places for one boolean, and neither of them where the eye goes
+              first. One toggle now, and this header is back to brand mark plus
+              app name. */}
         </div>
 
-        {collapsed && (
-          <div className="flex justify-center py-2 border-b border-brand/20 transition-colors duration-200 flex-shrink-0 dark:border-night-border">
-            <button
-              type="button"
-              onClick={() => setCollapsed(false)}
-              title="Expand sidebar"
-              className="flex h-7 w-7 items-center justify-center rounded-md text-ink-muted transition-all duration-200 hover:bg-brand/10 hover:text-brand dark:text-gray-500 dark:hover:bg-brand/20 dark:hover:text-brand-on-dark"
-            >
-              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
-              </svg>
-            </button>
-          </div>
-        )}
         {/* No filter box in the icon-only rail — there is no room for an input,
             and the tooltips already name every icon. */}
         {!collapsed && <NavFilter value={navQuery} onChange={setNavQuery} />}

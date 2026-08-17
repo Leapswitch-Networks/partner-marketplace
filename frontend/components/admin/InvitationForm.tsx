@@ -9,7 +9,7 @@ import Input from "@/components/common/Input";
 import Select from "@/components/common/Select";
 import { navIcon } from "@/components/dashboard/navIcons";
 import { invitationApi, roleApi } from "@/lib/api/rbacApi";
-import type { AccountType, Role } from "@/types";
+import { ACCOUNT_TYPE_LABELS, type AccountType, type Role } from "@/types";
 import { extractApiError } from "@/lib/utils/apiError";
 
 /**
@@ -41,7 +41,7 @@ interface Row {
 }
 
 let nextUid = 1;
-const blankRow = (): Row => ({ uid: nextUid++, email: "", role_id: "", account_type: "partner" });
+const blankRow = (): Row => ({ uid: nextUid++, email: "", role_id: "", account_type: "external" });
 
 /** Links the modal footer's submit button to the form it sits outside of. */
 const FORM_ID = "invitation-form";
@@ -226,8 +226,8 @@ export default function InvitationForm({
                     <Select
                       label="Type"
                       options={[
-                        { value: "partner", label: "Partner" },
-                        { value: "staff", label: "Staff" },
+                        { value: "external", label: ACCOUNT_TYPE_LABELS.external },
+                        { value: "internal", label: ACCOUNT_TYPE_LABELS.internal },
                       ]}
                       value={row.account_type}
                       onChange={(e) =>

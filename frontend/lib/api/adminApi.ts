@@ -20,6 +20,8 @@ export interface ListUsersParams {
   status?: UserStatus;
   account_type?: AccountType;
   role_id?: number;
+  /** Narrow the list to one organisation's members. */
+  organisation_id?: string;
   sort_by?: string;
   sort_order?: "asc" | "desc";
   page?: number;
@@ -34,6 +36,11 @@ export interface CreateUserPayload {
   password?: string;
   account_type?: AccountType;
   status?: UserStatus;
+  /**
+   * Which organisation the account belongs to; null/omitted means internal.
+   * Privileged — the API requires admin access to set or change it.
+   */
+  organisation_id?: string | null;
   role_ids?: number[];
   designation?: string | null;
   employee_id?: string | null;

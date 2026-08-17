@@ -157,6 +157,14 @@ def test_proxy_and_hsts_warn_but_do_not_refuse():
     settings = production_settings(HSTS_ENABLED=False, TRUST_PROXY_HEADERS=False)
     problems, warnings = settings.audit_environment()
     assert problems == []
-    assert len(warnings) == 2
+    # Three, not two, since 2026-08-17: `STAFF_EMAIL_DOMAINS` now warns when it
+    # is still the value this project ships (CORE_EXTRACTION_PLAN.md phase 5).
+    # `VALID_PRODUCTION` does not set it, so a production config that never
+    # changed the domain reports it — which is the whole point of the rule.
+    #
+    # The count is pinned deliberately rather than loosened to `>= 2`: a warning
+    # nobody meant to add is exactly as much of a drift as one that went missing.
+    assert len(warnings) == 3
     assert any("HSTS" in w for w in warnings)
     assert any("TRUST_PROXY_HEADERS" in w for w in warnings)
+    assert any("STAFF_EMAIL_DOMAINS" in w for w in warnings)

@@ -110,15 +110,19 @@ class TestOneFailingJobDoesNotStopTheRest:
 
 class TestTheSchedule:
     def test_the_registered_jobs_are_the_expected_set(self):
-        """Pinned by name rather than by count. `worker-runs` was added with the
-        monitor in Module 16 — the worker's own run history is a table that only
-        grows, so it needs the same answer every other one got."""
+        """Pinned by name rather than by count.
+
+        **Three jobs, not five, since 2026-08-17.** `api-request-logs`,
+        `worker-runs` and `activity-log` were three near-identical per-table
+        purges, and three more tables (`webhook_deliveries`, `error_occurrences`,
+        `search_logs`) had no job at all. They are now one `retention` job over a
+        policy registry, so adding a log table means adding a policy rather than
+        a fourth near-copy of the same job — see `core/retention.py`.
+        """
         assert {job.name for job in build_jobs()} == {
             "webhook-retries",
             "expired-sessions",
-            "api-request-logs",
-            "worker-runs",
-            "activity-log",
+            "retention",
         }
 
     def test_every_job_records_what_it_did(self):
@@ -142,24 +146,44 @@ class TestTheSchedule:
                 assert job.interval_seconds == DAY
 
     def test_activity_log_purge_is_off_by_default(self):
-        """**The one decision in this file.**
+        """**The one decision in this file, and it survived the consolidation.**
 
         `activity_service.purge_older_than` states that how long who-did-what is
         kept is a policy question — legal, contractual, or simply how far back
         you want to be able to answer questions — and that picking a number is
         not the function's place. Starting a worker must not quietly begin
         deleting an audit trail on a default nobody chose.
-        """
-        activity = next(j for j in build_jobs() if j.name == "activity-log")
-        assert activity.enabled is False
-        assert "DISABLED" in activity.description
 
-    def test_the_other_three_are_safe_to_run_unattended(self):
+        It used to be expressed as a job with `enabled=False`. Folding the purges
+        into one `retention` job could easily have dropped that — a sweep over
+        "every registered policy" would have overruled it silently. The flag
+        moved onto the policy instead (`requires_opt_in`), so it travels with the
+        table rather than living in whichever caller remembers it.
+        """
+        import importlib
+
+        from app.core import retention
+
+        saved = retention.policies()
+        retention.reset_for_tests()
+        try:
+            importlib.reload(importlib.import_module("app.services.retention_policies"))
+            activity = retention.policies()["activity-log"]
+            assert activity.requires_opt_in is True
+            # And the cap is off too: a row cap deletes the OLDEST evidence
+            # first, which is the half an investigation needs.
+            assert activity.max_rows == 0
+        finally:
+            retention.reset_for_tests()
+            for policy in saved.values():
+                retention.register_policy(policy)
+
+    def test_the_others_are_safe_to_run_unattended(self):
         """A retry sends something that was already meant to be sent; the two
         purges delete rows that are already useless. None of them destroys
         anything a person would miss."""
         for job in build_jobs():
-            if job.name != "activity-log":
+            if job.name != "activity-log":  # no longer a job; kept as a no-op guard
                 assert job.enabled is True
 
     def test_every_job_explains_itself(self):

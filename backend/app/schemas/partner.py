@@ -64,7 +64,7 @@ class PartnerTierResponse(BaseModel):
 class UpdatePartnerTierRequest(BaseModel):
     """Change what a tier grants. Name and display order are seeded, not edited.
 
-    `name` is deliberately absent: it is the key `core/partner_tiers.py` and
+    `name` is deliberately absent: it is the key `domain/partners/tiers.py` and
     every future entitlement check reference, and renaming it here would make the
     database disagree with the code until the next seed silently renamed it back.
     """

@@ -34,7 +34,7 @@ class Partner(Base):
     expensive decision in `MARKETPLACE_DOMAIN_PLAN.md`, it survived the switch to
     the directory product on 2026-08-10, and `PARTNER_DIRECTORY_PLAN.md` § 0 says
     explicitly that it should not be revisited: a listing belongs to a company,
-    not to whoever happened to sign up. `users.partner_id` is the link, and it is
+    not to whoever happened to sign up. `users.organisation_id` is the link, and it is
     the single column every scoping rule reads.
 
     ## Two independent gates, deliberately not one column
@@ -179,11 +179,11 @@ class Partner(Base):
         back_populates="partners", lazy="joined"
     )
     # Explicit foreign_keys because `users` reaches this table twice — once as
-    # the membership link (users.partner_id) and three times as audit columns
+    # the membership link (users.organisation_id) and three times as audit columns
     # pointing the other way. Without it SQLAlchemy cannot choose a join.
     users: Mapped[list["User"]] = relationship(  # noqa: F821
-        back_populates="partner",
-        foreign_keys="User.partner_id",
+        back_populates="organisation",
+        foreign_keys="User.organisation_id",
     )
 
     # --- Derived values -----------------------------------------------------

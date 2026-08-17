@@ -71,7 +71,7 @@ def plain_user():
         password=hash_password(PASSWORD),
         first_name="Zed",
         last_name="Tester",
-        account_type="staff",
+        account_type="internal",
         status="ACTIVE",
         auth_provider="password",
     )
@@ -256,7 +256,7 @@ class TestAnInvitationCannotOutrankItsSender:
             password=hash_password(PASSWORD),
             first_name="Ceil",
             last_name="Tester",
-            account_type="staff",
+            account_type="internal",
             status="ACTIVE",
             auth_provider="password",
         )

@@ -32,8 +32,6 @@ from app.models.associations import role_permissions, user_roles
 from app.models.data_access_grant import DataAccessGrant
 from app.models.error_group import ErrorGroup, ErrorOccurrence
 from app.models.feature_flag import FeatureFlag
-from app.models.partner import Partner
-from app.models.partner_tier import PartnerTier
 from app.models.permission import Permission
 from app.models.permission_group import PermissionGroup
 from app.models.role import Role
@@ -43,6 +41,21 @@ from app.models.user import User
 from app.models.user_invitation import UserInvitation
 from app.models.user_session import UserSession
 from app.models.webhook import WebhookDelivery, WebhookEndpoint
+
+# isort: split
+# --- Domain models ---------------------------------------------------------
+#
+# Everything above is platform. Everything below belongs to the partner
+# directory and is what a second project built on this core DELETES — see
+# `CORE_EXTRACTION_PLAN.md` § 1 and `app/domain/`.
+#
+# They stay in `app/models/` rather than moving under `app/domain/`: Alembic's
+# `env.py` imports this module to discover metadata, and it is a PROTECTED file
+# whose comment warns that a model missing from the import graph can produce a
+# migration that DROPS ITS TABLE. One labelled block here is safer than a second
+# discovery path.
+from app.models.partner import Partner
+from app.models.partner_tier import PartnerTier
 from app.models.worker_run import WorkerJobRun
 
 __all__ = [

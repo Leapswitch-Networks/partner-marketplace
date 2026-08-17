@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, Field, field_validator
 
-from app.services.navigation_service import COLLAPSIBLE_SECTION_CATALOG
+from app.services.navigation_service import collapsible_section_catalog
 
 
 class NavigationItem(BaseModel):
@@ -59,11 +59,12 @@ class UpdateNavPreferencesRequest(BaseModel):
     def _known_sections_only(
         cls, value: dict[str, dict[str, bool]]
     ) -> dict[str, dict[str, bool]]:
-        unknown = sorted(set(value) - set(COLLAPSIBLE_SECTION_CATALOG))
+        catalog = collapsible_section_catalog()
+        unknown = sorted(set(value) - set(catalog))
         if unknown:
             raise ValueError(
                 f"Unknown navigation section(s): {', '.join(unknown)}. "
-                f"Known sections: {', '.join(sorted(COLLAPSIBLE_SECTION_CATALOG))}"
+                f"Known sections: {', '.join(sorted(catalog))}"
             )
         for key, flags in value.items():
             if "collapsible" not in flags:

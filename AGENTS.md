@@ -60,8 +60,15 @@ identity, not this project's.
 Before any push: `git status`, then
 `git diff --cached | grep -iE "secret|password|token|api[_-]?key"`.
 
-The plaintext-password design is **known, accepted debt**. Don't re-raise it as a discovery; do fix
-it if asked; it is a hard blocker before any partner-facing launch.
+~~The plaintext-password design is **known, accepted debt**.~~ **Corrected 2026-08-17 — this was
+stale.** Passwords have been bcrypt-hashed since 2026-07-31 (TECH_DEBT PM-1, closed);
+`core/security.py` hashes with a configurable cost and its docstring forbids reintroducing a
+comparison anywhere else. `verify_password` is the only place a supplied password meets a stored
+one. Don't re-raise plaintext storage as a discovery **and don't repeat this line as current
+state** — it described the pre-rebuild code and outlived it by two and a half weeks.
+
+The one thing that *is* still outstanding from PM-1: credentials that existed before the rebuild
+were readable at the time, so those passwords should be rotated.
 
 ## 2. Model tiering — the default execution mode
 

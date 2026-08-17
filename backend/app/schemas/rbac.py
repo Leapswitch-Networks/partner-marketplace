@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 from app.schemas.auth import RoleSummary, validate_password_strength
 from app.schemas.common import Page
 
-AccountType = Literal["staff", "partner"]
+AccountType = Literal["internal", "external"]
 #: Must stay identical to `app.schemas.auth.UserStatus` — see the note there.
 UserStatus = Literal["INACTIVE", "ACTIVE"]
 
@@ -109,6 +109,10 @@ class UserListItem(BaseModel):
     designation: str | None
     company_name: str | None
     account_type: str
+    #: Organisation membership. NULL means an internal, first-party account.
+    #: Added 2026-08-17 with the write path (CORE_EXTRACTION_PLAN.md phase 2) —
+    #: a column the UI cannot read is a column an admin cannot verify they set.
+    organisation_id: str | None = None
     status: str
     auth_provider: str
     last_login_at: datetime | None
@@ -156,8 +160,16 @@ class CreateUserRequest(BaseModel):
     last_name: str = Field(min_length=1, max_length=100)
     email: EmailStr
     password: str | None = Field(default=None, max_length=128)
-    account_type: AccountType = "partner"
+    account_type: AccountType = "external"
     status: UserStatus = "INACTIVE"
+    #: Which organisation this account belongs to. NULL means an internal,
+    #: first-party account.
+    #:
+    #: **Added 2026-08-17 — until then nothing in the application could write
+    #: this at all** (`CORE_EXTRACTION_PLAN.md` phase 2, task 2.6). The column
+    #: and the org gate that reads it on every request both existed; the write
+    #: path did not, so the gate governed zero users.
+    organisation_id: str | None = Field(default=None, max_length=36)
     role_ids: list[int] = Field(default_factory=list)
     designation: str | None = Field(default=None, max_length=150)
     employee_id: str | None = Field(default=None, max_length=50)
@@ -187,6 +199,11 @@ class UpdateUserRequest(BaseModel):
     password: str | None = Field(default=None, max_length=128)
     account_type: AccountType | None = None
     status: UserStatus | None = None
+    #: Moving an account between organisations, or detaching it (explicit null).
+    #: Privileged — the service requires admin access, for the same reason
+    #: `status` and `role_ids` do: organisation membership decides what rows the
+    #: account can see once scoping is applied.
+    organisation_id: str | None = Field(default=None, max_length=36)
     role_ids: list[int] | None = None
     designation: str | None = Field(default=None, max_length=150)
     employee_id: str | None = Field(default=None, max_length=50)
@@ -344,7 +361,15 @@ class InvitationStats(BaseModel):
 class CreateInvitationRequest(BaseModel):
     email: EmailStr
     role_id: int | None = None
-    account_type: AccountType = "partner"
+    account_type: AccountType = "external"
+    #: Which organisation the invitee joins on acceptance. NULL means an
+    #: internal, first-party account.
+    #:
+    #: **Added 2026-08-17** with `users.organisation_id`'s write path
+    #: (`CORE_EXTRACTION_PLAN.md` phase 2, task 2.6). Inviting somebody INTO an
+    #: organisation is the normal way a tenant gets its second user, and until
+    #: this existed there was no way to do it at all.
+    organisation_id: str | None = Field(default=None, max_length=36)
     note: str | None = Field(default=None, max_length=1000)
 
 

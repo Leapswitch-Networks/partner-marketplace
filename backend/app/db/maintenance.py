@@ -17,6 +17,21 @@ meant for a cron line or a platform's scheduled-task hook:
     # show what would be deleted, delete nothing
     python -m app.db.maintenance --dry-run
 
+**Since 2026-08-17 this is the manual half of a job the worker also runs.** The
+size limits live in `core/retention.py`, and the important addition is that
+tables are now capped by **row count** as well as by age — age alone never
+bounded the database, because a 90-day window says nothing about how many rows
+arrive in 90 days:
+
+    # how big is everything, against its limits?
+    python -m app.db.maintenance --status
+
+    # enforce every non-opt-in policy now (age AND cap)
+    python -m app.db.maintenance --retention-all
+
+    # trim the audit trail — naming it IS the instruction it requires
+    python -m app.db.maintenance --retention activity-log
+
 **Sessions and the audit trail are treated differently, deliberately.**
 
 Expired sessions are *expired* — deleting them after a grace period is housekeeping,
@@ -34,9 +49,10 @@ from __future__ import annotations
 import argparse
 import sys
 
+from app.core import retention
 from app.core.config import settings
 from app.db.session import SessionLocal
-from app.services import activity_service, session_service
+from app.services import activity_service, retention_policies, session_service  # noqa: F401
 
 #: Expired sessions kept this long before deletion. Not configurable, because it is
 #: not a policy question: the session is already unusable and the only reason to keep
@@ -82,7 +98,45 @@ def _parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="Report what would be deleted and delete nothing.",
     )
+    parser.add_argument(
+        "--status",
+        action="store_true",
+        help="Show every table's current size against its limits, then exit.",
+    )
+    parser.add_argument(
+        "--retention",
+        metavar="POLICY",
+        help=(
+            "Run one retention policy by name and exit — including an opt-in one "
+            "like `activity-log`, because naming it IS the instruction."
+        ),
+    )
+    parser.add_argument(
+        "--retention-all",
+        action="store_true",
+        help="Run every non-opt-in retention policy (age limits AND row caps).",
+    )
     return parser.parse_args(argv)
+
+
+def _print_status(db) -> None:
+    """Current size against the two limits, per table.
+
+    The column that matters is the last one. Age tells you how far back the
+    table reaches; only `cap` says whether it can still grow, and `over` is the
+    number of rows the next sweep will remove.
+    """
+    counts = retention.row_counts(db)
+    print(f"{'policy':<22}{'rows':>12}{'cap':>12}{'over':>10}  age limit")
+    for name, policy in retention.policies().items():
+        rows = counts.get(name, 0)
+        cap = policy.max_rows
+        over = max(0, rows - cap) if cap else 0
+        flag = "  (opt-in)" if policy.requires_opt_in else ""
+        print(
+            f"{name:<22}{rows:>12,}{(cap and f'{cap:,}') or '-':>12}"
+            f"{(over or '-'):>10}  {policy.max_age_days or '-'}d{flag}"
+        )
 
 
 def run(argv: list[str] | None = None) -> int:
@@ -91,6 +145,28 @@ def run(argv: list[str] | None = None) -> int:
 
     db = SessionLocal()
     try:
+        if args.status:
+            _print_status(db)
+            return 0
+
+        if args.retention or args.retention_all:
+            results = retention.enforce_all(
+                db,
+                batch_size=settings.RETENTION_BATCH_SIZE,
+                max_batches=settings.RETENTION_MAX_BATCHES,
+                only=args.retention,
+            )
+            if not results:
+                print(f"[maintenance] no such retention policy: {args.retention!r}", file=sys.stderr)
+                return 2
+            for result in results:
+                tail = " (still over target — run again)" if result.truncated else ""
+                print(
+                    f"[maintenance] {result.policy}: removed {result.total} row(s) "
+                    f"— {result.by_age} by age, {result.by_cap} by cap{tail}"
+                )
+            return 0
+
         if args.dry_run:
             # Counted rather than deleted. Worth having: the first run of a delete
             # against a production table should be something you can read first.

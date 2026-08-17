@@ -19,7 +19,8 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db, require_permission
-from app.core.permissions import (
+from app.core.query import page_meta
+from app.domain.partners.permissions import (
     PARTNER_APPROVE,
     PARTNER_CREATE,
     PARTNER_DELETE,
@@ -30,7 +31,6 @@ from app.core.permissions import (
     PARTNER_VERIFY,
     PARTNER_VIEW,
 )
-from app.core.query import page_meta
 from app.models.user import User
 from app.schemas.common import Page
 from app.schemas.partner import (

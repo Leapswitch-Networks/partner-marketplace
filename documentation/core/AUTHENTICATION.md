@@ -43,7 +43,7 @@ add a role.
 
 ## Signup Policy
 
-Configured, not hardcoded — `STAFF_EMAIL_DOMAINS`, `ALLOW_PARTNER_SELF_REGISTRATION`,
+Configured, not hardcoded — `STAFF_EMAIL_DOMAINS`, `ALLOW_EXTERNAL_SELF_REGISTRATION`,
 `NEW_USER_DEFAULT_STATUS`.
 
 | Who | Route in | Lands as | Approval needed? |

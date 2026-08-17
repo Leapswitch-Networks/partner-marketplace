@@ -16,7 +16,7 @@ import Skeleton from "@/components/common/Skeleton";
 import { adminApi, type CreateUserPayload, type UpdateUserPayload } from "@/lib/api/adminApi";
 import { roleApi } from "@/lib/api/rbacApi";
 import useAppSelector from "@/lib/hooks/useAppSelector";
-import type { ManagedUserDetail, Role } from "@/types";
+import { ACCOUNT_TYPE_LABELS, type ManagedUserDetail, type Role } from "@/types";
 import { extractApiError } from "@/lib/utils/apiError";
 
 /**
@@ -49,7 +49,7 @@ const schema = z.object({
   // Optional in both modes, for different reasons: on create, blank means a
   // Google-only staff account with no password; on edit, blank means unchanged.
   password: z.string().max(128),
-  account_type: z.enum(["staff", "partner"]),
+  account_type: z.enum(["internal", "external"]),
   // Two values only — the `user_status` column holds no others (migration
   // `b3d7e02f4c19`). Sending a third would be rejected by the API's own
   // `Literal`, so keeping one here would only move the failure later.
@@ -65,8 +65,8 @@ type FormValues = z.infer<typeof schema>;
 const FORM_ID = "user-form";
 
 const ACCOUNT_TYPE_OPTIONS = [
-  { value: "partner", label: "Partner" },
-  { value: "staff", label: "Staff" },
+  { value: "external", label: ACCOUNT_TYPE_LABELS.external },
+  { value: "internal", label: ACCOUNT_TYPE_LABELS.internal },
 ];
 
 const STATUS_OPTIONS = [
@@ -105,7 +105,7 @@ export default function UserForm({
       last_name: "",
       email: "",
       password: "",
-      account_type: "partner",
+      account_type: "external",
       status: "INACTIVE",
       designation: "",
       company_name: "",

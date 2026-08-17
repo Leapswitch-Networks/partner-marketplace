@@ -1,80 +1,75 @@
-"""The RBAC vocabulary: system roles, permission groups, and permission names.
+"""The RBAC vocabulary: **the core's permissions, plus whatever a domain registers.**
 
-This module is the single source of truth. The seeder writes the database from
-it, the guards read role names from it, and nothing else should hardcode a role
-or permission string.
+This module is still the single source of truth that the seeder writes the
+database from, the guards read role names from, and the roles UI renders. What
+changed on 2026-08-17 (`CORE_EXTRACTION_PLAN.md` phase 1) is that it is now an
+*assembly point* rather than one big literal:
+
+* **Role names** live in `core/roles.py` and are re-exported here, so the
+  forty-odd `from app.core.permissions import ROLE_ADMIN` call sites are
+  unaffected.
+* **Core permissions** are declared and registered below, exactly as before.
+* **Domain permissions** — the nine `PARTNER_*`, the `Partner` role, its grant to
+  `Staff` — now live in `app/domain/partners/permissions.py` and arrive through
+  `core/registry.py`.
+
+`PERMISSION_CATALOG`, `ROLE_PERMISSION_MATRIX` and `ROLE_DESCRIPTIONS` are still
+plain module-level dicts with the same shapes. They are materialised at the
+bottom of this file, after the domain import has run.
+
+**Deleting `app/domain/` leaves a working platform** with no partner vocabulary
+in it. That is the property `tests/test_core_extraction.py` asserts, and it is
+the whole reason for the indirection.
 
 Naming convention (inherited from LeapDesk):
     permissions   {resource}-{action}, resource SINGULAR, kebab-case
                   e.g. user-view, role-create, api-credential-update
     actions       view | create | update | delete  (+ domain verbs like approve)
+
+⚠️ **Do not import this module from anything under `app/domain/`.** The import
+below is what makes registration happen, so a domain importing back would be a
+cycle. Domain modules import `app.core.roles` and `app.core.registry` instead.
 """
 
-# --- System roles -----------------------------------------------------------
+from __future__ import annotations
 
-ROLE_ROOT = "RootUser"
-ROLE_SUPER_ADMIN = "SuperAdmin"
-#: Added 2026-08-12 for parity. The reference's engineering role, and it is
-#: **privileged, not descriptive**: it sits in the same bypass list as RootUser,
-#: so it is a second key to the building rather than a job title. Named after the
-#: reference's rather than invented, because an operator who knows one system's
-#: role names should not have to learn a second set.
-ROLE_BACKEND_DEVELOPER = "BackendDeveloper"
-ROLE_ADMIN = "Admin"
-#: The reference's commercial role, added 2026-08-12 alongside BackendDeveloper
-#: so the role vocabulary matches. **It is not a synonym for `Staff`**: Staff is
-#: ours and holds read access across the admin modules; Sales is the reference's
-#: and holds four permissions, none of which read another person's records.
-ROLE_SALES = "Sales"
-ROLE_STAFF = "Staff"
-ROLE_PARTNER = "Partner"
-ROLE_USER = "User"
+from app.core import registry
 
-#: Bypass every permission check. Kept deliberately tiny.
-#:
-#: Verified against LeapDesk source on 2026-08-12 — `AppServiceProvider`'s
-#: `Gate::before` and `AdminAccess::$superAdminRoles`, which are **both**
-#: `['RootUser', 'BackendDeveloper']`. Two notes on how ours differs, both
-#: deliberate:
-#:
-#: 1. **`BackendDeveloper` is added**, matching the reference. Its stated reason
-#:    is worth keeping: these roles must never see a 403 from a permission that
-#:    has not been seeded into their assignments yet.
-#: 2. **`SuperAdmin` stays, where the reference does not bypass for it.** Ours is
-#:    documented as emergency and maintenance access and has held the bypass
-#:    since the RBAC rebuild; removing it would be a privilege *reduction* to a
-#:    live role, made on the strength of a comparison rather than a decision.
-#:    In practice the gap is narrow — SuperAdmin holds `"*"` in the matrix, so
-#:    the bypass only matters for a permission added but not yet seeded, which is
-#:    precisely the case the reference wrote it for.
-SUPER_ADMIN_ROLES: frozenset[str] = frozenset(
-    {ROLE_ROOT, ROLE_SUPER_ADMIN, ROLE_BACKEND_DEVELOPER}
+# Re-exported for backwards compatibility — these are DEFINED in `core/roles.py`.
+from app.core.roles import (  # noqa: F401
+    ADMIN_ACCESS_ROLES,
+    CORE_ROLE_DESCRIPTIONS,
+    PROTECTED_ROLES,
+    ROLE_ADMIN,
+    ROLE_BACKEND_DEVELOPER,
+    ROLE_ROOT,
+    ROLE_SALES,
+    ROLE_STAFF,
+    ROLE_SUPER_ADMIN,
+    ROLE_USER,
+    SUPER_ADMIN_ROLES,
 )
 
-#: "Sees all data" rather than only their own. Drives data-visibility scoping.
-#: The reference's `admin_roles()` verbatim: RootUser, SuperAdmin, Admin,
-#: BackendDeveloper.
-ADMIN_ACCESS_ROLES: frozenset[str] = frozenset(
-    {ROLE_ROOT, ROLE_SUPER_ADMIN, ROLE_BACKEND_DEVELOPER, ROLE_ADMIN}
-)
-
-#: Cannot be deleted or renamed, and cannot be edited by a non-super-admin.
-#:
-#: `BackendDeveloper` belongs here for a reason specific to it: **its name is
-#: hardcoded in the bypass set above.** A role whose name is a security rule
-#: must not be renameable, or the rename silently detaches the rule and the role
-#: keeps its label while losing its power — or worse, a new role created under
-#: the old name inherits it.
-PROTECTED_ROLES: frozenset[str] = frozenset(
-    {ROLE_ROOT, ROLE_SUPER_ADMIN, ROLE_BACKEND_DEVELOPER, ROLE_USER}
-)
-
-#: Assigned automatically to a self-registering partner.
-DEFAULT_PARTNER_ROLE = ROLE_PARTNER
-
-#: Assigned automatically to a self-registering / first-time staff SSO user.
-DEFAULT_STAFF_ROLE = ROLE_USER
-
+# Imported for its registration side effects. Must come AFTER `core.roles` and
+# `core.registry` above, and must be the only `app.` import in this file that is
+# not from `app.core`.
+#
+# **Optional, and the narrowness of the except clause is the whole point.**
+# `CORE_EXTRACTION_PLAN.md` claims you can delete `app/domain/` and still have a
+# working platform. A hard import makes that false — verified 2026-08-17 by
+# actually deleting the directory, which is a check the unit test could not make
+# because it stubs the module in `sys.modules`.
+#
+# A bare `except ImportError` would be much worse than the hard import: a typo
+# inside a domain module raises ImportError too, so the whole domain would
+# silently vanish from the catalog and the only symptom would be missing
+# permissions. Comparing `exc.name` distinguishes "there is no domain package"
+# from "the domain package is broken", and re-raises the second.
+try:  # noqa: E402
+    import app.domain  # noqa: F401  isort:skip
+except ModuleNotFoundError as exc:  # pragma: no cover - exercised by deleting the package
+    if exc.name != "app.domain":
+        raise
 
 # --- Permissions ------------------------------------------------------------
 
@@ -114,11 +109,11 @@ DASHBOARD_VIEW = "dashboard-view"
 # Application settings — project identity (DYNAMIC_BRANDING_PLAN phase 1)
 #
 # ⚠️ Listing this in the catalog does NOT make it super-admin-only. ROLE_ADMIN is
-# `"*"` in ROLE_PERMISSION_MATRIX below, so every permission added here is granted
-# to Admin on the next seed — the same consequence PM-32 hit with `activity-view`.
-# The write routes are therefore gated on `require_super_admin` as well, and that
-# guard is the actual control. The permission exists so the capability is visible
-# in the catalog and on the role permissions page.
+# `"*"` in the matrix below, so every permission added here is granted to Admin on
+# the next seed — the same consequence PM-32 hit with `activity-view`. The write
+# routes are therefore gated on `require_super_admin` as well, and that guard is
+# the actual control. The permission exists so the capability is visible in the
+# catalog and on the role permissions page.
 SETTINGS_MANAGE = "settings-manage"
 
 
@@ -128,21 +123,6 @@ SETTINGS_MANAGE = "settings-manage"
 # singular, kebab-case — not the reference implementation's dotted names
 # (`data-access.view`, `api-credentials.providers.create`). The mapping is
 # recorded below so it stays reversible.
-#
-# That contradicts one line in LEAPDESK_PARITY_PLAN.md, which is worth being
-# explicit about. That document says **both**: § Decisions settled records
-# "LeapDesk's dotted names verbatim", while § Open decisions still lists the same
-# question as undecided. It contradicts itself, so neither line settles it.
-#
-# What settles it is this module's own docstring — it calls itself the single
-# source of truth, states the convention, and gives `api-credential-update` as
-# its example. All 18 existing permissions follow it. Adopting dotted names would
-# put two conventions in one catalog, and the roles page renders that catalog.
-#
-# Permission names are internal identifiers, never shown to a user, so the parity
-# contract in CORE_COMPLETION_PLAN.md § 1.1 — which binds *what the user sees and
-# can do* — does not require the reference's spelling here. Behaviour is at
-# parity; the identifier is ours.
 #
 #   Reference                            Ours
 #   data-access.view                     data-access-view
@@ -194,7 +174,7 @@ SEARCH_ENTITY_MANAGE = "search-entity-manage"
 AI_ASSISTANT_USE = "ai-assistant-use"
 #: Distinct from AI_ASSISTANT_USE on purpose, and the more dangerous of the two:
 #: it lets the assistant read the database rather than only converse. The
-#: reference separates them for the same reason, and Partner holds neither.
+#: reference separates them for the same reason.
 AI_ASSISTANT_QUERY_DATABASE = "ai-assistant-query-database"
 
 # Users — sending mail to an account from the admin UI (module 1 gap)
@@ -212,16 +192,14 @@ SETTINGS_UPDATE = "settings-update"
 #: `feature-flags.manage`. Split into view/manage here for the same reason
 #: SETTINGS_VIEW and SETTINGS_UPDATE are split: the list is worth reading for
 #: anyone debugging why a feature is off for one role, and reading it grants
-#: nothing. Merging them would mean the only way to see which flags exist is to
-#: hold the permission that lets you switch them.
+#: nothing.
 FEATURE_FLAG_VIEW = "feature-flag-view"
 FEATURE_FLAG_MANAGE = "feature-flag-manage"
 
 #: Error tracking (LeapDesk parity, Module 17). Their split is
 #: `system.errors.view` / `system.errors.manage` and it is kept: reading which
 #: errors are happening is an on-call concern, and **deleting an error group
-#: destroys the evidence of a bug** — a different risk level, and the reason this
-#: is not one permission.
+#: destroys the evidence of a bug** — a different risk level.
 ERROR_VIEW = "error-view"
 ERROR_MANAGE = "error-manage"
 
@@ -232,229 +210,128 @@ HEALTH_VIEW = "health-view"
 #: Recycle bin (LeapDesk parity). **One permission, not view/manage.** Seeing
 #: what was deleted is nearly as sensitive as restoring it — the list is a
 #: record of what somebody tried to remove, and reading it tells you a user
-#: existed, what they were called and when they went. LeapDesk makes the same
-#: call with a single `system.recycle-bin.manage`.
+#: existed, what they were called and when they went.
 RECYCLE_BIN_MANAGE = "recycle-bin-manage"
 
 
-# --- Partner directory (PARTNER_DIRECTORY_PLAN.md phase 1) -------------------
+# --- Core catalog registration ------------------------------------------------
 #
-# Same `{resource}-{action}` convention, resource singular. The domain verbs are
-# split from PARTNER_UPDATE on purpose, and the split is the same one this
-# codebase already draws between USER_UPDATE and USER_APPROVE: editing a record
-# and changing what it is ALLOWED TO DO are different risk levels.
+# Shape: group name -> (display name, display order, module, [(permission, label)])
 #
-# Three separate verbs rather than one because they gate three different
-# consequences, and the plan's § 9 depends on them not collapsing:
+# Orders are spaced by ten so a domain can slot a group between two core ones
+# without renumbering. The partner directory registers at 75, which is exactly
+# where its group sat when this was one literal.
+
+_CORE_PERMISSION_GROUPS: list[tuple[str, str, int, str, list[tuple[str, str]]]] = [
+    ("dashboard", "Dashboard", 10, "core", [
+        (DASHBOARD_VIEW, "View dashboard"),
+    ]),
+    ("users", "User Management", 20, "core", [
+        (USER_VIEW, "View users"),
+        (USER_CREATE, "Create users"),
+        (USER_UPDATE, "Update users"),
+        (USER_DELETE, "Delete users"),
+        (USER_APPROVE, "Approve pending users"),
+        (USER_EMAIL, "Send email to a user"),
+    ]),
+    ("roles", "Role Management", 30, "core", [
+        (ROLE_VIEW, "View roles"),
+        (ROLE_CREATE, "Create roles"),
+        (ROLE_UPDATE, "Update a role's name and description"),
+        (ROLE_PERMISSIONS, "Change which permissions a role grants"),
+        (ROLE_DELETE, "Delete roles"),
+    ]),
+    ("permissions", "Permissions", 40, "core", [
+        (PERMISSION_VIEW, "View the permission catalog"),
+    ]),
+    ("invitations", "User Invitations", 50, "core", [
+        (INVITATION_VIEW, "View invitations"),
+        (INVITATION_CREATE, "Send invitations"),
+        (INVITATION_RESEND, "Resend invitations"),
+        (INVITATION_CANCEL, "Cancel invitations"),
+    ]),
+    ("activity", "Activity Log", 60, "core", [
+        (ACTIVITY_VIEW, "View the activity log"),
+    ]),
+    ("settings", "Application Settings", 70, "core", [
+        (SETTINGS_MANAGE, "Change the application's name, monogram and branding"),
+        (SETTINGS_VIEW, "View the application settings"),
+        (SETTINGS_UPDATE, "Change the application settings"),
+        (FEATURE_FLAG_VIEW, "View feature flags and who they are on for"),
+        (FEATURE_FLAG_MANAGE, "Create, change and switch feature flags"),
+        (ERROR_VIEW, "View recorded application errors"),
+        (ERROR_MANAGE, "Triage, resolve and delete recorded errors"),
+        (HEALTH_VIEW, "View system health"),
+        (RECYCLE_BIN_MANAGE, "Restore or permanently remove deleted records"),
+    ]),
+    ("data-access", "Data Access", 80, "core", [
+        (DATA_ACCESS_VIEW, "View data access grants"),
+        (DATA_ACCESS_MANAGE, "Grant and revoke data access"),
+    ]),
+    ("api-credentials", "API Credentials", 90, "core", [
+        (API_CREDENTIAL_VIEW, "View stored credentials (values stay masked)"),
+        (API_CREDENTIAL_CREATE, "Add a credential"),
+        (API_CREDENTIAL_UPDATE, "Change a credential"),
+        (API_CREDENTIAL_DELETE, "Delete a credential"),
+        (API_PROVIDER_VIEW, "View integration providers"),
+        (API_PROVIDER_CREATE, "Add an integration provider"),
+        (API_PROVIDER_UPDATE, "Change an integration provider"),
+        (API_PROVIDER_DELETE, "Delete an integration provider"),
+    ]),
+    ("search", "Global Search", 100, "core", [
+        (SEARCH_ENTITY_MANAGE, "Choose which records are searchable"),
+    ]),
+    ("ai-assistant", "AI Assistant", 110, "core", [
+        (AI_ASSISTANT_USE, "Use the assistant"),
+        (AI_ASSISTANT_QUERY_DATABASE, "Let the assistant query the database"),
+    ]),
+    ("platform-api", "Platform API", 120, "core", [
+        (API_CONSUMER_VIEW, "View the systems permitted to call our API"),
+        (API_CONSUMER_CREATE, "Register a new system"),
+        (API_CONSUMER_UPDATE, "Edit a system, and switch its access off"),
+        (API_CONSUMER_DELETE, "Remove a system and every token it holds"),
+        # Read the description twice: this one mints standing, unattended
+        # credentials for a third party. It is separate from the four above so it
+        # can be withheld from someone who may administer the list.
+        (API_TOKEN_MANAGE, "Issue and revoke API tokens"),
+    ]),
+]
+
+for _name, _display, _order, _module, _entries in _CORE_PERMISSION_GROUPS:
+    registry.register_permission_group(_name, _display, _order, _module, _entries)
+
+
+# --- Core role grants ---------------------------------------------------------
 #
-#   PARTNER_APPROVE  PENDING -> ACTIVE, and suspend/reinstate. Gates LOGIN for
-#                    every user in the organisation.
-#   PARTNER_VERIFY   Sets verification_level. This is what Leapswitch VOUCHES
-#                    for, it is the directory's whole trust proposition (§ 9),
-#                    and it ranks above any paid placement. Whoever can grant it
-#                    can hand out the platform's credibility.
-#   PARTNER_PUBLISH  Flips is_listed. The only permission in this module whose
-#                    effect is visible to the anonymous internet.
-PARTNER_VIEW = "partner-view"
-PARTNER_CREATE = "partner-create"
-PARTNER_UPDATE = "partner-update"
-PARTNER_DELETE = "partner-delete"
-PARTNER_APPROVE = "partner-approve"
-PARTNER_VERIFY = "partner-verify"
-PARTNER_PUBLISH = "partner-publish"
+# "*" is a wildcard meaning every permission in the assembled catalog — resolved
+# by the seeder, so it picks up domain permissions too.
 
-#: Tiers are reference data seeded from `core/partner_tiers.py`. Viewing them is
-#: needed by anyone who can edit a partner (the tier selector); changing what a
-#: tier grants is an administrative act of its own.
-PARTNER_TIER_VIEW = "partner-tier-view"
-PARTNER_TIER_MANAGE = "partner-tier-manage"
+registry.register_role(ROLE_ROOT, CORE_ROLE_DESCRIPTIONS[ROLE_ROOT], "*")
+registry.register_role(ROLE_SUPER_ADMIN, CORE_ROLE_DESCRIPTIONS[ROLE_SUPER_ADMIN], "*")
+# Holds every permission explicitly AND bypasses the check, which is
+# belt-and-braces on purpose: the grant is what the Roles screen shows a reader,
+# and the bypass is what survives a permission added after the last seed. Neither
+# alone gives both properties.
+registry.register_role(
+    ROLE_BACKEND_DEVELOPER, CORE_ROLE_DESCRIPTIONS[ROLE_BACKEND_DEVELOPER], "*"
+)
+registry.register_role(ROLE_ADMIN, CORE_ROLE_DESCRIPTIONS[ROLE_ADMIN], "*")
 
+# The reference's `Sales` grants, ported name for name. **Deliberately narrow,
+# and worth not widening by reflex** — it holds no `user-view`, so a salesperson
+# cannot read the staff directory, and no `ai-assistant-query-database`, so the
+# assistant will converse with them but not read records for them. Both omissions
+# are the reference's.
+registry.register_role(
+    ROLE_SALES,
+    CORE_ROLE_DESCRIPTIONS[ROLE_SALES],
+    [DASHBOARD_VIEW, SETTINGS_VIEW, SETTINGS_UPDATE, AI_ASSISTANT_USE],
+)
 
-#: Permission groups, in display order. The seeder creates these verbatim.
-#: Shape: group name -> (display name, display order, module, [(permission, label)])
-PERMISSION_CATALOG: dict[str, tuple[str, int, str, list[tuple[str, str]]]] = {
-    "dashboard": (
-        "Dashboard",
-        10,
-        "core",
-        [
-            (DASHBOARD_VIEW, "View dashboard"),
-        ],
-    ),
-    "users": (
-        "User Management",
-        20,
-        "core",
-        [
-            (USER_VIEW, "View users"),
-            (USER_CREATE, "Create users"),
-            (USER_UPDATE, "Update users"),
-            (USER_DELETE, "Delete users"),
-            (USER_APPROVE, "Approve pending users"),
-            (USER_EMAIL, "Send email to a user"),
-        ],
-    ),
-    "roles": (
-        "Role Management",
-        30,
-        "core",
-        [
-            (ROLE_VIEW, "View roles"),
-            (ROLE_CREATE, "Create roles"),
-            (ROLE_UPDATE, "Update a role's name and description"),
-            (ROLE_PERMISSIONS, "Change which permissions a role grants"),
-            (ROLE_DELETE, "Delete roles"),
-        ],
-    ),
-    "permissions": (
-        "Permissions",
-        40,
-        "core",
-        [
-            (PERMISSION_VIEW, "View the permission catalog"),
-        ],
-    ),
-    "invitations": (
-        "User Invitations",
-        50,
-        "core",
-        [
-            (INVITATION_VIEW, "View invitations"),
-            (INVITATION_CREATE, "Send invitations"),
-            (INVITATION_RESEND, "Resend invitations"),
-            (INVITATION_CANCEL, "Cancel invitations"),
-        ],
-    ),
-    "activity": (
-        "Activity Log",
-        60,
-        "core",
-        [
-            (ACTIVITY_VIEW, "View the activity log"),
-        ],
-    ),
-    "settings": (
-        "Application Settings",
-        70,
-        "core",
-        [
-            (SETTINGS_MANAGE, "Change the application's name, monogram and branding"),
-            (SETTINGS_VIEW, "View the application settings"),
-            (SETTINGS_UPDATE, "Change the application settings"),
-            (FEATURE_FLAG_VIEW, "View feature flags and who they are on for"),
-            (FEATURE_FLAG_MANAGE, "Create, change and switch feature flags"),
-            (ERROR_VIEW, "View recorded application errors"),
-            (ERROR_MANAGE, "Triage, resolve and delete recorded errors"),
-            (HEALTH_VIEW, "View system health"),
-            (RECYCLE_BIN_MANAGE, "Restore or permanently remove deleted records"),
-        ],
-    ),
-    "partners": (
-        "Partner Directory",
-        75,
-        "directory",
-        [
-            (PARTNER_VIEW, "View partner organisations"),
-            (PARTNER_CREATE, "Onboard a partner organisation"),
-            (PARTNER_UPDATE, "Update a partner's details"),
-            (PARTNER_DELETE, "Delete a partner organisation"),
-            (PARTNER_APPROVE, "Activate, suspend or reinstate a partner"),
-            (PARTNER_VERIFY, "Set a partner's verification level"),
-            (PARTNER_PUBLISH, "Publish or unpublish a partner in the directory"),
-            (PARTNER_TIER_VIEW, "View partner tiers"),
-            (PARTNER_TIER_MANAGE, "Change what a partner tier grants"),
-        ],
-    ),
-    # --- The four modules still to be built --------------------------------
-    #
-    # Seeded ahead of their code deliberately. Nothing in modules 5–8 can be
-    # gated until the permissions exist, so seeding them first means each module
-    # starts with its guards available rather than adding a migration and a
-    # re-seed halfway through. They grant access to routes that do not exist
-    # yet, which is harmless — a permission with no route behind it is inert.
-    "data-access": (
-        "Data Access",
-        80,
-        "core",
-        [
-            (DATA_ACCESS_VIEW, "View data access grants"),
-            (DATA_ACCESS_MANAGE, "Grant and revoke data access"),
-        ],
-    ),
-    "api-credentials": (
-        "API Credentials",
-        90,
-        "core",
-        [
-            (API_CREDENTIAL_VIEW, "View stored credentials (values stay masked)"),
-            (API_CREDENTIAL_CREATE, "Add a credential"),
-            (API_CREDENTIAL_UPDATE, "Change a credential"),
-            (API_CREDENTIAL_DELETE, "Delete a credential"),
-            (API_PROVIDER_VIEW, "View integration providers"),
-            (API_PROVIDER_CREATE, "Add an integration provider"),
-            (API_PROVIDER_UPDATE, "Change an integration provider"),
-            (API_PROVIDER_DELETE, "Delete an integration provider"),
-        ],
-    ),
-    "search": (
-        "Global Search",
-        100,
-        "core",
-        [
-            (SEARCH_ENTITY_MANAGE, "Choose which records are searchable"),
-        ],
-    ),
-    "ai-assistant": (
-        "AI Assistant",
-        110,
-        "core",
-        [
-            (AI_ASSISTANT_USE, "Use the assistant"),
-            (AI_ASSISTANT_QUERY_DATABASE, "Let the assistant query the database"),
-        ],
-    ),
-    "platform-api": (
-        "Platform API",
-        120,
-        "core",
-        [
-            (API_CONSUMER_VIEW, "View the systems permitted to call our API"),
-            (API_CONSUMER_CREATE, "Register a new system"),
-            (API_CONSUMER_UPDATE, "Edit a system, and switch its access off"),
-            (API_CONSUMER_DELETE, "Remove a system and every token it holds"),
-            # Read the description twice: this one mints standing, unattended
-            # credentials for a third party. It is separate from the four above
-            # so it can be withheld from someone who may administer the list.
-            (API_TOKEN_MANAGE, "Issue and revoke API tokens"),
-        ],
-    ),
-}
-
-
-#: Which permissions each system role receives on seed.
-#: "*" is a wildcard meaning every permission in the catalog.
-ROLE_PERMISSION_MATRIX: dict[str, list[str] | str] = {
-    ROLE_ROOT: "*",
-    ROLE_SUPER_ADMIN: "*",
-    # Holds every permission explicitly AND bypasses the check, which is
-    # belt-and-braces on purpose: the grant is what the Roles screen shows a
-    # reader, and the bypass is what survives a permission added after the last
-    # seed. Neither alone gives both properties.
-    ROLE_BACKEND_DEVELOPER: "*",
-    ROLE_ADMIN: "*",
-    # The reference's `Sales` grants, ported name for name:
-    # dashboard-view, settings-view, settings-update, ai-assistant.use.
-    # **Deliberately narrow, and worth not widening by reflex** — it holds no
-    # `user-view`, so a salesperson cannot read the staff directory, and no
-    # `ai-assistant-query-database`, so the assistant will converse with them but
-    # not read records for them. Both omissions are the reference's.
-    ROLE_SALES: [
-        DASHBOARD_VIEW,
-        SETTINGS_VIEW,
-        SETTINGS_UPDATE,
-        AI_ASSISTANT_USE,
-    ],
-    ROLE_STAFF: [
+registry.register_role(
+    ROLE_STAFF,
+    CORE_ROLE_DESCRIPTIONS[ROLE_STAFF],
+    [
         DASHBOARD_VIEW,
         USER_VIEW,
         ROLE_VIEW,
@@ -473,57 +350,51 @@ ROLE_PERMISSION_MATRIX: dict[str, list[str] | str] = {
         INVITATION_RESEND,
         INVITATION_CANCEL,
         # Matching the reference's grants for the new modules: Staff may see what
-        # data access has been granted, and may converse with the assistant.
-        # It gets neither DATA_ACCESS_MANAGE (granting access is an admin act)
-        # nor AI_ASSISTANT_QUERY_DATABASE (that reads the database).
+        # data access has been granted, and may converse with the assistant. It
+        # gets neither DATA_ACCESS_MANAGE (granting access is an admin act) nor
+        # AI_ASSISTANT_QUERY_DATABASE (that reads the database).
         DATA_ACCESS_VIEW,
         AI_ASSISTANT_USE,
-        # Read-only on the directory, matching Staff's posture everywhere else.
-        # Deliberately NOT approve/verify/publish: each of those either grants
-        # login to an organisation, hands out Leapswitch's credibility, or
-        # publishes to the anonymous internet.
-        PARTNER_VIEW,
-        PARTNER_TIER_VIEW,
+        # NOTE: Staff's read access to the partner directory is NOT here — the
+        # domain adds it via `register_role_grants`, so a project without that
+        # domain gives Staff no partner permissions it cannot use.
     ],
-    ROLE_PARTNER: [
-        DASHBOARD_VIEW,
-        # A partner user may read their OWN organisation. This permission alone
-        # grants nothing across organisations — row scoping does that, and it
-        # does not exist yet (PM-5). Until it does, every partner-facing read
-        # path must filter on the actor's partner_id itself; see
-        # partner_service.list_partners.
-        PARTNER_VIEW,
-    ],
-    ROLE_USER: [
-        DASHBOARD_VIEW,
-    ],
-}
+)
 
+registry.register_role(ROLE_USER, CORE_ROLE_DESCRIPTIONS[ROLE_USER], [DASHBOARD_VIEW])
+
+
+# --- The assembled catalogs ----------------------------------------------------
+#
+# Materialised once, here, after every registration above and every registration
+# `import app.domain` triggered. Read-only from this point — see the note in
+# `core/registry.py` on why the registry has no `unregister`.
+
+#: Permission groups, in display order. The seeder creates these verbatim.
+#: Shape: group name -> (display name, display order, module, [(permission, label)])
+PERMISSION_CATALOG: dict[str, tuple[str, int, str, list[tuple[str, str]]]] = (
+    registry.permission_groups()
+)
+
+#: Which permissions each role receives on seed. "*" means the whole catalog.
+ROLE_PERMISSION_MATRIX: dict[str, list[str] | str] = registry.role_grants()
 
 #: Human-readable descriptions, used by the seeder and surfaced in the roles UI.
-ROLE_DESCRIPTIONS: dict[str, str] = {
-    ROLE_ROOT: "System owner. Bypasses every permission check. Cannot be deleted or edited.",
-    ROLE_SUPER_ADMIN: "Emergency and maintenance access. Bypasses every permission check.",
-    ROLE_BACKEND_DEVELOPER: (
-        "Engineering access. Bypasses every permission check and sees all data — "
-        "a second key to the building, not a job title."
-    ),
-    ROLE_ADMIN: "Full management access across the platform. Sees all data.",
-    ROLE_SALES: (
-        "Commercial team. Dashboard, their own settings, and the assistant — "
-        "no access to other people's records."
-    ),
-    ROLE_STAFF: "Internal staff. Read access across modules, may invite users.",
-    ROLE_PARTNER: "External partner. Sees only their own records.",
-    ROLE_USER: "Default role for a new account. Dashboard only.",
-}
+ROLE_DESCRIPTIONS: dict[str, str] = registry.registered_role_descriptions()
+
+#: Assigned automatically to a self-registering EXTERNAL account. The core's
+#: fallback is `User` (dashboard only); `app/domain/partners` overrides it to
+#: `Partner`. Named for the account class rather than for this project's domain,
+#: which is what makes it survive into the next one.
+DEFAULT_EXTERNAL_ROLE: str = registry.default_external_role(ROLE_USER)
+
+#: Assigned automatically to a first-time INTERNAL account arriving via SSO.
+DEFAULT_INTERNAL_ROLE: str = registry.default_internal_role(ROLE_USER)
 
 
 def all_permission_names() -> list[str]:
     """Every permission in the catalog, in catalog order."""
     names: list[str] = []
-    for _display, _order, _module, entries in sorted(
-        PERMISSION_CATALOG.values(), key=lambda group: group[1]
-    ):
+    for _display, _order, _module, entries in PERMISSION_CATALOG.values():
         names.extend(name for name, _label in entries)
     return names

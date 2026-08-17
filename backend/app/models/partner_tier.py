@@ -11,7 +11,7 @@ class PartnerTier(Base):
 
     Integer primary key, like `roles`, because this is a small fixed list an
     administrator picks from rather than a row anyone creates ad hoc. The names
-    live in `app/core/partner_tiers.py` and `seed_partner_tiers` reconciles this
+    live in `app/domain/partners/tiers.py` and `seed_partner_tiers` reconciles this
     table against them.
 
     **A tier is commercial entitlement, not trust.** `partners.verification_level`
@@ -26,14 +26,14 @@ class PartnerTier(Base):
 
     name: Mapped[str] = mapped_column(
         String(50), unique=True, nullable=False, index=True,
-        comment="Stable code name, referenced from app/core/partner_tiers.py",
+        comment="Stable code name, referenced from app/domain/partners/tiers.py",
     )
     display_name: Mapped[str] = mapped_column(String(100), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     max_listings: Mapped[int | None] = mapped_column(
         Integer, nullable=True,
-        comment="NULL means unlimited. Not a -1 sentinel — see core/partner_tiers.py",
+        comment="NULL means unlimited. Not a -1 sentinel — see domain/partners/tiers.py",
     )
     featured_slots: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0,

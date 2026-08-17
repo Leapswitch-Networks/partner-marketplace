@@ -79,6 +79,7 @@ it and another register disagree, it says so and names the one that is stale.
 | `planning/MARKETPLACE_DOMAIN_PLAN.md` | Marketplace domain model — partners, tiers, customers, catalog, quotes | **Partly superseded 2026-08-10.** Its `partners` / `partner_tiers` / scoping foundation is adopted; the catalog, quotes and quote machine are **shelved** |
 | `planning/SCAFFOLD_CLEANUP_PLAN.md` | Retiring the inherited test-platform domain | **Tiers 2–3 executed 2026-08-06** — the domain is gone. Tier 1 housekeeping remains |
 | `planning/CORE_HARDENING_PLAN.md` | The platform layer under the features — config safety, transactions, tests/CI, API versioning, the frontend data layer. PM-37 to PM-44 | **Active — PM-37/38/39 closed 2026-08-06** |
+| `planning/CORE_EXTRACTION_PLAN.md` | **Making the core reusable for a second project.** The five places the partner domain leaks into the platform layer, the registration seam that removes them, the tenancy rename that must land *before* PM-5's 258-signature sweep, and the frontend data layer. A phase-by-phase code-level checklist | **New — 2026-08-17.** Phase 0 not started |
 | `planning/DYNAMIC_BRANDING_PLAN.md` | Project identity — name, monogram, tagline, theme, logo, favicon — configurable so the core is reusable across projects. **Read § 6 to rebrand a deployment**, § 7 for how theming and uploads work | **All four phases shipped 2026-08-06** |
 | `planning/TECH_DEBT.md` | Known defects and inconsistencies carried in from the scaffold, ranked | Active |
 

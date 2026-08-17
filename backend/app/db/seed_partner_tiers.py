@@ -1,7 +1,7 @@
 """Seed the partner tier reference data.
 
 Idempotent, and safe to re-run after every deploy: it reconciles `partner_tiers`
-against `app.core.partner_tiers.PARTNER_TIER_CATALOG`, which is the source of
+against `app.domain.partners.tiers.PARTNER_TIER_CATALOG`, which is the source of
 truth. Same contract `seed_rbac` has with `app.core.permissions`.
 
 Usage (from backend/):
@@ -32,8 +32,8 @@ import sys
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.partner_tiers import PARTNER_TIER_CATALOG
 from app.db.session import SessionLocal
+from app.domain.partners.tiers import PARTNER_TIER_CATALOG
 from app.models.partner_tier import PartnerTier
 
 

@@ -22,6 +22,7 @@ from datetime import datetime, timedelta, timezone
 from fastapi import Cookie, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
+from app.core import tenancy
 from app.core.config import settings
 from app.core.permissions import SUPER_ADMIN_ROLES
 from app.core.security import TokenError, decode_typed_token
@@ -173,34 +174,38 @@ def get_current_user(
 
 
 def _assert_organisation_active(user: User) -> None:
-    """Refuse a user whose partner organisation is not ACTIVE.
+    """Refuse a user whose organisation is not ACTIVE.
 
-    **The organisation gates its logins.** Suspending a partner has to be one
+    **The organisation gates its logins.** Suspending one has to be a single
     action, not a hunt through every account that belongs to it — otherwise the
     only way to stop an organisation is to remember all of its people, and the
     one you forget is the one that matters. Specified in
     `MARKETPLACE_DOMAIN_PLAN.md` § Entities and carried into
     `PARTNER_DIRECTORY_PLAN.md` § 0 unchanged.
 
-    `partner_id IS NULL` means Leapswitch staff, who have no organisation to
-    gate — they fall straight through.
+    `organisation_id IS NULL` means an internal, first-party account with no
+    organisation to gate — it falls straight through. `tenancy.is_active`
+    encodes that, rather than each caller remembering it.
 
     PENDING is refused as well as SUSPENDED. An organisation nobody has activated
     yet must not have working logins, or onboarding would grant access before
     approval, which is the same gate `users.status` applies one level down.
 
-    The read is free: `User.partner` is a `lazy="joined"` relationship precisely
-    because this runs on every authenticated request.
+    **Reads `user.organisation`, not a domain model.** The attribute satisfies
+    `core.tenancy.Organisation` — id and status, nothing else — so this guard
+    carries no knowledge of what the tenant is called in any given project
+    (`CORE_EXTRACTION_PLAN.md` phase 2). The read is free: the relationship is
+    `lazy="joined"` precisely because this runs on every authenticated request.
     """
-    partner = user.partner
-    if partner is None or partner.status == "ACTIVE":
+    organisation = user.organisation
+    if tenancy.is_active(organisation):
         return
 
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
         detail=(
             "Your organisation is awaiting activation."
-            if partner.status == "PENDING"
+            if organisation.status == tenancy.ORG_STATUS_PENDING
             else "Your organisation has been suspended. Contact an administrator."
         ),
     )

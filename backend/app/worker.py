@@ -58,13 +58,18 @@ from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
+from app.core import retention
 from app.core.config import settings
 from app.core.logging import configure_logging
 from app.db.session import SessionLocal
 from app.models.worker_run import STATUS_FAILED, STATUS_SUCCEEDED
+
+# Imported for its registration side effects — it populates the retention
+# registry that `_retention` sweeps. Without this import the sweep finds no
+# policies and silently deletes nothing, which is the worst possible failure for
+# a cleanup job: it reports success and the disk keeps filling.
 from app.services import (
-    activity_service,
-    api_consumer_service,
+    retention_policies,  # noqa: F401
     session_service,
     webhook_service,
     worker_service,
@@ -112,16 +117,44 @@ def _expired_sessions(db: Session) -> int:
     return session_service.purge_expired(db, older_than_days=30)
 
 
-def _api_request_logs(db: Session) -> int:
-    return api_consumer_service.purge_request_logs(db)
+def _retention(db: Session) -> int:
+    """Enforce every retention policy — **by age and by row count**.
 
+    Replaces the three separate per-table jobs this file used to carry
+    (`api-request-logs`, `worker-runs`, `activity-log`). Three reasons it is one
+    job now:
 
-def _activity_log(db: Session) -> int:
-    return activity_service.purge_older_than(db, settings.ACTIVITY_LOG_RETENTION_DAYS)
+    * **Three tables had no purge at all** — `webhook_deliveries`,
+      `error_occurrences` and `search_logs` grew forever with nothing scheduled
+      against them. Adding three more near-identical jobs would have made that
+      five near-identical jobs and a fourth omission waiting to happen.
+    * **Age does not bound size.** Every one of the old jobs deleted by date
+      only, so a burst inside the retention window could still fill the disk.
+      `core/retention.py` applies a row cap as well.
+    * **A new log table now needs a policy, not a job.** Register it in
+      `retention_policies.py` and it is swept — there is no second place to
+      remember.
 
-
-def _worker_run_history(db: Session) -> int:
-    return worker_service.purge_runs(db)
+    `activity-log` carries `requires_opt_in`, so this sweep skips it. Trimming
+    an audit trail stays an instruction, which is the decision the removed
+    `enabled=False` job encoded.
+    """
+    results = retention.enforce_all(
+        db,
+        batch_size=settings.RETENTION_BATCH_SIZE,
+        max_batches=settings.RETENTION_MAX_BATCHES,
+    )
+    for result in results:
+        if result.total:
+            logger.info(
+                "retention: %s removed %d row(s) (age=%d cap=%d)%s",
+                result.policy,
+                result.total,
+                result.by_age,
+                result.by_cap,
+                " — still over target, will continue next run" if result.truncated else "",
+            )
+    return sum(r.total for r in results)
 
 
 def build_jobs() -> list[Job]:
@@ -152,42 +185,16 @@ def build_jobs() -> list[Job]:
             ),
         ),
         Job(
-            name="api-request-logs",
+            name="retention",
             interval_seconds=DAY,
-            run=_api_request_logs,
+            run=_retention,
             unit="log rows removed",
             description=(
-                "Enforces the API traffic retention policy that shipped with "
-                "Module 10. The table grows fastest when something is wrong."
-            ),
-        ),
-        Job(
-            name="worker-runs",
-            interval_seconds=DAY,
-            run=_worker_run_history,
-            unit="run records removed",
-            description=(
-                "Trims this worker's own run history. Every table that only grows "
-                "needs an answer, including the monitoring one."
-            ),
-        ),
-        Job(
-            name="activity-log",
-            interval_seconds=DAY,
-            run=_activity_log,
-            # ⚠️ **Off unless asked for**, and this is the one deliberate default
-            # in the file. `activity_service.purge_older_than` says in as many
-            # words that how long who-did-what is kept is a policy decision —
-            # legal, contractual, or simply how far back you want to be able to
-            # answer questions — and that it is not the function's place to pick
-            # a number. Switching a worker on must not quietly start deleting an
-            # audit trail on the strength of a default nobody chose.
-            enabled=False,
-            unit="audit rows removed",
-            description=(
-                f"Deletes audit rows older than {settings.ACTIVITY_LOG_RETENTION_DAYS} "
-                "days. DISABLED by default — enable it with --job activity-log "
-                "once someone has decided the retention period."
+                "Enforces every retention policy: deletes rows past their age "
+                "limit AND trims each table back to its row cap. Covers API "
+                "traffic, webhook deliveries, error occurrences, search logs and "
+                "this worker's own history. The audit trail is opt-in and is NOT "
+                "touched here — see retention_policies.py."
             ),
         ),
     ]

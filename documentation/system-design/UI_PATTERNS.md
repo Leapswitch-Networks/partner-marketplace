@@ -208,7 +208,7 @@ shell so all eight modules get it; do not fork it locally.
 
 | Page | Shell | Module provides |
 |---|---|---|
-| Index | `ResourceIndex` | `icon`, `title`, `description`, `filters[]`, `columns[]`, `rowNoun`, bulk actions, empty state |
+| Index | `ResourceIndex` | `icon`, `title`, `description`, `filters[]`, `columns[]`, `rowNoun`, bulk actions, empty state, `stats[]` |
 | Form (create **and** edit) | `ResourceForm` + `FormSection` + `FormGrid` | `recordLabel`, sections, fields |
 | Show | `ShowPageHeader` / `Grid` / `Main` / `Sidebar` + `InfoCard` / `MetaCard` / `Field` / `AuditCard` | sections and fields |
 
@@ -232,6 +232,49 @@ item stretches to the row height and `sticky` does nothing.
 
 **Navigation is an anchor, actions are buttons.** Cancel, Edit and Back are
 `<Link className={buttonClasses(…)}>`; anything that mutates is `<Button>`.
+
+### Stat tiles — `StatTiles`, and only `StatTiles`
+
+Settled 2026-08-17, after finding **three** implementations of one idea: `ApiDocsModule`
+and `WorkerJobsModule` each inlined a `Card`-per-tile (the same twenty lines, copied),
+and `InvitationsModule` had a private `StatCard` of a different size and shape passed
+through `filterExtras`. A fix to any of them reached none of the others.
+
+| Rule | Why |
+|---|---|
+| **One component: `components/common/StatTiles.tsx`.** Never inline a tile | Three copies is how the row above one table stops matching the row above the next |
+| **Never `Card` for a tile.** `Card` is the *viewport-locked index surface* — `flex min-h-0 flex-1 overflow-hidden` exists so a table can scroll inside it. `flex-1` on a grid child is a contradiction | The two modules that reached for `Card` were both misusing it |
+| **On an index page, pass `stats` to `ResourceIndex`** — not `filterExtras` | `filterExtras` is for **controls**. Four numbers in the filter row compete with Reset and the column picker for one line |
+| **The figure stays ink; tone rides a dot beside the label** | Measured 2026-08-12: `tone-success` as text is 1.84:1 on night, `tone-warning` 1.47:1 on the light wash. A semantic fill is designed to sit *behind* white text in a badge |
+| **Tone is never the only signal** — the label names the state ("Unhealthy", "Expired") | A dot nobody can distinguish must still leave a tile that reads |
+| **Tone is conditional on the value, not the label.** `unhealthy > 0 ? "danger" : "success"` | A permanently red tile is a badge that can never clear — this codebase already rejected that for the notification bell |
+| **Proportional figures, not `tabular-nums`** | Opposite of the table columns, and deliberate: tabular gives every digit a `0`'s width, which aligns a column and leaves `121` gappy at display size |
+| **Values compact past five figures** — `12852` → `12.9K`, via `formatStatValue` | A tile is 1/5 of a row; a raw seven-digit number sets the whole row's column width |
+| **A non-numeric value takes `textual: true`** | A timestamp at `text-2xl` sizes the row on its own and still wraps. The value box is a fixed 30px either way, so labels stay on one baseline |
+| **`hint` is genuinely optional, and sits on the tile floor** (`mt-auto`) | Grid children stretch; without it a short tile's hint floats where its neighbour's two-line hint ends |
+
+The fill is a faint tint (`bg-surface-tile/60` / `dark:bg-white/[0.03]`) rather than a
+named surface, because these tiles render on **four** backgrounds — the page body and
+the index `Card`, in light and dark — and `night-card` tiles on a `night-card` card are
+invisible. The border does the separating.
+
+**Stats cost table rows.** `DataTable` sizes its scroll box from
+`getBoundingClientRect().top`, so adding the row re-measures correctly and nothing
+overflows — but chrome above the table is still records you cannot see. Pass `stats`
+when the numbers answer a question the table cannot; leave it off otherwise.
+
+### Back to top — `ScrollToTop`
+
+Added 2026-08-17. Mounted **inside both tables** (`DataTable` against its `scrollRef`,
+`DataTableVendor` against its `tableContainerRef`), so every index page has it and no
+module wires it up.
+
+| Rule | Why |
+|---|---|
+| **It scrolls the container, never the window** | On an index page the window does not scroll — the table's box does. `window.scrollTo(0,0)` would be a button that visibly does nothing |
+| **`bottom-20 right-4`, `z-30`** — the slot *above* the assistant | `AssistantWidget` owns `bottom-4 right-4` at `z-40`, and the pager already pads around it (audit #14). At `z-30` the assistant panel covers this instead of fighting it |
+| **Hidden until 240px down**, and `aria-hidden` + `tabIndex={-1}` while hidden | It stays mounted to animate; a 0-opacity control that still takes a tab stop is a focus trap |
+| **Reads its scroll position once on mount**, not only on the next event | The container can already be scrolled when this mounts after a filter or page change |
 
 ---
 

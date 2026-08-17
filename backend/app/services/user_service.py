@@ -37,6 +37,7 @@ from app.schemas.rbac import (
 )
 from app.services import (
     activity_service,
+    data_access_service,
     mail_service,
     recycle_bin_service,
     session_service,
@@ -133,6 +134,7 @@ def list_users(
     status_filter: str | None = None,
     account_type: str | None = None,
     role_id: int | None = None,
+    organisation_id: str | None = None,
     sort_by: str = "created_at",
     sort_order: str = "desc",
     page: int = 1,
@@ -152,7 +154,25 @@ def list_users(
     )
 
     if not actor.has_admin_access:
-        stmt = stmt.where(User.id == actor.id)
+        # **Delegated access is applied here, and this is its first production
+        # call site** (PM-5, 2026-08-17). `accessible_user_ids` was built,
+        # tested, and wired to nothing: an admin could create a data-access
+        # grant, see it listed as active, and it changed Global Search results
+        # and nothing else. A grant that appears to work and does not is worse
+        # than no feature.
+        #
+        # Fail-closed by construction: the helper seeds its result with the
+        # actor's own id before consulting any grant, so a user with no grants
+        # gets exactly `[self]` — the behaviour this line had before — and never
+        # an empty list, which a caller could misread as "no restriction".
+        #
+        # `scope="users"` rather than `None`: `None` means "wildcard grants
+        # only", so a future grant scoped specifically to this module would be
+        # ignored. Today `*` is the only scope in use and both spellings behave
+        # identically; this one stays correct when that changes.
+        stmt = stmt.where(
+            User.id.in_(data_access_service.accessible_user_ids(db, actor, scope="users"))
+        )
 
     # Filters needing a join stay here — `run_list` owns only what is identical
     # for every resource (search, sort allowlist, tiebreak, clamping, count).
@@ -162,6 +182,8 @@ def list_users(
         stmt = stmt.where(User.account_type == account_type)
     if role_id is not None:
         stmt = stmt.where(User.roles.any(Role.id == role_id))
+    if organisation_id:
+        stmt = stmt.where(User.organisation_id == organisation_id)
 
     if search:
         # Applied here rather than through `ListSpec.searchable`, which matches
@@ -284,6 +306,37 @@ def send_user_email(
 # --- Writes -----------------------------------------------------------------
 
 
+def _resolve_organisation(db: Session, organisation_id: str | None) -> str | None:
+    """Validate an organisation id, or `None`.
+
+    **404 rather than letting the foreign key raise.** Without this the database
+    rejects a bad id with an `IntegrityError`, which surfaces as a 500 — an
+    admin's typo reported as a server fault, and a stack trace in the log for
+    something that is simply a wrong id.
+
+    ## Why the model is read off the relationship instead of imported
+
+    `user_service` is platform code. Importing the domain's `Partner` here would
+    put the partner directory back in the middle of the core user service —
+    exactly the coupling `CORE_EXTRACTION_PLAN.md` phase 1 removed elsewhere. It
+    would also be a genuine import cycle: `app.models.partner` reaches
+    `app.models.user`, which imports `app.core.permissions`, which imports
+    `app.domain`.
+
+    `User.organisation` already knows its target class, so asking the mapper is
+    both zero-coupling and zero-import. A project that swaps the organisation
+    table changes the relationship and this function follows it.
+    """
+    if not organisation_id:
+        return None
+
+    model = User.organisation.property.mapper.class_
+    organisation = db.get(model, organisation_id)
+    if organisation is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Organisation not found")
+    return organisation.id
+
+
 def create_user(db: Session, data: CreateUserRequest, actor: User) -> User:
     email = normalise_email(data.email)
 
@@ -301,6 +354,7 @@ def create_user(db: Session, data: CreateUserRequest, actor: User) -> User:
         last_name=data.last_name.strip(),
         account_type=data.account_type,
         status=data.status,
+        organisation_id=_resolve_organisation(db, data.organisation_id),
         designation=(data.designation or "").strip() or None,
         employee_id=(data.employee_id or "").strip() or None,
         personal_mobile_number=(data.personal_mobile_number or "").strip() or None,
@@ -366,8 +420,8 @@ def update_user(db: Session, user_id: str, data: UpdateUserRequest, actor: User)
     # Snapshot before anything mutates, for the audit diff (PM-32). Taken here
     # rather than field by field so the recorded "old" values are genuinely the
     # pre-change state and cannot drift as the assignments below run.
-    _audited = ("email", "status", "account_type", "first_name", "last_name",
-                "designation", "employee_id", "personal_mobile_number",
+    _audited = ("email", "status", "account_type", "organisation_id", "first_name",
+                "last_name", "designation", "employee_id", "personal_mobile_number",
                 "personal_email", "company_name", "timezone_preference")
     before = {field: getattr(target, field) for field in _audited}
     roles_before = sorted(role.name for role in target.roles)
@@ -391,6 +445,22 @@ def update_user(db: Session, user_id: str, data: UpdateUserRequest, actor: User)
             # Approving clears any standing lockout.
             target.failed_login_attempts = 0
             target.locked_until = None
+
+    if "organisation_id" in updates:
+        # Privileged for the same reason `status` and `role_ids` are: once row
+        # scoping is applied, moving an account between organisations changes
+        # which rows it can read. Allowing a non-admin to set it would let
+        # someone grant themselves another tenant's data.
+        if not actor.has_admin_access:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "Administrator access required to change organisation membership.",
+            )
+        if target.id == actor.id:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST, "You cannot change your own organisation."
+            )
+        target.organisation_id = _resolve_organisation(db, updates["organisation_id"])
 
     if "role_ids" in updates and updates["role_ids"] is not None:
         if not actor.has_admin_access:

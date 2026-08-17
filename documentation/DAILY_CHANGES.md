@@ -6,6 +6,305 @@
 > Update this file as part of the same change as the code. A task that isn't here is invisible to the
 > next person.
 
+## August 17, 2026 — One stat tile, where there were three
+
+**Every index page's headline counts now come from one component.** The owner asked for the stat
+cards above the tables to be right and to follow the component structure; the finding on the way in
+was that there was no structure to follow — there were three of them:
+
+- `ApiDocsModule` and `WorkerJobsModule` each **inlined a `Card` per tile** — the same twenty lines,
+  copied. Both were also misusing `Card`, which is the viewport-locked *index surface*: its `flex
+  min-h-0 flex-1 overflow-hidden` exists so a table can scroll inside it, and `flex-1` on a grid
+  child is a contradiction that reads as deliberate.
+- `InvitationsModule` had a **private `StatCard` of a different size and shape**, passed through
+  `filterExtras` — so four numbers sat inside the filter row, competing with Reset and the column
+  picker for one line.
+
+A fix to any of them reached none of the others, which is why three pages that show the same kind of
+thing looked like three products. Now `components/common/StatTiles.tsx` is the only implementation,
+`ResourceIndex` gained a first-class `stats` slot that renders it between the heading and the table,
+and all three modules were migrated onto it. The rules are in `UI_PATTERNS.md` § Stat tiles.
+
+**What actually improved on screen, beyond consistency:**
+
+- **Tone now tracks the value, not the label.** Background Jobs printed `Unhealthy 4` in the same ink
+  as `Jobs 5`, on a page whose own banner said the worker was down. Unhealthy, Failures and Last
+  activity now carry a status dot **conditionally** — zero is not a problem, and a permanently red
+  tile is a badge that can never clear. API Documentation's `Public` count goes amber, or red when
+  there is an unexpected public route, because that number is the finding the page exists to surface.
+- **The `wide` hack is gone.** Worker's "Last activity" is a timestamp, and it was special-cased to
+  `text-xs` while its neighbours were `text-xl` — so its label rode ~16px above theirs. `textual:
+  true` is now the declared variant, and the value box is a fixed 30px in both cases, so every label
+  in a row shares a baseline.
+- **The invitation tiles' one measured finding was preserved, not lost in the merge.** Of the three
+  implementations only that one had checked anything: colouring the figure with the semantic tone put
+  `tone-success` at 1.84:1 on night and `tone-warning` at 1.47:1 on the light wash. The figure stays
+  ink and the tone rides a dot; the reasoning moved onto `StatTile.tone` so the next person finds it.
+- **Proportional figures, and compaction past five figures** (`12852` → `12.9K`). Deliberately the
+  opposite of the table columns: tabular figures align a column and leave `121` gappy at display size.
+- Hints sit on the tile floor, so a two-line hint no longer leaves its neighbours' hints floating.
+
+The tile fill is a faint tint rather than a named surface — these render on four backgrounds (page
+body and index `Card`, light and dark), and `night-card` tiles on a `night-card` card are invisible.
+
+**A back-to-top button now floats in the bottom-right of every index page.** Owner's request, same
+task. The one thing worth knowing about it: **it scrolls the table's container, not the window.** On
+an index page the window never scrolls — the viewport is locked and the table's own box is the
+scroller — so the obvious `window.scrollTo(0, 0)` would have been a button that visibly does nothing.
+It is mounted inside both table implementations (`DataTable` and the vendor one) rather than per
+module, so no module wires it up and the two behave identically.
+
+It takes the slot *above* the assistant's floating button rather than the corner itself, at a lower
+z-index, because the assistant already owns `bottom-4 right-4` and the index pager already pads
+around it. It stays hidden until 240px down, and is `aria-hidden` with no tab stop while hidden — it
+remains mounted so it can animate, and an invisible control that still takes focus is a trap.
+
+Verified: typecheck and lint clean; all three stat screens read on a headless-Chrome pass. The
+back-to-top button was checked with a **purpose-written** scroll test (`scripts/` has no equivalent —
+the 43-route harness never scrolls, so it structurally cannot see this button): on Activity it is
+opacity 0 at rest, becomes 44×44 at 16px/80px from the corner once the container is at 600px, and
+returns the container to `scrollTop: 0` and re-hides on click. On Invitations the button mounts
+correctly but **could not be exercised** — the seed data is three rows, so nothing scrolls there.
+
+## August 17, 2026 — Log tables get a size limit, not just an age limit
+
+**The owner's brief: put a cap on the logs so old ones are deleted automatically, because the
+database must not grow large on logs alone.** Every append-only table now has two independent
+limits, and the second one is new.
+
+**Age-based retention never bounded the database, and that is the whole point.** Everything here
+already deleted "rows older than N days" — a real policy, and the right one for *how far back can we
+answer questions*. It says nothing about how many rows arrive inside that window. The tables that
+grow fastest grow fastest **exactly when something is wrong**: API request logs during an
+integration retry loop, error occurrences during an incident, webhook deliveries when a receiver
+starts refusing everything. Those are the nights a disk fills, and a sweep scheduled for 03:15
+tomorrow does not help.
+
+So each table now carries a **row cap** as well: keep the newest N, delete the surplus. Age says how
+far back we keep; only the cap says how big it may get.
+
+**Three tables had no purge at all.** Not a disabled one, not an unwired one — nothing.
+`webhook_deliveries` (one row per attempt, and failures are retried), `error_occurrences` (one per
+raised error, so an incident is a burst) and `search_logs` grew forever. `search_logs` is the one
+worth noting: its own model docstring said *"it should get a retention policy before it gets a year
+of data. Left as a note rather than a silent decision."* That note is now discharged.
+
+**Six tables, with their limits:**
+
+| Table | Age | Row cap |
+|---|---|---|
+| `api_request_logs` | 90 days | 500,000 |
+| `webhook_deliveries` | 30 days | 200,000 |
+| `error_occurrences` | 90 days | 200,000 |
+| `search_logs` | 90 days | 200,000 |
+| `worker_job_runs` | 30 days | 50,000 |
+| `activity_log` | 730 days | **none — deliberately** |
+
+**The audit trail is the one exception, and it is an exception on purpose.** Everything else here is
+telemetry; that table is evidence. A row cap deletes the *oldest* rows first, which is the half an
+investigation needs, and three separate places in this codebase already said that trimming it must
+be an instruction rather than a default. That decision survived the change: the policy carries a
+`requires_opt_in` flag, so the automatic sweep skips it and `--retention activity-log` is how you
+trim it. The flag lives on the policy rather than in the caller, because a caller is where such a
+rule gets forgotten.
+
+**Five worker jobs became three.** `api-request-logs`, `worker-runs` and `activity-log` were three
+near-identical per-table purges, and three more tables had none — adding three more copies would
+have made six near-copies and a fourth omission waiting to happen. There is now one `retention` job
+over a policy registry: **adding a log table means adding a policy, not writing another job.**
+
+**Deletes run in batches and report honestly.** A single `DELETE` over millions of rows takes a long
+lock and one enormous transaction; each pass removes at most 5,000 rows and commits, so an
+interrupted sweep still leaves the table smaller. A run that hits its batch ceiling reports
+`truncated` rather than success — a cleanup job that says "done" while the table is still over
+budget is how a disk fills up with a green dashboard.
+
+**`--status` shows size against limits**, which is the number an operator actually wants:
+
+```
+policy                        rows         cap      over  age limit
+api-request-logs                 0     500,000         -  90d
+webhook-deliveries               0     200,000         -  30d
+error-occurrences                3     200,000         -  90d
+search-logs                      3     200,000         -  90d
+worker-runs                      4      50,000         -  30d
+activity-log                   746           -         -  730d  (opt-in)
+```
+
+**Verified end to end against the real database**, not only in unit tests: 60 synthetic rows seeded
+into `search_logs`, half of them 200 days old, then swept with a 90-day age limit and a cap of 10 —
+30 removed by age, 23 by cap, 10 left, and every survivor recent. 18 new tests, including the one
+that matters: **the cap keeps the NEWEST rows.** Trimming to the oldest would still shrink the table
+and still pass a naive "row count went down" check while deleting today's logs and keeping last
+year's.
+
+Two honest notes. The probe run above also removed the three pre-existing development search-log
+rows — they were the oldest of the survivors under a cap of 10. Dev telemetry only, but it happened.
+And **"automatic" still needs one thing this session could not do**: the worker is not a service in
+`docker-compose.yml`, which is a protected file. Until it is added, the sweep runs when the worker
+is run — `docker compose run --rm backend python -m app.worker --once`, or from cron. The job and
+the policies are in place; only the scheduler entry is missing.
+
+## August 17, 2026 — The core becomes liftable: five phases of the extraction plan, executed
+
+**`app/domain/` can now be deleted and the platform still boots.** That is the property the whole
+exercise was for, and it is verified by actually deleting the directory rather than only by a test.
+Phases 0, 1, 2, 3 and 5 of `planning/CORE_EXTRACTION_PLAN.md` are done; phase 4 has its foundation
+and one converted module; phase 6 is blocked on credentials and infrastructure.
+
+**Final gate: backend 722 tests passing, ruff clean, frontend typecheck and lint clean, Alembic at
+head `c9a71f4e2b60`.** The suite grew from 635 to 722 — the new tests are the point, not a side
+effect.
+
+**Phase 0 — the sidebar stopped pointing at 404s.** The Partner Directory nav section had shipped
+without the pages behind it. Added `PartnerForm`, `PartnerShow`, `PartnerTiersModule` and five route
+pages, and cleared the three typecheck errors in the work-in-progress module.
+
+**Phase 1 — the core stopped naming the partner directory.** Permissions, role grants and sidebar
+sections were three large literals mixing platform vocabulary with directory vocabulary, so lifting
+the core meant hand-editing all three. They are now registries: the core registers its own entries
+and `app/domain/partners/` registers the nine `PARTNER_*` permissions, the `Partner` role and the
+Partner Directory section. **The assembled result was proven byte-identical to the previous
+version** — same 13 groups in the same order, same 54 permissions, same 8 roles, same grants — by
+evaluating the old file alongside the new one and comparing. `core/partner_tiers.py` moved to
+`app/domain/partners/tiers.py`; it was the last whole file of directory data sitting in the platform
+layer.
+
+**Phase 2 — the tenancy concept lost this project's name.** `users.partner_id` became
+`users.organisation_id` and the `staff | partner` account-type enum became `internal | external`,
+in migration `c9a71f4e2b60`. The auth guard that runs on every authenticated request now reads
+`user.organisation` against a small `core/tenancy.py` Protocol — two members, id and status — rather
+than importing the directory's model.
+
+**And it closed a hole nothing had noticed: no code could write `users.partner_id` at all.** No
+service set it, neither user schema carried it, and `user_invitations` had no such column. An
+organisation could be onboarded, activated, verified and published while remaining permanently
+empty, so the organisation gate governed zero users. Creating a user, editing one, and inviting one
+can all name an organisation now.
+
+**The migration's `downgrade()` was broken on the first attempt and that is why it was tested.** It
+set the enum default before renaming the value back, so `'partner'` was not yet a legal value.
+Transactional DDL rolled it back cleanly and nothing was half-applied — but a rollback that cannot
+run is a rollback you do not have. Fixed and round-tripped down and up against the live database,
+with all 12 user rows preserved.
+
+**Phase 3 — PM-5 is closed.** `app/services/scoping.py` exists, with 24 tests written against the
+rule rather than against any router. Anonymous is the most restrictive branch **by construction**: a
+model must opt in to being publicly visible, and an unregistered model raises rather than quietly
+returning every row. Refusals are 404, never 403, because a 403 confirms a competitor exists. The
+two hand-rolled `# PM-5` filters in `partner_service` are gone. **The three `data_access_service`
+helpers that were built, tested and wired to nothing now have their first production call site** —
+until today an admin could create a data-access grant, see it listed as active, and have it change
+Global Search results and nothing else.
+
+**Phase 4 — the frontend has a data layer.** RTK Query, which cost zero new dependencies because
+`@reduxjs/toolkit` was already installed for the auth slice, over the existing axios instance so the
+single-flight token refresh is not reimplemented. `PartnerTiersModule` is converted as the worked
+example and no longer calls `refetch()` by hand — the mutation invalidates a tag and the list updates
+itself. **Sixteen modules are still on the old fetch-on-mount pattern**; converting them is
+mechanical follow-on, not design.
+
+**Phase 5 — the fossils that would follow the core into project #2.** `MAIL_FROM` and the seeder's
+root address were literal `@leapswitch.com` strings; both now derive from `STAFF_EMAIL_DOMAINS`, the
+same treatment `TWO_FACTOR_ISSUER` already had. A production deployment that never changed that
+domain is now warned about it, because it decides who may sign in with SSO. `ALLOW_PARTNER_SELF_REGISTRATION`
+became `ALLOW_EXTERNAL_SELF_REGISTRATION`, with the old environment-variable name still accepted.
+
+**A correction to `AGENTS.md`:** it described the plaintext-password design as accepted debt. That
+has been false since 2026-07-31 — passwords are bcrypt-hashed and PM-1 is closed. The line outlived
+the code it described by two and a half weeks.
+
+**One check found a defect no test could.** The plan claims the core boots with `app/domain/`
+deleted, and the unit test appeared to prove it — but the test stubs the module in `sys.modules`,
+while `core/permissions.py` imported it unconditionally. Physically deleting the directory failed
+outright. The import is now guarded by `except ModuleNotFoundError` comparing `exc.name`, so a
+*missing* domain is tolerated and a *broken* one still raises — because a bare `except ImportError`
+would let a typo inside any domain module silently delete nine permissions and a role with no error
+at all.
+
+**Not done, and why.** The Docker network and database rename (`test-platform`, `test_platformDB`)
+is destructive — it needs containers stopped and a dump-and-restore — so it waits for the owner.
+Google SSO verification needs real credentials, SMTP needs a provider, and Redis and monitoring both
+belong with a production topology that does not exist yet. The authenticated 43-route browser pass
+needs `CHECK_EMAIL`/`CHECK_PASSWORD`, which this session does not have; the new routes were confirmed
+to resolve (307 to sign-in) rather than 404 as they did before.
+
+## August 17, 2026 — A plan for lifting the core into a second project
+
+**The owner's brief: stop building the marketplace and make the platform underneath strong enough to
+reuse.** Written up as `planning/CORE_EXTRACTION_PLAN.md` — a phase-by-phase, code-level checklist.
+No code changed today; this entry records the measurement, because the numbers correct two documents.
+
+**The partner domain leaks into the core in five places, and the leak is shallow but deep.** Only
+five structural touchpoints — `users.partner_id` and the `partner` relationship on the User model,
+the organisation gate in `core/dependencies.py`, nine `PARTNER_*` permissions plus `ROLE_PARTNER` in
+the core vocabulary, the Partner Directory nav section, and the `account_type` Postgres enum that
+literally spells `staff | partner`. Shallow in count; the problem is that three of them sit in the
+User model and the auth guard, which is the first thing any future project inherits.
+
+**Two measurements correct earlier documents.** `CORE_HARDENING_PLAN.md` implies roughly forty
+`actor: User` signatures to retype for PM-5; the real count is **258 across 44 files**. That is the
+difference between an afternoon and a multi-day sweep, and it is the whole argument for renaming the
+tenancy concept *before* PM-5 rather than after — otherwise that sweep happens twice. Separately,
+`AGENTS.md` still describes the plaintext-password design as accepted debt; PM-1 closed on
+2026-07-31 and `core/security.py` uses bcrypt with a docstring forbidding a regression. Correcting
+that line needs the owner, since `AGENTS.md` is a protected file.
+
+**Measured state of the gate:** lint 0 errors (one unused-import warning), typecheck 3 errors — all
+three in the untracked `PartnersModule.tsx` work in progress — single Alembic head `b6e2a91c4d78`
+across 33 revisions. The frontend has 49 files using `useEffect` and 17 of 20 admin modules fetch on
+mount, with Redux carrying auth only; that is PM-41 and it is now the largest open build item.
+
+**One hole found that is not in any register:** nothing in the application can write
+`users.partner_id`. No service sets it, neither user schema carries it, and `user_invitations` has no
+such column. A partner organisation can be onboarded, activated and published, but no person can be
+attached to it except by hand in the database — so the organisation gate that `get_current_user`
+runs on every request currently governs zero users. Folded into the plan's phase 2.
+
+## August 17, 2026 — The sidebar slims down and hands its collapse button to the header
+
+**Three owner-directed changes to the signed-in chrome: a narrower nav, one toggle instead of two,
+and quieter section headings.**
+
+**The expanded sidebar is now a flat 240px at every desktop width, down from 256/288.** It used to
+widen with the viewport — `w-64` (256px) from 768px up, `2xl:w-72` (288px) from 1536px — so a big
+monitor paid the most for a column of fixed-width labels. One value now covers every breakpoint,
+which also removes the only reason the width had a responsive variant at all. The main panel is
+`flex-1`, so all 48px land in the content with nothing else to change: nothing in the frontend was
+coupled to the sidebar's width — no spacer, no offset, no matching `pl-*`. The collapsed rail
+(68px) and the below-`md` slide-over drawer (`w-72 max-w-[85vw]`) are untouched.
+
+**The collapse control moved out of the sidebar and into the top header's left corner.** It was two
+buttons for one boolean: `«` in the sidebar's own header when expanded, `»` in a separate bordered
+strip when collapsed — so the control moved as you used it, and neither position was where the eye
+starts. Now it is a single `HeaderIcon` in `TopNav`, first thing on the left, swapping its chevrons
+to show direction. **The state had to move with it:** `collapsed` was `useState` inside `Sidebar`,
+but the sidebar and the header are siblings, so it now lives in `AppShell` — their nearest common
+owner — which reads it to `Sidebar` and passes the toggle to `TopNav`. `Sidebar` is a pure reader of
+its own width. The mobile drawer keeps its own hamburger; it was never part of this control.
+
+Two consequences worth recording, both deliberate: the collapsed rail lost the divider that existed
+only to separate the expand button from the nav, and the sidebar header is back to brand mark plus
+app name. The stale comment claiming that divider still exists was corrected in the same change.
+
+**Partner Directory moved to second in the nav, directly under Dashboard.** It sat below User
+Management, which ordered the sidebar by how the platform is administered rather than by what it is
+for — the partner directory is the product, and user/role admin is plumbing underneath it. Done in
+`navigation_service.build_sections`, which is the only place nav order is expressed: the tree is
+server-driven, so no frontend file was touched. `COLLAPSIBLE_SECTION_CATALOG` was reordered to match,
+keeping the role page's toggle list reading top-to-bottom like the sidebar it configures; its lookups
+are by key, so that is presentation only. The docstring claiming the order "follows LeapDesk" was
+corrected — the grouping still does, the order deliberately no longer does.
+
+**Sidebar section headings dropped from 15px to 12px** — both variants, the plain heading
+("Administration") and the collapsible dropdown ones ("User Management", "Partner Directory", …).
+They are one visual tier and are always seen together, so changing only the one the owner quoted
+would have left the tier mismatched. Header padding also tightened to `px-4 sm:px-3 lg:px-2`.
+
+Verified: the full 43-route browser pass — 45 passed, sidebar and heading detected on every signed-in
+screen, zero console errors. Typecheck and lint clean apart from the three pre-existing errors in the
+untracked `PartnersModule.tsx` work-in-progress, which are unrelated to this change.
+
 ## August 13, 2026 — One codebase, every screen size: the responsive pass
 
 **The owner's brief: nobody from a phone to a big desktop should hit a style error.** Measured

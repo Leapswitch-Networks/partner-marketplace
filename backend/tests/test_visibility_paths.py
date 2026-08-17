@@ -70,7 +70,7 @@ def viewer():
         password=hash_password(PASSWORD),
         first_name="Vera",
         last_name="Viewer",
-        account_type="staff",
+        account_type="internal",
         status="ACTIVE",
         auth_provider="password",
     )

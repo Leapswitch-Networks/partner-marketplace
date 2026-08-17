@@ -93,7 +93,7 @@ function Section({
   if (!section.collapsible) {
     return (
       <div className="mt-3 first:mt-0">
-        <p className="mb-2 mt-6 border-b border-brand/20 px-4 pb-2 text-[15px] font-semibold text-brand first:mt-2 dark:border-night-border dark:text-brand-on-dark">
+        <p className="mb-2 mt-6 border-b border-brand/20 px-4 pb-2 text-[12px] font-semibold text-brand first:mt-2 dark:border-night-border dark:text-brand-on-dark">
           {section.label}
         </p>
         <div className="mt-0.5 space-y-1">
@@ -109,7 +109,7 @@ function Section({
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={effectiveOpen}
-        className="group mb-2 mt-6 flex w-full items-center justify-between border-b border-brand/20 px-4 pb-2 text-[15px] font-semibold text-brand transition-colors first:mt-2 hover:text-brand-dark dark:border-night-border dark:text-brand-on-dark dark:hover:text-white"
+        className="group mb-2 mt-6 flex w-full items-center justify-between border-b border-brand/20 px-4 pb-2 text-[12px] font-semibold text-brand transition-colors first:mt-2 hover:text-brand-dark dark:border-night-border dark:text-brand-on-dark dark:hover:text-white"
       >
         <span>{section.label}</span>
         <svg

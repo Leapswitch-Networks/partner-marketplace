@@ -5,7 +5,26 @@
  * nothing behaved differently for it.
  */
 export type UserStatus = "INACTIVE" | "ACTIVE";
-export type AccountType = "staff" | "partner";
+/**
+ * The account CLASS, not this project's word for it. Renamed from
+ * `staff | partner` on 2026-08-17 with the backend enum (migration
+ * `c9a71f4e2b60`, `CORE_EXTRACTION_PLAN.md` phase 2) so the contract survives
+ * into a project whose external accounts are clinics or suppliers.
+ *
+ * **The UI still says "Staff" and "Partner"** — see `ACCOUNT_TYPE_LABELS`. The
+ * wire value is neutral; the label is this project's.
+ */
+export type AccountType = "internal" | "external";
+
+/**
+ * What each account class is CALLED here. One map, so relabelling for a second
+ * project is a single edit rather than a hunt through six components — which is
+ * what it was before this existed.
+ */
+export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
+  internal: "Staff",
+  external: "Partner",
+};
 export type AuthProvider = "password" | "google";
 
 export interface RoleSummary {
@@ -35,6 +54,8 @@ export interface CurrentUser {
   personal_email: string | null;
   company_name: string | null;
   account_type: AccountType;
+  /** Organisation membership. NULL means an internal, first-party account. */
+  organisation_id: string | null;
   status: UserStatus;
   auth_provider: AuthProvider;
   timezone_preference: string;
@@ -65,6 +86,8 @@ export interface ManagedUser {
   designation: string | null;
   company_name: string | null;
   account_type: AccountType;
+  /** Organisation membership. NULL means an internal, first-party account. */
+  organisation_id: string | null;
   status: UserStatus;
   auth_provider: AuthProvider;
   /** 2FA enrolled AND confirmed. Drives the per-row "Reset 2FA" action. */
@@ -164,6 +187,101 @@ export interface Invitation {
 export interface InvitationCreated extends Invitation {
   accept_url: string | null;
   email_sent: boolean;
+}
+
+/**
+ * The organisation's lifecycle, one level above the account gate on `users` —
+ * mirrors `Partner.status` on the backend. `status` gates LOGIN for every user
+ * in the organisation; it is independent of `is_listed`, which gates public
+ * visibility. See `PartnerListItem.publicly_visible`, which needs both.
+ */
+export type PartnerStatus = "PENDING" | "ACTIVE" | "SUSPENDED";
+
+/**
+ * What Leapswitch vouches for — the directory's trust signal, ranked ahead of
+ * any paid placement. Mirrors `Partner.verification_level`.
+ */
+export type VerificationLevel = "UNVERIFIED" | "VERIFIED" | "PREMIER";
+
+/** A partner tier, as `GET /partners/tiers` and the tier picker render it. */
+export interface PartnerTier {
+  id: number;
+  name: string;
+  display_name: string;
+  description: string | null;
+  /** NULL means unlimited. Do not coerce this to 0. */
+  max_listings: number | null;
+  featured_slots: number;
+  sort_order: number;
+  is_active: boolean;
+  is_unlimited: boolean;
+  can_feature: boolean;
+}
+
+/**
+ * One row of the staff partners table, from GET /partners.
+ *
+ * `can_*` flags are computed per row against the requesting actor — for
+ * rendering only, same contract as `ManagedUser`. The API re-checks every write
+ * regardless.
+ */
+export interface PartnerListItem {
+  id: string;
+  name: string;
+  slug: string;
+  status: PartnerStatus;
+  verification_level: VerificationLevel;
+  is_listed: boolean;
+  tier: PartnerTier | null;
+  city: string | null;
+  country: string | null;
+  user_count: number;
+  created_at: string;
+
+  is_active: boolean;
+  is_verified: boolean;
+  publicly_visible: boolean;
+
+  can_edit: boolean;
+  can_delete: boolean;
+  can_change_status: boolean;
+  can_verify: boolean;
+  can_publish: boolean;
+}
+
+/**
+ * What `GET /partners/{id}` actually returns — `PartnerListItem` plus the
+ * compliance and audit columns the directory profile needs. Declared in full
+ * rather than inherited-and-hoped, same reasoning as `ManagedUserDetail`: the
+ * list item under-describes the record.
+ */
+export interface PartnerDetailResponse extends PartnerListItem {
+  legal_name: string | null;
+  tagline: string | null;
+  about: string | null;
+  logo_path: string | null;
+  banner_path: string | null;
+  website: string | null;
+  public_email: string | null;
+  public_phone: string | null;
+  founded_year: number | null;
+  employee_range: string | null;
+
+  gst_number: string | null;
+  pan_number: string | null;
+  billing_address: string | null;
+  state: string | null;
+  postal_code: string | null;
+
+  agreement_signed_at: string | null;
+  verified_at: string | null;
+  verified_by: string | null;
+  onboarded_by: string | null;
+  notes: string | null;
+
+  created_by: string | null;
+  updated_by: string | null;
+  updated_at: string;
 }
 
 export interface Paginated<T> {

@@ -22,7 +22,7 @@ import { adminApi } from "@/lib/api/adminApi";
 import usePermissions from "@/lib/hooks/usePermissions";
 import { extractApiError } from "@/lib/utils/apiError";
 import { formatDate, formatDateTime } from "@/lib/utils/format";
-import type { ManagedUserDetail, UserStatus } from "@/types";
+import { ACCOUNT_TYPE_LABELS, type ManagedUserDetail, type UserStatus } from "@/types";
 
 /**
  * The Users detail page — the third page of the Index / Form / Show contract,
@@ -124,7 +124,7 @@ export default function UserShow({
                   )
                 }
               />
-              <Field label="Account type" value={user.account_type === "staff" ? "Staff" : "Partner"} />
+              <Field label="Account type" value={ACCOUNT_TYPE_LABELS[user.account_type]} />
               <Field
                 label="Sign-in method"
                 value={user.auth_provider === "google" ? "Google" : "Password"}
@@ -228,7 +228,7 @@ export default function UserShow({
             and email, and stacking a third row on it crowds the close button. */}
         <div className="mb-4 flex flex-wrap items-center gap-1.5">
           <Badge tone={status.tone}>{status.label}</Badge>
-          <Badge tone="neutral">{user.account_type === "staff" ? "Staff" : "Partner"}</Badge>
+          <Badge tone="neutral">{ACCOUNT_TYPE_LABELS[user.account_type]}</Badge>
           {user.two_factor_enabled && <Badge tone="brand">2FA on</Badge>}
           {locked && <Badge tone="danger">Locked</Badge>}
         </div>
@@ -271,7 +271,7 @@ export default function UserShow({
         description={user.designation ?? undefined}
         badges={[
           { label: status.label, tone: status.tone },
-          { label: user.account_type === "staff" ? "Staff" : "Partner", tone: "neutral" },
+          { label: ACCOUNT_TYPE_LABELS[user.account_type], tone: "neutral" },
           ...(user.two_factor_enabled ? [{ label: "2FA on", tone: "brand" as const }] : []),
           // Only shown while the lockout is live. A stale "locked" badge on an
           // account that has since unlocked itself would send support down the
@@ -305,7 +305,7 @@ export default function UserShow({
                   )
                 }
               />
-              <Field label="Account type" value={user.account_type === "staff" ? "Staff" : "Partner"} />
+              <Field label="Account type" value={ACCOUNT_TYPE_LABELS[user.account_type]} />
               <Field
                 label="Sign-in method"
                 value={user.auth_provider === "google" ? "Google" : "Password"}

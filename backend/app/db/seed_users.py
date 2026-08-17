@@ -32,7 +32,7 @@ Roster format — a JSON array:
         "email": "ada@example.com",
         "roles": ["Admin"],
         "status": "ACTIVE",              // optional, defaults to ACTIVE
-        "account_type": "staff",         // optional, inferred from the domain
+        "account_type": "internal",      // optional, inferred from the domain
         "password": "..."                // optional; generated if omitted
       }
     ]
@@ -137,7 +137,7 @@ def seed_users(db: Session, roster: list[dict]) -> None:
                 last_name=entry["last_name"].strip(),
                 account_type=entry.get(
                     "account_type",
-                    "staff" if settings.is_staff_email(email) else "partner",
+                    "internal" if settings.is_staff_email(email) else "external",
                 ),
                 status=entry.get("status", "ACTIVE"),
                 # Seeded accounts are vouched for by whoever wrote the roster, so

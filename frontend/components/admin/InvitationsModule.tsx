@@ -21,7 +21,7 @@ import useModalState from "@/lib/hooks/useModalState";
 import usePermissions from "@/lib/hooks/usePermissions";
 import useResourceList from "@/lib/hooks/useResourceList";
 import useResourceQuery from "@/lib/hooks/useResourceQuery";
-import type { Invitation } from "@/types";
+import { ACCOUNT_TYPE_LABELS, type AccountType, type Invitation } from "@/types";
 import { extractApiError } from "@/lib/utils/apiError";
 
 /**
@@ -62,36 +62,18 @@ const STATUS_OPTIONS = [
 ];
 
 const ACCOUNT_TYPE_OPTIONS = [
-  { value: "partner", label: "Partner" },
-  { value: "staff", label: "Staff" },
+  { value: "external", label: ACCOUNT_TYPE_LABELS.external },
+  { value: "internal", label: ACCOUNT_TYPE_LABELS.internal },
 ];
 
-/**
- * Summary card. Counts come from their own endpoint — see `stats`.
- *
- * **The number is ink, not the tone colour**, and the tone moved to a dot beside
- * the label. Measured on 2026-08-12: colouring the figure itself put
- * `tone-success` at 1.84:1 on the dark surface and `tone-warning` at 1.47:1 on
- * the light one — the count was the least readable thing on a card whose entire
- * job is to show a count. A semantic fill is designed to sit *behind* white text
- * in a badge, not to be text on a page background.
- *
- * The dot keeps the colour coding at a glance, where a shape rather than a glyph
- * is what carries it, and passes because a 6px block is not text.
+/*
+ * The private `StatCard` that used to live here moved to
+ * `components/common/StatTiles.tsx` on 2026-08-17, along with the two inlined
+ * copies in `ApiDocsModule` and `WorkerJobsModule`. Its contrast finding — the
+ * figure stays ink and the tone rides a dot beside the label — survived the move
+ * and is documented on `StatTile.tone`, because it was the only one of the three
+ * implementations that had measured anything.
  */
-function StatCard({ label, value, tone }: { label: string; value: number; tone: string }) {
-  return (
-    <div className="flex-1 rounded-[5px] border border-brand/20 px-3 py-2 dark:border-night-border">
-      <p className="text-lg font-bold tabular-nums text-ink dark:text-gray-100">{value}</p>
-      <p className="flex items-center gap-1.5 text-[11px] text-ink-label dark:text-night-muted">
-        <span className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${tone.replace("text-", "bg-")}`} />
-        {/* Cards go 2-up under 640px (below) — truncate so a narrow card
-            shrinks the label instead of overflowing it. */}
-        <span className="truncate">{label}</span>
-      </p>
-    </div>
-  );
-}
 
 export default function InvitationsModule() {
   const { can } = usePermissions();
@@ -122,7 +104,7 @@ export default function InvitationsModule() {
         .list({
           search: q.applied.search || undefined,
           status: (q.applied.status as Invitation["status"]) || undefined,
-          account_type: (q.applied.account_type as "staff" | "partner") || undefined,
+          account_type: (q.applied.account_type as AccountType) || undefined,
           sort_by: q.sortBy,
           sort_order: q.sortOrder,
           page: q.page,
@@ -235,8 +217,8 @@ export default function InvitationsModule() {
       badgeColumn<Invitation>({
         id: "account_type",
         header: "Type",
-        tone: (row) => (row.account_type === "staff" ? "info" : "neutral"),
-        label: (row) => (row.account_type === "staff" ? "Staff" : "Partner"),
+        tone: (row) => (row.account_type === "internal" ? "info" : "neutral"),
+        label: (row) => ACCOUNT_TYPE_LABELS[row.account_type],
         width: "w-[90px]",
       }),
       {
@@ -304,17 +286,15 @@ export default function InvitationsModule() {
         { type: "select", key: "status", placeholder: "All statuses", label: "Filter by status", options: STATUS_OPTIONS },
         { type: "select", key: "account_type", placeholder: "All types", label: "Filter by account type", options: ACCOUNT_TYPE_OPTIONS },
       ]}
-      filterExtras={
-        stats ? (
-          // 2x2 grid under 640px — a 4-up flex row left each card ~55px, too
-          // narrow for its label. Reverts to a single row from `sm`.
-          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
-            <StatCard label="Pending" value={stats.pending} tone="text-tone-warning" />
-            <StatCard label="Accepted" value={stats.accepted} tone="text-tone-success" />
-            <StatCard label="Expired" value={stats.expired} tone="text-ink-label" />
-            <StatCard label="Cancelled" value={stats.cancelled} tone="text-tone-danger" />
-          </div>
-        ) : undefined
+      stats={
+        stats
+          ? [
+              { label: "Pending", value: stats.pending, tone: "warning", hint: "sent, not yet accepted" },
+              { label: "Accepted", value: stats.accepted, tone: "success", hint: "became an account" },
+              { label: "Expired", value: stats.expired, tone: "neutral", hint: "lapsed before use" },
+              { label: "Cancelled", value: stats.cancelled, tone: "danger", hint: "withdrawn by an admin" },
+            ]
+          : undefined
       }
       columns={columns}
       rows={list.rows}

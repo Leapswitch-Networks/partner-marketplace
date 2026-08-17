@@ -290,7 +290,7 @@ def create_invitation(
 
     # A staff invitation must point at a staff domain, or the invitee could never
     # complete it — staff sign in with Google, which is domain-gated.
-    if data.account_type == "staff" and not settings.is_staff_email(email):
+    if data.account_type == "internal" and not settings.is_staff_email(email):
         allowed = ", ".join("@" + d for d in settings.staff_domains)
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
@@ -303,6 +303,7 @@ def create_invitation(
         token=generate_token(64),
         status="pending",
         account_type=data.account_type,
+        organisation_id=data.organisation_id,
         role_id=role.id if role else None,
         expires_at=now + timedelta(days=INVITATION_TTL_DAYS),
         invited_by=actor.id,
@@ -426,7 +427,7 @@ def accept_with_credentials(
     """
     invitation = get_usable_by_token(db, data.token)
 
-    if invitation.account_type == "staff":
+    if invitation.account_type == "internal":
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             "This is a staff invitation — accept it by signing in with Google.",
@@ -443,9 +444,14 @@ def accept_with_credentials(
         password=hash_password(data.password),
         first_name=data.first_name.strip(),
         last_name=data.last_name.strip(),
-        account_type="partner",
+        account_type="external",
         auth_provider="password",
         status="ACTIVE",
+        # The invitation carries the organisation, so accepting one is what
+        # attaches a person to a tenant. Before this existed the column could
+        # only be written by hand in the database, and the organisation gate in
+        # `get_current_user` governed nobody.
+        organisation_id=invitation.organisation_id,
         email_verified_at=datetime.now(timezone.utc),
         created_by=invitation.invited_by,
     )
