@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import GlobalSearch from "@/components/dashboard/GlobalSearch";
 import useAppSelector from "@/lib/hooks/useAppSelector";
 import useAppDispatch from "@/lib/hooks/useAppDispatch";
 import { logoutUser } from "@/lib/store/authSlice";
@@ -22,12 +23,29 @@ import { getUserDisplayName } from "@/lib/utils/user";
  * the theme's full row, greying out the six with no feature behind them; the
  * owner had them removed, which is the better call — a permanently dead control
  * is visual noise that teaches users to ignore that corner of the screen. Gone
- * with them: the bare search (Global Search is an unbuilt parity module),
- * language, bookmarks, notifications and messages.
+ * with them: the bare search, language, bookmarks, notifications and messages.
  *
- * So what remains is real: **fullscreen**, **dark mode**, **log out**, and the
- * account menu. Add each of the others back here, live, when its feature lands —
+ * **Search came back on 2026-08-17, and the gap is worth recording.** This
+ * docstring said "Global Search is an unbuilt parity module" and closed with
+ * "add each of the others back here, live, when its feature lands". The feature
+ * landed — `GET /api/v1/search`, `search_service`, a configurable entity list at
+ * `/dashboard/search`, and a finished `GlobalSearch` component — and the
+ * re-adding step was never done, so the component sat in the tree importing
+ * nothing and imported by nothing for six days. Nothing was broken; a hand-off
+ * was simply left half-finished, which is the failure mode a note like the one
+ * above does not prevent on its own.
+ *
+ * So what is here is real: **search**, **fullscreen**, **dark mode**, **log out**,
+ * and the account menu. Language, bookmarks, notifications and messages are still
+ * out, and stay out until each has something behind it —
  * `VIHO_THEME_REFERENCE.md` § Dashboard Shell records the full row.
+ *
+ * **No permission gates the search box**, deliberately. `GET /api/v1/search` is
+ * authentication-only and `search_service` scopes every hit to what the caller may
+ * already see, so gating the input would hide the feature from people whose
+ * results would simply have been narrower. The one search permission that exists,
+ * `search-entity-manage`, governs *which records are searchable* — the admin page,
+ * not the box.
  *
  * Viho's bell also carries a red unread dot. It is not reproduced, and would not
  * have been even if the bell had stayed: a badge that can never clear is worse
@@ -114,6 +132,23 @@ export default function TopNav({
           )}
         </svg>
       </HeaderIcon>
+
+      {/* Middle: global search.
+          `flex-1 justify-center` rather than absolute centring. The two side
+          groups are `shrink-0` and unequal — one icon on the left, five controls
+          and a Log out button on the right — so an
+          `absolute left-1/2 -translate-x-1/2` box would be truly centred and
+          would overlap the right-hand group at the narrower `md` widths this bar
+          starts at. Centred within the space that is actually free never
+          collides, and `GlobalSearch` caps itself at `max-w-md` so it does not
+          stretch into the action row on a 2560px display.
+
+          The popover positions itself from `getBoundingClientRect`, so it follows
+          this box wherever the flex layout puts it — nothing here needs to know
+          about it. */}
+      <div className="flex min-w-0 flex-1 justify-center px-2">
+        <GlobalSearch />
+      </div>
 
       <div className="flex shrink-0 items-center gap-2">
         <HeaderIcon label="Fullscreen" onClick={toggleFullscreen}>

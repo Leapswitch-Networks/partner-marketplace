@@ -49,6 +49,50 @@ which is lead time, not build time, and worth starting now rather than at step 7
 readers to consult `node_modules/next/dist/docs/`, a directory that does not exist in a 14.2.35
 install. The root `AGENTS.md` corrected the same line on 11 August; this copy outlived it by six days.
 
+## August 17, 2026 — The search box was built, finished, and mounted nowhere
+
+**The global search input is now in the middle of the dashboard header, where it was always meant
+to be.** It was not missing because of a bug, and nothing had to be built to put it there.
+
+The sequence explains it. When the header was first assembled from the theme, it carried the theme's
+full row of controls — search, language, bookmarks, notifications, messages — and most of them had no
+feature behind them. The owner had the dead ones removed, which was the right call: a control that
+never does anything teaches people to ignore that corner of the screen. The header's own notes
+recorded the removals and ended with an instruction to add each one back, live, once its feature
+existed.
+
+Search's feature then arrived — the endpoint, the service, the configurable list of which records are
+searchable — and a complete search component was written: debounced input, results grouped in a
+popover, out-of-order responses discarded so typing "ali" then "alice" cannot leave you looking at the
+wrong results, and arrow keys that walk the whole result list straight through the group headings.
+
+**And then nobody carried out the last step.** The component sat in the tree for six days, imported by
+nothing. The only thing in the codebase that referred to it was a sidebar comment describing what it
+does "in the header", where it was not. A note reminding a future reader to finish a hand-off is worth
+writing, and this is the evidence that it does not reliably work on its own.
+
+**Worth clearing up, because it caused the confusion:** `/dashboard/search` is not the search results
+page. It is the admin screen that chooses *which records the search box looks in*. The search itself
+has no page of its own — results appear in the popover under the input, which is why the input being
+absent made the whole feature look absent.
+
+Two decisions in placing it:
+
+- **It sits in the free space between the sidebar toggle and the action row, not at true centre.**
+  Those two groups are unequal — one icon on the left, five controls and a Log out button on the
+  right — so a genuinely centred box would overlap the right-hand group at the narrower widths this
+  bar starts at. It caps its own width, so it does not stretch across a 2560px display either.
+- **No permission hides it.** The search endpoint requires only that you are signed in, and results
+  are already narrowed to what the caller may see, so gating the input would hide the feature from
+  people whose results would merely have been shorter. The one search permission that exists governs
+  which records are searchable — the admin page, not the box.
+
+Still absent: the search box does not appear on phones, where the header is a slim bar with a
+hamburger and no room for it. That is a separate decision about what belongs in a mobile drawer, and
+it is not made here.
+
+**Verified:** type checking and linting clean, and the dev server recompiled the shell without error.
+
 ## August 17, 2026 — Going live no longer means pasting secrets into a screen
 
 **A deployment can now seed its integration credentials with one command, and the credentials are
