@@ -97,7 +97,7 @@ an ordering that only reads correctly together.
 | PM-42 | 🟡 | ~~The API contract is hand-copied into TypeScript~~ — generated + drift-asserted | ✅ closed 2026-08-06 |
 | PM-43 | 🟡 | ~~Two purge functions exist and nothing runs them~~ — `worker.py` + `db/maintenance.py` | ✅ closed 2026-08-06 |
 | PM-44 | 🟡 | Three pieces of state live in process memory | Open — deferred to the production topology |
-| PM-45 | 🟡 | Model/database drift: 116 column comments never applied, 8 index names disagreeing | ⏳ **partly closed 2026-08-18** — the dangerous quarter is gone |
+| PM-45 | 🟡 | Model/database drift — `--autogenerate` proposed 80 unrelated operations | ✅ **closed 2026-08-18** — drift is 0; a generated migration is now empty |
 
 > **This table was wrong for eleven days and that is worth a line.** PM-40, PM-42 and PM-43 were
 > closed in `CORE_HARDENING_PLAN.md` on 2026-08-06 and still read "Open" here on 2026-08-17, found by
@@ -1587,16 +1587,37 @@ RBAC tables as a side effect — which is exactly what nearly happened.
 provides an index), and migration `ae8cee95c547` drops the four orphaned
 indexes. Drift went 80 → 74 and constraint operations 4 → **0**.
 
-**Still open, and deliberately not bundled:**
+**Closed in three separate changes, one purpose each:**
 
-| Remaining | Count | Risk |
-|---|---:|---|
-| Column comments in models never applied to the database | 116 | None — documentation metadata |
-| Index *names* disagreeing on `user_sessions` and `webhook_deliveries` | 8 | None — cosmetic |
+| Change | What | Ops |
+|---|---|---:|
+| `ae8cee95c547` | Dropped four indexes redundant with a unique constraint | 4 |
+| `0e6d123d0fa3` | Applied 116 model column comments to the database | 116 |
+| *(models only, no DDL)* | Declared indexes the database already had | 8 |
 
-Neither is a correctness issue. Applying 116 comment changes inside a migration
-named after an index cleanup would repeat the mistake this entry exists to
-record, so they want their own change — and it should be one that says
-"apply model comments" on the tin.
+**A generated migration is now empty — `pass` in both directions.**
 
-⚠️ **Until then, `--autogenerate` output still needs reading, not trusting.**
+### The third one is the finding worth keeping
+
+`--autogenerate` wanted to **drop two indexes on `user_sessions`**:
+`ix_user_sessions_refresh_token_jti` and `ix_user_sessions_user_id_revoked_at`.
+Both were created deliberately, with reasons recorded in their own migrations —
+the jti index because reuse detection looks that column up and it is highly
+selective. They were simply absent from the model, so the tool proposed removing
+them.
+
+Taking that suggestion would have been a **silent performance regression dressed
+up as tidying**, and it would have looked like drift cleanup in the diff.
+
+The rule it produced, which is the transferable part:
+
+> **When the model and the database disagree about an index the database is right
+> about, correct the model.** Converging the other way deletes work somebody did
+> on purpose, and `--autogenerate` cannot tell the difference.
+
+The same reasoning settled the webhook index: the database's name was kept and
+declared, rather than renaming a working index to match a generated default.
+
+⚠️ **A generated migration being empty is the point of all this** — it means the
+next real change produces a diff short enough to read, which is how four
+constraint drops nearly rode into a migration named after something else.

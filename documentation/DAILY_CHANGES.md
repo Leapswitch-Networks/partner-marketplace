@@ -99,6 +99,52 @@ module. So a question like *"can I use `async def` here?"* had a correct answer 
 and that file is protected — it needs the owner's explicit approval before it is edited. The one-row
 change is prepared and waiting rather than applied.
 
+## August 18, 2026 — Drift closed to zero, and the suggestion that would have cost us two indexes
+
+**A generated migration is now empty — `pass` in both directions.** It proposed eighty operations
+against unrelated tables this morning. That number is the whole point: a short diff is one somebody
+reads, and a long one is where four constraint drops nearly rode into a migration named after
+something else.
+
+Closed in three changes with one purpose each, which was the rule the earlier near-miss produced.
+
+**The last of the three is the finding worth keeping.** The tool wanted to drop two indexes on the
+sessions table. Both had been created deliberately, with reasons written into their own migrations —
+one because token-reuse detection looks that column up and it is highly selective. They were simply
+absent from the model, so the tool proposed removing them.
+
+Taking that suggestion would have been a silent performance regression dressed up as tidying, and in
+the diff it would have looked exactly like the cleanup it was sitting inside. The rule it produced:
+
+> When the model and the database disagree about an index the database is right about, correct the
+> model. Converging the other way deletes work somebody did on purpose, and generation cannot tell the
+> difference.
+
+So no schema change was needed for that third of it at all — the models now declare what already
+exists, including keeping a working index's real name rather than renaming it to match a generated
+default.
+
+- **The comment migration was checked before it was trusted.** Its 116 operations were confirmed to
+  contain no type change, no nullability change and no default change — every one carries only a
+  comment and descriptors telling the tool what the column already is. That check is why it could be
+  applied in one go rather than read line by line.
+- **⚠️ It also failed the first time, and the way it failed is the lesson.** Hand-writing the file's
+  header dropped an import the generated version had, so it raised at runtime — but the tool prints
+  "Running upgrade" *before* executing, so the output looked like a success. Grepping for that line is
+  not verification; asking what revision the database is actually on is. Three of my own checks
+  earlier today were similarly inconclusive, and the pattern is the same: a command that fails for a
+  reason unrelated to what you are testing proves nothing.
+- **Every probe migration was deleted immediately after reading it.** A generated file left in the
+  versions directory is a real migration as far as the tool is concerned, and one of these had a
+  revision pointing at head.
+
+**Verified:** generation now produces an empty migration in both directions, the two real migrations
+round-trip with the revision checked after each step rather than inferred from log output, 97 column
+comments confirmed present in the database, 838 tests passing, ruff clean, typecheck clean, lint
+clean.
+
+---
+
 ## August 18, 2026 — The drift that would have dropped the access-control constraints
 
 **A migration named after something else would eventually have dropped and recreated the unique

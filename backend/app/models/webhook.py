@@ -126,7 +126,11 @@ class WebhookDelivery(Base):
         String(36),
         ForeignKey("webhook_endpoints.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
+        # Not `index=True`: that would have SQLAlchemy name the index
+        # `ix_webhook_deliveries_webhook_endpoint_id`, while the database has
+        # `ix_webhook_deliveries_endpoint` from the migration that created it.
+        # The index is declared in `__table_args__` under its real name instead,
+        # so `--autogenerate` stops proposing a rename nobody needs.
     )
     event: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     payload: Mapped[dict] = mapped_column(JSONB, nullable=False)
@@ -161,6 +165,8 @@ class WebhookDelivery(Base):
     endpoint: Mapped["WebhookEndpoint"] = relationship(back_populates="deliveries")
 
     __table_args__ = (
+        # Its real name in the database — see the note on `webhook_endpoint_id`.
+        Index("ix_webhook_deliveries_endpoint", "webhook_endpoint_id"),
         Index("webhook_deliveries_endpoint_created_index", "webhook_endpoint_id", "created_at"),
         # Ours: the retry sweep asks "what is due now", and without this it scans
         # every delivery ever made to find the handful that are.

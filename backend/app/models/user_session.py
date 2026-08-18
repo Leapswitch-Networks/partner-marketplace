@@ -30,7 +30,7 @@ information nobody needs to the second.
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy import DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -40,6 +40,25 @@ class UserSession(Base):
     """One sign-in. Revoking the row ends it, whatever tokens exist."""
 
     __tablename__ = "user_sessions"
+
+    # ⚠️ **Declared here because they already exist and are wanted.**
+    #
+    # Both were created deliberately, with reasons recorded in their migrations:
+    # the jti index because reuse detection looks that column up and it is highly
+    # selective, and the composite because listing a user's live sessions filters
+    # on exactly this pair.
+    #
+    # They were absent from this model, so `--autogenerate` proposed **dropping
+    # them** — which would have been a silent performance regression dressed up as
+    # tidying. Found 2026-08-18 while clearing PM-45's drift.
+    #
+    # The rule this follows: when the model and the database disagree about an
+    # index the database is right about, correct the model. Converging the other
+    # way deletes work somebody did on purpose.
+    __table_args__ = (
+        Index("ix_user_sessions_refresh_token_jti", "refresh_token_jti"),
+        Index("ix_user_sessions_user_id_revoked_at", "user_id", "revoked_at"),
+    )
 
     #: This value is the `sid` claim in both the access and refresh tokens.
     id: Mapped[str] = mapped_column(
