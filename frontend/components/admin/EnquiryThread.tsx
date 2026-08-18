@@ -1,0 +1,188 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
+import Button from "@/components/common/Button";
+import Textarea from "@/components/common/Textarea";
+import Toast, { useToast } from "@/components/common/Toast";
+import {
+  getEnquiry,
+  replyToEnquiry,
+  updateEnquiryStatus,
+  type Enquiry,
+  type EnquiryStatus,
+} from "@/lib/api/directoryApi";
+import { extractApiError } from "@/lib/utils/apiError";
+import { usePermissions } from "@/lib/hooks/usePermissions";
+
+const STATUSES: EnquiryStatus[] = ["NEW", "RESPONDED", "CLOSED", "WON", "LOST"];
+
+/**
+ * One enquiry, as a conversation.
+ *
+ * ## Replying here is not a convenience
+ *
+ * It is the only place `first_responded_at` is written, and that column is the
+ * numerator of the only trust signal the public surface can honestly show. A
+ * partner who answers from their own mail client leaves the enquiry at NEW
+ * forever, and § 16's one number reads zero while the product works fine. The
+ * page says so rather than assuming anyone would guess it.
+ *
+ * ## Staff see this and cannot write to it
+ *
+ * `enquiry-respond` is granted to partners and deliberately not to staff
+ * (§ 20.6.1) — a buyer would have no way to know they were talking to us rather
+ * than to the company they wrote to. The composer is replaced with a note
+ * explaining that, rather than hidden: a staff member who cannot find the reply
+ * box will assume it is broken.
+ */
+export default function EnquiryThread({ enquiryId }: { enquiryId: string }) {
+  const { toasts, show, dismiss } = useToast();
+  const { can } = usePermissions();
+  const canRespond = can("enquiry-respond");
+
+  const [enquiry, setEnquiry] = useState<Enquiry | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [body, setBody] = useState("");
+  const [sending, setSending] = useState(false);
+
+  const load = () =>
+    getEnquiry(enquiryId)
+      .then(setEnquiry)
+      .catch((e) => show(extractApiError(e, "Could not load the enquiry."), "error"))
+      .finally(() => setLoading(false));
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enquiryId]);
+
+  const onReply = async () => {
+    if (!body.trim()) return;
+    setSending(true);
+    try {
+      await replyToEnquiry(enquiryId, body.trim());
+      setBody("");
+      show("Reply sent.");
+      await load();
+    } catch (e) {
+      show(extractApiError(e, "Could not send the reply."), "error");
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const onStatus = async (status: EnquiryStatus) => {
+    try {
+      const next = await updateEnquiryStatus(enquiryId, status);
+      setEnquiry(next);
+      show(`Marked ${status.toLowerCase()}.`);
+    } catch (e) {
+      show(extractApiError(e, "Could not change the status."), "error");
+    }
+  };
+
+  if (loading) {
+    return <p className="p-6 text-sm text-ink-muted dark:text-night-muted">Loading…</p>;
+  }
+  if (!enquiry) {
+    return <p className="p-6 text-sm text-ink-muted dark:text-night-muted">Enquiry not found.</p>;
+  }
+
+  return (
+    <div className="mx-auto max-w-4xl p-4 sm:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h1 className="text-lg font-semibold text-ink dark:text-gray-100">
+            {enquiry.buyer_name}
+          </h1>
+          <p className="text-sm text-ink-muted dark:text-night-muted">
+            {enquiry.company ? `${enquiry.company} · ` : ""}
+            {enquiry.buyer_email}
+            {enquiry.buyer_phone ? ` · ${enquiry.buyer_phone}` : ""}
+          </p>
+          <p className="mt-1 text-xs text-ink-muted dark:text-night-muted">
+            Reference {enquiry.reference} ·{" "}
+            {enquiry.first_responded_at
+              ? `first answered ${new Date(enquiry.first_responded_at).toLocaleString()}`
+              : "not yet answered"}
+          </p>
+        </div>
+        {canRespond && (
+          <select
+            value={enquiry.status}
+            onChange={(e) => onStatus(e.target.value as EnquiryStatus)}
+            aria-label="Enquiry status"
+            className="rounded-[5px] border border-surface-border bg-white px-3 py-2 text-sm text-ink dark:border-night-border dark:bg-night-card dark:text-gray-100"
+          >
+            {STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+
+      {(enquiry.budget_range || enquiry.timeline) && (
+        <dl className="mt-4 flex flex-wrap gap-6 rounded-[5px] bg-surface-wash p-3 text-sm dark:bg-night-body">
+          {enquiry.budget_range && (
+            <div>
+              <dt className="text-xs text-ink-muted dark:text-night-muted">Budget</dt>
+              <dd className="font-medium text-ink dark:text-gray-100">{enquiry.budget_range}</dd>
+            </div>
+          )}
+          {enquiry.timeline && (
+            <div>
+              <dt className="text-xs text-ink-muted dark:text-night-muted">Timeline</dt>
+              <dd className="font-medium text-ink dark:text-gray-100">{enquiry.timeline}</dd>
+            </div>
+          )}
+        </dl>
+      )}
+
+      <ol className="mt-6 space-y-4">
+        {(enquiry.messages ?? []).map((m) => (
+          <li
+            key={m.id}
+            className={
+              m.direction === "FROM_BUYER"
+                ? "rounded-[5px] border border-surface-border p-4 dark:border-night-border"
+                : "rounded-[5px] border border-brand/30 bg-brand/5 p-4"
+            }
+          >
+            <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-ink-muted dark:text-night-muted">
+              {m.direction === "FROM_BUYER" ? enquiry.buyer_name : "You"} ·{" "}
+              {new Date(m.created_at).toLocaleString()}
+            </p>
+            <p className="whitespace-pre-wrap text-sm text-ink dark:text-gray-100">{m.body}</p>
+          </li>
+        ))}
+      </ol>
+
+      {canRespond ? (
+        <div className="mt-6">
+          <Textarea
+            label="Reply"
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            rows={5}
+            placeholder="Answer here — this is what records your response time."
+          />
+          <div className="mt-3">
+            <Button onClick={onReply} loading={sending} disabled={!body.trim()}>
+              Send reply
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <p className="mt-6 rounded-[5px] border border-surface-border p-4 text-sm text-ink-muted dark:border-night-border dark:text-night-muted">
+          <strong className="text-ink dark:text-gray-100">Read only.</strong> Only the partner this
+          enquiry was sent to can reply — a buyer needs to know who is answering them.
+        </p>
+      )}
+
+      <Toast toasts={toasts} onDismiss={dismiss} />
+    </div>
+  );
+}

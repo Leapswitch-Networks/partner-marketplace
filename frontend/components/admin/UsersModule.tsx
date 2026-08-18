@@ -22,6 +22,7 @@ import {
 import { navIcon } from "@/components/dashboard/navIcons";
 import { adminApi } from "@/lib/api/adminApi";
 import { roleApi } from "@/lib/api/rbacApi";
+import { partnersApi } from "@/lib/api/partnersApi";
 import useModalState from "@/lib/hooks/useModalState";
 import usePermissions from "@/lib/hooks/usePermissions";
 import useResourceList from "@/lib/hooks/useResourceList";
@@ -103,7 +104,7 @@ export default function UsersModule({ initialModal }: { initialModal?: ModalMode
   // change, clear the selection with it, debounce text but not dropdowns — so
   // the next seven modules inherit them instead of reimplementing them.
   const q = useResourceQuery({
-    filters: { search: "", status: "", account_type: "", role_id: "" },
+    filters: { search: "", status: "", account_type: "", role_id: "", organisation_id: "" },
     debounced: ["search"],
     defaultSortBy: "created_at",
     defaultSortOrder: "desc",
@@ -127,6 +128,7 @@ export default function UsersModule({ initialModal }: { initialModal?: ModalMode
           status: (q.applied.status as UserStatus) || undefined,
           account_type: (q.applied.account_type as AccountType) || undefined,
           role_id: q.applied.role_id ? Number(q.applied.role_id) : undefined,
+          organisation_id: q.applied.organisation_id || undefined,
           sort_by: q.sortBy,
           sort_order: q.sortOrder,
           page: q.page,
@@ -184,6 +186,19 @@ export default function UsersModule({ initialModal }: { initialModal?: ModalMode
     );
 
   // --- columns: #, Actions, Status, then data (LeapDesk's fixed order) ---
+  // Organisations, fetched once. Not a `useResourceList` — unpaged, unfiltered,
+  // and a failure here must leave the users table readable rather than blocking
+  // it. Same pattern the flags module uses for its targeting pickers.
+  const [organisations, setOrganisations] = useState<{ id: string; name: string }[]>([]);
+  useEffect(() => {
+    partnersApi
+      .list({ per_page: 100 })
+      .then((res) => setOrganisations(res.data.items.map((p) => ({ id: p.id, name: p.name }))))
+      .catch(() => setOrganisations([]));
+  }, []);
+  const organisationName = (id: string | null | undefined) =>
+    id ? organisations.find((o) => o.id === id)?.name ?? "—" : "Internal";
+
   const columns = useMemo<Column<ManagedUser>[]>(
     () => [
       numberColumn(),
@@ -306,6 +321,15 @@ export default function UsersModule({ initialModal }: { initialModal?: ModalMode
             </span>
           ),
       },
+      {
+        // Organisation membership. The write path landed in CORE_EXTRACTION_PLAN
+        // phase 2 and nothing displayed it, so an admin could set it and never
+        // confirm it. "Internal" rather than a dash for NULL: the absence is a
+        // meaningful value here — a first-party account — not missing data.
+        id: "organisation",
+        header: "Organisation",
+        cell: (row) => organisationName(row.organisation_id),
+      },
       badgeColumn<ManagedUser>({
         id: "account_type",
         header: "Type",
@@ -368,6 +392,14 @@ export default function UsersModule({ initialModal }: { initialModal?: ModalMode
         { type: "text", key: "search", placeholder: "Search users...", label: "Search users" },
         { type: "select", key: "status", placeholder: "All Status", searchPlaceholder: "Search status...", label: "Filter by status", options: STATUS_OPTIONS },
         { type: "select", key: "account_type", placeholder: "All Types", searchPlaceholder: "Search types...", label: "Filter by account type", options: ACCOUNT_TYPE_OPTIONS },
+        {
+          type: "select",
+          key: "organisation_id",
+          placeholder: "All Organisations",
+          searchPlaceholder: "Search organisations...",
+          label: "Filter by organisation",
+          options: organisations.map((o) => ({ value: o.id, label: o.name })),
+        },
         {
           type: "select",
           key: "role_id",
