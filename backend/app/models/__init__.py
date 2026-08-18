@@ -62,8 +62,16 @@ from app.models.worker_run import WorkerJobRun
 # "delete this", whose table `retention_policies`, `worker_service` and
 # `activity_service` all read. Deleting it as instructed would have dropped
 # `worker_job_runs` — exactly the failure `env.py` warns about.
+from app.models.enquiry import Enquiry, EnquiryMessage, EnquiryRecipient
 from app.models.partner import Partner
 from app.models.partner_tier import PartnerTier
+
+# The directory product's own tables — punchlist Phase 1, 2026-08-18.
+# They belong BELOW the marker with the other domain models: a second project
+# built on this core deletes the partner directory, and that means deleting the
+# taxonomy, the listings and the enquiries with it.
+from app.models.service_category import ServiceCategory
+from app.models.service_listing import ListingAttribute, ListingMedia, ServiceListing
 
 __all__ = [
     # Core identity + RBAC
@@ -114,4 +122,12 @@ __all__ = [
     # LeapDesk parity — Module 16, re-scoped: a worker is not a queue, so this
     # records runs rather than a backlog. See the model docstring.
     "WorkerJobRun",
+    # Directory product — Phase 1 of DIRECTORY_BUILD_PUNCHLIST.md
+    "ServiceCategory",
+    "ServiceListing",
+    "ListingMedia",
+    "ListingAttribute",
+    "Enquiry",
+    "EnquiryMessage",
+    "EnquiryRecipient",
 ]

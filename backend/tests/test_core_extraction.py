@@ -50,6 +50,17 @@ DOMAIN_BLOCK_MARKER = "--- Domain models"
 #: back in.
 DOMAIN_TOKEN = "partner"
 
+#: Domain modules whose names do not contain `DOMAIN_TOKEN`. Added 2026-08-18:
+#: the directory product's tables belong to the partner domain and are deleted
+#: with it, but "service_category" and "enquiry" say nothing about partners.
+DOMAIN_MODULES = frozenset(
+    {
+        "app.models.service_category",
+        "app.models.service_listing",
+        "app.models.enquiry",
+    }
+)
+
 # --- What the check looks at, and what it deliberately ignores ---------------
 #
 # **Identifiers, not text.** Three exclusions, each load-bearing:
@@ -228,7 +239,15 @@ class TestTheDeleteThisBlockContainsOnlyDomainModels:
 
     def test_no_platform_model_sits_in_the_deletable_block(self):
         _above, below = self._imports_by_side()
-        strays = sorted(m for m in below if DOMAIN_TOKEN not in m.lower())
+        # `DOMAIN_TOKEN` is "partner", which was enough while the domain was two
+        # tables named after it. The directory's tables — categories, listings,
+        # enquiries — are just as much part of what a second project deletes, and
+        # none of them contains the word. Matching on the module list rather than
+        # on a substring keeps this test honest about what "domain" means here.
+        strays = sorted(
+            m for m in below
+            if DOMAIN_TOKEN not in m.lower() and m not in DOMAIN_MODULES
+        )
         assert not strays, (
             f"platform models imported below {DOMAIN_BLOCK_MARKER!r}: {strays}. That block is "
             "documented as safe to delete, so a second project would drop their tables. Move the "
@@ -237,8 +256,22 @@ class TestTheDeleteThisBlockContainsOnlyDomainModels:
 
     def test_the_domain_models_are_in_the_block_and_not_above_it(self):
         above, below = self._imports_by_side()
-        assert sorted(below) == ["app.models.partner", "app.models.partner_tier"], (
-            f"expected exactly the two partner models below the marker, got {sorted(below)}"
+        # Widened 2026-08-18 when the directory product got its own tables
+        # (punchlist Phase 1). The invariant is unchanged — "every domain model
+        # sits in the deletable block" — but the block is no longer just the two
+        # partner models, so an exact list has to grow with it. Keeping it exact
+        # rather than loosening to a prefix match is deliberate: this test's job
+        # is to notice when something NEW appears below the marker, and a fuzzy
+        # match would stop it doing that.
+        assert sorted(below) == [
+            "app.models.enquiry",
+            "app.models.partner",
+            "app.models.partner_tier",
+            "app.models.service_category",
+            "app.models.service_listing",
+        ], (
+            f"expected exactly the partner and directory models below the marker, got "
+            f"{sorted(below)}"
         )
         misplaced = sorted(m for m in above if DOMAIN_TOKEN in m.lower())
         assert not misplaced, (

@@ -144,6 +144,26 @@ class Partner(Base):
     country: Mapped[str | None] = mapped_column(String(100), nullable=True)
     postal_code: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
+    # --- The public half, added 2026-08-18 (punchlist 1.2) ------------------
+    #
+    # ⚠️ **No column here may record what a partner buys from us.** That
+    # relationship is confidential — `PARTNER_DIRECTORY_PLAN.md` § 0.1 — and the
+    # strongest enforcement available is that the column does not exist, because
+    # a column that does not exist cannot be serialised by a schema somebody
+    # writes next month.
+
+    #: Where they will actually work. Free text is deliberate here and NOT for
+    #: expertise: an area is displayed, never joined, whereas expertise is the
+    #: filter's index and has to be a foreign key.
+    service_areas: Mapped[str | None] = mapped_column(
+        Text, nullable=True,
+        comment="Comma-separated display list of served areas. Display only, never filtered on",
+    )
+    #: Stamped the first time staff make the profile publicly visible. Distinct
+    #: from `is_listed`, which can be toggled back and forth — this records when
+    #: the directory first showed them, and drives sitemap lastmod.
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
     agreement_signed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
@@ -184,6 +204,23 @@ class Partner(Base):
     users: Mapped[list["User"]] = relationship(  # noqa: F821
         back_populates="organisation",
         foreign_keys="User.organisation_id",
+    )
+    #: What they advertise expertise in — the join the public filter runs on.
+    #:
+    #: `selectin` rather than `joined`: a partner card renders its expertise, so
+    #: it is always needed, but a joined load would multiply the partner row by
+    #: its categories and break the pagination count on the directory index.
+    #: Two queries, never N+1.
+    expertise: Mapped[list["ServiceCategory"]] = relationship(  # noqa: F821
+        "ServiceCategory",
+        secondary="partner_expertise",
+        lazy="selectin",
+        order_by="ServiceCategory.sort_order",
+    )
+    listings: Mapped[list["ServiceListing"]] = relationship(  # noqa: F821
+        "ServiceListing",
+        primaryjoin="Partner.id == ServiceListing.partner_id",
+        viewonly=True,
     )
 
     # --- Derived values -----------------------------------------------------
