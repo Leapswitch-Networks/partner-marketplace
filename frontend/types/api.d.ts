@@ -1075,6 +1075,60 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Categories */
+        get: operations["list_categories_api_v1_categories_get"];
+        put?: never;
+        /** Create Category */
+        post: operations["create_category_api_v1_categories_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/categories/reorder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reorder Categories */
+        post: operations["reorder_categories_api_v1_categories_reorder_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/categories/{category_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Category */
+        get: operations["get_category_api_v1_categories__category_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Category */
+        delete: operations["delete_category_api_v1_categories__category_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Category */
+        patch: operations["update_category_api_v1_categories__category_id__patch"];
+        trace?: never;
+    };
     "/api/v1/data-access": {
         parameters: {
             query?: never;
@@ -1084,7 +1138,12 @@ export interface paths {
         };
         /**
          * List Data Access Grants
-         * @description Every grant, newest first.
+         * @description The grants this caller may see, newest first.
+         *
+         *     Administrators see the whole delegation graph; everyone else sees the grants
+         *     they are a party to. It returned *every* grant to any `data-access-view`
+         *     holder until 2026-08-17, and Staff holds that permission — see
+         *     `data_access_service.list_grants` for why that changed and what was rejected.
          *
          *     `sort_by` outside `scope` / `access_level` / `created_at` falls back to
          *     `created_at` rather than erroring — the allowlist lives in the service's
@@ -1163,6 +1222,82 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/enquiries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Enquiries */
+        get: operations["list_enquiries_api_v1_enquiries_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/enquiries/{enquiry_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Enquiry */
+        get: operations["get_enquiry_api_v1_enquiries__enquiry_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/enquiries/{enquiry_id}/reply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reply To Enquiry
+         * @description Reply on-platform.
+         *
+         *     **This is the only place response time gets recorded**, which is why the
+         *     thread exists at all — a partner answering from their own mail client leaves
+         *     the enquiry at NEW forever and § 16's one number reads zero while the product
+         *     works fine.
+         */
+        post: operations["reply_to_enquiry_api_v1_enquiries__enquiry_id__reply_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/enquiries/{enquiry_id}/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Update Enquiry Status */
+        patch: operations["update_enquiry_status_api_v1_enquiries__enquiry_id__status_patch"];
         trace?: never;
     };
     "/api/v1/errors": {
@@ -1392,6 +1527,153 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/listings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Listings */
+        get: operations["list_listings_api_v1_listings_get"];
+        put?: never;
+        /**
+         * Create Listing
+         * @description Create a listing for the caller's own organisation.
+         *
+         *     ⚠️ **`partner_id` comes from the actor, never from the request body.** That
+         *     is the same rule the invitation flow follows, and for the same reason: a
+         *     partner id in a payload is an invitation to create a listing under somebody
+         *     else's name.
+         */
+        post: operations["create_listing_api_v1_listings_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/listings/{listing_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Listing */
+        get: operations["get_listing_api_v1_listings__listing_id__get"];
+        put?: never;
+        post?: never;
+        /** Delete Listing */
+        delete: operations["delete_listing_api_v1_listings__listing_id__delete"];
+        options?: never;
+        head?: never;
+        /** Update Listing */
+        patch: operations["update_listing_api_v1_listings__listing_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/listings/{listing_id}/submit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit Listing
+         * @description Send a draft to the moderation queue. The partner's own action.
+         */
+        post: operations["submit_listing_api_v1_listings__listing_id__submit_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/moderation/listings/{listing_id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve Listing
+         * @description Publish. **Not scoped** — a reviewer is not a tenant, and the queue is the
+         *     whole point of the role.
+         */
+        post: operations["approve_listing_api_v1_moderation_listings__listing_id__approve_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/moderation/listings/{listing_id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reject Listing */
+        post: operations["reject_listing_api_v1_moderation_listings__listing_id__reject_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/moderation/listings/{listing_id}/unpublish": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Unpublish Listing
+         * @description Take a published listing back off the site without deleting it.
+         */
+        post: operations["unpublish_listing_api_v1_moderation_listings__listing_id__unpublish_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/moderation/queue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Review Queue
+         * @description Everything awaiting review, **oldest first**.
+         *
+         *     Oldest-first is not a display preference: § 16.2 measures the age of the
+         *     oldest item in the queue, and a newest-first list is how the oldest item
+         *     becomes permanently invisible to the person working it.
+         */
+        get: operations["review_queue_api_v1_moderation_queue_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/navigation": {
         parameters: {
             query?: never;
@@ -1555,6 +1837,165 @@ export interface paths {
          * @description Grouped and ordered, ready to render as checkbox sections in the role editor.
          */
         get: operations["list_permissions_api_v1_permissions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/categories": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Public Categories
+         * @description The taxonomy, as a two-level tree.
+         *
+         *     **Only categories with something in them.** § 8's threshold governs whether
+         *     a category earns a page at all; an empty category on the public map is a
+         *     promise the directory cannot keep.
+         */
+        get: operations["public_categories_api_v1_public_categories_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/enquiries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Public Enquiry
+         * @description Accept an enquiry from an anonymous visitor. **The product.**
+         *
+         *     Three defences, in order of how much they are worth:
+         *
+         *     1. **The rate limit** in `core/rate_limit.py` — the real control, because it
+         *        is the only one that survives somebody posting directly rather than using
+         *        our form.
+         *     2. **The honeypot** below. A real browser leaves it empty; a bot fills every
+         *        field it finds. It returns success rather than an error on purpose —
+         *        telling a bot it was detected teaches whoever wrote it what to change.
+         *     3. Field validation in the schema.
+         *
+         *     **No captcha.** § 20.4: not until there is a spam problem to solve. A captcha
+         *     costs every honest buyer something to prevent a problem we have not had.
+         */
+        post: operations["create_public_enquiry_api_v1_public_enquiries_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/enquiries/{reference}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Public Enquiry Status
+         * @description The buyer's own thread, by capability URL.
+         *
+         *     ⚠️ **The reference is the credential.** There is no session here and no
+         *     account behind it — possession of an unguessable string is the whole of the
+         *     authorisation. That is why the page is `noindex`, why it is excluded from the
+         *     sitemap, and why there is deliberately no variant of this route that accepts
+         *     an enquiry id.
+         */
+        get: operations["public_enquiry_status_api_v1_public_enquiries__reference__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/listings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Public Listings */
+        get: operations["public_listings_api_v1_public_listings_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/listings/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Public Listing */
+        get: operations["public_listing_api_v1_public_listings__slug__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/partners": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Public Partners
+         * @description The directory index, with the filter the whole loop depends on.
+         *
+         *     Filtering is a **join on the expertise pivot**, not a text match: that is why
+         *     the taxonomy is Leapswitch's and why a partner picks from it rather than
+         *     typing. A LIKE over free text would find "Kubernetes" and miss "kubernetes
+         *     & containers".
+         */
+        get: operations["public_partners_api_v1_public_partners_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/partners/{slug}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Public Partner */
+        get: operations["public_partner_api_v1_public_partners__slug__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3146,6 +3587,27 @@ export interface components {
             /** Unexpected Public */
             unexpected_public: string[];
         };
+        /** CategoryResponse */
+        CategoryResponse: {
+            /** Description */
+            description: string | null;
+            /** Icon */
+            icon: string | null;
+            /** Id */
+            id: number;
+            /** Is Active */
+            is_active: boolean;
+            /** Listing Count */
+            listing_count: number;
+            /** Name */
+            name: string;
+            /** Parent Id */
+            parent_id: number | null;
+            /** Slug */
+            slug: string;
+            /** Sort Order */
+            sort_order: number;
+        };
         /**
          * ChangePartnerStatusRequest
          * @description Move a partner through PENDING → ACTIVE ↔ SUSPENDED.
@@ -3336,6 +3798,22 @@ export interface components {
              */
             updated_at: string;
         };
+        /** CreateCategoryRequest */
+        CreateCategoryRequest: {
+            /** Description */
+            description?: string | null;
+            /** Icon */
+            icon?: string | null;
+            /** Name */
+            name: string;
+            /** Parent Id */
+            parent_id?: number | null;
+            /**
+             * Sort Order
+             * @default 0
+             */
+            sort_order: number;
+        };
         /**
          * CreateDataAccessRequest
          * @description One grantee, many subjects — the reference's shape, verbatim.
@@ -3378,6 +3856,39 @@ export interface components {
             /** Skipped Reasons */
             skipped_reasons?: string[];
         };
+        /**
+         * CreateEnquiryRequest
+         * @description What the public form posts.
+         *
+         *     `budget_range` and `timeline` are optional and are the two that matter —
+         *     § 6.4 records that they raise lead quality sharply, which is why they are on
+         *     a form that otherwise asks for as little as possible.
+         */
+        CreateEnquiryRequest: {
+            /** Budget Range */
+            budget_range?: string | null;
+            /**
+             * Buyer Email
+             * Format: email
+             */
+            buyer_email: string;
+            /** Buyer Name */
+            buyer_name: string;
+            /** Buyer Phone */
+            buyer_phone?: string | null;
+            /** Company */
+            company?: string | null;
+            /** Listing Id */
+            listing_id?: string | null;
+            /** Message */
+            message: string;
+            /** Partner Id */
+            partner_id: string;
+            /** Timeline */
+            timeline?: string | null;
+            /** Website */
+            website?: string | null;
+        };
         /** CreateInvitationRequest */
         CreateInvitationRequest: {
             /**
@@ -3397,6 +3908,29 @@ export interface components {
             organisation_id?: string | null;
             /** Role Id */
             role_id?: number | null;
+        };
+        /** CreateListingRequest */
+        CreateListingRequest: {
+            /** Category Id */
+            category_id: number;
+            /**
+             * Currency
+             * @default INR
+             */
+            currency: string;
+            /** Description */
+            description?: string | null;
+            /** Price */
+            price?: number | string | null;
+            /**
+             * Pricing Model
+             * @default ON_REQUEST
+             */
+            pricing_model: string;
+            /** Summary */
+            summary: string;
+            /** Title */
+            title: string;
         };
         /**
          * CreatePartnerRequest
@@ -3855,6 +4389,109 @@ export interface components {
             pending: number;
             /** Total */
             total: number;
+        };
+        /**
+         * EnquiryCreatedResponse
+         * @description What the buyer gets back.
+         *
+         *     **The reference and nothing else.** It is the buyer's only way back to their
+         *     thread, so it has to be returned — and returning the enquiry id alongside it
+         *     would hand out a second identifier that the capability URL does not accept.
+         */
+        EnquiryCreatedResponse: {
+            /** Partner Name */
+            partner_name: string;
+            /** Reference */
+            reference: string;
+        };
+        /** EnquiryDetailResponse */
+        EnquiryDetailResponse: {
+            /** Budget Range */
+            budget_range: string | null;
+            /**
+             * Buyer Email
+             * Format: email
+             */
+            buyer_email: string;
+            /** Buyer Name */
+            buyer_name: string;
+            /** Buyer Phone */
+            buyer_phone: string | null;
+            /** Company */
+            company: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** First Responded At */
+            first_responded_at: string | null;
+            /** Id */
+            id: string;
+            /** Listing Id */
+            listing_id: string | null;
+            /** Message */
+            message: string;
+            /**
+             * Messages
+             * @default []
+             */
+            messages: components["schemas"]["EnquiryMessageResponse"][];
+            /** Partner Id */
+            partner_id: string;
+            /** Reference */
+            reference: string;
+            /** Source */
+            source: string;
+            /** Status */
+            status: string;
+            /** Timeline */
+            timeline: string | null;
+        };
+        /** EnquiryListItem */
+        EnquiryListItem: {
+            /**
+             * Buyer Email
+             * Format: email
+             */
+            buyer_email: string;
+            /** Buyer Name */
+            buyer_name: string;
+            /** Company */
+            company: string | null;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** First Responded At */
+            first_responded_at: string | null;
+            /** Id */
+            id: string;
+            /** Listing Id */
+            listing_id: string | null;
+            /** Partner Id */
+            partner_id: string;
+            /** Reference */
+            reference: string;
+            /** Source */
+            source: string;
+            /** Status */
+            status: string;
+        };
+        /** EnquiryMessageResponse */
+        EnquiryMessageResponse: {
+            /** Body */
+            body: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Direction */
+            direction: string;
+            /** Id */
+            id: string;
         };
         /**
          * ErrorGroupDetailResponse
@@ -4326,6 +4963,119 @@ export interface components {
             /** Unit */
             unit: string;
         };
+        /** ListingAttributeResponse */
+        ListingAttributeResponse: {
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Sort Order */
+            sort_order: number;
+            /** Value */
+            value: string;
+        };
+        /** ListingDetailResponse */
+        ListingDetailResponse: {
+            /**
+             * Attributes
+             * @default []
+             */
+            attributes: components["schemas"]["ListingAttributeResponse"][];
+            /** Category Id */
+            category_id: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Currency */
+            currency: string;
+            /** Description */
+            description: string | null;
+            /** Id */
+            id: string;
+            /**
+             * Media
+             * @default []
+             */
+            media: components["schemas"]["ListingMediaResponse"][];
+            /** Partner Id */
+            partner_id: string;
+            /** Price */
+            price: string | null;
+            /** Pricing Model */
+            pricing_model: string;
+            /** Published At */
+            published_at: string | null;
+            /** Rejection Reason */
+            rejection_reason: string | null;
+            /** Slug */
+            slug: string;
+            /** Status */
+            status: string;
+            /** Submitted At */
+            submitted_at: string | null;
+            /** Summary */
+            summary: string;
+            /** Title */
+            title: string;
+        };
+        /**
+         * ListingListItem
+         * @description The row a partner or staff member sees in an index.
+         *
+         *     Carries `status` and `rejection_reason` because this is the **authenticated**
+         *     view — a partner has to know why something was rejected. The public model
+         *     below carries neither.
+         */
+        ListingListItem: {
+            /** Category Id */
+            category_id: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Currency */
+            currency: string;
+            /** Id */
+            id: string;
+            /** Partner Id */
+            partner_id: string;
+            /** Price */
+            price: string | null;
+            /** Pricing Model */
+            pricing_model: string;
+            /** Published At */
+            published_at: string | null;
+            /** Rejection Reason */
+            rejection_reason: string | null;
+            /** Slug */
+            slug: string;
+            /** Status */
+            status: string;
+            /** Submitted At */
+            submitted_at: string | null;
+            /** Summary */
+            summary: string;
+            /** Title */
+            title: string;
+        };
+        /** ListingMediaResponse */
+        ListingMediaResponse: {
+            /** Alt Text */
+            alt_text: string | null;
+            /** Height */
+            height: number | null;
+            /** Id */
+            id: string;
+            /** Path */
+            path: string;
+            /** Sort Order */
+            sort_order: number;
+            /** Width */
+            width: number | null;
+        };
         /** LoginRequest */
         LoginRequest: {
             /**
@@ -4518,6 +5268,19 @@ export interface components {
             /** Total */
             total: number;
         };
+        /** Page[EnquiryListItem] */
+        Page_EnquiryListItem_: {
+            /** Items */
+            items: components["schemas"]["EnquiryListItem"][];
+            /** Page */
+            page: number;
+            /** Pages */
+            pages: number;
+            /** Per Page */
+            per_page: number;
+            /** Total */
+            total: number;
+        };
         /** Page[ErrorGroupResponse] */
         Page_ErrorGroupResponse_: {
             /** Items */
@@ -4544,10 +5307,49 @@ export interface components {
             /** Total */
             total: number;
         };
+        /** Page[ListingListItem] */
+        Page_ListingListItem_: {
+            /** Items */
+            items: components["schemas"]["ListingListItem"][];
+            /** Page */
+            page: number;
+            /** Pages */
+            pages: number;
+            /** Per Page */
+            per_page: number;
+            /** Total */
+            total: number;
+        };
         /** Page[PartnerListItem] */
         Page_PartnerListItem_: {
             /** Items */
             items: components["schemas"]["PartnerListItem"][];
+            /** Page */
+            page: number;
+            /** Pages */
+            pages: number;
+            /** Per Page */
+            per_page: number;
+            /** Total */
+            total: number;
+        };
+        /** Page[PublicListingWithPartner] */
+        Page_PublicListingWithPartner_: {
+            /** Items */
+            items: components["schemas"]["PublicListingWithPartner"][];
+            /** Page */
+            page: number;
+            /** Pages */
+            pages: number;
+            /** Per Page */
+            per_page: number;
+            /** Total */
+            total: number;
+        };
+        /** Page[PublicPartnerSummary] */
+        Page_PublicPartnerSummary_: {
+            /** Items */
+            items: components["schemas"]["PublicPartnerSummary"][];
             /** Page */
             page: number;
             /** Pages */
@@ -4950,6 +5752,188 @@ export interface components {
             /** Slug */
             slug: string;
         };
+        /** PublicCategory */
+        PublicCategory: {
+            /**
+             * Children
+             * @default []
+             */
+            children: components["schemas"]["PublicCategory"][];
+            /** Description */
+            description: string | null;
+            /** Icon */
+            icon: string | null;
+            /** Listing Count */
+            listing_count: number;
+            /** Name */
+            name: string;
+            /** Slug */
+            slug: string;
+        };
+        /**
+         * PublicEnquiryStatus
+         * @description What the buyer sees at their capability URL.
+         *
+         *     Carries the partner's *name* and not their id: the page is for a human
+         *     checking whether anyone replied, and an id would be one more identifier
+         *     circulating for no reason.
+         */
+        PublicEnquiryStatus: {
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** First Responded At */
+            first_responded_at: string | null;
+            /**
+             * Messages
+             * @default []
+             */
+            messages: components["schemas"]["EnquiryMessageResponse"][];
+            /** Partner Name */
+            partner_name: string;
+            /** Reference */
+            reference: string;
+            /** Status */
+            status: string;
+        };
+        /**
+         * PublicListing
+         * @description A published listing. No `status` — everything here is published by
+         *     definition, and rendering the word would invite the question of what else
+         *     there is.
+         */
+        PublicListing: {
+            /**
+             * Attributes
+             * @default []
+             */
+            attributes: components["schemas"]["ListingAttributeResponse"][];
+            /** Currency */
+            currency: string;
+            /** Description */
+            description: string | null;
+            /**
+             * Media
+             * @default []
+             */
+            media: components["schemas"]["ListingMediaResponse"][];
+            /** Price */
+            price: string | null;
+            /** Pricing Model */
+            pricing_model: string;
+            /** Published At */
+            published_at: string | null;
+            /** Slug */
+            slug: string;
+            /** Summary */
+            summary: string;
+            /** Title */
+            title: string;
+        };
+        /** PublicListingWithPartner */
+        PublicListingWithPartner: {
+            /**
+             * Attributes
+             * @default []
+             */
+            attributes: components["schemas"]["ListingAttributeResponse"][];
+            category?: components["schemas"]["PublicCategory"] | null;
+            /** Currency */
+            currency: string;
+            /** Description */
+            description: string | null;
+            /**
+             * Media
+             * @default []
+             */
+            media: components["schemas"]["ListingMediaResponse"][];
+            partner: components["schemas"]["PublicPartnerSummary"];
+            /** Price */
+            price: string | null;
+            /** Pricing Model */
+            pricing_model: string;
+            /** Published At */
+            published_at: string | null;
+            /** Slug */
+            slug: string;
+            /** Summary */
+            summary: string;
+            /** Title */
+            title: string;
+        };
+        /** PublicPartnerDetail */
+        PublicPartnerDetail: {
+            /** About */
+            about: string | null;
+            /** Banner Path */
+            banner_path: string | null;
+            /** City */
+            city: string | null;
+            /** Country */
+            country: string | null;
+            /** Employee Range */
+            employee_range: string | null;
+            /**
+             * Expertise
+             * @default []
+             */
+            expertise: components["schemas"]["PublicCategory"][];
+            /** Founded Year */
+            founded_year: number | null;
+            /**
+             * Listings
+             * @default []
+             */
+            listings: components["schemas"]["PublicListing"][];
+            /** Logo Path */
+            logo_path: string | null;
+            /** Name */
+            name: string;
+            /** Public Email */
+            public_email: string | null;
+            /** Public Phone */
+            public_phone: string | null;
+            /** Service Areas */
+            service_areas: string | null;
+            /** Slug */
+            slug: string;
+            /** State */
+            state: string | null;
+            /** Tagline */
+            tagline: string | null;
+            /** Verification Level */
+            verification_level: string;
+            /** Website */
+            website: string | null;
+        };
+        /**
+         * PublicPartnerSummary
+         * @description A partner, as an anonymous visitor may see them.
+         *
+         *     ⚠️ **Every absence here is deliberate.** No `notes`, `gst_number`,
+         *     `pan_number` or `status` — § 17.3 marks them internal. No supplier, no
+         *     sourcing, nothing about where this company buys anything — § 0.1.
+         */
+        PublicPartnerSummary: {
+            /** City */
+            city: string | null;
+            /** Employee Range */
+            employee_range: string | null;
+            /** Founded Year */
+            founded_year: number | null;
+            /** Logo Path */
+            logo_path: string | null;
+            /** Name */
+            name: string;
+            /** Slug */
+            slug: string;
+            /** Tagline */
+            tagline: string | null;
+            /** Verification Level */
+            verification_level: string;
+        };
         /**
          * PublishPartnerRequest
          * @description Flip directory visibility. The only field here the public can observe.
@@ -5026,6 +6010,21 @@ export interface components {
             personal_email?: string | null;
             /** Personal Mobile Number */
             personal_mobile_number?: string | null;
+        };
+        /** RejectListingRequest */
+        RejectListingRequest: {
+            /** Reason */
+            reason: string;
+        };
+        /** ReorderCategoriesRequest */
+        ReorderCategoriesRequest: {
+            /** Ordered Ids */
+            ordered_ids: number[];
+        };
+        /** ReplyEnquiryRequest */
+        ReplyEnquiryRequest: {
+            /** Body */
+            body: string;
         };
         /** RequestLogEntry */
         RequestLogEntry: {
@@ -5713,6 +6712,24 @@ export interface components {
             /** Theme Preset */
             theme_preset?: string | null;
         };
+        /** UpdateCategoryRequest */
+        UpdateCategoryRequest: {
+            /** Description */
+            description?: string | null;
+            /** Icon */
+            icon?: string | null;
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Name */
+            name?: string | null;
+            /** Sort Order */
+            sort_order?: number | null;
+        };
+        /** UpdateEnquiryStatusRequest */
+        UpdateEnquiryStatusRequest: {
+            /** Status */
+            status: string;
+        };
         /**
          * UpdateErrorStatusRequest
          * @description Triage one group.
@@ -5731,6 +6748,23 @@ export interface components {
              * @enum {string}
              */
             status: "open" | "resolved" | "ignored" | "muted";
+        };
+        /** UpdateListingRequest */
+        UpdateListingRequest: {
+            /** Category Id */
+            category_id?: number | null;
+            /** Currency */
+            currency?: string | null;
+            /** Description */
+            description?: string | null;
+            /** Price */
+            price?: number | string | null;
+            /** Pricing Model */
+            pricing_model?: string | null;
+            /** Summary */
+            summary?: string | null;
+            /** Title */
+            title?: string | null;
         };
         /**
          * UpdateNavPreferencesRequest
@@ -7966,6 +9000,208 @@ export interface operations {
             };
         };
     };
+    list_categories_api_v1_categories_get: {
+        parameters: {
+            query?: {
+                include_inactive?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_category_api_v1_categories_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateCategoryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reorder_categories_api_v1_categories_reorder_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReorderCategoriesRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_category_api_v1_categories__category_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                category_id: number;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_category_api_v1_categories__category_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                category_id: number;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_category_api_v1_categories__category_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                category_id: number;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateCategoryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CategoryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_data_access_grants_api_v1_data_access_get: {
         parameters: {
             query?: {
@@ -8092,6 +9328,149 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MessageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_enquiries_api_v1_enquiries_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                per_page?: number;
+                status?: string | null;
+                unanswered?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_EnquiryListItem_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_enquiry_api_v1_enquiries__enquiry_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                enquiry_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnquiryDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reply_to_enquiry_api_v1_enquiries__enquiry_id__reply_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                enquiry_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReplyEnquiryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnquiryMessageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_enquiry_status_api_v1_enquiries__enquiry_id__status_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                enquiry_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateEnquiryStatusRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnquiryDetailResponse"];
                 };
             };
             /** @description Validation Error */
@@ -8519,6 +9898,344 @@ export interface operations {
             };
         };
     };
+    list_listings_api_v1_listings_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                per_page?: number;
+                status?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_ListingListItem_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_listing_api_v1_listings_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateListingRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListingDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_listing_api_v1_listings__listing_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                listing_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListingDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_listing_api_v1_listings__listing_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                listing_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_listing_api_v1_listings__listing_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                listing_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateListingRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListingDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    submit_listing_api_v1_listings__listing_id__submit_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                listing_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListingDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    approve_listing_api_v1_moderation_listings__listing_id__approve_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                listing_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListingDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reject_listing_api_v1_moderation_listings__listing_id__reject_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                listing_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RejectListingRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListingDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unpublish_listing_api_v1_moderation_listings__listing_id__unpublish_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                listing_id: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListingDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    review_queue_api_v1_moderation_queue_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListingDetailResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_navigation_api_v1_navigation_get: {
         parameters: {
             query?: never;
@@ -8926,6 +10643,221 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PermissionGroupResponse"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    public_categories_api_v1_public_categories_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicCategory"][];
+                };
+            };
+        };
+    };
+    create_public_enquiry_api_v1_public_enquiries_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateEnquiryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EnquiryCreatedResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    public_enquiry_status_api_v1_public_enquiries__reference__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                reference: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicEnquiryStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    public_listings_api_v1_public_listings_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                per_page?: number;
+                category?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_PublicListingWithPartner_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    public_listing_api_v1_public_listings__slug__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicListingWithPartner"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    public_partners_api_v1_public_partners_get: {
+        parameters: {
+            query?: {
+                page?: number;
+                per_page?: number;
+                /** @description Category slug */
+                expertise?: string | null;
+                city?: string | null;
+                q?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Page_PublicPartnerSummary_"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    public_partner_api_v1_public_partners__slug__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PublicPartnerDetail"];
                 };
             };
             /** @description Validation Error */

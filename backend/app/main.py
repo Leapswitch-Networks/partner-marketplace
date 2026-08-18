@@ -17,16 +17,21 @@ from app.api import (
     api_credentials,
     api_docs,
     auth,
+    categories,
     configuration,
     data_access,
+    enquiries,
     errors,
     feature_flags,
     google,
     health_status,
     invitations,
+    listings,
+    moderation,
     navigation,
     partners,
     permissions,
+    public,
     recycle_bin,
     roles,
     search,
@@ -258,6 +263,14 @@ app.include_router(api_docs.router, prefix=settings.API_PREFIX)
 app.include_router(worker_jobs.router, prefix=settings.API_PREFIX)
 app.include_router(recycle_bin.router, prefix=settings.API_PREFIX)
 app.include_router(partners.router, prefix=settings.API_PREFIX)
+# The directory product — DIRECTORY_BUILD_PUNCHLIST.md Phase 2.
+app.include_router(categories.router, prefix=settings.API_PREFIX)
+app.include_router(listings.router, prefix=settings.API_PREFIX)
+app.include_router(moderation.router, prefix=settings.API_PREFIX)
+app.include_router(enquiries.router, prefix=settings.API_PREFIX)
+# ⚠️ The only router in this application with no authentication on any route.
+# Its response models are the allowlist — see `app/api/public.py`.
+app.include_router(public.router, prefix=settings.API_PREFIX)
 
 
 @app.get("/health", tags=["health"])

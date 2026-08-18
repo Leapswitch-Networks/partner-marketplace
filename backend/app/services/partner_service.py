@@ -629,3 +629,82 @@ def update_tier(
         actor=actor,
     )
     return tier
+
+
+# --- The partner's own organisation — punchlist 3.2 / 3.4 --------------------
+
+
+def get_own_organisation(db: Session, actor: User) -> Partner:
+    """The caller's own partner record.
+
+    **Reads `actor.organisation_id`, never a path parameter.** That is the whole
+    security model of the "my organisation" screens: there is no id to tamper
+    with, so there is no scoping check to forget. A route taking `/partners/{id}`
+    and checking it matches the actor would be one forgotten comparison away from
+    letting anyone edit anyone.
+    """
+    if actor.organisation_id is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            "Your account is not attached to an organisation.",
+        )
+    partner = db.get(Partner, actor.organisation_id)
+    if partner is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Organisation not found")
+    return partner
+
+
+def update_own_organisation(db: Session, partner: Partner, *, actor: User, **fields) -> Partner:
+    """Update the public half of a partner's own record.
+
+    ⚠️ **The fields a partner may write are an allowlist, not an exclusion list.**
+    `status`, `verification_level`, `is_listed`, `tier_id`, `notes`, `gst_number`
+    and `pan_number` are all absent — each is either staff's judgement about the
+    partner or internal, and an exclusion list is one new column away from
+    leaking write access to it.
+    """
+    writable = {
+        "name",
+        "tagline",
+        "about",
+        "website",
+        "public_email",
+        "public_phone",
+        "founded_year",
+        "employee_range",
+        "city",
+        "state",
+        "country",
+        "postal_code",
+        "service_areas",
+    }
+    for field, value in fields.items():
+        if field in writable and value is not None:
+            setattr(partner, field, value)
+    partner.updated_by = actor.id
+    db.flush()
+    return partner
+
+
+def set_expertise(db: Session, partner: Partner, category_ids: list[int]) -> Partner:
+    """Replace what a partner advertises expertise in.
+
+    Replaces rather than diffs: the form submits the whole selection, and the
+    pivot rows are two integers each.
+
+    **This is what makes the public filter work.** A category chosen here is a
+    foreign key the directory index joins on — which is why partners pick from
+    the taxonomy rather than typing, and why this takes ids rather than names.
+    """
+    from app.models.service_category import ServiceCategory
+
+    categories = (
+        db.execute(select(ServiceCategory).where(ServiceCategory.id.in_(category_ids)))
+        .scalars()
+        .all()
+        if category_ids
+        else []
+    )
+    partner.expertise = list(categories)
+    db.flush()
+    return partner

@@ -378,6 +378,35 @@ class TestTheEnforcementMatrixIsPinned:
         # Reads an invitation by TOKEN, which is the credential. An invitee has no
         # account yet, so requiring one would make the link unusable.
         ("GET", "/api/v1/invitations/preview"),
+        # ── The public directory — DIRECTORY_BUILD_PUNCHLIST Phase 2 ─────────
+        #
+        # SECURITY: these are the anonymous surface, and they are public on
+        # purpose. What makes that safe is not the absence of a guard — it is
+        # that every one returns a `Public*` response model from
+        # `schemas/directory.py`, and those models **do not have** the internal
+        # fields. A router here cannot leak `notes`, `gst_number`, `pan_number`
+        # or `status` because its response type has no such attribute.
+        #
+        # Each read is additionally filtered to `is_listed AND ACTIVE` partners
+        # and `PUBLISHED` listings, written into the query rather than delegated
+        # to `apply_scope` — there is no principal here to scope against, so a
+        # forgotten filter would serve everything.
+        ("GET", "/api/v1/public/categories"),
+        ("GET", "/api/v1/public/partners"),
+        ("GET", "/api/v1/public/partners/{slug}"),
+        ("GET", "/api/v1/public/listings"),
+        ("GET", "/api/v1/public/listings/{slug}"),
+        # SECURITY: the only unauthenticated WRITE in the application. Rate
+        # limited in `core/rate_limit.py` (6/min per address) — that is the real
+        # control, because the honeypot and the client throttle are both skipped
+        # by anyone posting directly.
+        ("POST", "/api/v1/public/enquiries"),
+        # SECURITY: a capability URL. The unguessable reference IS the
+        # credential — the buyer has no account, so requiring one would make
+        # their own thread unreachable. Generated with `secrets`, `noindex`, and
+        # excluded from the sitemap. There is deliberately no id-based variant.
+        ("GET", "/api/v1/public/enquiries/{reference}"),
+
         # The sign-in screen renders branding before anybody is signed in.
         ("GET", "/api/v1/settings/branding"),
         ("GET", "/api/v1/settings/branding/themes"),

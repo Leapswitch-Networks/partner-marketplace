@@ -294,3 +294,37 @@ class PartnerPublicResponse(BaseModel):
     verification_level: str
     is_verified: bool
     tier: PartnerTierResponse | None
+
+
+class UpdateOwnOrganisationRequest(BaseModel):
+    """What a partner may change about their own record.
+
+    ⚠️ **Everything absent is absent on purpose.** No `status`, no
+    `verification_level`, no `is_listed`, no `tier_id` — those are Leapswitch's
+    judgement about this partner, not theirs. No `notes`, `gst_number` or
+    `pan_number` — internal. The service applies a matching allowlist, so a field
+    added here without being added there is inert rather than dangerous.
+    """
+
+    name: str | None = Field(default=None, min_length=2, max_length=160)
+    tagline: str | None = Field(default=None, max_length=200)
+    about: str | None = None
+    website: str | None = Field(default=None, max_length=255)
+    public_email: EmailStr | None = None
+    public_phone: str | None = Field(default=None, max_length=30)
+    founded_year: int | None = Field(default=None, ge=1800, le=2100)
+    employee_range: str | None = Field(default=None, max_length=40)
+    city: str | None = Field(default=None, max_length=100)
+    state: str | None = Field(default=None, max_length=100)
+    country: str | None = Field(default=None, max_length=100)
+    postal_code: str | None = Field(default=None, max_length=20)
+    service_areas: str | None = None
+
+
+class SetExpertiseRequest(BaseModel):
+    """Replace the whole expertise selection.
+
+    Ids, not names: these become pivot rows the public directory filter joins on.
+    """
+
+    category_ids: list[int]

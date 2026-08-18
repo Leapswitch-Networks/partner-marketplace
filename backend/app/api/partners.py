@@ -40,6 +40,8 @@ from app.schemas.partner import (
     PartnerListItem,
     PartnerTierResponse,
     PublishPartnerRequest,
+    SetExpertiseRequest,
+    UpdateOwnOrganisationRequest,
     UpdatePartnerRequest,
     UpdatePartnerTierRequest,
     VerifyPartnerRequest,
@@ -47,6 +49,65 @@ from app.schemas.partner import (
 from app.services import partner_service
 
 router = APIRouter(prefix="/partners", tags=["partners"])
+
+
+# --- The caller's own organisation — punchlist 3.2 / 3.4 ---------------------
+#
+# Declared BEFORE /{partner_id} so "me" is not captured as a partner id.
+#
+# ⚠️ **These are the only partner-writable routes on this router**, and they are
+# gated on PARTNER_VIEW rather than PARTNER_UPDATE — which partners do not hold,
+# because that permission is staff editing *any* partner. The subject here is
+# always the caller's own organisation, resolved from the session, so there is no
+# id to tamper with and no ownership check to forget.
+
+
+@router.get("/me", response_model=PartnerDetailResponse)
+def get_my_organisation(
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_permission(PARTNER_VIEW)),
+) -> PartnerDetailResponse:
+    return PartnerDetailResponse.model_validate(
+        partner_service.get_own_organisation(db, actor)
+    )
+
+
+@router.patch("/me", response_model=PartnerDetailResponse)
+def update_my_organisation(
+    payload: UpdateOwnOrganisationRequest,
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_permission(PARTNER_VIEW)),
+) -> PartnerDetailResponse:
+    """Update the public half of the caller's own record.
+
+    The writable fields are an allowlist in `partner_service`, not an exclusion
+    list here — `status`, `verification_level` and `is_listed` are staff's
+    judgement about this partner and are not reachable from this route.
+    """
+    partner = partner_service.get_own_organisation(db, actor)
+    partner_service.update_own_organisation(
+        db, partner, actor=actor, **payload.model_dump(exclude_unset=True)
+    )
+    db.commit()
+    return PartnerDetailResponse.model_validate(partner)
+
+
+@router.put("/me/expertise", response_model=PartnerDetailResponse)
+def set_my_expertise(
+    payload: SetExpertiseRequest,
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_permission(PARTNER_VIEW)),
+) -> PartnerDetailResponse:
+    """What this partner advertises expertise in.
+
+    **This is what makes the public filter work** — each id becomes a pivot row
+    the directory index joins on, which is why it takes ids from the taxonomy
+    rather than free text.
+    """
+    partner = partner_service.get_own_organisation(db, actor)
+    partner_service.set_expertise(db, partner, payload.category_ids)
+    db.commit()
+    return PartnerDetailResponse.model_validate(partner)
 
 
 # --- Tiers ------------------------------------------------------------------

@@ -85,6 +85,24 @@ EXPECTED_PUBLIC_PATHS: frozenset[str] = frozenset(
         "/api/v1/settings/branding",
         "/api/v1/settings/branding/themes",
         "/api/v1/settings/branding/{asset}",
+        # ── The public directory — DIRECTORY_BUILD_PUNCHLIST Phase 2 ─────────
+        #
+        # The anonymous surface. Public by design: a directory nobody can read
+        # without an account is not a directory.
+        #
+        # What keeps it safe is not a guard but the response models — every
+        # route here returns a `Public*` type from `schemas/directory.py`, and
+        # those types have no `notes`, `gst_number`, `pan_number` or `status`
+        # field to leak. See the SECURITY notes in `tests/test_route_enforcement.py`.
+        "/api/v1/public/categories",
+        "/api/v1/public/partners",
+        "/api/v1/public/partners/{slug}",
+        "/api/v1/public/listings",
+        "/api/v1/public/listings/{slug}",
+        # The only unauthenticated write in the application. Rate limited.
+        "/api/v1/public/enquiries",
+        # A capability URL — the unguessable reference is the credential.
+        "/api/v1/public/enquiries/{reference}",
     }
 )
 

@@ -233,6 +233,18 @@ SENSITIVE_PATH_SHAPES: tuple[tuple[str, str, str], ...] = (
 METERED_PATHS: dict[str, tuple[str, int]] = {
     f"{settings.API_PREFIX}/ai/chat": ("ai-chat", 30),
     f"{settings.API_PREFIX}/ai/feedback": ("ai-feedback", 60),
+    # ── The public enquiry form — punchlist 2.8 ──────────────────────────────
+    #
+    # **The only unauthenticated write on the whole application.** Everything
+    # else that accepts a POST sits behind a session; this accepts a message
+    # from anyone on the internet and delivers it to a partner's inbox, which
+    # makes it both the spam target and the abuse vector.
+    #
+    # Six per minute per address: generous for a human filling in one form
+    # carefully, useless for a script. The client-side throttle and the honeypot
+    # field are conveniences — **this is the actual control**, because it is the
+    # only one an attacker cannot simply skip by posting directly.
+    f"{settings.API_PREFIX}/public/enquiries": ("public-enquiry", 6),
 }
 
 METERED_WINDOW_SECONDS = 60
