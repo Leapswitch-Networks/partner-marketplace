@@ -78,6 +78,13 @@ this core."* Follow that precedent for the remaining identity constants (§ 5).
    regression. That line should be corrected — it is a Protected File, so it needs the owner's
    confirmation (§ 5, task 5.6).
 
+   > ✅ **Resolved 2026-08-18.** The root `AGENTS.md` was corrected on 2026-08-17 (struck through,
+   > with a note forbidding the line being repeated as current state). What that fix *missed* was the
+   > second copy: `documentation/AGENTS.md` still carried the claim in the present tense for another
+   > day — which is the drift that motivated merging the two contracts into one. Both are now
+   > correct, because only one file remains. See
+   > [`ADR-0016`](../adr/0016-one-agent-contract.md).
+
 ---
 
 ## 1. Where the domain leaks into the core — the full inventory
@@ -281,8 +288,18 @@ project inherits this pattern, which is exactly why it belongs in the core rathe
       interfaces. `types/api-contract.ts` is the hand-copied layer PM-42 exists to retire.
 - [ ] **4.4** Migrate `ResourceIndex` to accept a query hook rather than data + loading props, so all
       12 list modules convert by changing their call site rather than their body.
-- [ ] **4.5** Convert the 17 modules. Mechanical once 4.4 lands — **delegate in packages**, one
-      module per file, no overlapping ownership.
+- [~] **4.5** Convert the modules. **3 done 2026-08-18** — listings, enquiries and the enquiry
+      thread, in `lib/api/endpoints/directoryEndpoints.ts`. **12 modules still import
+      `useResourceList`; 4 are fully on RTK Query.**
+      ⚠️ **The counts in this plan were measured by grepping for the word**, which matches prose in
+      comments as well as imports — the "17" above was never reliable. Measure with
+      `grep -rl 'from "@/lib/hooks/useResourceList"' frontend/components/admin/` instead.
+      **Why these three first:** they were added to the old pattern on 2026-08-18 by the directory
+      build, so converting them repays debt created the same day rather than starting on somebody
+      else's module — and it leaves a worked example that is not the partner modules.
+      **What it demonstrated:** the enquiry thread's reply mutation invalidates the *inbox* list, so
+      the badge counts on another page are correct the moment the thread changes something. The
+      hand-rolled reload could not do that, because it did not know the other page existed.
 - [ ] **4.6** Delete the now-dead `useEffect` fetch blocks and confirm the react-hooks lint count
       stays at 0. PM-30 was closed by fixing symptoms; this retires the cause.
 - [ ] **4.7** Establish server-side fetching for public data via `INTERNAL_API_URL`. The rule in
@@ -310,8 +327,11 @@ Small, independent, and each one is a fossil that would follow the core into pro
       network `test-platform` and `POSTGRES_DB=test_platformDB`. **Both are Protected-File /
       destructive territory** — compose needs containers stopped, the database rename is
       dump-and-restore. Needs the owner's go-ahead.
-- [ ] **5.6** Correct `AGENTS.md`'s stale plaintext-password line (§ 0 above). **Protected file —
-      requires explicit owner confirmation.**
+- [x] **5.6** Correct `AGENTS.md`'s stale plaintext-password line (§ 0 above). **Protected file —
+      requires explicit owner confirmation.** ✅ **Done 2026-08-18**, with the owner's approval, as
+      part of merging the two agent contracts — the root file had been corrected on 2026-08-17, and
+      the duplicate in `documentation/AGENTS.md` was still wrong until the merge removed it
+      ([ADR-0016](../adr/0016-one-agent-contract.md)).
 
 ---
 

@@ -14,8 +14,8 @@ import {
   stackedCell,
 } from "@/components/common/columns";
 import { navIcon } from "@/components/dashboard/navIcons";
-import { listEnquiries, type Enquiry, type EnquiryStatus } from "@/lib/api/directoryApi";
-import useResourceList from "@/lib/hooks/useResourceList";
+import type { Enquiry, EnquiryStatus } from "@/lib/api/directoryApi";
+import { useListEnquiriesQuery } from "@/lib/api/endpoints/directoryEndpoints";
 import useResourceQuery from "@/lib/hooks/useResourceQuery";
 import { usePermissions } from "@/lib/hooks/usePermissions";
 
@@ -66,19 +66,27 @@ export default function EnquiriesModule() {
     defaultSortOrder: "desc",
   });
 
-  const list = useResourceList<Enquiry>({
-    ready: q.ready,
-    deps: [q.applied, q.page, q.perPage],
-    errorMessage: "Could not load enquiries.",
-    fetch: () =>
-      listEnquiries({
-        page: q.page,
-        per_page: q.perPage,
-        status: (q.applied.status || undefined) as EnquiryStatus | undefined,
-        // Tri-state: "" means no filter, so it must not collapse to false.
-        unanswered: q.applied.unanswered === "" ? undefined : q.applied.unanswered === "true",
-      }),
-  });
+  // PM-41: RTK Query. The invalidation matters more here than anywhere else in
+  // the product — replying to an enquiry stamps its response time and flips its
+  // status, so the inbox and the unanswered filter are both stale the moment the
+  // thread is answered. The mutation's tags refresh this list without the thread
+  // page having to know it exists.
+  const {
+    data: page,
+    isFetching,
+    error,
+    refetch,
+  } = useListEnquiriesQuery(
+    {
+      page: q.page,
+      per_page: q.perPage,
+      status: (q.applied.status || undefined) as EnquiryStatus | undefined,
+      // Tri-state: "" means no filter, so it must not collapse to false.
+      unanswered: q.applied.unanswered === "" ? undefined : q.applied.unanswered === "true",
+    },
+    { skip: !q.ready },
+  );
+  const rows = page?.items ?? [];
 
   const columns = useMemo<Column<Enquiry>[]>(() => {
     const cols: Column<Enquiry>[] = [
@@ -122,7 +130,7 @@ export default function EnquiriesModule() {
     return cols;
   }, [router, seesEveryPartner]);
 
-  const unanswered = list.rows.filter((r) => !r.first_responded_at).length;
+  const unanswered = rows.filter((r) => !r.first_responded_at).length;
 
   return (
     <ResourceIndex<Enquiry, { status: string; unanswered: string }>
@@ -130,11 +138,11 @@ export default function EnquiriesModule() {
       description="Buyers who described what they need and asked for you specifically."
       icon={navIcon("enquiries")}
       stats={[
-        { label: "On this page", value: list.rows.length },
+        { label: "On this page", value: rows.length },
         // The number that should be near zero — § 16.2.
         { label: "Not yet answered", value: unanswered, tone: unanswered > 0 ? "danger" : "success" },
       ]}
-      statsLoading={list.loading}
+      statsLoading={isFetching}
       query={q}
       filters={[
         {
@@ -156,13 +164,13 @@ export default function EnquiriesModule() {
         },
       ]}
       columns={columns}
-      rows={list.rows}
+      rows={rows}
       rowKey={(row) => row.id}
-      loading={list.loading}
-      error={list.error}
-      onRetry={list.refetch}
-      total={list.total}
-      pages={list.pages}
+      loading={isFetching}
+      error={error ? "Could not load enquiries." : null}
+      onRetry={refetch}
+      total={page?.total ?? 0}
+      pages={page?.pages ?? 0}
       rowNoun="enquiry"
       table="vendor"
       emptyTitle="No enquiries yet"

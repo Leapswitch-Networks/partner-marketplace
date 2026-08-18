@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import Button from "@/components/common/Button";
@@ -16,19 +16,15 @@ import {
   stackedCell,
 } from "@/components/common/columns";
 import { navIcon } from "@/components/dashboard/navIcons";
+import type { Listing, ListingStatus } from "@/lib/api/directoryApi";
 import {
-  deleteListing,
-  listCategories,
-  listListings,
-  submitListing,
-  type Category,
-  type Listing,
-  type ListingStatus,
-} from "@/lib/api/directoryApi";
+  useDeleteListingMutation,
+  useListCategoriesQuery,
+  useListListingsQuery,
+  useSubmitListingMutation,
+} from "@/lib/api/endpoints/directoryEndpoints";
 import useModalState from "@/lib/hooks/useModalState";
-import useResourceList from "@/lib/hooks/useResourceList";
 import useResourceQuery from "@/lib/hooks/useResourceQuery";
-import useRowAction from "@/lib/hooks/useRowAction";
 import { usePermissions } from "@/lib/hooks/usePermissions";
 
 type ModalMode = "delete";
@@ -84,40 +80,63 @@ export default function ListingsModule() {
     defaultSortOrder: "desc",
   });
 
-  const list = useResourceList<Listing>({
-    ready: q.ready,
-    deps: [q.applied, q.page, q.perPage],
-    errorMessage: "Could not load listings.",
-    fetch: () =>
-      listListings({
-        page: q.page,
-        per_page: q.perPage,
-        status: (q.applied.status || undefined) as ListingStatus | undefined,
-      }),
-  });
+  // PM-41: RTK Query rather than fetch-on-mount. Three things this buys that
+  // `useResourceList` could not — and each was a real defect class in the old
+  // pattern rather than a nicety:
+  //
+  //  * a cache, so navigating away and back does not refetch what was on screen
+  //    a second ago
+  //  * invalidation, so a mutation refreshes the table without a hand-written
+  //    `refetch()` that is silent when forgotten
+  //  * deduplication, so two components needing this list make one request
+  const {
+    data: page,
+    isFetching,
+    error,
+    refetch,
+  } = useListListingsQuery(
+    {
+      page: q.page,
+      per_page: q.perPage,
+      status: (q.applied.status || undefined) as ListingStatus | undefined,
+    },
+    // The query hook has no equivalent of `useResourceList`'s `ready` gate, so
+    // the URL-restore race is handled here: skip until the query state has been
+    // read from the address bar, or the first render fires a throwaway request
+    // with default filters.
+    { skip: !q.ready },
+  );
+  const rows = page?.items ?? [];
 
-  // Categories are reference data: unpaged, unfiltered, and a failure here must
-  // leave the table readable rather than blanking the page.
-  const [categories, setCategories] = useState<Category[]>([]);
-  useEffect(() => {
-    listCategories()
-      .then(setCategories)
-      .catch(() => setCategories([]));
-  }, []);
+  // Reference data, and now shared: the taxonomy admin and the authoring form
+  // ask for the same list, and RTK Query serves all three from one request
+  // instead of three. A failure still leaves the table readable — the fallback
+  // is an empty array, not a thrown render.
+  const { data: categories = [] } = useListCategoriesQuery();
   const categoryName = useCallback(
     (id: number) => categories.find((c) => c.id === id)?.name ?? "—",
     [categories],
   );
 
   const modal = useModalState<ModalMode, Listing>();
+  const [submitListing, { isLoading: submitting }] = useSubmitListingMutation();
+  const [deleteListing] = useDeleteListingMutation();
+  const [busyId, setBusyId] = useState<string | null>(null);
 
-  // Per-row write: marks the row busy and reports through the toast, exactly as
-  // every other index in this app does.
-  const { busy, run } = useRowAction<Listing>({
-    onSuccess: list.patchRow,
-    show,
-    errorFallback: "Could not update the listing.",
-  });
+  // No `useRowAction` here, and no `patchRow`. The mutation's `invalidatesTags`
+  // refreshes the row and the list, so patching local state by hand would be a
+  // second source of truth racing the first.
+  const onSubmitForReview = async (row: Listing) => {
+    setBusyId(row.id);
+    try {
+      await submitListing(row.id).unwrap();
+      show("Sent for review — a person reads every one.");
+    } catch {
+      show("Could not submit for review.", "error");
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   const columns = useMemo<Column<Listing>[]>(() => {
     const cols: Column<Listing>[] = [
@@ -164,14 +183,9 @@ export default function ListingsModule() {
           // `{ data }`. `directoryApi` unwraps `.data` for its callers, so it is
           // re-wrapped here rather than making every other consumer dig through
           // an envelope it does not need.
-          onSelect: () =>
-            run(
-              row.id,
-              () => submitListing(row.id).then((data) => ({ data })),
-              "Sent for review — a person reads every one.",
-            ),
+          onSelect: () => void onSubmitForReview(row),
           visible: row.status === "DRAFT" || row.status === "REJECTED",
-          disabled: busy === row.id,
+          disabled: busyId === row.id || submitting,
           hint: "A person reads every listing before it is published",
         },
         {
@@ -187,7 +201,7 @@ export default function ListingsModule() {
     }
     return cols;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [categoryName, busy, canDelete, seesEveryPartner, can, router]);
+  }, [categoryName, busyId, submitting, canDelete, seesEveryPartner, can, router]);
 
   return (
     <>
@@ -211,13 +225,13 @@ export default function ListingsModule() {
           },
         ]}
         columns={columns}
-        rows={list.rows}
+        rows={rows}
         rowKey={(row) => row.id}
-        loading={list.loading}
-        error={list.error}
-        onRetry={list.refetch}
-        total={list.total}
-        pages={list.pages}
+        loading={isFetching}
+        error={error ? "Could not load listings." : null}
+        onRetry={refetch}
+        total={page?.total ?? 0}
+        pages={page?.pages ?? 0}
         rowNoun="listing"
         table="vendor"
         emptyTitle="No listings yet"
@@ -229,11 +243,11 @@ export default function ListingsModule() {
       >
         {/* Rejections surface above the table, not inside it. A partner opening
             this page needs to see the thing needing action before they scan. */}
-        {list.rows.some((r) => r.status === "REJECTED") && (
+        {rows.some((r) => r.status === "REJECTED") && (
           <div className="mb-4 rounded-[5px] border border-tone-danger/40 bg-tone-danger/5 p-4">
             <p className="text-sm font-semibold text-tone-danger">Some listings need changes</p>
             <ul className="mt-2 space-y-1">
-              {list.rows
+              {rows
                 .filter((r) => r.status === "REJECTED")
                 .map((r) => (
                   <li key={r.id} className="text-sm text-ink-label dark:text-night-muted">
@@ -249,12 +263,14 @@ export default function ListingsModule() {
             noun="listing"
             name={modal.target.title}
             subtitle="It disappears from the directory immediately."
-            onConfirm={() => deleteListing(modal.target!.id)}
+            onConfirm={async () => {
+              await deleteListing(modal.target!.id).unwrap();
+            }}
             onDeleted={() => {
               const title = modal.target!.title;
               modal.close();
               show(`Listing “${title}” deleted.`);
-              list.refetch();
+              // No refetch: `invalidatesTags` on the mutation already did it.
             }}
             onClose={modal.close}
           />

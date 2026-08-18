@@ -99,6 +99,42 @@ module. So a question like *"can I use `async def` here?"* had a correct answer 
 and that file is protected — it needs the owner's explicit approval before it is edited. The one-row
 change is prepared and waiting rather than applied.
 
+## August 18, 2026 — Paying back the debt I added this morning
+
+**Three screens moved off fetch-on-mount and onto the cached data layer** — the listings index, the
+enquiry inbox and the enquiry thread. They were written earlier today on the old pattern, matching the
+dozen that already used it, which was the right call for consistency at the time and still left the
+project's largest open item slightly larger than it found it.
+
+Converting the ones I wrote seemed better than starting on somebody else's module: it repays debt
+created the same day, and it leaves a worked example that is not the partner modules.
+
+**What it actually buys, demonstrated rather than asserted.** The thread's reply now invalidates the
+*inbox* as well as itself, so the unanswered count on a different page is correct the moment a partner
+answers. The hand-rolled reload it replaced could not do that — it did not know the other page
+existed, and nothing would have alerted anyone when the count went stale.
+
+- **The other two gains are structural.** A cache, so navigating away and back does not refetch what
+  was on screen a second ago. And deduplication — the taxonomy is now read once and shared between
+  the listings index, the authoring form and the taxonomy admin instead of fetched three times.
+- **Manual state patching came out with it.** The old pattern needed the module to hand-patch a row
+  after a write; keeping that alongside tag invalidation would be two sources of truth racing each
+  other, and the one that loses is the one the user is looking at.
+- **⚠️ A measurement correction, and it is the same mistake I flagged twice earlier today.** The plan
+  said seventeen modules used the old pattern, counted by grepping for the word — which matches the
+  word inside comments as well as real imports. It was never a reliable number, and my first count
+  after this change was wrong the same way, because my own new comments mention the hook by name.
+  Counting imports gives twelve remaining and four fully converted. The plan now records the command
+  that measures it honestly, because a number nobody can reproduce is worse than no number.
+- **The endpoint names were tidied before they became a template.** They initially carried suffixes to
+  dodge a name collision that does not exist across modules, which would have looked deliberate to
+  whoever converts the next twelve.
+
+**Verified:** typecheck clean, lint clean, all four converted routes still redirecting correctly when
+signed out, the public surface untouched, and no compile errors in the dev server.
+
+---
+
 ## August 18, 2026 — Drift closed to zero, and the suggestion that would have cost us two indexes
 
 **A generated migration is now empty — `pass` in both directions.** It proposed eighty operations

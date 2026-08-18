@@ -63,6 +63,10 @@ export const api = createApi({
     "Role",
     "SearchEntity",
     "Setting",
+    // The directory product — added 2026-08-18 with PM-41's first repayment.
+    "Category",
+    "Listing",
+    "Enquiry",
     "User",
     "Webhook",
     "WorkerJob",

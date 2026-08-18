@@ -1,18 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import Button from "@/components/common/Button";
 import Textarea from "@/components/common/Textarea";
 import Toast, { useToast } from "@/components/common/Toast";
+import type { EnquiryStatus } from "@/lib/api/directoryApi";
 import {
-  getEnquiry,
-  replyToEnquiry,
-  updateEnquiryStatus,
-  type Enquiry,
-  type EnquiryStatus,
-} from "@/lib/api/directoryApi";
-import { extractApiError } from "@/lib/utils/apiError";
+  useGetEnquiryQuery,
+  useReplyEnquiryMutation,
+  useUpdateEnquiryStatusMutation,
+} from "@/lib/api/endpoints/directoryEndpoints";
 import { usePermissions } from "@/lib/hooks/usePermissions";
 
 const STATUSES: EnquiryStatus[] = ["NEW", "RESPONDED", "CLOSED", "WON", "LOST"];
@@ -41,44 +39,32 @@ export default function EnquiryThread({ enquiryId }: { enquiryId: string }) {
   const { can } = usePermissions();
   const canRespond = can("enquiry-respond");
 
-  const [enquiry, setEnquiry] = useState<Enquiry | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data: enquiry, isLoading: loading } = useGetEnquiryQuery(enquiryId);
+  const [reply, { isLoading: sending }] = useReplyEnquiryMutation();
+  const [setStatus] = useUpdateEnquiryStatusMutation();
   const [body, setBody] = useState("");
-  const [sending, setSending] = useState(false);
 
-  const load = () =>
-    getEnquiry(enquiryId)
-      .then(setEnquiry)
-      .catch((e) => show(extractApiError(e, "Could not load the enquiry."), "error"))
-      .finally(() => setLoading(false));
-
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enquiryId]);
-
+  // No manual reload after either write. Both mutations invalidate this thread
+  // AND the inbox list, so the badge counts on `/dashboard/enquiries` are right
+  // the moment this page changes something — which the old hand-rolled reload
+  // could not do, because it did not know the other page existed.
   const onReply = async () => {
     if (!body.trim()) return;
-    setSending(true);
     try {
-      await replyToEnquiry(enquiryId, body.trim());
+      await reply({ id: enquiryId, body: body.trim() }).unwrap();
       setBody("");
       show("Reply sent.");
-      await load();
-    } catch (e) {
-      show(extractApiError(e, "Could not send the reply."), "error");
-    } finally {
-      setSending(false);
+    } catch {
+      show("Could not send the reply.", "error");
     }
   };
 
   const onStatus = async (status: EnquiryStatus) => {
     try {
-      const next = await updateEnquiryStatus(enquiryId, status);
-      setEnquiry(next);
+      await setStatus({ id: enquiryId, status }).unwrap();
       show(`Marked ${status.toLowerCase()}.`);
-    } catch (e) {
-      show(extractApiError(e, "Could not change the status."), "error");
+    } catch {
+      show("Could not change the status.", "error");
     }
   };
 
