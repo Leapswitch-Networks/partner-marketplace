@@ -253,7 +253,15 @@ class PublicPartnerSummary(BaseModel):
     verification_level: str
     founded_year: int | None
     employee_range: str | None
-    logo_path: str | None
+    #: ⚠️ `logo_path` is a legacy column nothing writes — kept on the model for a
+    #: future filesystem or CDN backend, and deliberately NOT exposed here.
+    #:
+    #: What a client needs is whether an asset exists, so it can render an
+    #: `<img>` or fall back to initials. The bytes come from
+    #: `/public/partners/{slug}/brand/logo`, which caches and validates
+    #: independently of this response.
+    has_logo: bool = False
+    has_banner: bool = False
 
 
 class PublicPartnerDetail(PublicPartnerSummary):

@@ -247,6 +247,9 @@ export interface OwnOrganisation {
   country: string | null;
   postal_code: string | null;
   service_areas: string | null;
+  /** Presence, not content — the bytes are served by their own route. */
+  logo_mime?: string | null;
+  banner_mime?: string | null;
   status: string;
   verification_level: string;
   is_listed: boolean;
@@ -273,3 +276,28 @@ export const setMyExpertise = async (categoryIds: number[]): Promise<OwnOrganisa
   (await axiosInstance.put<OwnOrganisation>("/partners/me/expertise", {
     category_ids: categoryIds,
   })).data;
+
+/**
+ * Upload a logo or banner for the caller's own organisation.
+ *
+ * `FormData`, so the browser sets the multipart boundary — setting
+ * `Content-Type` by hand here is the classic way to break a multipart upload,
+ * because the boundary token is generated per request and cannot be guessed.
+ *
+ * Validation is entirely server-side: size, magic bytes rather than the declared
+ * type or the filename, dimensions, and an SVG content scan. The client checks
+ * nothing, on purpose — a client-side check is a courtesy that becomes a lie the
+ * moment somebody posts directly.
+ */
+export const uploadBrandAsset = async (
+  asset: "logo" | "banner",
+  file: File,
+): Promise<OwnOrganisation> => {
+  const body = new FormData();
+  body.append("file", file);
+  const { data } = await axiosInstance.put<OwnOrganisation>(`/partners/me/brand/${asset}`, body);
+  return data;
+};
+
+export const clearBrandAsset = async (asset: "logo" | "banner"): Promise<OwnOrganisation> =>
+  (await axiosInstance.delete<OwnOrganisation>(`/partners/me/brand/${asset}`)).data;

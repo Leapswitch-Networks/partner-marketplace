@@ -15,7 +15,7 @@ a general edit should not: login for a whole organisation, Leapswitch's publishe
 endorsement, and visibility to the anonymous internet.
 """
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, File, Query, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db, require_permission
@@ -106,6 +106,41 @@ def set_my_expertise(
     """
     partner = partner_service.get_own_organisation(db, actor)
     partner_service.set_expertise(db, partner, payload.category_ids)
+    db.commit()
+    return PartnerDetailResponse.model_validate(partner)
+
+
+@router.put("/me/brand/{asset}", response_model=PartnerDetailResponse)
+async def upload_my_brand_asset(
+    asset: str,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_permission(PARTNER_VIEW)),
+) -> PartnerDetailResponse:
+    """Upload the caller's own logo or banner.
+
+    `async def` — the one exception to this codebase's synchronous rule, and it is
+    forced rather than chosen: `UploadFile.read()` is a coroutine. The database
+    work below is still synchronous and still on the same session.
+
+    Validation is `core/images.py`'s, applied in the service. Nothing here trusts
+    the filename or the declared content type.
+    """
+    partner = partner_service.get_own_organisation(db, actor)
+    data = await file.read()
+    partner_service.set_brand_asset(db, partner, asset=asset, data=data)
+    db.commit()
+    return PartnerDetailResponse.model_validate(partner)
+
+
+@router.delete("/me/brand/{asset}", response_model=PartnerDetailResponse)
+def clear_my_brand_asset(
+    asset: str,
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_permission(PARTNER_VIEW)),
+) -> PartnerDetailResponse:
+    partner = partner_service.get_own_organisation(db, actor)
+    partner_service.clear_brand_asset(db, partner, asset=asset)
     db.commit()
     return PartnerDetailResponse.model_validate(partner)
 

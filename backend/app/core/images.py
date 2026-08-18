@@ -82,6 +82,13 @@ SVG_MIME = "image/svg+xml"
 ALLOWED_TYPES: dict[str, frozenset[str]] = {
     "logo": frozenset({"image/png", "image/jpeg", "image/webp", SVG_MIME}),
     "favicon": frozenset({"image/png", "image/x-icon", SVG_MIME}),
+    # A partner's profile banner, added 2026-08-18.
+    #
+    # **No SVG.** A banner is photographic and always rendered large, so vector
+    # buys nothing — and every SVG accepted is one more document that has to be
+    # scanned and served under a restrictive policy. Narrowing the format list is
+    # the cheapest security decision available here.
+    "banner": frozenset({"image/png", "image/jpeg", "image/webp"}),
 }
 
 #: Substrings that disqualify an SVG. Matched case-insensitively against the whole

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ArrowUpRight, MapPin } from "lucide-react";
 
 import type { PublicPartnerSummary } from "@/lib/api/public";
+import PartnerLogo from "./PartnerLogo";
 import VerificationBadge from "./VerificationBadge";
 
 /**
@@ -15,12 +16,11 @@ import VerificationBadge from "./VerificationBadge";
  * each row deep rather than the list long. So this is the smallest complete
  * argument for a company, not a table row with rounded corners.
  *
- * ## The monogram is derived, not stored
+ * ## The logo falls back to initials
  *
- * There are no partner logos, and inventing one would mean inventing another
- * company's mark. Initials from the name are honest, stable, and need no asset
- * pipeline. `logo_path` is in the API shape and is used when a partner has
- * actually uploaded one.
+ * Delegated to `PartnerLogo`, which renders the uploaded image when there is one
+ * and the company's initials when there is not. The fallback is a deliberate
+ * treatment rather than a placeholder — a directory of grey boxes looks broken.
  *
  * ## What it must never show
  *
@@ -29,17 +29,9 @@ import VerificationBadge from "./VerificationBadge";
  * rating or review count either: § 6.5, unverified ratings read as astroturf and
  * no review exists to average.
  */
-function monogram(name: string): string {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((word) => word[0]?.toUpperCase() ?? "")
-    .join("");
-}
-
 export default function PartnerCard({ partner }: { partner: PublicPartnerSummary }) {
-  const { slug, name, tagline, city, verification_level, founded_year, employee_range } = partner;
+  const { slug, name, tagline, city, verification_level, founded_year, employee_range, has_logo } =
+    partner;
 
   return (
     <Link
@@ -49,12 +41,7 @@ export default function PartnerCard({ partner }: { partner: PublicPartnerSummary
       {/* `min-w-0` on the text side and `shrink-0` on the badge — a long partner
           name otherwise pushes the badge off the right edge of a 360px screen. */}
       <div className="flex items-start justify-between gap-3">
-        <span
-          aria-hidden
-          className="pub-deep-bg pub-cream flex h-12 w-12 shrink-0 items-center justify-center rounded-xl text-base font-semibold sm:h-14 sm:w-14 sm:text-lg"
-        >
-          {monogram(name)}
-        </span>
+        <PartnerLogo name={name} slug={slug} hasLogo={has_logo} size={56} />
         <VerificationBadge level={verification_level} />
       </div>
 

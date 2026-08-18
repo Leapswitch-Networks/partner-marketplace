@@ -4,6 +4,7 @@ import { Building2, ExternalLink, MapPin, Users } from "lucide-react";
 
 import Breadcrumb from "@/components/public/Breadcrumb";
 import EnquiryForm from "@/components/public/EnquiryForm";
+import PartnerLogo from "@/components/public/PartnerLogo";
 import PublicButton from "@/components/public/PublicButton";
 import SectionSlab from "@/components/public/SectionSlab";
 import VerificationBadge from "@/components/public/VerificationBadge";
@@ -62,15 +63,6 @@ export async function generateMetadata({
   };
 }
 
-function monogram(name: string): string {
-  return name
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((w) => w[0]?.toUpperCase() ?? "")
-    .join("");
-}
-
 export default async function PartnerProfilePage({ params }: { params: { slug: string } }) {
   const partner = await fetchPartner(params.slug).catch(() => null);
   if (!partner) notFound();
@@ -110,12 +102,12 @@ export default async function PartnerProfilePage({ params }: { params: { slug: s
 
       <SectionSlab className="pt-8 sm:pt-12">
         <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:gap-8">
-          <span
-            aria-hidden
-            className="pub-deep-bg pub-cream flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl text-2xl font-semibold sm:h-28 sm:w-28 sm:text-4xl"
-          >
-            {monogram(partner.name)}
-          </span>
+          <PartnerLogo
+            name={partner.name}
+            slug={partner.slug}
+            hasLogo={partner.has_logo}
+            size={112}
+          />
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-3">
               <VerificationBadge level={partner.verification_level} />

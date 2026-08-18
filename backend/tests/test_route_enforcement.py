@@ -396,6 +396,16 @@ class TestTheEnforcementMatrixIsPinned:
         ("GET", "/api/v1/public/partners/{slug}"),
         ("GET", "/api/v1/public/listings"),
         ("GET", "/api/v1/public/listings/{slug}"),
+        # SECURITY: serves a listed partner's logo or banner bytes. Public
+        # because a profile page renders them, and gated the same way the page
+        # is — the partner must be listed AND active, or it 404s.
+        #
+        # An SVG is a document rather than a bitmap, so this response carries a
+        # hard Content-Security-Policy and `nosniff` **in addition to** the
+        # upload path already refusing script, embedded HTML, external
+        # references and DOCTYPEs. `core/images.py` argues for both controls:
+        # either alone is one mistake away from failing.
+        ("GET", "/api/v1/public/partners/{slug}/brand/{asset}"),
         # SECURITY: the only unauthenticated WRITE in the application. Rate
         # limited in `core/rate_limit.py` (6/min per address) — that is the real
         # control, because the honeypot and the client throttle are both skipped

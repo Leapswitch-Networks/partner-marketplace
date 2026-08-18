@@ -708,3 +708,75 @@ def set_expertise(db: Session, partner: Partner, category_ids: list[int]) -> Par
     partner.expertise = list(categories)
     db.flush()
     return partner
+
+
+# --- Brand assets — punchlist 3.3 -------------------------------------------
+
+
+def set_brand_asset(db: Session, partner: Partner, *, asset: str, data: bytes) -> Partner:
+    """Store a validated logo or banner on the partner's own row.
+
+    **Validation is `core/images.py`'s, not a second copy.** That module refuses
+    anything over 512 KB before parsing it, checks magic bytes rather than the
+    claimed content type or the filename, caps dimensions, and scans SVG for
+    script, embedded HTML, external references and DOCTYPEs — refusing rather than
+    stripping, because silently rewriting somebody's logo produces a file they did
+    not upload.
+
+    A second validator here would be a second thing to keep in agreement with the
+    first, and the first is the one that has been thought about.
+
+    ⚠️ `ImageValidationError` is translated to a 422 with the module's own message.
+    Those messages deliberately never echo the filename or the claimed MIME type
+    back — the whole point is that neither was trusted.
+    """
+    from app.core import images
+
+    if asset not in ("logo", "banner"):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Unknown asset {asset!r}.")
+
+    try:
+        validated = images.validate(data, asset=asset)
+    except images.ImageValidationError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+
+    now = datetime.now(timezone.utc)
+    if asset == "logo":
+        partner.logo_mime = validated.mime
+        partner.logo_bytes = validated.data
+        partner.logo_updated_at = now
+    else:
+        partner.banner_mime = validated.mime
+        partner.banner_bytes = validated.data
+        partner.banner_updated_at = now
+    db.flush()
+    return partner
+
+
+def clear_brand_asset(db: Session, partner: Partner, *, asset: str) -> Partner:
+    """Remove an asset.
+
+    Clears the timestamp too, so the serving route's validator changes and any
+    cached copy of the old image is invalidated rather than lingering.
+    """
+    if asset == "logo":
+        partner.logo_mime = None
+        partner.logo_bytes = None
+        partner.logo_updated_at = None
+    elif asset == "banner":
+        partner.banner_mime = None
+        partner.banner_bytes = None
+        partner.banner_updated_at = None
+    else:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Unknown asset {asset!r}.")
+    db.flush()
+    return partner
+
+
+def brand_asset(partner: Partner, asset: str) -> tuple[bytes, str, datetime] | None:
+    """The stored bytes, mime and timestamp, or None when unset."""
+    if asset == "logo" and partner.logo_bytes and partner.logo_mime:
+        return partner.logo_bytes, partner.logo_mime, partner.logo_updated_at
+    if asset == "banner" and partner.banner_bytes and partner.banner_mime:
+        return partner.banner_bytes, partner.banner_mime, partner.banner_updated_at
+    return None

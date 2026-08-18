@@ -67,7 +67,10 @@ export interface PublicPartnerSummary {
   verification_level: string;
   founded_year: number | null;
   employee_range: string | null;
-  logo_path: string | null;
+  /** Whether a brand asset exists. The bytes come from
+   *  `/public/partners/{slug}/brand/{logo|banner}` — see `PartnerLogo`. */
+  has_logo: boolean;
+  has_banner: boolean;
 }
 
 export interface PublicListing {

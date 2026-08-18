@@ -5,7 +5,7 @@
 > `c9a71f4e2b60`, there is **no** `service_categories`, `service_listings` or `enquiries` table, and
 > **no public API router** exists.
 >
-> ## Progress — 47 of 48 done, verified 2026-08-18
+> ## Progress — 48 of 48 done, verified 2026-08-18
 >
 > **Phases 1 and 2 complete — the whole backend exists.** Migration `5098784d1c1c` round-trips
 > (`upgrade → downgrade → upgrade`) on the live database. The app boots with **190 routes**, the
@@ -178,8 +178,25 @@ All under `(app)`, one route tree shared with staff, scoped by `apply_scope` —
 - [x] **3.1 · `/dashboard` partner variant** — listings vs entitlement, new and unanswered enquiries.
 - [x] **3.2 · `/dashboard/organisation`** — their own record, **public half only**. Never `notes`,
       `gst_number`, `pan_number`.
-- [ ] **3.3 · `/dashboard/organisation/branding`** — logo and banner, reusing the brand-asset
-      pipeline and honouring the 32px floor.
+- [x] **3.3 · `/dashboard/organisation/branding`** — **done 2026-08-18.** Logo and banner, reusing
+      `core/images.py` rather than adding a second validator: it refuses anything over 512 KB before
+      parsing, checks magic bytes rather than the filename or the declared type, caps dimensions, and
+      scans SVG for script, embedded HTML, external references and DOCTYPEs — refusing rather than
+      stripping. A `banner` asset kind was added with **no SVG allowed**, because a banner is
+      photographic and always rendered large, so vector buys nothing and every accepted SVG is one
+      more document to scan and serve carefully.
+      **Bytes in the row, not a file on disk** — the pattern `app_settings` already proved for the
+      platform's own logo: no volume to mount, no storage path to agree, nothing lost when a container
+      is replaced, and the asset is transactional with its owner. Wrong at photo-library scale;
+      revisit if partners ever get galleries.
+      Served by its own public route under a hard `Content-Security-Policy` and `nosniff`, with a
+      strong validator from `*_updated_at` so a replaced logo invalidates everywhere. ⚠️ The
+      `downgrade()` **destroys uploaded images** — they live in these columns and nowhere else — and
+      says so.
+      The 32px floor from `LOGO_BRIEF.md` is stated next to the upload rather than left in a document
+      nobody reads, and `PartnerLogo` falls back to initials as a designed treatment.
+
+
 - [x] **3.4 · `/dashboard/organisation/expertise`** — selects from the taxonomy, never free text; it
       has to be joinable or the public filter cannot work.
 - [x] **3.5 · `/dashboard/listings` + `/[id]`** — index and show. `rejection_reason` shown

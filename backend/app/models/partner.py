@@ -7,6 +7,7 @@ from sqlalchemy import (
     Enum,
     ForeignKey,
     Integer,
+    LargeBinary,
     String,
     Text,
 )
@@ -99,8 +100,38 @@ class Partner(Base):
         String(200), nullable=True, comment="One line under the name on the listing page"
     )
     about: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # ⚠️ `logo_path` and `banner_path` were declared at the start and **nothing
+    # ever wrote them**. They are kept rather than dropped because a second
+    # project on this core may serve assets from a filesystem or a CDN, and the
+    # columns are free — but this installation does not use them.
     logo_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
     banner_path: Mapped[str | None] = mapped_column(String(255), nullable=True)
+
+    # --- Brand assets, added 2026-08-18 (punchlist 3.3) ---------------------
+    #
+    # Bytes in the database, not a file on disk. That is the pattern
+    # `app_settings` already proved for the platform's own logo and favicon, and
+    # it is the right one here for the same reasons: no volume to mount, no
+    # storage path to agree, nothing to lose when a container is replaced, and
+    # the asset is transactional with the row that owns it.
+    #
+    # It is not the right pattern at photo-library scale. At 512 KB a side and a
+    # few hundred partners the whole set is a few hundred megabytes, which is
+    # nothing — revisit it if partners ever get galleries, not before.
+    #
+    # `*_updated_at` exists so the serving route can emit a strong validator.
+    # Without it every profile page re-downloads every logo, and with a naive
+    # cache header a replaced logo stays stale everywhere.
+    logo_mime: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    logo_bytes: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    logo_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    banner_mime: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    banner_bytes: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    banner_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # Deliberately separate from the account email on `users`. What is DISPLAYED
     # is a business decision; what SIGNS IN is an identity. Merging them would

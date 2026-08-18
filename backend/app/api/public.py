@@ -22,7 +22,7 @@ and a route that *forgot* to filter would serve everything. The filters are the
 first thing in every statement below for that reason.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
@@ -42,7 +42,7 @@ from app.schemas.directory import (
     PublicPartnerDetail,
     PublicPartnerSummary,
 )
-from app.services import category_service, enquiry_service, listing_service
+from app.services import category_service, enquiry_service, listing_service, partner_service
 
 router = APIRouter(prefix="/public", tags=["public"])
 
@@ -51,6 +51,20 @@ router = APIRouter(prefix="/public", tags=["public"])
 #: suspended partner appearing on one page and not another is the kind of bug
 #: that survives review.
 _VISIBLE_PARTNER = (Partner.is_listed.is_(True), Partner.status == "ACTIVE")
+
+
+def _partner_summary(partner) -> PublicPartnerSummary:
+    """A partner summary with the brand-asset flags filled in.
+
+    `model_validate` cannot derive them: they are "are these bytes present",
+    which is a question about two columns the response deliberately does not
+    carry. Computed in one place so a route cannot forget and silently render
+    initials for a partner who uploaded a logo.
+    """
+    summary = PublicPartnerSummary.model_validate(partner)
+    summary.has_logo = bool(partner.logo_bytes and partner.logo_mime)
+    summary.has_banner = bool(partner.banner_bytes and partner.banner_mime)
+    return summary
 
 
 def _listing_with_partner(listing, partner) -> PublicListingWithPartner:
@@ -68,7 +82,7 @@ def _listing_with_partner(listing, partner) -> PublicListingWithPartner:
     """
     return PublicListingWithPartner(
         **PublicListing.model_validate(listing).model_dump(),
-        partner=PublicPartnerSummary.model_validate(partner),
+        partner=_partner_summary(partner),
     )
 
 
@@ -166,7 +180,7 @@ def public_partners(
     ).unique().scalars().all()
 
     return Page[PublicPartnerSummary](
-        items=[PublicPartnerSummary.model_validate(r) for r in rows],
+        items=[_partner_summary(r) for r in rows],
         **page_meta(page, per_page, total),
     )
 
@@ -192,6 +206,8 @@ def public_partner(slug: str, db: Session = Depends(get_db)) -> PublicPartnerDet
     ).unique().scalars().all()
 
     detail = PublicPartnerDetail.model_validate(partner)
+    detail.has_logo = bool(partner.logo_bytes and partner.logo_mime)
+    detail.has_banner = bool(partner.banner_bytes and partner.banner_mime)
     detail.expertise = [
         PublicCategory(
             name=c.name, slug=c.slug, description=c.description,
@@ -199,7 +215,15 @@ def public_partner(slug: str, db: Session = Depends(get_db)) -> PublicPartnerDet
         )
         for c in partner.expertise
     ]
-    detail.listings = [PublicListingWithPartner.model_validate(listing) for listing in listings]
+    # `PublicListing`, not `PublicListingWithPartner`.
+    #
+    # ⚠️ This was the third site of the same mistake and my earlier fix missed
+    # it: `PublicListingWithPartner` requires `partner`, and validating without
+    # it raises before anything can be assigned. On this page the partner is the
+    # page, so repeating it inside each listing would be redundant as well as
+    # broken — which is exactly why `PublicPartnerDetail.listings` is typed as
+    # the plain listing model.
+    detail.listings = [PublicListing.model_validate(listing) for listing in listings]
     return detail
 
 
@@ -257,6 +281,55 @@ def public_listing(slug: str, db: Session = Depends(get_db)) -> PublicListingWit
     if listing is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Listing not found")
     return _listing_with_partner(listing, db.get(Partner, listing.partner_id))
+
+
+@router.get("/partners/{slug}/brand/{asset}")
+def public_brand_asset(slug: str, asset: str, db: Session = Depends(get_db)) -> Response:
+    """Serve a listed partner's logo or banner.
+
+    ## Why the response carries a content-security policy
+
+    An SVG is a document, not a bitmap: opened directly it can carry script. The
+    upload path already refuses anything with script, embedded HTML, external
+    references or a DOCTYPE — but `core/images.py`'s own docstring makes the case
+    for two independent controls, because either alone is one mistake away from
+    failing. This is the second: even a file that slipped past the check executes
+    nothing, because the response forbids script and every external fetch.
+    
+    `X-Content-Type-Options: nosniff` matters for the same reason — without it a
+    browser may decide the bytes are HTML regardless of what we said they were.
+
+    ## Caching
+    
+    A strong validator from `*_updated_at`, so a replaced logo invalidates
+    everywhere rather than lingering, and an unchanged one is not re-downloaded on
+    every profile view. Public and immutable-ish: these are the same bytes for
+    every visitor.
+    """
+    partner = db.execute(
+        select(Partner).where(Partner.slug == slug, *_VISIBLE_PARTNER)
+    ).scalar_one_or_none()
+    if partner is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Partner not found")
+
+    found = partner_service.brand_asset(partner, asset)
+    if found is None:
+        # 404 rather than a placeholder image: the caller asked for an asset that
+        # does not exist, and the card already knows how to fall back to initials.
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such asset")
+
+    data, mime, updated_at = found
+    stamp = int(updated_at.timestamp()) if updated_at else 0
+    return Response(
+        content=data,
+        media_type=mime,
+        headers={
+            "Cache-Control": "public, max-age=300",
+            "ETag": f'"{slug}-{asset}-{stamp}"',
+            "X-Content-Type-Options": "nosniff",
+            "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+        },
+    )
 
 
 @router.post(

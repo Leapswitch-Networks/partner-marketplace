@@ -99,6 +99,9 @@ EXPECTED_PUBLIC_PATHS: frozenset[str] = frozenset(
         "/api/v1/public/partners/{slug}",
         "/api/v1/public/listings",
         "/api/v1/public/listings/{slug}",
+        # A listed partner's logo or banner. Served under a restrictive CSP —
+        # see the SECURITY note in tests/test_route_enforcement.py.
+        "/api/v1/public/partners/{slug}/brand/{asset}",
         # The only unauthenticated write in the application. Rate limited.
         "/api/v1/public/enquiries",
         # A capability URL — the unguessable reference is the credential.

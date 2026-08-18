@@ -99,6 +99,61 @@ module. So a question like *"can I use `async def` here?"* had a correct answer 
 and that file is protected — it needs the owner's explicit approval before it is edited. The one-row
 change is prepared and waiting rather than applied.
 
+## August 18, 2026 — 48 of 48: partner logos, and a bug my earlier fix had missed
+
+**Partners can upload a logo and a profile banner, and the last open task is closed.** It reuses the
+platform's own image pipeline rather than adding a second validator — that module refuses anything
+over half a megabyte before parsing it, checks magic bytes rather than the filename or the declared
+content type, caps dimensions, and scans vector files for script, embedded HTML, external references
+and document type declarations, refusing rather than stripping. A second validator would be a second
+thing to keep in agreement with the first, and the first is the one that has been thought about.
+
+**Banners deliberately do not accept vector files.** A banner is photographic and always rendered
+large, so vector buys nothing, and every format accepted is one more document that has to be scanned
+and served carefully. Narrowing the list was the cheapest security decision available.
+
+- **The images live in the row, not on a disk.** That is the pattern already proved for the
+  platform's own logo: no volume to mount, no storage location to agree, nothing lost when a
+  container is replaced, and the asset is transactional with the record that owns it. It would be the
+  wrong pattern at photo-library scale, which is written down alongside the trigger for revisiting it.
+- **The downgrade destroys uploaded images and says so.** They exist in those columns and nowhere
+  else, so unlike most schema changes this one is not reversible for content. Better recorded in the
+  migration than discovered during an incident.
+- **Two independent controls protect vector uploads, not one.** The upload path refuses anything
+  dangerous, and the serving response independently forbids script and every external fetch. The
+  image module's own reasoning is that either alone is one mistake away from failing, so both are
+  applied.
+- **The 32-pixel floor is on the page, next to the upload.** A partner who uploads a detailed
+  wordmark and watches it turn to mush will blame the site, not the brief — so the constraint sits
+  where the decision is made rather than in a document nobody reads.
+- **No client-side validation at all, on purpose.** The file picker's format hint is a convenience,
+  not a control, and duplicating the server's checks would create a second set to keep in step. The
+  server's refusals are shown verbatim because they are more specific than anything the page could
+  invent: "that image is 4000×3000, the limit is 2048×2048" beats "upload failed".
+- **The fallback is a designed treatment, not a placeholder.** Most partners will not upload
+  anything, and a directory of grey boxes looks broken, so a card without a logo shows the company's
+  initials on the brand colour. It is chosen by a flag from the API rather than by an image error
+  handler, because a fallback that appears only after a failed request shows a broken image first.
+
+**⚠️ Adding this surfaced a bug my earlier fix had missed.** Building a response model and then
+assigning a required field cannot work — validation happens at construction. I found and fixed that on
+the two listing routes days ago; the partner profile route had **a third copy of it**, which had been
+returning a server error for that endpoint. The profile page was serving a cached copy, so nothing
+looked wrong until the new fields failed to appear on it. Fixed, with the correct model this time: a
+partner's own profile does not need each listing to repeat the partner.
+
+**Also worth recording:** a test that used "banner" as its example of a nonexistent asset kind now had
+a real one to contend with. The example moved and the assertion did not — the rule under test was
+never about banners.
+
+**Verified:** 838 tests passing, ruff clean, typecheck clean, lint clean, migration at head and
+round-tripped, every public route responding, logos rendering on cards and profiles with initials
+where there is no upload, the scripted-vector and wrong-format uploads both refused with 422, an
+unlisted partner's asset returning not-found, and the confidentiality audit re-run across the new
+surface.
+
+---
+
 ## August 18, 2026 — 47 of 48, and the one left undone is left undone on purpose
 
 **The directory is finished apart from partner logo uploads.** Everything the owner described — a

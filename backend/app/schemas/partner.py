@@ -227,6 +227,12 @@ class PartnerListItem(BaseModel):
 
 
 class PartnerDetailResponse(PartnerListItem):
+    #: Presence of a brand asset, not its bytes. The image itself is served by
+    #: its own route so it can be cached and validated independently; a boolean
+    #: here would be equally fine, but the mime is free and lets a client pick a
+    #: sensible `<img>` treatment for an SVG versus a raster.
+    logo_mime: str | None = None
+    banner_mime: str | None = None
     """The full staff-facing record.
 
     Carries `notes`, `gst_number` and `pan_number`. **Never return this from a

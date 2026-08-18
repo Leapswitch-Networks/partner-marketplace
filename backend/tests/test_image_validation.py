@@ -323,9 +323,15 @@ def test_png_is_allowed_for_both():
 
 def test_unknown_asset_name_is_refused():
     """Defence in depth. The route already constrains this with a `Literal`, but the
-    service must not depend on its caller having done so."""
+    service must not depend on its caller having done so.
+
+    ⚠️ The example used to be `"banner"`, chosen because no such asset existed.
+    One does since 2026-08-18 (partner profile banners), so the example moved
+    rather than the assertion — the rule under test is unchanged, and picking a
+    name that is unlikely to ever become real keeps it that way.
+    """
     with pytest.raises(ImageValidationError, match="Unknown asset"):
-        validate(png(), asset="banner")
+        validate(png(), asset="not-an-asset-kind")
 
 
 def test_every_allowlisted_type_is_actually_detectable():
