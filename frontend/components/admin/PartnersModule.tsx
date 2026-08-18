@@ -23,8 +23,14 @@ import { navIcon } from "@/components/dashboard/navIcons";
 import { partnersApi } from "@/lib/api/partnersApi";
 import useModalState from "@/lib/hooks/useModalState";
 import usePermissions from "@/lib/hooks/usePermissions";
-import useResourceList from "@/lib/hooks/useResourceList";
 import useResourceQuery from "@/lib/hooks/useResourceQuery";
+import {
+  useChangePartnerStatusMutation,
+  useDeletePartnerMutation,
+  useListPartnersQuery,
+  useSetPartnerListedMutation,
+  useSetPartnerVerificationMutation,
+} from "@/lib/api/endpoints/partnersEndpoints";
 import { extractApiError } from "@/lib/utils/apiError";
 import type {
   PartnerDetailResponse,
@@ -113,27 +119,44 @@ export default function PartnersModule({ initialModal }: { initialModal?: ModalM
     defaultPerPage: 30,
   });
 
-  const list = useResourceList<PartnerListItem>({
-    ready: q.ready,
-    deps: [q.applied, q.sortBy, q.sortOrder, q.page, q.perPage],
-    errorMessage: "Could not load partners.",
-    fetch: () =>
-      partnersApi
-        .list({
-          search: q.applied.search || undefined,
-          status: (q.applied.status as PartnerStatus) || undefined,
-          verification_level: (q.applied.verification_level as VerificationLevel) || undefined,
-          tier_id: q.applied.tier_id ? Number(q.applied.tier_id) : undefined,
-          is_listed: q.applied.is_listed === "" ? undefined : q.applied.is_listed === "true",
-          sort_by: q.sortBy,
-          sort_order: q.sortOrder,
-          page: q.page,
-          per_page: q.perPage,
-        })
-        .then((res) => res.data),
-  });
+  // PM-41. `partnersEndpoints` already existed and this module was the last
+  // thing still not using it — the endpoints were written first and the module
+  // never followed, which is how a data layer ends up with one consumer.
+  //
+  // Every write below now relies on `invalidatesTags` rather than `patchRow`.
+  // That matters here more than in a plain CRUD screen: the four state actions
+  // change `status`, `verification_level` and `is_listed`, all of which are
+  // *filters* on this table — so a patched row can sit in a filtered view it no
+  // longer belongs to, which is exactly the stale-row-with-no-error case the
+  // old pattern could not fix.
+  const {
+    data: page,
+    isFetching,
+    error,
+    refetch,
+  } = useListPartnersQuery(
+    {
+      search: q.applied.search || undefined,
+      status: (q.applied.status as PartnerStatus) || undefined,
+      verification_level: (q.applied.verification_level as VerificationLevel) || undefined,
+      tier_id: q.applied.tier_id ? Number(q.applied.tier_id) : undefined,
+      is_listed: q.applied.is_listed === "" ? undefined : q.applied.is_listed === "true",
+      sort_by: q.sortBy,
+      sort_order: q.sortOrder,
+      page: q.page,
+      per_page: q.perPage,
+    },
+    // The query hook has no `ready` gate, so the URL-restore race is handled
+    // here: without it the first render fires a throwaway request with default
+    // filters before the real one.
+    { skip: !q.ready },
+  );
+  const rows = page?.items ?? [];
 
   const modal = useModalState<ModalMode, PartnerListItem>(initialModal);
+  const [changeStatus] = useChangePartnerStatusMutation();
+  const [setListed] = useSetPartnerListedMutation();
+  const [removePartner] = useDeletePartnerMutation();
 
   const [tiers, setTiers] = useState<PartnerTier[]>([]);
 
@@ -295,13 +318,13 @@ export default function PartnersModule({ initialModal }: { initialModal?: ModalM
         },
       ]}
       columns={columns}
-      rows={list.rows}
+      rows={rows}
       rowKey={(r) => r.id}
-      loading={list.loading}
-      error={list.error}
-      onRetry={list.refetch}
-      total={list.total}
-      pages={list.pages}
+      loading={isFetching}
+      error={error ? "Could not load partners." : null}
+      onRetry={refetch}
+      total={page?.total ?? 0}
+      pages={page?.pages ?? 0}
       table="vendor"
       rowNoun="partner"
       emptyTitle="No partners found"
@@ -326,7 +349,8 @@ export default function PartnersModule({ initialModal }: { initialModal?: ModalM
             modal.close();
             if (action === "saved") {
               show(wasEdit ? "Partner updated." : "Partner onboarded.");
-              list.refetch();
+              // The form's own create/update mutations invalidate the list, so
+              // there is nothing to refetch here.
             }
           }}
         />
@@ -358,11 +382,12 @@ export default function PartnersModule({ initialModal }: { initialModal?: ModalM
           tone={modal.target.status === "ACTIVE" ? "danger" : "primary"}
           errorFallback="Could not change status."
           onConfirm={async () => {
-            const res = await partnersApi.changeStatus(
-              modal.target!.id,
-              statusAction(modal.target!.status).target
-            );
-            list.patchRow(res.data);
+            // No `patchRow`: the mutation's tags refresh the row and the list,
+            // and a status change can move a row out of the active filter.
+            await changeStatus({
+              id: modal.target!.id,
+              status: statusAction(modal.target!.status).target,
+            }).unwrap();
           }}
           onConfirmed={() => {
             const name = modal.target!.name;
@@ -394,7 +419,8 @@ export default function PartnersModule({ initialModal }: { initialModal?: ModalM
           partner={modal.target}
           onClose={modal.close}
           onSaved={(next) => {
-            list.patchRow(next);
+            // Verification is invalidated by its own mutation — see
+            // `VerifyPartnerModal`. Patching here would race that refetch.
             modal.close();
             show(`${next.name} — verification set to ${VERIFICATION_TONE[next.verification_level].label}.`);
           }}
@@ -410,8 +436,10 @@ export default function PartnersModule({ initialModal }: { initialModal?: ModalM
           tone={modal.target.is_listed ? "danger" : "primary"}
           errorFallback="Could not change directory visibility."
           onConfirm={async () => {
-            const res = await partnersApi.setListed(modal.target!.id, !modal.target!.is_listed);
-            list.patchRow(res.data);
+            await setListed({
+              id: modal.target!.id,
+              is_listed: !modal.target!.is_listed,
+            }).unwrap();
           }}
           onConfirmed={() => {
             const name = modal.target!.name;
@@ -445,12 +473,13 @@ export default function PartnersModule({ initialModal }: { initialModal?: ModalM
           // The API refuses while anyone still belongs to the organisation —
           // same shape as Roles' `user_count` guard.
           confirmDisabled={modal.target.user_count > 0}
-          onConfirm={() => partnersApi.remove(modal.target!.id)}
+          onConfirm={async () => {
+            await removePartner(modal.target!.id).unwrap();
+          }}
           onDeleted={() => {
             const name = modal.target!.name;
             modal.close();
             show(`${name} deleted.`);
-            list.refetch();
           }}
           onClose={modal.close}
         >
@@ -485,6 +514,7 @@ export function VerifyPartnerModal({
   onClose: () => void;
   onSaved: (next: PartnerDetailResponse) => void;
 }) {
+  const [setVerification] = useSetPartnerVerificationMutation();
   const [level, setLevel] = useState<VerificationLevel>(partner.verification_level);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -493,8 +523,10 @@ export function VerifyPartnerModal({
     setBusy(true);
     setError(null);
     try {
-      const res = await partnersApi.setVerification(partner.id, level);
-      onSaved(res.data);
+      // The mutation invalidates both the row and the list, so the caller no
+      // longer patches anything — it just closes and reports.
+      const next = await setVerification({ id: partner.id, verification_level: level }).unwrap();
+      onSaved(next);
     } catch (err) {
       setError(extractApiError(err, "Could not update verification."));
     } finally {

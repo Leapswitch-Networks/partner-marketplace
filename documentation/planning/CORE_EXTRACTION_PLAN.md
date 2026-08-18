@@ -289,11 +289,15 @@ project inherits this pattern, which is exactly why it belongs in the core rathe
 - [ ] **4.4** Migrate `ResourceIndex` to accept a query hook rather than data + loading props, so all
       12 list modules convert by changing their call site rather than their body.
 - [~] **4.5** Convert the modules. **3 done 2026-08-18** — listings, enquiries and the enquiry
-      thread, in `lib/api/endpoints/directoryEndpoints.ts`. **12 modules still import
-      `useResourceList`; 4 are fully on RTK Query.**
+      thread, in `lib/api/endpoints/directoryEndpoints.ts`. **11 modules still import
+      `useResourceList`; 5 are fully on RTK Query.**
       ⚠️ **The counts in this plan were measured by grepping for the word**, which matches prose in
       comments as well as imports — the "17" above was never reliable. Measure with
       `grep -rl 'from "@/lib/hooks/useResourceList"' frontend/components/admin/` instead.
+      `PartnersModule` converted next and needed **no new endpoint code at all** —
+      `partnersEndpoints.ts` had existed since the layer was built and this module was its only
+      missing consumer, which is how a data layer ends up with one user and a reputation for not
+      being worth adopting.
       **Why these three first:** they were added to the old pattern on 2026-08-18 by the directory
       build, so converting them repays debt created the same day rather than starting on somebody
       else's module — and it leaves a worked example that is not the partner modules.
