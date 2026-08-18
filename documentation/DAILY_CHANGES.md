@@ -99,6 +99,52 @@ module. So a question like *"can I use `async def` here?"* had a correct answer 
 and that file is protected — it needs the owner's explicit approval before it is edited. The one-row
 change is prepared and waiting rather than applied.
 
+## August 18, 2026 — The drift that would have dropped the access-control constraints
+
+**A migration named after something else would eventually have dropped and recreated the unique
+constraints protecting permissions, roles and invitations.** That is now impossible, and the
+mechanism is worth stating because it nearly happened twice today.
+
+Adding the directory tables surfaced it: asking Alembic to generate that migration produced **eighty
+operations against tables the change did not touch**, four of which dropped those constraints in
+order to recreate them as indexes. I excluded them at the time and wrote down why. This closes the
+dangerous quarter of it.
+
+**Uniqueness was never actually at risk**, and establishing that mattered more than fixing it. The
+constraints were present throughout, and a full-row clone is still rejected by name on three of the
+four tables. What existed was redundancy: each of those columns carried a unique constraint *and* a
+separate plain index, so every insert and update paid for an index that served no query the
+constraint's own index did not.
+
+The cause was a single redundant word. Four columns were declared as both unique and indexed, which
+the ORM renders as one unique index while the database had a constraint plus a plain index — the two
+agreeing about the rule and disagreeing about the shape. Removing the redundant declaration took the
+drift from eighty items to seventy-five and the constraint operations from four to **zero**. A
+migration then drops the four now-orphaned indexes, which has to be explicit: once the models no
+longer mention them, generation cannot see them to propose it.
+
+- **Three of my own verification attempts were inconclusive and I said so rather than round up.** The
+  first insert was malformed, the second used a wrong attribute name, and the third tripped a
+  not-null constraint before uniqueness was ever evaluated — each failed for a reason that had
+  nothing to do with what I was testing. Only cloning a complete row proved it, and even then one of
+  the four tables stayed inconclusive because another constraint fires first. A failing test is not
+  evidence unless it fails for the reason you claimed.
+- **What remains is deliberately not bundled in.** A hundred and sixteen of the leftover items are
+  column comments that live in the models and were never applied to the database, and eight are index
+  names disagreeing on two other tables. Neither is a correctness issue, and applying a hundred and
+  sixteen comment changes inside a migration named after an index cleanup would repeat exactly the
+  mistake this work exists to correct. They are recorded as their own item, with the warning that
+  generated migrations still need reading rather than trusting.
+- **The finding is in the debt register rather than only in a commit message**, because the next
+  person to run generation will see seventy-four proposed operations and needs to know which of them
+  are expected.
+
+**Verified:** the migration round-trips, uniqueness still rejects duplicates by constraint name after
+the indexes are gone, 838 tests passing, ruff clean, typecheck clean, lint clean, and the drift
+measured again afterwards to confirm the constraint operations are gone rather than assumed.
+
+---
+
 ## August 18, 2026 — 48 of 48: partner logos, and a bug my earlier fix had missed
 
 **Partners can upload a logo and a profile banner, and the last open task is closed.** It reuses the

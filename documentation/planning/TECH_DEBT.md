@@ -97,6 +97,7 @@ an ordering that only reads correctly together.
 | PM-42 | 🟡 | ~~The API contract is hand-copied into TypeScript~~ — generated + drift-asserted | ✅ closed 2026-08-06 |
 | PM-43 | 🟡 | ~~Two purge functions exist and nothing runs them~~ — `worker.py` + `db/maintenance.py` | ✅ closed 2026-08-06 |
 | PM-44 | 🟡 | Three pieces of state live in process memory | Open — deferred to the production topology |
+| PM-45 | 🟡 | Model/database drift: 116 column comments never applied, 8 index names disagreeing | ⏳ **partly closed 2026-08-18** — the dangerous quarter is gone |
 
 > **This table was wrong for eleven days and that is worth a line.** PM-40, PM-42 and PM-43 were
 > closed in `CORE_HARDENING_PLAN.md` on 2026-08-06 and still read "Open" here on 2026-08-17, found by
@@ -1561,3 +1562,41 @@ knows what it must reproduce.
 - [`../system-design/DEPLOYMENT.md`](../system-design/DEPLOYMENT.md) § 0 — the deploy blocker list
 - [`SCAFFOLD_CLEANUP_PLAN.md`](./SCAFFOLD_CLEANUP_PLAN.md) — retiring inherited code
 - [`MARKETPLACE_DOMAIN_PLAN.md`](./MARKETPLACE_DOMAIN_PLAN.md) — what must exist regardless of domain
+
+---
+
+## PM-45 — the drift `--autogenerate` proposes, and what is left of it
+
+Found 2026-08-18 while adding the directory tables: `alembic revision --autogenerate`
+proposed **80 operations against tables the change did not touch**, and four of
+them dropped the unique constraints on `permissions`, `roles`,
+`permission_groups` and `user_invitations` to recreate them as unique indexes.
+
+**Uniqueness was never at risk** — `pg_constraint` showed the UNIQUE constraint
+present on all four throughout, and a full-row clone is still rejected by
+`permissions_name_key`, `roles_name_key` and `permission_groups_name_key` by
+name. It was redundancy, not a hole: each column carried a unique constraint
+*and* a separate plain index, so every insert and update paid for an index that
+served no query the constraint's own index did not.
+
+The risk was that a future migration would sweep it in. A change named after
+something else would have dropped and recreated the constraints protecting the
+RBAC tables as a side effect — which is exactly what nearly happened.
+
+**Closed:** `index=True` removed from the four columns (`unique=True` already
+provides an index), and migration `ae8cee95c547` drops the four orphaned
+indexes. Drift went 80 → 74 and constraint operations 4 → **0**.
+
+**Still open, and deliberately not bundled:**
+
+| Remaining | Count | Risk |
+|---|---:|---|
+| Column comments in models never applied to the database | 116 | None — documentation metadata |
+| Index *names* disagreeing on `user_sessions` and `webhook_deliveries` | 8 | None — cosmetic |
+
+Neither is a correctness issue. Applying 116 comment changes inside a migration
+named after an index cleanup would repeat the mistake this entry exists to
+record, so they want their own change — and it should be one that says
+"apply model comments" on the tin.
+
+⚠️ **Until then, `--autogenerate` output still needs reading, not trusting.**

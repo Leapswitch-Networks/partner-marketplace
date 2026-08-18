@@ -19,7 +19,7 @@ class Permission(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(
-        String(150), unique=True, nullable=False, index=True,
+        String(150), unique=True, nullable=False,
         comment="{resource}-{action}, resource singular, e.g. 'user-view'",
     )
     display_name: Mapped[str] = mapped_column(String(200), nullable=False)

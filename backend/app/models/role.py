@@ -20,7 +20,7 @@ class Role(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(
-        String(100), unique=True, nullable=False, index=True
+        String(100), unique=True, nullable=False
     )
     display_name: Mapped[str] = mapped_column(String(150), nullable=False)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)

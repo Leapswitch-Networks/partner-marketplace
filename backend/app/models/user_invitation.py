@@ -40,7 +40,7 @@ class UserInvitation(Base):
         comment="Stored lower-cased; must match the accepting account's email",
     )
     token: Mapped[str] = mapped_column(
-        String(128), unique=True, nullable=False, index=True,
+        String(128), unique=True, nullable=False,
         comment="URL-safe random token from security.generate_token()",
     )
     status: Mapped[str] = mapped_column(
