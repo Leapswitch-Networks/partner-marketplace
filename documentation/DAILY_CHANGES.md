@@ -6,6 +6,1009 @@
 > Update this file as part of the same change as the code. A task that isn't here is invisible to the
 > next person.
 
+## August 18, 2026 — Two agent contracts became one, and the contradiction between them is gone
+
+**This repository was telling agents two different things about password security, and the file it
+ordered them to read carried the wrong one.** The root `AGENTS.md` and `documentation/AGENTS.md` have
+been merged into a single contract at the project root.
+
+**The split had a stated rationale, and it did not survive being checked.** The reasoning, written
+into `CLAUDE.md`, was that imports load eagerly, so 300 lines of process should not ride along in
+every session. Sound in principle. Three things were true in practice:
+
+- **The saving never existed.** The root file's § 0 told every session to display the startup banner
+  from `documentation/AGENTS.md`. The banner lived only there, so **all 302 lines were opened on turn
+  one of every session anyway** — as a manual read instead of an import. A session opened roughly 420
+  lines across the two files. The merged contract is **226**, so this change makes sessions cheaper,
+  not more expensive.
+- **The two copies had already drifted, on a security claim.** On 2026-08-17 the root file struck
+  through the statement that plaintext passwords were known, accepted debt, marked it stale, and
+  explicitly instructed agents not to repeat it — passwords have been bcrypt-hashed since
+  2026-07-31. **`documentation/AGENTS.md` still said it**, in the present tense, as debt the owner
+  had chosen to publish. An agent obeying § 0 was handed both versions with nothing to distinguish
+  them. That contradiction is now deleted, because the file holding it is gone.
+- **About fifteen rules were maintained twice** — commit approval, AI attribution, the
+  `/opt/lampp/htdocs` warning, branch deletion, read-before-write, public-repo handling down to the
+  same `grep` command, the protected-files table, and more. The same pass found a third error: the
+  Next.js documentation correction was credited to "PM-19", which is actually *"No error boundaries
+  or route suspense"*.
+
+**The root file is where a contract has to live in this repo.** `CLAUDE.md`'s import is the only
+thing that loads automatically; Codex and OpenCode read the root `AGENTS.md` directly; and a
+subdirectory `AGENTS.md` is never auto-discovered at all, which is why the documentation copy sat
+unreachable by that chain until 2026-08-11.
+
+- **Nothing binding was dropped.** The merged file keeps all ten non-negotiable rules, the protected
+  files, the model tiering, the multi-worker rules, the verification gate and the layer boundaries
+  verbatim, and absorbs what the second file genuinely added: the banner, the before/during/after
+  rhythm, branch naming, the commit convention and the agent entry-point table. It gained a § 6
+  working rhythm and a § 8 naming which file each agent reads.
+- **`documentation/AGENTS.md` is kept as a pointer, not deleted.** `README.md`, `INDEX.md` and
+  outside links reference that path, and this project marks superseded documents rather than removing
+  them. It now says plainly that it is not the contract and that rules must not be put back into it.
+- **`CLAUDE.md`'s comment block was rewritten**, because it described the two-file arrangement in
+  detail and would otherwise document a structure that no longer exists. It now records why the
+  arrangement was retired.
+- **The decision is recorded as [ADR-0016](adr/0016-one-agent-contract.md)** — the sixteenth record,
+  and the first written *alongside* the change rather than retroactively, which is how the register
+  is meant to be used.
+
+## August 18, 2026 — The project now records *why* it is built the way it is, not just what changed
+
+**Fifteen architecture decisions that were already settled have been written down, with their status,
+the alternatives that lost, and the file that enforces each one.** They live in a new register,
+`documentation/ADR.md`, with one file per decision in `documentation/adr/`.
+
+**The gap this fills is specific, and it is not "we needed more documentation".** This project already
+explains itself unusually well — the docstrings on `core/registry.py`, `core/query.py`,
+`core/principal.py` and `services/scoping.py` are better reasoning than most projects' architecture
+guides. The problem was that **none of the four existing registers could answer "is this settled?"**
+`DAILY_CHANGES.md` narrates and never revisits. `TECH_DEBT.md` tracks what is broken, and says nothing
+about a choice working as intended. The planning documents warn in their own headers that they are
+intent rather than current state. And a module docstring only reaches someone who already found the
+module. So a question like *"can I use `async def` here?"* had a correct answer buried in § 10 of a
+540-line standards document, and nothing pointing at it.
+
+- **The records are pointers with a status, not re-explanations.** Every one ends with a *Where this
+  is enforced* table naming the code, the test and the doc. Where a docstring already explains the
+  reasoning well, the record links to it rather than restating it — that is the rule, written into
+  the register.
+- **Each was verified against the code before being written**, not recalled. One assertion was wrong
+  on the first pass and corrected: the synchronous-endpoints record originally claimed 178 endpoints,
+  which came from counting every top-level `def` in `app/api/` including helpers. The real figure is
+  **157 routes, of which exactly one handler is `async def`** — the branding upload, which must await
+  `UploadFile.read()` and touches no database. Every in-repo path the records cite was then checked
+  mechanically: 81 paths and 25 relative links, all resolving.
+- **What they cover is the surface a newcomer gets wrong.** That everything is synchronous and why
+  `async def` fails silently rather than loudly. That bcrypt is used directly because passlib reads an
+  attribute bcrypt deleted. That the domain registers into the core and never the reverse, and which
+  convenient import breaks it. That scoping fails closed by construction, because the obvious early
+  return serves unfiltered rows to the internet. That machine callers are principals and never hidden
+  user rows, because the shortcut turns an integration into a login. That the dev container must never
+  run a production build.
+- **The dates are the decisions' own, not today's.** The index carries when each was actually made —
+  the earliest is 2026-07-30 — with a note that all fifteen were *recorded* on 2026-08-18 from the
+  code and the commit history. Records are appended to, never rewritten; corrections go in a dated
+  note at the bottom, the same convention `TECH_DEBT.md` already uses and for the same reason.
+- **Three registers were kept in step.** `INDEX.md` gained the section, the folder-structure block and
+  a new step 3 in its agent checklist; `README.md` gained the rows and a quick-link. Both file counts
+  were stale and are now recounted against the tree — `INDEX.md` said 39 and `README.md` said 31; the
+  real figure is **56**.
+
+**One thing was deliberately not done.** The root `AGENTS.md` § 6 table should point at the register,
+and that file is protected — it needs the owner's explicit approval before it is edited. The one-row
+change is prepared and waiting rather than applied.
+
+## August 18, 2026 — 47 of 48, and the one left undone is left undone on purpose
+
+**The directory is finished apart from partner logo uploads.** Everything the owner described — a
+partner applies, we approve the company, they sign in and write their own listings, we approve the
+content, a buyer filters and enquires, the partner reads it in their back office — works end to end
+with real data, and both the loop and the CRUD matrix run as tests on every commit.
+
+**The last item was not attempted, and that is a recommendation rather than an omission.** Partner
+logos and banners are two columns nothing writes. Doing it properly means an upload endpoint, image
+validation, a size floor, a storage location and a public serving route — real work, and the least
+load-bearing item on the whole list, because a profile renders perfectly without one: the card
+derives initials from the company name. Rushing it to close a checklist would have produced the worst
+version of it. It is written up as its own piece of work.
+
+- **One task turned out to be already built, and the checklist was wrong rather than the code.** The
+  partner approval actions — activate, suspend, verify, publish — have been on the partners index all
+  along, each gated on a per-row permission flag. It is now ticked as *verified* rather than *done*,
+  with a note saying so. Recording a mis-inventory is worth more than quietly taking the credit.
+- **A real gap closed that nobody had noticed.** Organisation membership got its write path in
+  mid-August and nothing ever displayed it, so an administrator could assign somebody to a company
+  and never confirm it had worked. The users index now shows it and can filter by it. An account with
+  no organisation reads as "Internal" rather than a dash — the absence is a meaningful value there,
+  not missing data.
+- **The partner dashboard leads with what is waiting on them**, not with what they have received.
+  Unanswered enquiries and rejected listings appear above everything else, in the one colour on that
+  surface that means "act". Putting the count of enquiries received first would make a full inbox
+  look like success, when the number that should be near zero is the one nobody has answered.
+- **Median response time is deliberately absent from it.** With a handful of enquiries a median is one
+  slow reply away from meaningless, and showing it would have a partner optimising noise. It arrives
+  when the volume makes it honest.
+- **The search page was built despite the argument against it, and says so.** At this size the
+  category filter is strictly better — it offers a closed set of real words instead of asking a
+  stranger to guess our vocabulary. But the header has a search box, and a form posting to a missing
+  page is worse than a page that admits its limits, so it runs the same query and sends people to the
+  filter when the text finds nothing. It is never indexed.
+- **The team page adds no second users module.** It calls the same endpoint the staff index does and
+  row scoping returns only that organisation's accounts. Inviting a colleague has no field for which
+  company they join, because the payload has nowhere to put one — the enforcement is the shape of the
+  request, not a check that could be forgotten.
+- **The taxonomy admin shows each category's live listing count**, which is the indexing threshold
+  made visible: it is how a staff member sees why a category has no public page without reading a
+  planning document.
+
+**Verified:** 838 tests passing, ruff clean, typecheck clean, lint clean, migration at head, every
+public route responding, and the confidentiality audit re-run across every rendered page and every
+public API response. The only mentions of the operating company are on the terms, privacy and contact
+pages, which is the intended exception; every "resell" on the site is the promise not to resell
+enquiries.
+
+---
+
+## August 18, 2026 — The loop runs, and walking it found four bugs no unit test would have
+
+**The directory works end to end with real data**, and the walk that proves it is now a test rather
+than something somebody did once. A partner's listing goes draft → review → rejected with a reason →
+resubmitted → published → visible publicly → enquired about → answered, and editing it afterwards
+pulls it straight back off the public site. 826 tests green.
+
+**Four real defects surfaced only because the whole thing was run together**, and each one is the
+kind that unit tests are structurally blind to:
+
+- **A response model was being validated before a required field was filled in**, which returned a
+  server error on every listing route. The field was assigned immediately afterwards — but validation
+  happens at construction, so the assignment never ran.
+- **The frontend was calling the wrong base URL.** Two constants differ only by a path prefix and the
+  names do not make that obvious. Every request 404'd — and because the page has an error boundary, it
+  still answered successfully with an empty directory. **A wrong base URL looks exactly like an empty
+  database**, which is the most expensive kind of wrong to debug.
+- **Every parent category reported zero listings**, because listings attach to the leaves. The public
+  interface filters out empty categories, so the entire taxonomy vanished from the site while the data
+  was perfectly fine.
+- **Filtering by a top-level category matched nothing.** Nobody tags themselves "Cloud &
+  infrastructure" — they tag "Managed Kubernetes". The filter buttons rendered beautifully and
+  returned nothing, and it is invisible to any test that only filters on a leaf.
+
+**One non-bug cost a debugging cycle and is worth recording.** After fixing the filter, the page still
+showed nothing while the interface behind it returned the right answer. The framework's data cache was
+holding the pre-fix empty result across the code change — so a fixed bug looked unfixed. I chased the
+wrong theory until restarting the container proved it.
+
+- **The walk is a test because a walk done once proves the code worked that afternoon.** It shares
+  state across steps so a break fails at the step that broke, uses two partners rather than one
+  because the tenant boundary cannot be tested with a single tenant, and removes everything it creates
+  — a test that leaves rows behind makes the next failure somebody else's mystery.
+- **The negative tests are the ones that matter and they all pass.** An unapproved listing is
+  invisible to the public. An unlisted partner returns not-found rather than forbidden, because
+  confirming a hidden company exists is itself a disclosure. One partner cannot reach another's
+  listings or enquiries. No public response carries internal fields. Nothing anywhere reveals the
+  supply relationship except the operating entity on the three legal and contact pages, which is the
+  intended exception.
+- **Sample data covers every state deliberately**, not just "some rows": listings in all four
+  statuses so the review queue is not empty and the public surface has something to hide, enquiries
+  both answered and unanswered so the unanswered rate is not trivially zero, and one partner who is
+  deliberately not listed so "invisible to the public" can be checked rather than assumed.
+- **A capping bug was fixed properly rather than conveniently.** Static page generation asked for two
+  hundred partners against a limit of sixty. Setting it to sixty would have worked until the
+  sixty-first partner signed up and their profile silently stopped being generated, so it paginates.
+
+**Verified:** 826 tests passing, ruff clean, typecheck clean, lint clean, migration at head, and every
+public page checked against live data with the confidentiality audit re-run.
+
+---
+
+## August 18, 2026 — The directory has tables, and the rules are in the schema rather than in prose
+
+**Eight new tables, ten new permissions, three services — 12 of the 48 tasks, each verified before
+being ticked.** The product had a fully designed frontend reading hardcoded files and no database
+behind any of it. It now has the database.
+
+**The migration round-trips**, which is the whole test for this phase: up, down, and up again on the
+live database. The second upgrade is the one that catches mistakes, and it only passes because the
+downgrade drops the enum types as well as the tables — Postgres keeps a type after its table is gone,
+so without that a downgrade looks like it worked right up until somebody tries to go forward again.
+
+- **⚠️ The autogenerated migration was cut back by hand, and that was the most important decision in
+  the phase.** Alembic proposed around ninety operations against tables this change does not touch —
+  column comments across users and sessions, index renames on webhooks, and, worst of all, dropping
+  the unique constraints on the permissions, roles and permission-groups tables in order to recreate
+  them as indexes. That is pre-existing drift between the models and the database. Letting it through
+  would have meant a migration whose name says "directory tables" quietly rewriting the access-control
+  tables' constraints. Only the eight tables and two columns this change is actually about survived,
+  and the file says why at the top. **The drift is real and still there; it wants its own migration.**
+- **Two approvals are now two different things in the schema, not one flag.** A company's status gates
+  login; a listing's status gates publication. A partner routinely has published listings and drafts
+  at the same time, and suspending a company has to hide all of its listings at once — which is a join
+  on the company, not an update of thirty rows.
+- **The rule that makes moderation mean anything is enforced in the service, not documented in a
+  guide: editing a published listing returns it to review.** Without it a listing is approved once and
+  then freely rewritten, and the reviewer's decision applies to text nobody can see any more. The
+  check compares old and new values rather than trusting that a form submission implies a change,
+  because otherwise opening and saving a listing unchanged would send it back to the queue.
+- **Rejection requires a reason.** Not optional. A queue that rejects silently produces a resubmission
+  loop that costs the reviewer more than one sentence would have.
+- **What is absent from the permissions is the design.** Partners get to create, edit and delete their
+  own listings and to answer their own enquiries — and deliberately **not** to publish. Authoring and
+  approving are the two halves of moderation, and a partner holding both would make the queue
+  decorative. Staff get the mirror image: they can read every enquiry to measure whether it was
+  answered, and can never answer one, because a buyer would have no way to know who they were talking
+  to.
+- **The confidentiality rule is now enforced by an absence rather than a note.** No table has a column
+  recording what a partner sources from us. A column that does not exist cannot be serialised by a
+  schema somebody writes next month, cannot leak through an endpoint nobody reviewed, and cannot be
+  added by accident — only on purpose, against a comment saying not to.
+- **Row scoping was registered with one asymmetry worth knowing.** Listings carry a public predicate
+  that admits published rows only, so an unapproved listing is invisible to the public interface by
+  construction. Enquiries carry **no** public predicate at all — nothing anonymous may ever read one
+  through the scoping layer. The buyer's own access is by unguessable reference and goes through a
+  separate function on purpose.
+- **A test was widened rather than weakened.** The core-extraction suite asserts that every
+  domain-owned model sits inside the block a second project deletes, and it did that by looking for
+  the word "partner" in the module name. The new tables — categories, listings, enquiries — belong to
+  that block and none of them contains the word. The list is now explicit rather than fuzzy, because
+  this test's job is to notice when something *new* appears in the deletable block and a loose match
+  would stop it doing that.
+
+**⚠️ Two tests are red and are meant to be.** The suite asserts that every declared permission is
+enforced by some route; the ten new ones exist and no route declares them yet. They go green when the
+routers land. **This is the guard working**, and weakening it to get a green build would remove the
+only thing that notices a permission nobody checks.
+
+**Verified:** migration up/down/up on the live database, all models importing, the permission catalog
+assembling with the new group in the right position, 46 core-extraction tests passing, ruff clean.
+
+---
+
+## August 18, 2026 — The build has a checklist now, and it starts from what is actually there
+
+**Forty-eight tasks, in dependency order, from an empty schema to a proven end-to-end cycle.** The
+owner described the full lifecycle — a partner applies, we approve the company, they sign in and edit
+their own data, we approve the data, a buyer filters and enquires, and the partner reads it in their
+back office — and asked for that turned into a plan to work through one item at a time.
+
+**It was written against the tree as measured, not against the existing plans.** The migration head
+was read from the database, the models and routers were listed, and the result is that three of the
+tables every page depends on do not exist, and neither does any public endpoint. The older plan
+already had a sequencing section; it now points at the new list and keeps only the reasoning for why
+the order is what it is.
+
+- **The most important thing it makes explicit is that there are two approvals, not one.** Approving a
+  *company* and approving its *content* are different permissions on different objects. Collapsing
+  them is the likeliest design mistake available here — it would mean either that an approved partner
+  can publish anything unread, or that every small edit re-approves the whole company.
+- **The public read API is deliberately near the end, not near the start.** It can only expose what
+  moderation has approved, so building it before the moderation state exists means building it twice.
+- **The final phase is not a formality and is written so it cannot be treated as one.** It walks the
+  entire loop in one sitting — apply, approve, draft, submit, reject with a reason, resubmit, approve,
+  filter, enquire, reply, and confirm that editing a published listing pulls it back off the public
+  site. Then a CRUD matrix by hand, then the negative tests.
+- **The negative tests matter more than the positive ones, and they are listed individually**: one
+  partner cannot reach another's records and gets a not-found rather than a forbidden, unapproved
+  listings are invisible publicly, no response carries the internal fields, and the supply
+  relationship does not appear in any JSON. That last one is audited on the API response rather than
+  the rendered page, because a new field is exactly where it would reappear.
+- **One test exists because passing is not the same as working**: change a value in the database and
+  confirm the page changes — then stop the backend and confirm the page fails *visibly*. A silent
+  fallback to a default is how a page ships looking healthy while reading nothing.
+- **Six decisions are listed as decisions rather than smuggled in as defaults**, each against the task
+  it blocks. The legal review is the one with teeth: the enquiry form collects personal data, so
+  wiring it up is blocked until the privacy page has been through review, and the checklist says so
+  rather than leaving it to be noticed later.
+- **A note was left about the one file that must not simply be deleted.** When the hardcoded content
+  files are removed, the confidentiality rule written at the top of one of them has to move to the API
+  layer first — it is currently the only written record of a rule the backend will also have to obey.
+- **Two counts were corrected while writing it.** The task total was claimed before the boxes were
+  counted and was wrong by four; it is now derived from a table. And the platform-layer punchlist
+  turned out never to have been listed in the documentation index at all, so it was added.
+
+**Nothing was built.** This entry is a plan, and the next one should be task 1.1.
+
+---
+
+## August 18, 2026 — The page heading now rises into place, without costing the loading score
+
+**Every public page's main heading animates on load**, line by line from behind a mask. The home page
+splits into two, matching where its sentence breaks; every other page animates as one.
+
+**This was the one element the reveal component explicitly refused to touch**, and the reason it
+refused is worth keeping in view rather than deleting along with the rule: the main heading is almost
+always the element a page's loading speed is measured on. The owner asked for it anyway, so it was
+built the way that costs nothing rather than the obvious way that costs something.
+
+- **It is pure stylesheet, with no JavaScript at all.** That is the whole design. A script-driven
+  version cannot begin until the page has finished hydrating, so a visitor on a slow connection would
+  see the heading appear, sit there, and only then animate — which is worse than no animation. A
+  keyframe declared in the stylesheet starts at first paint, before any of our code has run.
+- **It moves rather than fades, and that is a measurement decision rather than a taste one.** An
+  element that is fully transparent does not count as painted, so fading the heading in would push
+  the measured loading time out by the length of the animation — a real regression against the
+  budget. Moving it does not: the text is painted the entire time, it is simply out of position. The
+  note in the stylesheet says not to add a fade, and why.
+- **The line breaks are chosen by whoever writes the headline, not measured.** Splitting a heading at
+  its visual wrap means measuring after layout, which needs scripting, re-measuring on every resize,
+  and produces a different split at each screen size. Passing the lines in means the break lands
+  where the sentence breaks — which is where a writer would put it anyway.
+- **The mask would have sliced the tails off every g, y and p.** It is padded to give descenders room
+  and the same amount is taken back out of the layout, so nothing shifts.
+- **Reduced motion gets the heading in place, not a faster version of it.** The global rule collapses
+  transition durations, but an animation needs its own instruction, so it has one.
+
+**Verified:** typecheck and lint clean, and the heading markup confirmed on all ten public pages —
+one heading each, correctly split into two on the home page with the stagger applied to the second
+line only. A first count looked wrong until it turned out to be counting the streamed payload as well
+as the page; checking inside the element itself gave the right answer.
+
+---
+
+## August 18, 2026 — A light that follows the pointer, built so it can be defended
+
+**A soft glow now trails the cursor across the public pages.** It is the easiest effect in web design
+to get wrong — decoration by definition, a listener that fires faster than the screen refreshes, and
+the first thing to stutter when anything else is happening. So it was built to four rules, and if any
+one of them is ever dropped the effect should come out with it.
+
+- **It does not exist on a phone.** Guarded on the pointer being a fine one. There is no cursor to
+  trail on a touch screen, so the element, the listener and the animation loop are never created at
+  all — not hidden with a style rule, simply never mounted.
+- **Reduced motion means gone, not gentler.** Somebody who has asked for less movement is not asking
+  for a slower chase animation.
+- **It moves inside an animation frame, never on the event.** Pointer events fire several times per
+  painted frame; writing to the page on each one would do the same work repeatedly for no visible
+  gain. The handler only records where the pointer is, and a single frame loop moves the element using
+  a property the compositor can handle on its own, so nothing is laid out or repainted.
+- **The loop stops when the pointer does.** A permanently running animation loop is a quiet battery
+  drain on a page nobody is touching. Once the glow has caught up it cancels itself and does not
+  restart until the next movement.
+- **It lags on purpose.** It eases toward the cursor rather than tracking it exactly, because
+  something pinned precisely to the pointer reads as a second cursor and is faintly unpleasant to
+  look at. Following a moment later reads as response, which is the intent — it is ambient light in
+  the page rather than an object in it.
+- **A comment was corrected before it could mislead anyone.** The first version explained the effect
+  disappearing over the dark sections as a property of the blend mode. That is not the main reason —
+  it is paint order: the glow is the first thing in the layout and the dark panels have their own
+  opaque backgrounds, so they simply cover it. The blend mode decides how it looks against the cream,
+  not whether it shows on the dark. Both matter, and the note now says which does what, because
+  somebody relying on the wrong explanation would move the element and be surprised.
+- **Clicks still work**, which sounds trivial and is the failure this kind of effect most often ships
+  with: a full-screen overlay that swallows every interaction on the page. It is explicitly
+  transparent to input, and there is a stylesheet fallback that hides it on touch devices even if the
+  component's own guard is ever loosened.
+
+**Verified:** typecheck and lint clean, all routes responding, the element and its styles both present
+in what the server sends. **Not verified: how it feels** — a cursor effect is the one thing that can
+only be judged with a mouse in hand.
+
+---
+
+## August 18, 2026 — Motion, but only the kind that is doing a job
+
+**A floating back-to-top button, a real carousel for the partner cards, and a set of pointer
+responses across the surface.** The brief was to make the site feel cleaner and fresher. Three of the
+four things asked for pull against decisions already recorded, so each was built in the restrained
+version and the bend is written down rather than quietly taken.
+
+- **Back to top** sits in the bottom-right, appears once there is something to undo, and is removed
+  from the keyboard order while hidden — otherwise a keyboard user tabs into an invisible control at
+  the top of every page. It is a second component rather than a reuse: the application already has
+  one, but that one solves a different problem (on an index page the window never scrolls, so it
+  takes the scrolling element as an argument) and it wears the signed-in styling. It is also
+  positioned clear of the enquiry form's submit button — an earlier audit of the application found a
+  floating button sitting exactly on top of "next page", and repeating that here would put this on
+  top of "Send enquiry" on a phone.
+- **The carousel is the browser's own scroll-snap**, not a library. Native snap gives momentum
+  scrolling on touch, trackpad swiping, keyboard scrolling and find-in-page for nothing; the only
+  thing added on top is knowing whether there is more to the left or right, so the arrows can disable
+  themselves and the edge fades can come and go. **No autoplay and no dots** — content that moves on
+  its own reads as an advert, steals focus mid-read, and becomes an accessibility failure the moment
+  it runs more than a few seconds without a pause control.
+- **The carousel replaced the grid on the home page only, and that is a content decision.** Six cards
+  in a grid reads as "that is all of them", which is the impression a directory this size can least
+  afford. A rail reads as a sample and invites the scroll. The full directory keeps its grid, because
+  there the point *is* that you are seeing everything.
+- **The entrance animation is deliberately smaller than the convention.** Our own anti-slop notes list
+  "everything fades up twenty pixels on scroll, staggered" as one of ten signs a page was generated
+  rather than designed — motion reads as *designed* without requiring a single decision. So this
+  travels eight pixels rather than twenty, runs once and never again on scroll-back, does not stagger
+  its children, and is **never applied to the hero**: the first thing a visitor reads must not fade
+  in, and it is also the element the page's loading speed is measured on.
+- **Reduced motion is handled in one place, in CSS.** The obvious approach — checking the preference
+  in JavaScript and skipping the animation — sets state in a way the lint rules correctly reject and
+  risks the server rendering the opposite of what the visitor wants. Letting the stylesheet collapse
+  every transition keeps one source of truth for motion across the whole surface.
+- **The pointer responses are all tied to something the pointer is doing.** Card borders darken on
+  hover, the arrow inside a card nudges two pixels toward where it is taking you, prose underlines
+  grow from the left, and text selection uses the palette instead of the browser's default blue.
+  Nothing animates on load and nothing moves without being touched. Notably, **card hover animates the
+  border rather than raising a shadow** — this design separates surfaces with borders, so a shadow
+  appearing on hover would contradict the system it sits in.
+- **The rail's scrollbar is hidden and the scrolling is not.** On macOS a native scrollbar overlays
+  the content under a row of cards and reads as a rendering fault; the edge fades and the arrows are
+  the affordance instead. The rail itself stays focusable and scrollable by every other means.
+
+**Verified:** typecheck and lint clean, every route responding, and each new piece confirmed present
+in the served markup. The confidentiality audit was re-run after the changes and all pages are still
+clean — worth doing, because new components are exactly where a stray label creeps back in.
+
+**Still not verified: how it feels.** Motion is the one thing that genuinely cannot be judged from
+markup, so this needs a scroll and a mouse.
+
+---
+
+## August 18, 2026 — Who supplies the partners is nobody's business but ours and theirs
+
+**The public site no longer says, implies or hints that partners get their infrastructure from us.**
+Earlier the same day the whole surface had been rebuilt around exactly that relationship. The owner
+then set the opposite rule: it is confidential, between us and partners only, and buyers are not to
+be told. Everything built on the previous framing came out.
+
+**What the product is, publicly:** a directory in the Justdial shape. Companies advertise what they
+are expert in, buyers browse by requirement and send an enquiry through the platform, and the partner
+reads it in their back office here. That is the whole visible story.
+
+- **The leak was much wider than the obvious copy.** Attribution on every badge, a whole section on
+  each profile listing what the partner sourced from us, three brand cards, a trust bar built out of
+  our datacenter count and certifications, page descriptions, search-engine metadata — and **a route
+  whose name gave it away in the address bar.** That route was renamed and the old one now returns a
+  proper not-found.
+- **The subtlest leak was the footer, and it was on every single page.** It carried the operating
+  company's legal name, its founding year, its office cities and its company identification number.
+  Any visitor on any route had the operator's identity in front of them, and from there the rest is
+  one search away. The bottom bar now names the product and links to the legal pages.
+- **The apply button on the partner page was a leak too**, in a way that is easy to miss: it opened a
+  message to an address on the operating company's domain. It routes through the contact page now.
+- **One boundary was kept deliberately, and it is worth understanding rather than tidying away.** The
+  operating entity is still named on the terms, privacy and contact pages. A legal document has to
+  say who stands behind it, and a marketplace naming its operator is ordinary — Justdial names Just
+  Dial Ltd. Naming who runs a website is not the same as revealing where its listed companies buy
+  their servers. That exception is written down so nobody either extends it or deletes it by
+  accident.
+- **The strongest enforcement is not a rule, it is an absence.** The frontend model has **no field**
+  for what a partner resells. A column that does not exist cannot be rendered by a component somebody
+  writes next month, and it cannot leak through an API response nobody thought about. The same
+  should hold when the schema is designed: that join belongs on the authenticated side only.
+- **The trust argument had to be rebuilt, and it is better for it.** It previously leaned on our own
+  credentials, which is exactly what gave the game away. It now rests on how the platform behaves:
+  every company is checked before listing and the criteria are published, an enquiry goes to one
+  company and is never resold, and position cannot be bought. Those are claims a visitor can hold us
+  to, which the old ones were not.
+- **The about page was rewritten from scratch** — it had been about an infrastructure business, and
+  is now about the marketplace: why a short checked list beats a long unchecked one, how a listing
+  gets here, and where to find us.
+
+**Verified by reading the served HTML of every public page, not by grepping the source** — because
+the question is what a visitor receives, not what the code says. All seven pages come back clean; the
+three legal and contact pages name the operator, which is the intended exception. Typecheck and lint
+both clean, every route responding, and the renamed route's predecessor correctly gone.
+
+**Still not verified: how it reads.** This was the third rewrite of the same copy in one day and it
+is the one that most needs an actual read.
+
+---
+
+## August 18, 2026 — The business model was wrong in the plan, and wrong on every page
+
+**Partners resell our infrastructure under their own name. They are not independent consultancies we
+vouch for.** The owner corrected this today, and it contradicts a decision recorded in the directory
+plan on 10 August — which had it exactly backwards and had been the basis for every page built since.
+
+**Why it matters more than a wording change.** The old framing had each partner selling their own
+distinct expertise, so a profile listed specialities and a buyer compared capabilities. The truth is
+that what partners carry from us is **identical by definition** — same hardware, same network, same
+datacenters — and what differs is the support, the packaging, the billing and the price they wrap
+around it. A directory that presents the identical half as though it were the differentiator is
+answering the wrong question on every page it appears.
+
+- **A partner's offer is now modelled as three separate things**, because collapsing them loses the
+  point: what they carry from us, what they add themselves, and their own priced packages. The middle
+  one is what a buyer actually chooses on, so it is what leads on every card and every profile — the
+  Leapswitch half is listed underneath, plainly, as the floor rather than the selling point.
+- **Partners publish their own prices, margin included.** That was the owner's call, taken with the
+  risk stated: it makes this directory comparable on price between our own partners, which tends to
+  push margins toward zero. **The mitigation is in the interface, not the data** — nothing sorts or
+  ranks by price, there is no comparison table, and a price only ever appears inside a partner's own
+  card or profile, never as a column beside a competitor's. That distinction is one line of code away
+  from being lost, so it is written into the code and into the plan.
+- **The plan now carries the correction where somebody will actually hit it** — as a block above the
+  decision table rather than a quiet edit to the row, with a table showing what changed and what did
+  not. Two things it explicitly does not reinstate: the shelved quoting machinery, since a reseller
+  relationship is not a quoting product, and any change to the tenancy and scoping work already done.
+- **One consequence for the backend, recorded now rather than discovered later.** The schema has to
+  express "which of our services this partner carries" as a join to a Leapswitch service catalogue —
+  a table that does not exist in any form. Until it does, the frontend content file is the only
+  written record of the corrected shape.
+- **Every page was rewritten to match**, not just relabelled. The home page leads on the split
+  between our infrastructure and their name. The directory says the servers are ours and the invoice
+  is theirs. The verification page makes a stronger argument than it could before — every partner buys
+  from us, so we see how they run what they sell, which is a relationship rather than a review we
+  collected. The partner-facing page became what it should always have been: wholesale rates, your
+  own packaging, your own prices, your name on the invoice.
+- **The tier table needed a correction that was not obvious.** Tiers govern how a partner appears in
+  this directory; they do not change what that partner pays us. Leaving that ambiguous would have
+  implied a wholesale discount tied to a badge, which is not what was decided.
+
+**Verified:** typecheck clean, lint clean. **Not verified: how it reads now** — the rewrite is
+substantial and the copy is the thing that changed most, so it wants an actual read rather than a
+compile.
+
+---
+
+## August 18, 2026 — The public site is navigable end to end, with no dead links in it
+
+**Six more pages, six shared components, and the search-engine plumbing.** The directory now goes
+from the home page to a partner's profile and back without hitting a route that does not exist —
+which matters more than it sounds, because a dead link on a page whose whole argument is
+trustworthiness undoes the argument.
+
+**What was built:** the partner directory index; a partner profile; the supply-side landing where
+companies apply to be listed; a page setting out exactly what verification checks; six audience pages;
+and the public 404, loading skeleton and error boundary. Plus a sitemap and a robots file.
+
+- **Everything composes, nothing was reinvented.** Seven new shared components — breadcrumb with its
+  structured data, empty state, numbered step list, FAQ, tier table, enquiry form, page opener — and
+  the pages are almost entirely arrangements of them. The page opener owns the single heading each
+  page is allowed, which is what stops that rule being something eleven files have to remember.
+- **The page the whole directory rests on now exists.** If the argument is that our partners have been
+  checked, the checks have to be published — an unpublished standard is not a standard. It lists the
+  criteria for all three badges and, more importantly, **what verification does not promise**: not a
+  guarantee of the work, not purchasable, and not permanent. That block costs some persuasiveness now
+  and protects the credibility of every badge later.
+- **The supply-side page says what we will not tell partners.** No traffic figures, no promised lead
+  volume, no invented success stories — and it says so in a block of its own, because we have none of
+  those and a partner who signs up on a promise we cannot keep is worse than one who never signs up.
+- **The audience pages filter for real.** Each one shows partners offering what that audience actually
+  needs. Six copies of the directory with different headlines would be a doorway page, which search
+  engines treat as spam and readers treat as noise.
+- **The enquiry form exists and sends nothing, and says so.** There is no backend for enquiries yet, so
+  submitting shows a success state that states plainly that nothing was sent. A form that silently
+  discards what somebody typed is the worst possible version of this.
+- **The FAQ uses the browser's own disclosure element** rather than a hand-built accordion: keyboard
+  operable, findable by in-page search, and zero JavaScript. On a surface committed to CSS-only
+  interaction this was the clearest case for it.
+- **A partner profile points its canonical link at the partner's own website.** We do not compete with
+  a company for its own name using a page we wrote about them — outranking them there would be a
+  commercial injury to somebody who trusted us with their details.
+- **⚠️ One defect found and not fixed, reported rather than papered over.** An unknown partner slug
+  renders the 404 page correctly but the dev server answers with a success status — a soft 404, which
+  a crawler indexes as a real page and no monitor ever flags. It is not a general fault: a genuinely
+  unmatched address returns a proper 404, so it is specific to the not-found call inside a dynamic
+  route. The correct setting has been applied and is expected to resolve it in a real build, but
+  **that is unverified**, because production builds must not be run in this container and CI is the
+  first place it can be checked. Somebody needs to confirm it there before this surface meets a
+  crawler.
+- **⚠️ A second gap, also left open deliberately.** A completely unmatched address still falls through
+  to the application's own 404, which wears the signed-in styling and offers a link to the dashboard —
+  wrong for a stranger who has never heard of us. Fixing it means deciding which surface an unmatched
+  address belongs to, and that is a decision rather than a guess.
+- **The robots file blocks the enquiry paths for a specific reason**: an enquiry reference is the only
+  thing protecting that conversation, so a crawled one is a leaked one.
+
+**Verified:** typecheck clean, lint clean, seventeen routes checked by hand and every one behaving as
+intended except the soft-404 above, sitemap and robots both serving correct content. **How it looks is
+still unverified** — that is the review this was all built for.
+
+---
+
+## August 18, 2026 — Four more pages, built out of what the three live sites already publish
+
+**About, contact, terms and privacy now exist**, assembled from the company's own published pages
+rather than invented. Five of the thirteen planned public pages are now up, and every fact on the
+first three is verifiable today.
+
+**About** carries the real story, the five ISO certifications plus MSME, the uptime and client-approval
+figures, the government SME recognition, the company identification number, all three storefronts, and
+the three office addresses in full. **Contact** routes to the six published role addresses with what
+each is for and how quickly it answers, the 24×7 phone number, and the offices again with their
+postcodes.
+
+- **⚠️ One thing to decide before launch, and it is not cosmetic.** Every contact address on the page
+  reaches the *platform* team, because those are the only ones that exist. Somebody emailing support
+  about a partner listing will land with hosting support. The directory probably needs its own
+  aliases; that is a decision, not a code change.
+- **No individual is named anywhere, and that follows their own practice rather than being caution on
+  our part.** All three live sites publish role addresses — grievance, abuse, legal, billing — and not
+  one names a person. A role survives someone leaving, and it keeps personal data out of a public
+  repository. If a named officer is ever required for a statutory filing, that belongs in
+  configuration rather than in source.
+- **No contact form yet, deliberately.** A form collecting a name and an email needs the privacy page
+  to be real, and it is still in review. The page routes to email and phone instead — both already
+  published, both already answered.
+- **No map embed**, which the plan explicitly forbids: it would load a third-party script on first
+  paint, blow the performance budget, and set a cookie before anyone consented.
+- **The legal pages were structured, not authored.** The platform's own terms run to twenty-five
+  sections covering things like customer verification, GPU services and telecom-authority compliance —
+  **most of which do not apply to us and were dropped rather than copied.** We do not sell compute; we
+  publish pages about companies that do and forward enquiries to them. So the sections that matter
+  here are ones a hosting document has no reason to carry: what verification does and does not
+  promise, what happens to an enquiry, and that we are not a party to whatever a buyer agrees with a
+  partner. The privacy page is built on the same data-protection framework their policy uses, with one
+  section theirs does not need — an enquiry is personal data we deliberately hand to a third party,
+  and the page says so plainly rather than burying it.
+- **Both legal pages carry a standing "draft, not reviewed, not binding" banner**, and it stays until
+  somebody who owns compliance signs them off. The plan has always said these must not be drafted by
+  an engineer or an AI; building the structure early so it can be reviewed is a different thing from
+  publishing unreviewed text as though it binds anyone, and the banner is what keeps those apart.
+- **The datacenter count is still not rendered anywhere.** Their site gives three different answers,
+  so the about page lists the twelve cities it can actually enumerate instead. This remains the one
+  open question for marketing.
+- **Three new shared components** — a page opener that owns the single heading each page is allowed,
+  a shell both legal documents render through so they cannot drift apart, and the review banner.
+  Legal text is capped to a readable measure rather than running the full page width, for the same
+  reason the app caps its forms while letting data tables run wide.
+
+**Verified:** typecheck clean, lint clean, all five public routes plus sign-in return successfully,
+the dashboard still redirects when signed out, and every real detail was confirmed present in the
+served markup. The page register was updated to match. **Still not verified: how any of it looks.**
+
+---
+
+## August 18, 2026 — The home page stops being plausible and starts being true
+
+**Everything on the home page that could be real now is.** It was built earlier the same day on
+invented placeholder content so the design could be judged before any backend existed. The three live
+company sites — the main hosting site, the IaaS brand and the PaaS brand — were read directly and the
+page now carries their actual figures, product lines, addresses and vocabulary.
+
+**What changed, in one sentence: the only invented thing left on the page is the partners themselves**,
+which is correct, because we do not have any yet.
+
+- **The company figures were re-verified rather than trusted.** The About page was read today and it
+  confirms what the plan recorded ten days ago: operating since 2006, 20,000+ customers across 110+
+  countries, 3,000+ nodes, 80 Gbps of network capacity, a 97% approval rating, government recognition
+  as a top-100 SME, five ISO certifications plus MSME, and the three real office addresses with the
+  company identification number.
+- **⚠️ Their own site still contradicts itself, and the page had to pick a side.** The home page says
+  "19 locations world-wide" in one block and "18 locations across 3 continents" in another, while the
+  datacenter list below shows twelve cities; the home page claims 99.9% uptime and the About page
+  claims 99.99%. The plan's standing instruction is to treat the About page as current, so those are
+  the values used — and the conflict is written into the code beside them so nobody quietly "corrects"
+  it later. **This needs confirming with marketing before launch**, because a rule we already hold
+  ourselves to says not to publish a number we cannot back, and "our own website disagrees with
+  itself" is not backing.
+- **A new section makes the three brands legible, and it is the only fully verifiable block on the
+  page.** One company operates all three, which a buyer arriving from the IaaS brand has no way of
+  knowing — so "verified by Leapswitch" reads as an unrelated third party unless we say otherwise.
+  Every line in it is quoted from the live sites, including the published starting prices, which
+  render as "from" because they are entry points rather than quotes and they will move.
+- **The search vocabulary is now the real product catalogue.** Managed Kubernetes, GPU and AI
+  workloads, object storage, bare metal and colocation, private networking, backup and disaster
+  recovery, migration off the hyperscalers, WordPress and Magento clusters, business email, ISO 27001
+  readiness. A buyer already using the platform should see the words they use, not category names an
+  agent made up. Six of the ten sit under the search box; a wall of them would be the taxonomy dump
+  that made the other reference site unusable.
+- **The invented partners now do plausible work.** Their names and cities are still fiction and the
+  page still says so in a standing notice, but their specialities are drawn from that same real
+  catalogue — so a reviewer is judging whether the card design works for the services this business
+  actually sells, rather than for generic consultancy.
+- **The audience segments came off the live sites too** — startups, developers and enterprises are the
+  three the IaaS brand names itself, with small business, agencies and resellers, and public sector
+  added from the other two. One of the PaaS brand's own customer quotes describes hosting government
+  websites, which is where that last one comes from rather than from guesswork.
+- **The footer gained the things a real footer needs**: the three brands as outbound links, the sales
+  address, support hours, the office cities and the company identification number.
+
+**Verified:** typecheck clean, lint clean, the page still returns successfully with no redirect, and
+every real figure was confirmed present in the served markup. **Still not verified: how it looks** —
+that remains the owner's review, and it is the point of the exercise.
+
+---
+
+## August 18, 2026 — localhost:3001 stops sending you to a login screen and shows the product instead
+
+**The public home page is built and live at `/`.** It runs entirely on hardcoded placeholder content
+by design: the aim is to get the look approved before any backend work starts, so the page reads from
+one file instead of a database that has nothing in it.
+
+**Two redirects had to go, not one.** Visiting the root sent you to the sign-in screen from the edge
+middleware *and* from a page stub behind it — removing either alone leaves the other, with an
+identical symptom, which is exactly why this was written down in the plan a day earlier. Both went in
+the same change, and the root path came out of the middleware's matcher entirely, since a path the
+matcher does not list never reaches the middleware at all. That is the cheapest way to keep it public.
+
+**What is on the page, and one thing that deliberately is not.** A hero whose search box sits above
+the fold as the primary action; a trust bar carrying Leapswitch's own record; six partner cards; how
+it works in three steps; a "built for" block; and a full-width invitation for partners to get listed.
+**The category grid specified for this page was omitted rather than shrunk** — the plan is explicit
+that it stays out until a category has at least three listed partners, and today the table for
+categories does not exist. An eight-tile grid over an empty taxonomy is the first failure mode the
+plan lists. In its place is the by-audience idea taken from the reference site's footer, which needs
+no data we do not have.
+
+- **Nothing invented is presented as real, and the page says so.** A standing notice at the top marks
+  it as a design preview and names which figures are real — the company's own, which are sourced —
+  against the partners, which are entirely made up. It disappears when one boolean flips. There are
+  no ratings, no review counts, no response times, no partner count and no "trusted by" logos: every
+  one of those is forbidden until the data exists, and inventing them now is how a fake number
+  survives into production, because by then it looks normal.
+- **Everything is a component, in its own folder.** Seven of them, in a public-only directory, none
+  reaching into the admin shell's shared components — the two surfaces were settled as separate
+  applications and this is where that stops being theory. All the placeholder content lives in one
+  file, shaped like the API response it will eventually be, carrying nothing the public schema marks
+  internal.
+- **The palette landed as tokens, not as colour values scattered through components.** This is the
+  condition that keeps yesterday's "no dark mode for now" decision cheap to reverse: a dark
+  counterpart redefines ten values in one file rather than touching every component. The stylesheet
+  is imported by the public layout alone, which also guarantees an installation changing its brand
+  preset can never repaint the marketing site.
+- **One trap was hit and is now documented where the next person will find it.** Tailwind's layer
+  directive only works in a file that also declares the framework, and this file deliberately does
+  not — using it there failed the build and, because a stylesheet error is a compile error, took the
+  sign-in page and the dashboard down with it until it was fixed. The classes are now plain CSS,
+  scoped so they cannot tie with a utility and lose on stylesheet order instead of intent.
+- **The serif is loaded in the public layout and nowhere else**, so the signed-in app never downloads
+  a font it does not render. Confirmed self-hosted and wired through correctly rather than assumed.
+- **Responsive from the start rather than as a pass afterwards.** Single-column grids as the base,
+  touch targets at or above the minimum, dynamic viewport height rather than the unit that breaks on
+  mobile, and long text truncating beside fixed controls — each of those closes a defect the app
+  already paid for once.
+- **The accessibility floors are in place**: a skip link as the first focusable element, one page
+  heading, a search landmark, a labelled input, an expandable menu that announces its state, and one
+  focus ring for the whole surface. The reduced-motion preference is honoured.
+
+**Verified:** typecheck clean, lint clean, the root URL returns successfully with no redirect, the
+design tokens and the display font are both served, and the sign-in and dashboard routes still behave
+as they did. **Not verified: how it actually looks.** It has been checked by compiling and by reading
+the served markup, not by opening a browser — the visual review is the owner's, and it is the entire
+point of building it this way.
+
+---
+
+## August 18, 2026 — The palette is adopted, and the public site ships without dark mode
+
+**All four open questions about the public surface's look were decided, and the design worksheet went
+from blocked to mostly answered.** The owner approved the harvested palette and, on the one question
+where the recommendation was to do the extra work, chose not to: **the client-facing site will not
+have a dark mode for now.**
+
+**That decision overrides a standing rule, so it is recorded as an override rather than absorbed
+quietly.** "Dark mode from day one" has been in force because retrofitting it later is a sweep across
+every file. The rule is now scoped to the signed-in and sign-in surfaces, where it is unchanged and
+still mandatory — the theme toggle stays, and the paired brand-colour class that exists because our
+green fails contrast on a dark card is untouched. Only the public route group is exempt.
+
+- **The exemption comes with four conditions, and they are the decision rather than a footnote.**
+  "For now" is only true if the retrofit stays a ten-value token change instead of becoming the file
+  sweep the rule was written to prevent. The load-bearing one: **public components reference named
+  tokens, never raw colour values.** Get that wrong and reversing this costs what the rule always said
+  it would. The other three — declare a light colour scheme on the public layout, never write a
+  dark-mode variant on a public component, and re-run the contrast audit before any dark mode ships —
+  are cheap today and expensive to add later.
+- **One condition is worth calling out because it will otherwise be discovered as a bug.** Opting out
+  of dark mode by simply not opting in is not enough: a browser set to dark will still restyle form
+  controls and scrollbars on its own. Without an explicit declaration on the public layout, the
+  enquiry form's inputs go dark on a cream page and nothing in our code will have done it.
+- **The cost is stated rather than glossed.** A visitor whose system is in dark mode sees a cream
+  site, then signs in and lands in a dark app. That seam is real and there is no way to avoid it
+  without building the dark counterpart. It is a defensible trade at zero traffic and becomes less
+  defensible as traffic grows — which is exactly why the reversibility conditions matter.
+- **A second font family was approved, narrowly.** The rule was one family only, because it sits in
+  the performance budget. It is now "one display face on the public surface, everything else
+  unchanged": a serif, weight 400, headings only, loaded in the public layout and **not** the root
+  one, so the signed-in app never pays for a font it does not render. This was the one place worth
+  spending, because the serif at large sizes with tight tracking is doing most of the visual work —
+  taking the colours without it produces a lavender admin panel.
+- **The public surface also opts out of runtime theming.** We support eight brand presets; a marketing
+  page for one company does not need to be re-themeable, and making it so would mean
+  contrast-checking eight variants of a design chosen because it looks like itself. Flagged as a code
+  change rather than a policy, since branding is currently fetched server-side for the root layout —
+  and the logo and app name are a separate question from the palette, deliberately left for when the
+  shell is built.
+- **The worksheet is no longer blocked.** Five of its ten sections are now decided — the register, the
+  interaction tier and motion vocabulary, the full colour set with its rules, the type scale, and
+  elevation. The four still open need no further input: component anatomy, layout, breakpoint
+  behaviour and the iteration guide are all derivable from what was measured plus the responsive
+  contract we already have.
+- **Elevation was settled by agreement rather than argument.** The reference separates surfaces with
+  two- and four-pixel borders and almost no shadow, which is what our own token set already does and
+  documents. Hover states shrink rather than lift. That is now written down as the rule.
+- **The pre-flight checklist was updated in the same change**, so the new rules can actually fail a
+  page: no dark-mode variant on a public component, no raw colour values, and the two accent colours
+  that fail contrast on cream are never used as text.
+
+**No code changed.** These are decisions recorded against the plan; nothing has been applied to a
+token file or a component yet.
+
+---
+
+## August 18, 2026 — The public site now has a palette, taken exactly from the reference the owner picked
+
+**Every colour on wisprflow.ai has been harvested and written into the frontend plan as § 15.** The
+owner named it as the visual reference for the client-facing site and asked for the exact values —
+button background, button border, card colours, page background, all of it — collected from every
+page linked in the header and the footer.
+
+**How it was collected matters, because it makes the numbers trustworthy.** The site is built in
+Webflow, which means its entire design system ships as named variables in one stylesheet rather than
+having to be guessed from screenshots. All thirty-two pages in the header and footer were fetched —
+every one returned successfully — and the result is a finding in itself: **one stylesheet serves the
+whole site and not a single page overrides the palette.** There is no marketing-versus-product split
+and no per-page theming. Thirty-two pages, one set of colours.
+
+- **Eleven named colours, and the two that define the site are not the obvious ones.** The page
+  background is a warm cream, not white, and the primary button is lavender with a hard two-pixel
+  near-black border. Those two choices are most of why the site looks like itself. A deep pine green
+  carries the premium sections and every link hover; near-black carries text, borders and the dark
+  cards.
+- **The technique underneath is worth more than the hexes.** Every tint, overlay and border on the
+  site comes from one of sixteen values — two alpha ramps, one per background. Nothing is improvised.
+  It is the same approach our own brand variables already use, applied to the whole system.
+- **Borders are two or four pixels, never one, and there is essentially no shadow.** That is the
+  reason it reads as confident rather than delicate, and it happens to agree with a decision this
+  project already made — our token set deliberately ships no brand shadow because the adopted theme
+  separates surfaces with borders. The design worksheet's open question about elevation can now be
+  answered with a reference behind it.
+- **A contrast audit was computed rather than assumed, and it found two rules.** The core pairs clear
+  the accessibility threshold with enormous margin — body text at 17.2, the primary button at 13.1 —
+  and, unlike our own palette, there is no dark-surface contrast trap needing a mandatory paired
+  class. But the coral and amber accents **fail outright as text on cream**, at 2.77 and 1.88. They
+  are decoration and display sizes only. Their borders on cream are likewise decorative and cannot
+  carry state.
+- **Four things adopting this will cost, three of which collide with rules already written down.**
+  The reference site **has no dark mode at all** — the term appears zero times in its stylesheet —
+  while our standing rule is dark mode from day one. It uses **two font families, neither of them
+  ours**, against a rule that says one family only because it sits in the performance budget. And we
+  have runtime theming with eight presets, which a fixed palette does not want. Each is written up
+  with options and a recommendation; each needs the owner rather than an agent.
+- **The honest one, stated plainly.** A serif display face at very large sizes with tight tracking is
+  doing most of the visual work. Taking the colours and keeping a bold sans for headings will not
+  produce this look — it will produce a lavender admin panel. That is the single most consequential
+  line in the section.
+- **A structural idea worth stealing for free.** Their footer carries eight pages that are the same
+  product described to eight different audiences. Ours writes itself from the partner categories,
+  needs no tables that do not exist yet, and would be the cheapest indexable surface available to us
+  at our current size. Also worth noting against the earlier research: their header has **five**
+  links where Justdial's homepage has around a hundred and fifty — which is a large part of why this
+  is the better reference for us.
+- **Their colour names are not being copied, only their values.** Shipping another company's internal
+  vocabulary in a public repo is the part that would read as a lift, so the proposed mapping renames
+  everything. The same section says plainly not to take the wordmark, illustration style or copy
+  voice alongside the palette — that combination, not a set of hexes, is what would be imitation.
+- **One useful coincidence.** Their deep green and our existing brand green are close enough that the
+  public site will not look like a different company from the signed-in app — which is normally the
+  price of giving a marketing surface its own palette.
+
+The design worksheet was updated in the same change: its colour section is now marked superseded for
+the public surface and points at the harvest, and the aesthetic question it was blocked on is
+narrowed — the reference answers it in substance, leaving only warm-versus-cold and the two
+collisions above.
+
+**No code changed.** This is planning documentation, and the palette is recorded as a proposal, not
+applied to any token file.
+
+---
+
+## August 18, 2026 — A folder that exists to stop the public site looking like every other AI-built page
+
+**The three design references the owner picked now live in `documentation/design/references/`,
+distilled rather than bookmarked.** The ask was a folder holding three links. What went in is what
+each one actually teaches, checked against the live sources on the day and bound to constraints this
+codebase already has, because a folder of three URLs helps nobody at the moment somebody is writing a
+page.
+
+**What the three actually are, and why they are not alternatives.** They are three stages of one
+workflow. `awesome-design-md` (109k stars, MIT) is a **format** plus 74 worked examples — complete
+design systems for Stripe, Linear, Wise, Shopify and others, each in a single markdown file that an
+AI agent reads before generating UI. `xiaopu-ai/web-design` is a **process**: understand, then emit a
+design spec **and stop for approval**, then write code. `taste-skill` (77k stars, MIT, updated the day
+before) is the **guardrail** — a tool whose entire stated purpose is stopping an agent producing
+generic output, backed by its own research corpus on why models default to the average.
+
+**The single most valuable idea across all three is the stop.** Writing the spec before the code is
+the discipline this project already applies to backend work and has never once applied to a page.
+Code written before the spec is agreed gets defended instead of replaced, and this is the surface
+where a second draft is far more expensive than the first.
+
+- **The division of labour it introduces is one we were missing.** `AGENTS.md` tells a coding agent
+  *how the project is built*; a `DESIGN.md` tells a design agent *how it should look*. We had the
+  first and nothing playing the second part, which is why every screen so far looks like the admin
+  panel it is.
+- **The real risk this addresses is not ugliness, it is genericness.** The plan for the public pages
+  already warns that building a category page out of the admin's list component is the likeliest way
+  the site ends up looking like a CRM. `ANTI_SLOP.md` names ten concrete tells — the purple gradient
+  hero, three identical feature cards, animated counters, emoji as iconography — and **six of them
+  were already banned in writing** by the per-page rules in the directory plan. The new file is not
+  new policy; it is the reason those lines were right.
+- **A pre-flight checklist now exists, and a page is not done until it passes.** Mechanical checks
+  first, then honesty checks — no number we cannot back, no rating or response time before the data
+  exists, no inventory count at all at our size, and the page must read correctly with **zero**
+  partners in the database, which is the state it is in today.
+- **Two-thirds of our design spec turned out to be transcription, so it was transcribed.** The
+  worksheet arrives with every measured value already filled in — the full token table with its
+  defaults, the mandatory contrast rule, the font decision, the thirteen responsive rules, the
+  performance budget, the interaction tier the budget forces. **The remaining third is taste, and it
+  is left deliberately blank**, because an agent inventing it is precisely the failure the folder
+  exists to prevent. One decision by the owner unblocks the rest.
+- **A live trap was written down while the tokens were being read.** The Tailwind config ships no
+  brand shadow token on purpose — this theme separates surfaces with borders, not elevation — so a
+  public design that leans on shadows is choosing to diverge from the signed-in app. That is allowed
+  and it has to be chosen out loud rather than drifted into.
+- **Neither skill was installed, deliberately.** Both are a single command, and both write
+  third-party code into a public repository and into shared agent configuration. That is the owner's
+  call. The commands are recorded; the folder is useful without them.
+- **Something stale was found on the way through.** The UI patterns file states the project uses no
+  component library and specifically no Radix. Four Radix packages are in `package.json`, alongside a
+  block of shadcn aliases added on 2026-08-10. It matters here because a design decision that assumes
+  no primitives exist will be wrong about what is already installed.
+- **Honest about the limits.** These three will not give the site taste. They remove the ways it can
+  be generic. What it should actually feel like is a decision nobody has made yet, and the worksheet
+  is explicit that it is waiting on it.
+
+**No code changed** — documentation only. The doc index and the frontend plan were updated in the
+same change to point at the new folder, and the index's file count was corrected: it claimed 32, and
+had been wrong before these four files were added.
+
+---
+
+## August 18, 2026 — Justdial is 190,000× our size, and most of its frontend is an answer to that
+
+**The public surface now has a scale calibration, and it removes three pages from the launch and
+promotes one.** The owner asked for Justdial to be studied as the reference for our frontend, with
+the explicit caveat that we will not have lakhs of users and partners. That caveat turned out to be
+the whole finding. `documentation/planning/FRONTEND_PLAN.md` gains §§ 12–14.
+
+**What Justdial's frontend actually is.** Its homepage is a search box on top of roughly 150
+taxonomy links — a sitemap, in effect — and the trust claim is rendered inside the search box:
+*"search across 5.6 crore businesses"*. City is the **first path segment**, not a filter, which is
+what turns a few thousand categories into millions of indexable pages. Its Advertise page states the
+business model without euphemism: guaranteed top-5 placement, a verified badge gated on KYC plus a
+3.8-star average, leads sold by the week, and banners placed on competitors' listings.
+
+**Almost none of that is available to us, and not for reasons of taste.** Three of those five
+mechanics are already forbidden by decisions this project took earlier — a featured slot may never
+outrank a verification failure, an enquiry belongs to the partner it named, and no revenue decision
+exists at all. The rest fails on arithmetic: every mechanic on that homepage exists to make an
+unmanageable inventory navigable, and we have the opposite problem.
+
+- **The measurement that made this concrete.** The database has **zero** partners, zero listed, three
+  tiers and twelve users; there are zero public pages and zero public API routes; and
+  `service_categories`, `service_listings` and `enquiries` do not exist as tables. So four of the
+  thirteen planned public pages have no data source that *could* exist yet — including the two the
+  plan calls "the page that ranks" and "the most commercially important page on the site".
+- **Four size bands replace guesswork about when a feature earns its place.** Facets, pagination,
+  result counts, category pages, search, ratings and response-time claims each now have a written
+  trigger keyed to the number of listed partners, rather than being adopted or refused by argument. A
+  facet over twelve rows manufactures mostly-empty pages, and the plan already asks for facet states
+  to be crawlable URLs — so filtering early actively creates the thin content the plan elsewhere
+  warns about.
+- **`/become-a-partner` moves to first.** It was near the end of the sequence. At zero partners the
+  demand side has nothing to look at, and the only thing that moves the number is partners signing
+  up — Justdial agrees, and keeps *Free Listing* and *Advertise* permanently in its top-level header.
+  Terms and privacy move forward with it, because that page's form is the first thing here to collect
+  a name and an email.
+- **The scale inversion, stated once so it drives the design.** Justdial's trust signal is its
+  inventory count. Ours cannot be and must not be faked. Ours is the vetting company's own record —
+  since 2006, the ISO stack, 19 locations, 20,000+ customers — which is why the home page's trust bar
+  is a day-one requirement while its category grid is omitted entirely until a category qualifies.
+- **The closer analogues were checked too, and they agree with each other.** Shopify's partner
+  directory ranks by tier and advertises no counts anywhere; Clutch gets its density from depth per
+  company — rating, project-size floor, rate band, service-focus breakdown — not from row count. Both
+  answer low inventory the same way: **make each row deep rather than the list long.** That is why
+  the partner profile keeps its full spec rather than being trimmed because there are only twelve.
+- **Honest about the research itself.** Justdial's category and business-detail pages are
+  bot-challenged and returned nothing; only the homepage, the Advertise page and robots.txt were read
+  first-hand. § 12.1 says exactly what that leaves reconstructed from secondary sources, and those
+  parts are not presented as measured. Their robots.txt is also a small lesson in its own right — it
+  permits agents fetching on a person's behalf and blocks the crawler, a distinction our own
+  `robots.ts` will eventually have to make.
+- **One assumption stated rather than asked.** The launch is planned as 1–25 listed partners. "Not
+  lakhs" rules out the top band but does not choose between 5 and 60, and every mechanic is written
+  as off-until-a-trigger-fires — so being wrong low costs a switch flipped early, while being wrong
+  high ships facets over an empty directory. If the real number is higher, the triggers move and the
+  page inventory does not.
+- **Nothing was changed in the other plan, deliberately.** Five amendments this research owes to
+  `PARTNER_DIRECTORY_PLAN.md` § 20.4 are listed as an unticked checklist in § 14.6 instead. That file
+  still wins on what a page contains; the new sections override it for the launch window only, and
+  the checklist is the marker that the two disagree on purpose rather than by drift.
+
+**No code changed** — this is a planning document only, so the verification gate is untouched. It was
+run anyway before the edit: typecheck 0, lint 0, 819 passed / 4 skipped, ruff clean.
+
+---
+
 ## August 17, 2026 — You could not see the shape of the frontend without reading six tables
 
 **Every page this product will have is now in one file.** The owner's framing was that the frontend

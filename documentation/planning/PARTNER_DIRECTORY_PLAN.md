@@ -96,9 +96,74 @@ translated into what they close and what they open. **This is § 11's Phase 0 de
 > visiting our frontend contact the partner directly based on their requirement. Because Leapswitch
 > offers the platform, Leapswitch monitors everything.*
 
+> ## 🔴🔴 CONFIDENTIALITY — the supply relationship is not public. Set 2026-08-18
+>
+> **The public surface must never state, imply, or let a reader infer that partners buy their
+> infrastructure from us.** The relationship exists and is why partners are here; it is **between us
+> and them only.** Buyers are not told.
+>
+> This came *after* the correction below and supersedes how that correction was first implemented —
+> the reseller framing was built into every public page on 2026-08-18 and then stripped out again the
+> same day. What the public sees is a **Justdial-shaped directory**: partners advertise the expertise
+> they have, buyers browse by requirement and send an enquiry through the platform, and the partner
+> reads it in their back office here.
+>
+> | ❌ Never on a public page | ✅ Instead |
+> |---|---|
+> | "Verified by Leapswitch" | "Checked before listing" — the platform verifies, unattributed |
+> | "What they carry from us" | Nothing. There is no such field and no such section |
+> | Datacenter counts, ISO certs, uptime, customer totals as **ours** | Nothing. They imply we are the supplier |
+> | Leapswitch / CloudPe / CloudJiffy as brands | Nothing |
+> | An `@leapswitch.com` address anywhere in global chrome | Route through `/contact` |
+>
+> **The one permitted exception is the operating entity on `/terms`, `/privacy` and `/contact`.** A
+> legal document must name who is behind it, and a marketplace naming its operator is ordinary —
+> Justdial names Just Dial Ltd. That discloses *who runs the site*, not *where partners buy servers*.
+> **Do not extend it beyond those three pages**, and specifically not into the footer, which renders
+> everywhere.
+>
+> The enforcement that is not a rule: **there is no field in the frontend model for what a partner
+> resells.** A column that does not exist cannot be rendered by a component somebody writes next
+> month. Keep it that way when the schema is designed — the join belongs on the authenticated side.
+>
+> ---
+>
+> ## 🔴 Decision 1 was CORRECTED by the owner on 2026-08-18 — read this before the table
+>
+> The row below is **wrong as written**, and it was wrong for eight days. The owner's correction:
+>
+> > *"Our partners take services from us and then sell by their name."*
+>
+> **Partners are resellers and managed-service providers.** They buy Leapswitch infrastructure at
+> wholesale, sell it under their own brand, and add their own support, packaging and billing on top.
+> They are not independent consultancies that Leapswitch merely vouches for.
+>
+> | | Recorded 2026-08-10 | Correct, 2026-08-18 |
+> |---|---|---|
+> | What a partner sells | Their own services | **Our infrastructure, under their name, plus their own value on top** |
+> | Who sets the buyer's price | n/a | **The partner.** They publish their own packaged prices, margin included |
+> | What differentiates partners | Their specialities | **What they add** — the Leapswitch half is identical by definition |
+>
+> **What this does NOT reinstate:** the shelved `quotes` / `quote_items` / nine-state approval
+> machine. This is a *reseller relationship*, not a quoting product — the buyer transacts with the
+> partner directly and off-platform. § 0's recommendation to keep `partners`, `partner_tiers`,
+> `users.organisation_id` and the scoping module still stands, unchanged.
+>
+> **What it does change:** the schema needs to express *which Leapswitch services a partner carries*
+> and *what they add* as two different things — the frontend already models it that way in
+> `frontend/lib/public/homeContent.ts`, and that file is currently the only written record of the
+> corrected shape. It is a **join to a Leapswitch service catalogue**, which no table represents yet.
+>
+> ⚠️ **The pricing decision carries a stated risk the owner accepted.** Partners publishing their own
+> prices makes this directory comparable on price between our own partners, which tends to push
+> margins toward zero. It is mitigated in the UI, not in the data: nothing sorts or ranks by price,
+> there is no comparison table, and a price only ever appears inside a partner's own card or profile.
+> **Keep it that way** — a sortable price column would turn a trust directory into a race to the
+> bottom, and it would be one line of code to add.
+
 | # | Decision | Answer |
 |---|---|---|
-| 1 | Directory, reseller quoting, or both? | **The directory.** Partners supply their *own* services |
+| 1 | Directory, reseller quoting, or both? | ~~**The directory.** Partners supply their *own* services~~ **CORRECTED 2026-08-18 — see above** |
 | 2 | Who is the demand side? | **Reading A — the public.** Unauthenticated visitors browse and make contact |
 | 3 | How many partners? | **300+** |
 
@@ -1177,6 +1242,12 @@ repeatably. The expensive surfaces are §14.2 (new architecture) and the listing
 ---
 
 ## 15. The order of work — every item, sequenced
+
+> ⚠️ **Superseded as the working list, 2026-08-18.** This section is still the reasoning for *why* the
+> order is what it is. The list actually being worked from is
+> [`DIRECTORY_BUILD_PUNCHLIST.md`](./DIRECTORY_BUILD_PUNCHLIST.md) — 48 tasks written against the tree
+> as measured, with the owner's eight-step lifecycle at the top of it. Where the two disagree about
+> what exists, the punchlist wins; where they disagree about sequencing rationale, this one does.
 
 Added 2026-08-10. § 14 lists *what*; this lists *when*, as **34 numbered steps** grouped under § 11's
 phases. Work top to bottom.
