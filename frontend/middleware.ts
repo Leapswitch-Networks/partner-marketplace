@@ -74,13 +74,14 @@ export function middleware(request: NextRequest) {
   // attempting; the client does the attempting.
   const sessionHint = request.cookies.get("session_active")?.value;
 
-  // Root path: send to sign-in always (the sign-in page redirects on if already authed)
-  if (pathname === "/") {
-    const url = request.nextUrl.clone();
-    url.pathname = "/sign-in";
-    return NextResponse.redirect(url);
-  }
-
+  // ⚠️ Removed 2026-08-18: `/` used to 307 to /sign-in from here.
+  //
+  // `/` is now the PUBLIC HOME PAGE — `app/(public)/page.tsx`. There were two
+  // redirects, not one (`FRONTEND_PLAN.md` § 8 ②): this branch, and a
+  // `redirect("/sign-in")` in `app/page.tsx`. Removing either alone leaves the
+  // other, and the symptom is identical, so both went in the same change and
+  // `"/"` came out of the matcher below — a path the matcher does not list never
+  // reaches this middleware at all, which is the cheapest way to keep it public.
   const retired = RETIRED[pathname];
   if (retired) {
     const url = request.nextUrl.clone();
@@ -106,7 +107,7 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/",
+    // "/" is deliberately absent — it is the public home page. See above.
     "/admin/:path*",
     "/dashboard/:path*",
     "/dashboard",

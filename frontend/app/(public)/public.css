@@ -1,0 +1,294 @@
+/* ============================================================================
+ * Public surface tokens — app/(public)/ ONLY
+ * ============================================================================
+ *
+ * Adopted 2026-08-18. Values are harvested exactly from wisprflow.ai, the
+ * reference the owner picked; the NAMES are ours. See
+ * `documentation/planning/FRONTEND_PLAN.md` § 15 for the full harvest, the
+ * contrast audit, and the four decisions this file implements.
+ *
+ * ## Why these live here and not in tailwind.config.ts
+ *
+ * § 15.8 ③: **the public surface opts out of runtime theming.** The app's
+ * `--brand` variables are swapped per installation by `core/theme.py`; these are
+ * not, and must not be. Keeping them in a stylesheet that only the (public)
+ * layout imports is what guarantees a preset change can never repaint the
+ * marketing site, and vice versa.
+ *
+ * ## The one rule that matters most
+ *
+ * 🔴 **Components reference the token, never the hex.** `bg-public-bg`, not
+ * `bg-[#ffffeb]`. This is the whole reason "no dark mode for now" (§ 15.8 ①) is
+ * reversible: a dark counterpart redefines the ten values below in one place
+ * instead of touching every component — which is the file sweep that
+ * `FRONTEND_PLAN.md` § 11 rule 2 exists to prevent.
+ *
+ * 🔴 **Never write a `dark:` variant on a public component.** A half-built dark
+ * mode reads as a bug rather than a choice.
+ * ========================================================================= */
+
+.public-root {
+  /* ── Base palette — § 15.2 ─────────────────────────────────────────────── */
+  --public-bg: #ffffeb;        /* warm cream. NOT white — this is the page      */
+  --public-bg-alt: #e4e4d0;    /* cream, one step down. Borders + 2nd button    */
+  --public-ink: #1a1a1a;       /* text, borders, dark slabs                     */
+  --public-deep: #034f46;      /* deep pine. Premium slabs + every link hover   */
+  --public-lilac: #f0d7ff;     /* PRIMARY BUTTON FILL                           */
+  --public-amber: #ffa946;     /* accent · footer hover ON DARK ONLY            */
+  --public-coral: #ff6c4c;     /* accent, display sizes only                    */
+  --public-blush: #ffbcf2;     /* rare accent                                   */
+  --public-wine: #7f1c34;      /* error text                                    */
+  --public-focus: #2d62ff;     /* focus ring                                    */
+
+  /* ── Alpha ramps — § 15.2. Every tint on the surface comes from these ────
+   * Sixteen values, two grounds. NEVER improvise a grey. */
+  --public-ink-05: #1a1a1a0d;
+  --public-ink-10: #1a1a1a1a;
+  --public-ink-15: #1a1a1a26;
+  --public-ink-30: #1a1a1a4d;
+  --public-ink-50: #1a1a1a80;
+  --public-ink-70: #1a1a1ab3;
+  --public-cream-05: #ffffeb0d;
+  --public-cream-10: #ffffeb1a;
+  --public-cream-15: #ffffeb26;
+  --public-cream-30: #ffffeb4d;
+  --public-cream-70: #ffffebb3;
+
+  /* ⚠️ § 15.8 ① condition 2. `darkMode: "class"` means we opt out by not opting
+   * in — but a browser set to dark still restyles form controls and scrollbars
+   * on its own. Without this line the enquiry form's inputs go dark on a cream
+   * page and nothing in our code did it. */
+  color-scheme: light;
+
+  background-color: var(--public-bg);
+  color: var(--public-ink);
+}
+
+/* ── Semantic utilities ────────────────────────────────────────────────────
+ * Thin wrappers so components read as intent. Anything not covered here uses
+ * Tailwind arbitrary values against the SAME variables — still a token
+ * reference, never a hex.
+ *
+ * ⚠️ **Plain CSS, not `@layer components`.** Tailwind's `@layer` only works in a
+ * file that also carries the matching `@tailwind` directive, and this file
+ * deliberately does not — it is imported by the (public) layout alone, which is
+ * what keeps these tokens out of the app's bundle and out of reach of the
+ * runtime theme (§ 15.8 ③). Using `@layer` here fails the build outright, and it
+ * takes every other route down with it, because a PostCSS error is a compile
+ * error for the whole app.
+ *
+ * Each selector is scoped under `.public-root`, giving it two-class specificity.
+ * That is not decoration: without it these would tie with a single Tailwind
+ * utility and the winner would be stylesheet order rather than the call site's
+ * intent — the same silent-ordering bug `lib/utils/cn.ts` adopted `tailwind-merge`
+ * to fix. **Never rely on class order to override one of these; add a variant.**
+ */
+.public-root .pub-bg        { background-color: var(--public-bg); }
+.public-root .pub-bg-alt    { background-color: var(--public-bg-alt); }
+.public-root .pub-ink-bg    { background-color: var(--public-ink); }
+.public-root .pub-deep-bg   { background-color: var(--public-deep); }
+.public-root .pub-lilac-bg  { background-color: var(--public-lilac); }
+
+.public-root .pub-ink       { color: var(--public-ink); }
+.public-root .pub-cream     { color: var(--public-bg); }
+.public-root .pub-deep      { color: var(--public-deep); }
+.public-root .pub-amber     { color: var(--public-amber); }
+
+/* Borders are 2px or 4px, never 1px — § 15.4. It is the whole reason the
+ * reference reads as confident rather than delicate, and it is free. */
+.public-root .pub-border      { border: 2px solid var(--public-ink); }
+.public-root .pub-border-soft { border: 2px solid var(--public-bg-alt); }
+.public-root .pub-border-thick { border: 4px solid var(--public-bg-alt); }
+
+/* Muted body text. 5.68:1 on cream — the audit's only neutral that passes.
+ * ⚠️ coral and amber are NEVER text on cream: 2.77:1 and 1.88:1. */
+.public-root .pub-muted     { color: #5c5c52; }
+
+/* One focus ring for the whole surface. 4.82:1 on cream. */
+.public-root .pub-focus:focus-visible {
+  outline: 3px solid var(--public-focus);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Display face. Loaded in the (public) layout only — never the root layout, or
+ * the signed-in app pays for a font it never renders (§ 15.8 ②). */
+.public-root .pub-display {
+  font-family: var(--font-eb-garamond), Georgia, "Times New Roman", serif;
+  font-weight: 400;
+}
+
+/* ── Pointer & motion polish ───────────────────────────────────────────────
+ * Added 2026-08-18. The brief was "make it feel cleaner and fresher"; the
+ * constraint is L1 — CSS only, no scroll library, and nothing that reads as
+ * decoration for its own sake (`ANTI_SLOP.md` § 1).
+ *
+ * Every rule below is tied to something a pointer is actually doing. None of
+ * them animate on load, and all of them are neutralised by the reduced-motion
+ * block at the end of this file.
+ */
+
+/* The card rail's own scrollbar is hidden — the edge fades and the arrows are
+ * the affordance, and a native scrollbar under a row of cards reads as a bug on
+ * macOS where it overlays the content. Scrolling itself is untouched. */
+.public-root .pub-rail {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  scroll-padding-inline: 1px;
+}
+.public-root .pub-rail::-webkit-scrollbar {
+  display: none;
+}
+.public-root .pub-rail > * {
+  scroll-snap-align: start;
+  flex: 0 0 auto;
+}
+
+/* Links in prose: the underline grows from the left rather than appearing.
+ * `background-size` is the cheapest way to animate an underline — `text-
+ * decoration` cannot be transitioned, and a pseudo-element would need a
+ * positioning context on every link that uses it. */
+.public-root .pub-underline {
+  background-image: linear-gradient(currentColor, currentColor);
+  background-position: 0 100%;
+  background-repeat: no-repeat;
+  background-size: 0% 2px;
+  transition: background-size 0.3s ease;
+  text-decoration: none;
+}
+.public-root .pub-underline:hover,
+.public-root .pub-underline:focus-visible {
+  background-size: 100% 2px;
+}
+
+/* Cards: the border darkens toward ink on hover. The reference separates
+ * surfaces with borders rather than elevation (§ 15.6), so the border is the
+ * only honest thing to animate — a shadow appearing on hover would contradict
+ * the whole system. */
+.public-root .pub-card-hover {
+  transition: border-color 0.3s ease, transform 0.2s ease;
+}
+.public-root .pub-card-hover:hover {
+  border-color: var(--public-ink);
+}
+
+/* The arrow inside a card nudges toward its direction of travel. Two pixels —
+ * enough to feel responsive, small enough that nothing reflows. */
+.public-root .pub-card-hover .pub-nudge {
+  transition: transform 0.25s ease;
+}
+.public-root .pub-card-hover:hover .pub-nudge {
+  transform: translate(2px, -2px);
+}
+
+/* Selection colour. A small thing, but the default browser blue on a cream page
+ * is the one moment the palette breaks for no reason. */
+.public-root ::selection {
+  background: var(--public-lilac);
+  color: var(--public-ink);
+}
+
+/* ── The heading reveal ────────────────────────────────────────────────────
+ * Each line of a page's `<h1>` rises into place from behind a mask on load.
+ *
+ * ## Why this is CSS and not the `Reveal` component
+ *
+ * `Reveal` is JavaScript, and JavaScript cannot start until hydration has
+ * finished. On the one element a visitor looks at first, that is the difference
+ * between "it animated in" and "it appeared, sat there, then animated" — the
+ * second is worse than no animation at all. A keyframe declared in the
+ * stylesheet begins at first paint, before React has done anything.
+ *
+ * ## Why it moves rather than fades
+ *
+ * **The `<h1>` is almost always the Largest Contentful Paint element.** An
+ * element at `opacity: 0` is not counted as painted, so fading the heading in
+ * would push the measured LCP out by the length of the animation — a real
+ * regression against the < 2.5s budget, not a matter of taste. Transform does
+ * not have that effect: the text is painted the whole time, it is simply moved.
+ * **So this animates transform only. Do not add opacity to it.**
+ *
+ * ## The descender detail
+ *
+ * The mask is `overflow: hidden`, which would otherwise slice the tails off
+ * every g, y and p on the final frame. The padding gives them room and the equal
+ * negative margin takes the space back out of the layout, so nothing shifts.
+ */
+@keyframes pub-rise {
+  from {
+    transform: translateY(105%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.public-root .pub-rise-mask {
+  display: block;
+  overflow: hidden;
+  padding-bottom: 0.14em;
+  margin-bottom: -0.14em;
+}
+
+.public-root .pub-rise-line {
+  display: block;
+  animation: pub-rise 0.75s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* A visitor who has asked for less motion gets the heading in place, not a
+ * faster version of it. The global reduced-motion block collapses transition
+ * durations; an animation needs its own instruction. */
+@media (prefers-reduced-motion: reduce) {
+  .public-root .pub-rise-line {
+    animation: none;
+  }
+}
+
+/* The pointer glow — see `components/public/PointerGlow.tsx` for the four rules
+ * that keep it from being decoration.
+ *
+ * Sizing and colour live here rather than in the component so the palette stays
+ * in one file. `mix-blend-mode: multiply` is what makes it self-limiting: over
+ * the cream page it darkens gently, and over the ink and pine slabs it does
+ * almost nothing — so the effect fades out exactly where the surface is already
+ * carrying the design, with no per-section logic to keep in sync.
+ *
+ * `will-change: transform` promotes it to its own compositor layer once, rather
+ * than letting the browser decide on every frame. */
+.public-root .pub-pointer-glow {
+  width: 26rem;
+  height: 26rem;
+  border-radius: 9999px;
+  background: radial-gradient(
+    circle,
+    color-mix(in srgb, var(--public-lilac) 70%, transparent) 0%,
+    color-mix(in srgb, var(--public-lilac) 22%, transparent) 45%,
+    transparent 70%
+  );
+  mix-blend-mode: multiply;
+  filter: blur(28px);
+  will-change: transform;
+  transition: opacity 0.4s ease;
+}
+
+/* Belt and braces: the component already refuses to mount on a touch device or
+ * under reduced motion, but if either check is ever loosened these keep the
+ * element out of the way rather than leaving a stray blob on a phone. */
+@media (pointer: coarse), (prefers-reduced-motion: reduce) {
+  .public-root .pub-pointer-glow {
+    display: none;
+  }
+}
+
+/* The reference's motion vocabulary, in one place: hover SHRINKS. It does not
+ * lift, glow or recolour. L1 — CSS only, no scroll library (§ 15.5, § 1). */
+@media (prefers-reduced-motion: reduce) {
+  .public-root *,
+  .public-root *::before,
+  .public-root *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

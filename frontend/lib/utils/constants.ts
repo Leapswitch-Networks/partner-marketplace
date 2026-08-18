@@ -101,3 +101,19 @@ export const APP_SHORT_NAME = process.env.NEXT_PUBLIC_APP_SHORT_NAME ?? "Partner
  * SVG upload validation — nobody can replace it without a deploy.
  */
 export const APP_LOGO = process.env.NEXT_PUBLIC_APP_LOGO ?? "/logo.svg";
+
+/**
+ * The public site's absolute origin — used by `app/sitemap.ts` and
+ * `app/robots.ts`, both of which must emit absolute URLs.
+ *
+ * Build-time, like `APP_NAME`, and for the same reason: a sitemap is generated
+ * at build and a second installation sets its own value and rebuilds anyway.
+ *
+ * ⚠️ The fallback is the dev origin on purpose. A wrong absolute URL in a
+ * sitemap is worse than an obviously-local one — `http://localhost:3001` is
+ * visibly broken the moment anyone looks, whereas a plausible-but-wrong domain
+ * gets shipped and silently indexes nothing.
+ */
+export const SITE_URL = (
+  process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3001"
+).replace(/\/$/, "");
