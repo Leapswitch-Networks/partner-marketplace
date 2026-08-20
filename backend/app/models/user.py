@@ -138,6 +138,20 @@ class User(Base):
         SidebarPreferenceEnum, nullable=False, default="INACTIVE",
         comment="LeapDesk semantics: ACTIVE = collapsed, INACTIVE = expanded",
     )
+    #: A personal theme override. NULL means **inherit the installation's**, which is
+    #: not the same as "no theme": clearing a choice must return the user to whatever
+    #: the administrator has since set, so a rebrand still reaches everyone who never
+    #: deliberately opted out. That is why there is no database default — a default
+    #: would make "never chose" indistinguishable from "chose the current default",
+    #: and those two must differ.
+    #:
+    #: Presets only, validated against `core.theme.THEME_PRESETS` on write. The set is
+    #: closed and every entry is contrast-audited, so no user can produce an
+    #: unreadable interface. There is deliberately no per-user custom hex.
+    theme_preference: Mapped[str | None] = mapped_column(
+        String(40), nullable=True,
+        comment="Key into core.theme.THEME_PRESETS; NULL inherits app_settings",
+    )
 
     # --- Login throttling (these columns ARE written — see auth_service) -----
     failed_login_attempts: Mapped[int] = mapped_column(

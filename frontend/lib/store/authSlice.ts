@@ -1,5 +1,6 @@
 import { createSlice, createAsyncThunk, PayloadAction } from "@reduxjs/toolkit";
 import { authApi } from "@/lib/api/authApi";
+import { clearPersonalTheme } from "@/lib/hooks/usePersonalTheme";
 import { extractApiError } from "@/lib/utils/apiError";
 import type { CurrentUser } from "@/types";
 
@@ -68,6 +69,11 @@ export const fetchCurrentUser = createAsyncThunk(
 
 export const logoutUser = createAsyncThunk("auth/logout", async () => {
   await authApi.logout();
+  // 🔴 `localStorage` is per-origin, not per-user. Without this, the next person to
+  // sign in on this browser sees the previous person's colours until hydration
+  // finishes — which looks exactly like the bug where a page shows the wrong
+  // account's data, and would be reported as one.
+  clearPersonalTheme();
 });
 
 const authSlice = createSlice({

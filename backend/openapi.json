@@ -2669,6 +2669,17 @@
             ],
             "title": "Personal Mobile Number"
           },
+          "resolved_theme": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved Theme"
+          },
           "roles": {
             "items": {
               "$ref": "#/components/schemas/RoleSummary"
@@ -2679,6 +2690,17 @@
           "status": {
             "title": "Status",
             "type": "string"
+          },
+          "theme_preference": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Theme Preference"
           },
           "timezone_preference": {
             "title": "Timezone Preference",
@@ -10127,6 +10149,18 @@
               }
             ],
             "title": "Personal Mobile Number"
+          },
+          "theme_preference": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Theme Preference"
           },
           "timezone_preference": {
             "anyOf": [

@@ -52,6 +52,36 @@ export const metadata: Metadata = {
 // makes the pre-3-way stored values keep working rather than forcing light mode.
 const themeScript = `(function(){try{var t=localStorage.getItem('theme');var dark=t==='dark'||(t!=='light'&&window.matchMedia('(prefers-color-scheme: dark)').matches);if(dark)document.documentElement.classList.add('dark');}catch(e){}})();`;
 
+// The PERSONAL brand theme, applied before first paint.
+//
+// ## Why this cannot be done on the server
+//
+// The installation's theme is resolved server-side and written into a `<style>`
+// below. A personal one cannot be: per `AGENTS.md` § 5 an httpOnly cookie is not
+// forwardable server-side, so the server does not know **who** is asking before the
+// page renders. The layering is therefore:
+//
+//   1. `<style>` installation default   — server-rendered. The floor. No JS, no auth
+//   2. this script                      — blocking, overrides for THIS user
+//   3. hydration -> /auth/me            — reconciles and writes the cache back
+//
+// Every failure degrades to the installation default rather than to an unstyled
+// page: JS off, empty cache, first login on a new machine, or a failed `/auth/me`.
+//
+// 🔴 The cache is a REQUIREMENT, not an optimisation. Without it there is no way to
+// know the user's theme before paint, so every load would visibly flash the
+// installation's colours and then swap.
+//
+// `localStorage`, not `sessionStorage`, matching the dark-mode key above: a
+// preference that survives closing the tab is the entire point, and session storage
+// would re-flash in every new tab.
+//
+// ⚠️ Stores the RESOLVED CSS custom properties, never the preset key. `core/theme.py`
+// owns the derivation maths — the tints, the night border, the success tone, both
+// chart ramps — and a second implementation of it in JavaScript would drift from the
+// Python one. The symptom would be tints subtly wrong under some themes only.
+const personalThemeScript = `(function(){try{var v=localStorage.getItem('pmp.theme.vars');if(!v)return;var d=JSON.parse(v);var r=document.documentElement;for(var k in d){if(/^--[a-z-]+$/.test(k)&&/^\\d{1,3}( \\d{1,3}){2}$/.test(d[k]))r.style.setProperty(k,d[k]);}}catch(e){}})();`;
+
 // `async` so the branding can be resolved server-side, once, for every route.
 //
 // This does NOT make routes dynamic: `getBranding` fetches with `next.revalidate`,
@@ -68,6 +98,12 @@ export default async function RootLayout({
     <html lang="en" className={`${montserrat.variable} ${ebGaramond.variable} h-full antialiased`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
+        {/* After the installation `<style>` would be too late to avoid a flash, and
+            before it would be overridden — so this sets inline properties on the
+            root element instead, which outrank any stylesheet rule regardless of
+            order. Values are validated against the same two patterns the server
+            side uses before being written, so a tampered cache cannot inject. */}
+        <script dangerouslySetInnerHTML={{ __html: personalThemeScript }} />
         {/* Brand theme, server-resolved. Rendered in <head> so it applies before
             first paint — no flash of the default colour. Overrides the complete
             default theme in globals.css; null when the default is in force. */}

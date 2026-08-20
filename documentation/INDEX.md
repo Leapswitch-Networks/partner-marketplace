@@ -102,6 +102,7 @@ it and another register disagree, it says so and names the one that is stale.
 | `planning/BACKEND_CORE_PUNCHLIST.md` | **The platform layer's remaining work** — row-level scoping, RBAC coverage, the deferred Redis items, and what is blocked outside this repo | Active — §§ A/B closed 2026-08-17 |
 | `planning/DYNAMIC_BRANDING_PLAN.md` | Project identity — name, monogram, tagline, theme, logo, favicon — configurable so the core is reusable across projects. **Read § 6 to rebrand a deployment**, § 7 for how theming and uploads work | **All four phases shipped 2026-08-06** |
 | `planning/PER_USER_THEMING_PLAN.md` | **Per-user themes** — one nullable column on `users`, precedence (user → installation → shipped default), why the choice rides on `/auth/me` instead of a new endpoint, and why browser caching is a requirement rather than an optimisation (the server cannot resolve an authenticated theme before first paint) | ⏳ **PLAN — 2026-08-20, not built** |
+| `planning/CORE_PACKAGE_SPLIT_RND.md` | **Can the backend split into `core/` + `<project>/`?** Feasibility R&D: what is already inverted (measured), the four blockers, and why the `users → partners` foreign key is the only real one | ⏳ **R&D — 2026-08-20, nothing implemented** |
 | `planning/TECH_DEBT.md` | Known defects and inconsistencies carried in from the scaffold, ranked | Active |
 
 ## Project Tracking

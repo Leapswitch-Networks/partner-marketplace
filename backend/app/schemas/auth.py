@@ -108,6 +108,29 @@ class UpdateProfileRequest(BaseModel):
     personal_email: EmailStr | None = None
     company_name: str | None = Field(default=None, max_length=255)
     timezone_preference: str | None = Field(default=None, max_length=50)
+    #: A personal theme. `None` is ambiguous on a partial update — it means "not
+    #: supplied" for every other field here — so **clearing** is spelled as the
+    #: literal string `"inherit"` rather than null. Unset leaves it alone; a preset
+    #: key sets it; `"inherit"` returns the user to the installation's theme.
+    theme_preference: str | None = Field(default=None, max_length=40)
+
+    @field_validator("theme_preference")
+    @classmethod
+    def _known_preset_or_inherit(cls, value: str | None) -> str | None:
+        """Reject an unknown key loudly, listing what is valid.
+
+        The set is closed on purpose: every preset is contrast-audited, so a user
+        cannot pick their way to an unreadable interface. Silently falling back to
+        the default would tell someone their choice was saved when it was not.
+        """
+        if value is None or value == "inherit":
+            return value
+        from app.core import theme
+
+        if value not in theme.THEME_PRESETS:
+            valid = ", ".join(sorted(theme.THEME_PRESETS))
+            raise ValueError(f"Unknown theme {value!r}. Valid: {valid}, or 'inherit'.")
+        return value
 
 
 class ChangePasswordRequest(_PasswordPair):
@@ -186,6 +209,15 @@ class CurrentUserResponse(BaseModel):
     status: str
     auth_provider: str
     timezone_preference: str
+    #: The user's own choice, or None when they inherit. The UI needs the raw value
+    #: to show which option is selected — a resolved value cannot distinguish
+    #: "chose pine" from "inherits, and the installation happens to be pine", and
+    #: those must look different in a picker.
+    theme_preference: str | None = None
+    #: What actually renders: the personal choice if there is one, otherwise the
+    #: installation's. Sent so the client can apply a theme without a second request
+    #: and without reimplementing the precedence rule.
+    resolved_theme: str | None = None
     email_verified_at: datetime | None
     last_login_at: datetime | None
     created_at: datetime

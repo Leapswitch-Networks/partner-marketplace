@@ -794,7 +794,7 @@ Recorded rather than quietly edited, because both changed the plan.
 | ✅ 12 | The card set — `SurfaceCard` + `groundText()` + 4 specialised cards (§ 4.12) | `common/cards/*` | **Done** |
 | ✅ 13 | Dashboard migrated onto it; `StatCard` and `QuickActionsCard` now dead | `dashboard/DashboardOverview.tsx` | **Done** |
 | ✅ 14 | The display face shared with the public surface (§ 3) | `app/layout.tsx`, `app/(public)/layout.tsx`, `globals.css`, 5 call sites | **Done** |
-| 8 | Per-user themes | [`PER_USER_THEMING_PLAN.md`](../planning/PER_USER_THEMING_PLAN.md) | ⏳ **Outstanding** — needs a migration |
+| ✅ 8 | Per-user themes | [`PER_USER_THEMING_PLAN.md`](../planning/PER_USER_THEMING_PLAN.md) | **Done** — migration `c1f7a03b5e42` |
 
 **No Protected file was touched.** `tailwind.config.ts` is untouched, as § 11 predicted once
 `surface-page` turned out to be dead.

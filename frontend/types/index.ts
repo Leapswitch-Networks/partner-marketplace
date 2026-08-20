@@ -59,6 +59,18 @@ export interface CurrentUser {
   status: UserStatus;
   auth_provider: AuthProvider;
   timezone_preference: string;
+  /**
+   * The user's OWN theme choice, or null when they inherit the installation's.
+   * The picker needs the raw value: a resolved one cannot tell "chose pine" apart
+   * from "inherits, and the installation happens to be pine".
+   */
+  theme_preference: string | null;
+  /**
+   * What should actually render — the personal choice, else the installation's.
+   * Null when the installation runs a custom brand colour, which no preset key can
+   * name; the server-rendered style is already correct in that case.
+   */
+  resolved_theme: string | null;
   email_verified_at: string | null;
   /** 2FA enrolled AND confirmed. A boolean only — never the secret. */
   two_factor_enabled: boolean;

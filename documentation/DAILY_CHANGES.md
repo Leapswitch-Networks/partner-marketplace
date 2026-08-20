@@ -6,6 +6,48 @@
 > Update this file as part of the same change as the code. A task that isn't here is invisible to the
 > next person.
 
+## August 20, 2026 — Each person can now choose their own theme, and the dead components are gone
+
+**Anyone signed in can pick their own colour scheme, on Settings → Profile.** It is stored against
+the account, so it follows them to any machine they sign in on, and it leaves the administrator's
+control of the installation-wide default exactly as it was. The choice sits beside the timezone and
+sidebar preferences because that is what it is — a personal preference, not a change to what the
+product is.
+
+**"Use the installation's theme" is a real option, not the absence of one.** Choosing it clears the
+override rather than recording today's default. That distinction is the whole design: an
+administrator who rebrands has to reach everyone who never deliberately opted out, and must not
+override the people who did. It is why the new column has no database default, and why clearing is
+sent as the word "inherit" rather than as an empty value — on a partial save, empty already means
+"not included", so a reset button would have silently done nothing.
+
+**The choice costs no extra request.** It rides along on the identity call every signed-in page
+already makes. What it does need is a small cache in the browser, and that is a requirement rather
+than a speed-up: the server cannot know who is asking before the page is drawn, so without a cached
+value every load would visibly flash the installation's colours and then swap to the person's own.
+The cache is cleared at sign-out, or the next person to use that browser would briefly see the
+previous person's colours.
+
+**The browser caches the finished colours, never the name of the theme.** All the derivation — the
+tints, the borders, the success tone, the accent, both chart scales — is done in one place on the
+server. A second copy of that arithmetic in the browser would drift from the first, and the symptom
+would be colours subtly wrong under some themes only.
+
+**Only the pre-set themes are offered, deliberately.** Every one has been checked for legibility, so
+a closed list means nobody can choose their way to an unreadable screen. Picking an arbitrary colour
+stays an administrator's decision, where it is one deliberate choice for the whole installation
+rather than something each account can get wrong.
+
+**Two guardrails caught mistakes while building this.** A type-level contract test refused the change
+until the API description and the browser's types had been regenerated from the schema — exactly its
+job, since a field added on one side and not the other is invisible until it reaches a user. And an
+unknown theme name is rejected with the valid options listed, rather than quietly falling back to the
+default, which would tell someone their choice had been saved when it had not.
+
+**Separately: three components were deleted.** The two old dashboard cards and a second, unused
+header had no remaining callers after this week's work — 354 lines. Their replacements have been in
+place and on screen for some time.
+
 ## August 20, 2026 — Every selectable theme now has its own matching palette, not the primary's
 
 **A defect I introduced this morning, and the owner spotted it.** Warming the

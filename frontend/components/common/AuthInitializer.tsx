@@ -6,11 +6,17 @@ import useAppDispatch from "@/lib/hooks/useAppDispatch";
 import useAppSelector from "@/lib/hooks/useAppSelector";
 import { fetchCurrentUser } from "@/lib/store/authSlice";
 import BrandMark from "@/components/common/BrandMark";
+import usePersonalTheme from "@/lib/hooks/usePersonalTheme";
 
 export default function AuthInitializer({ children }: { children: React.ReactNode }) {
   const dispatch = useAppDispatch();
   const router = useRouter();
   const { isAuthenticated, loading } = useAppSelector((s) => s.auth);
+
+  // Applies the signed-in user's own theme and keeps the pre-paint cache current.
+  // Mounted here because it must run on every authenticated route, and this is the
+  // one component that already wraps all of them.
+  usePersonalTheme();
 
   // Track whether we have attempted the session check this mount cycle
   const fetchedRef = useRef(false);

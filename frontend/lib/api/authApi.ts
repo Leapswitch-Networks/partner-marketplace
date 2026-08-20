@@ -144,6 +144,15 @@ export const authApi = {
     personal_email?: string | null;
     company_name?: string | null;
     timezone_preference?: string;
+    /**
+     * A preset key, or the literal `"inherit"` to clear the override.
+     *
+     * Clearing is a string rather than `null` because this is a PARTIAL update:
+     * `null` already means "not supplied" for every other field here, so a null
+     * could not be distinguished from an absent one — and a "reset to default"
+     * that silently does nothing is the bug that shape produces.
+     */
+    theme_preference?: string;
   }) => axiosInstance.patch<CurrentUser>("/auth/me", data),
 
   /**

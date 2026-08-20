@@ -4424,10 +4424,14 @@ export interface components {
             personal_email: string | null;
             /** Personal Mobile Number */
             personal_mobile_number: string | null;
+            /** Resolved Theme */
+            resolved_theme?: string | null;
             /** Roles */
             roles: components["schemas"]["RoleSummary"][];
             /** Status */
             status: string;
+            /** Theme Preference */
+            theme_preference?: string | null;
             /** Timezone Preference */
             timezone_preference: string;
             /**
@@ -7186,6 +7190,8 @@ export interface components {
             personal_email?: string | null;
             /** Personal Mobile Number */
             personal_mobile_number?: string | null;
+            /** Theme Preference */
+            theme_preference?: string | null;
             /** Timezone Preference */
             timezone_preference?: string | null;
         };

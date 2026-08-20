@@ -386,3 +386,54 @@ def test_unknown_preset_falls_back_rather_than_raising(bad):
 
 def test_known_preset_resolves_to_itself():
     assert resolve("indigo").label == "Indigo"
+
+
+# --- Per-user themes (2026-08-20) -------------------------------------------
+
+
+def test_unknown_personal_theme_is_refused_with_the_valid_options():
+    """A bad key must fail loudly, not fall back to the default.
+
+    Silently resolving an unknown key to the default would tell someone their choice
+    was saved when it was not — the same reasoning the installation-level preset
+    validator already carries.
+    """
+    from pydantic import ValidationError
+
+    from app.schemas.auth import UpdateProfileRequest
+
+    with pytest.raises(ValidationError) as caught:
+        UpdateProfileRequest(theme_preference="chartreuse")
+
+    message = str(caught.value)
+    assert "chartreuse" in message
+    # The error names what IS valid, so the caller does not have to guess.
+    assert "pine" in message and "inherit" in message
+
+
+def test_inherit_is_accepted_and_is_distinct_from_absent():
+    """`"inherit"` clears the override; an absent field leaves it alone.
+
+    These must differ. If clearing were spelled `null`, it would be
+    indistinguishable from "not supplied" on a partial update, and a reset-to-default
+    control would silently do nothing.
+    """
+    from app.schemas.auth import UpdateProfileRequest
+
+    cleared = UpdateProfileRequest(theme_preference="inherit")
+    absent = UpdateProfileRequest()
+
+    assert cleared.model_dump(exclude_unset=True) == {"theme_preference": "inherit"}
+    assert "theme_preference" not in absent.model_dump(exclude_unset=True)
+
+
+@pytest.mark.parametrize("key", PRESET_KEYS)
+def test_every_preset_is_a_valid_personal_choice(key):
+    """Anything selectable at the installation level is selectable personally.
+
+    The two lists must not drift: a preset offered in the admin picker but refused by
+    the personal one would be a difference nobody would think to look for.
+    """
+    from app.schemas.auth import UpdateProfileRequest
+
+    assert UpdateProfileRequest(theme_preference=key).theme_preference == key

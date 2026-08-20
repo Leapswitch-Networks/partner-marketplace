@@ -1,6 +1,24 @@
 # Per-user theming — plan
 
-> **Status: PLAN, not built.** Written 2026-08-20. Planning docs are intent, not current state.
+> **Status: ✅ BUILT — 2026-08-20.** Shipped as specified, with the deviations below recorded
+> honestly. Kept as the record of *why* it is shaped this way; `documentation/DAILY_CHANGES.md` has
+> the entry.
+>
+> **Deviations from this plan, all discovered while building:**
+>
+> 1. **Clearing is the string `"inherit"`, not `null`.** The plan said "accept `null` to clear". That
+>    cannot work on a partial update: `null` already means *not supplied* for every other field on
+>    `UpdateProfileRequest`, so a reset-to-default control would have silently done nothing.
+> 2. **The column is `theme_preference`, not `theme_preset`** — it sits beside
+>    `timezone_preference` and `sidebar_preference`, and matching its neighbours matters more than
+>    matching `app_settings`.
+> 3. **The response carries two fields, not one.** `theme_preference` is the raw choice (null when
+>    inheriting) and `resolved_theme` is what should render. A resolved value alone cannot tell
+>    "chose pine" from "inherits, and the installation is pine" — and a picker has to show which.
+> 4. **`resolved_theme` is null when the installation runs a custom brand colour**, because no
+>    preset key can name one. The server-rendered style is already correct there.
+>
+> Planning docs are intent, not current state.
 > The colour values this delivers are specified in
 > [`../design/BACKOFFICE_DESIGN.md`](../design/BACKOFFICE_DESIGN.md); this file is only the
 > *mechanism* by which a theme becomes **per-user**.

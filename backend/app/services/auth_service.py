@@ -261,7 +261,7 @@ def update_own_profile(db: Session, user: User, data: UpdateProfileRequest) -> U
     _PROFILE_FIELDS = (
         "first_name", "last_name", "designation", "employee_id",
         "personal_mobile_number", "personal_email", "company_name",
-        "timezone_preference",
+        "timezone_preference", "theme_preference",
     )
     before = {f: getattr(user, f) for f in _PROFILE_FIELDS}
 
@@ -282,6 +282,13 @@ def update_own_profile(db: Session, user: User, data: UpdateProfileRequest) -> U
 
     if updates.get("timezone_preference"):
         user.timezone_preference = updates["timezone_preference"]
+
+    # `"inherit"` clears the override; a key sets it. Tested with `in updates` rather
+    # than truthiness, or the clearing case would be indistinguishable from an
+    # absent field — the exact bug that makes a "reset to default" button do nothing.
+    if "theme_preference" in updates:
+        chosen = updates["theme_preference"]
+        user.theme_preference = None if chosen == "inherit" else chosen
 
     user.updated_by = user.id
     db.commit()

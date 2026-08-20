@@ -170,6 +170,20 @@ def current_user_payload(db: Session, user: User) -> dict:
         "status": user.status,
         "auth_provider": user.auth_provider,
         "timezone_preference": user.timezone_preference,
+        # Both, because they answer different questions. `theme_preference` is the
+        # user's own choice and is None when they inherit — the picker needs it to
+        # show which option is selected, and a resolved value cannot tell "chose
+        # pine" apart from "inherits, and the installation is pine".
+        # `resolved_theme` is what should actually render, so the client applies a
+        # theme without a second request and without reimplementing precedence.
+        #
+        # This rides on `/auth/me`, which every authenticated page load already
+        # makes — so a personal theme costs no extra request. It has to be
+        # client-side regardless: the root layout resolves branding on the SERVER,
+        # and per `AGENTS.md` § 5 an httpOnly cookie cannot be forwarded there, so
+        # the server cannot know who is asking before the page renders.
+        "theme_preference": user.theme_preference,
+        "resolved_theme": _resolved_theme(db, user),
         "email_verified_at": user.email_verified_at,
         "last_login_at": user.last_login_at,
         "created_at": user.created_at,
@@ -182,6 +196,34 @@ def current_user_payload(db: Session, user: User) -> dict:
         # LeapDesk gets the same effect from an Inertia prop backed by the session.
         "password_otp_grace": user.password_otp_grace,
     }
+
+
+def _resolved_theme(db: Session, user: User) -> str | None:
+    """Which theme should actually render for this user.
+
+    Precedence, and NULL means *inherit* at every level rather than "no theme":
+
+        user.theme_preference        a personal choice
+          -> app_settings.brand_color / theme_preset   the installation's
+             -> theme.DEFAULT_PRESET                   the shipped default
+
+    Returns None when the installation is using a **custom brand colour**, because a
+    preset key cannot name one. The client then falls back to the server-rendered
+    installation theme, which is already correct — and is why this returns an
+    optional rather than inventing a key that resolves to something else.
+    """
+    if user.theme_preference:
+        return user.theme_preference
+
+    from app.core import theme
+    from app.models.app_settings import SINGLETON_ID, AppSettings
+
+    row = db.get(AppSettings, SINGLETON_ID)
+    if row is not None and row.brand_color:
+        return None
+    if row is not None and row.theme_preset in theme.THEME_PRESETS:
+        return row.theme_preset
+    return theme.DEFAULT_PRESET
 
 
 def role_users(db: Session, role_id: int) -> list[User]:
