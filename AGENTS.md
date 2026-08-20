@@ -21,21 +21,37 @@ node -e "console.log(require('./frontend/node_modules/next/package.json').versio
 
 # Partner Marketplace — Operating Contract
 
-Everything below is **always in context**. It is the short list you may not violate. The full
-process — startup banner, phases, conventional-commit scopes, checklists — lives in
-[`documentation/AGENTS.md`](documentation/AGENTS.md), which is **deliberately not imported here**:
-imports load eagerly into every session, and 300 lines of process is not worth that on every turn.
-Read it when you start real work.
+> **This is the only agent contract in this repository.** It was merged from two files on
+> **2026-08-18**. `documentation/AGENTS.md` used to carry the workflow half and is now a pointer to
+> this file — see [ADR-0016](documentation/adr/0016-one-agent-contract.md) for why, including the
+> contradiction the split had already produced.
+
+`CLAUDE.md` imports this file, and that import is the only thing that loads automatically. Everything
+below is therefore always in context. Read it in full; it is the short list you may not violate.
 
 ## 0. First response in any session
 
-Read `CLAUDE.md` → this file before emitting any text. Then display the banner in
-`documentation/AGENTS.md` § Startup Announcement and state
-"Ready to work on Partner Marketplace. What would you like me to work on?"
+Read `CLAUDE.md` → this file before emitting any text. Then display this banner:
 
-Never describe the stack from memory — read `frontend/package.json`, `backend/requirements.txt` and
-`docker-compose.yml`. Never call this a test/assessment platform; that is the deleted scaffold's
-identity, not this project's.
+```
+╔══════════════════════════════════════════════════════════════╗
+║  📋 Partner Marketplace — AGENTS.md loaded                    ║
+║  ✓ Stack: Next.js 14 App Router + FastAPI + PostgreSQL        ║
+║  ✓ Branch: main (never master)                                ║
+║  ✓ Docs: update documentation/DAILY_CHANGES.md every task     ║
+║  ✓ Commits: ask the user first — never auto-commit            ║
+║  ✓ No AI attribution in commit messages                       ║
+╚══════════════════════════════════════════════════════════════╝
+```
+
+Then state: "Ready to work on Partner Marketplace. What would you like me to work on?"
+
+**Never describe the stack from memory** — read `frontend/package.json`, `backend/requirements.txt`
+and `docker-compose.yml`. Quoting a version from prose is how the inherited `README.md` came to be
+wrong in twelve places (PM-12).
+
+**Never call this a test/assessment platform.** That is the deleted scaffold's identity, not this
+project's — see [ADR-0002](documentation/adr/0002-keep-the-inherited-scaffold.md).
 
 ## 1. Non-negotiable
 
@@ -60,12 +76,16 @@ identity, not this project's.
 Before any push: `git status`, then
 `git diff --cached | grep -iE "secret|password|token|api[_-]?key"`.
 
+Anything committed here is world-readable **the moment it is pushed**, and may be cached or indexed
+even if deleted later.
+
 ~~The plaintext-password design is **known, accepted debt**.~~ **Corrected 2026-08-17 — this was
 stale.** Passwords have been bcrypt-hashed since 2026-07-31 (TECH_DEBT PM-1, closed);
 `core/security.py` hashes with a configurable cost and its docstring forbids reintroducing a
 comparison anywhere else. `verify_password` is the only place a supplied password meets a stored
 one. Don't re-raise plaintext storage as a discovery **and don't repeat this line as current
 state** — it described the pre-rebuild code and outlived it by two and a half weeks.
+See [ADR-0005](documentation/adr/0005-bcrypt-directly-not-passlib.md).
 
 The one thing that *is* still outstanding from PM-1: credentials that existed before the rebuild
 were readable at the time, so those passwords should be rotated.
@@ -73,7 +93,8 @@ were readable at the time, so those passwords should be rotated.
 ## 2. Model tiering — the default execution mode
 
 **Opus orchestrates and validates; Sonnet subagents implement.** Sonnet is far cheaper per token,
-so run this split unless told otherwise.
+so run this split unless told otherwise. Recorded as
+[ADR-0014](documentation/adr/0014-opus-orchestrates-sonnet-implements.md).
 
 **The orchestrator (Opus) keeps for itself:**
 
@@ -117,7 +138,8 @@ docker compose run --rm --no-deps backend sh -c "pip install -q pytest ruff && p
 docker compose run --rm backend alembic current                # after any migration
 ```
 
-Two project-specific traps that override the generic advice:
+Two project-specific traps that override the generic advice — both recorded in
+[ADR-0013](documentation/adr/0013-compose-is-development-only.md):
 
 - ⚠️ **`npm run build` is NOT part of the gate — never run it in the dev container.** `.next` is a
   volume shared with the running dev server; a production build replaces the dev output and every
@@ -138,20 +160,67 @@ Two project-specific traps that override the generic advice:
 | Public data | Server-side via `INTERNAL_API_URL`. Getting these two backwards fails **silently** |
 | Business logic | Never in a page or component |
 
-## 6. Where the rest lives
+Match the surrounding code's style. **Don't introduce a second way of doing something.**
+
+## 6. Working rhythm
+
+**Before starting.** Confirm you are in `/opt/lampp/htdocs/Partner Market Place` and on `main`
+(`git branch --show-current`). Read `documentation/INDEX.md`, then the one **Start Here** doc for
+your area — § 7 below is the map. Before changing the *shape* of anything, check
+[`documentation/ADR.md`](documentation/ADR.md): a decision listed there as **Accepted** is settled.
+
+Branch only when asked, or when work spans sessions. If you do: `feature/<name>`, `fix/<name>`,
+`hotfix/<name>`, `refactor/<name>`, `docs/<name>`.
+
+**During.** Keep changes atomic and reviewable. Decide up front where the change gets recorded:
+
+| Change | Recorded in |
+|--------|-------------|
+| Every task | an entry in `documentation/DAILY_CHANGES.md` |
+| A new subsystem | a doc under `documentation/core/`, plus a row in `INDEX.md` |
+| A new convention | the relevant `documentation/system-design/` file |
+| A multi-session plan | a doc under `documentation/planning/` |
+| A settled architectural decision | a record under `documentation/adr/`, plus a row in `ADR.md` |
+
+**Commits** are conventional: `<type>(<scope>): <description>`.
+Types: `feat`, `fix`, `docs`, `refactor`, `test`, `chore`, `perf`, `style`, `build`.
+Scopes in use: `auth`, `authz`, `admin`, `api`, `core`, `db`, `ui`, `frontend`, `docs`, `infra`,
+`deploy`, `test`, and module names (`users`, `roles`, `invitations`, `webhooks`, `ai`).
+
+**After.** Run the § 4 gate. Update `DAILY_CHANGES.md`, and `VERSION_SUMMARY.md` if the work is a
+shippable feature. Update the affected `core/` or `system-design/` doc if behaviour or a convention
+changed. Report the verification output honestly — including failures and anything skipped. **Then
+ask before committing, and wait.**
+
+## 7. Where the rest lives
 
 | Need | File |
 |------|------|
-| Full agent workflow, phases, checklists | [`documentation/AGENTS.md`](documentation/AGENTS.md) |
+| **Why something is built this way — settled decisions** | [`documentation/ADR.md`](documentation/ADR.md) |
 | The doc map — which single file to read | [`documentation/INDEX.md`](documentation/INDEX.md) |
 | Running it locally | [`README.md`](README.md) § Running Locally with Docker |
 | Backend conventions | `documentation/system-design/FASTAPI_STANDARDS.md` |
 | Frontend conventions | `documentation/system-design/NEXTJS_STANDARDS.md` |
 | Styling | `documentation/system-design/UI_PATTERNS.md` |
 | Schema changes | `documentation/system-design/DATABASE_MIGRATIONS.md` |
+| Deploying | `documentation/system-design/DEPLOYMENT.md` |
 | Auth | `documentation/core/AUTHENTICATION.md` + `AUTHORIZATION.md` |
 | Known defects — don't re-report as new | `documentation/planning/TECH_DEBT.md` |
 
 Planning docs are **intent, not current state** — check the code before trusting them. The four
 lowercase files in `documentation/` (`architecture.md`, `instruction.md`, `phases.md`,
 `planning.md`) describe a **deleted** product. Never cite them as how this project works.
+
+## 8. Which file each agent reads
+
+| Agent | Entry point | Note |
+|-------|-------------|------|
+| Claude Code | `CLAUDE.md` | Loaded automatically; imports this file |
+| OpenAI Codex / OpenCode | `AGENTS.md` (root) | Reads this file directly |
+| Gemini CLI | `GEMINI.md` | Not present — falls back to this file |
+| GitHub Copilot | `.github/copilot-instructions.md` | Not present |
+| Cursor | `.cursor/rules/*.mdc` | Not present |
+
+Subdirectory `AGENTS.md` files are **never auto-discovered** — only `CLAUDE.md` files are. That is
+why a second contract in `documentation/` was unreachable by this chain until 2026-08-11, and part of
+why there is now only one.
