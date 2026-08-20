@@ -29,6 +29,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.models.enquiry import Enquiry, EnquiryMessage, EnquiryRecipient
 from app.models.partner import Partner
 from app.models.service_listing import ServiceListing
+from app.models.user import User
 from app.services import scoping
 
 # ── Scoping — punchlist 1.8 ──────────────────────────────────────────────────
@@ -193,6 +194,42 @@ def add_buyer_message(db: Session, enquiry: Enquiry, *, body: str) -> EnquiryMes
     db.add(msg)
     db.flush()
     return msg
+
+
+def mark_viewed(db: Session, enquiry: Enquiry, actor: User) -> bool:
+    """Stamp `first_viewed_at` the first time the **recipient partner** looks.
+
+    Returns whether it stamped, so a caller can tell "just seen" from "seen
+    before" without comparing timestamps.
+
+    ## Two rules, and both of them are the point
+
+    **Write-once.** § 19.9 makes both trust timestamps write-once. Re-stamping on
+    every open would turn "how long did they take to look at it" into "when did
+    they last look at it", which is a different question and not the one ranking
+    asks.
+
+    **Only the recipient partner.** Staff hold `enquiry-view` for oversight
+    (§ 20.6), so without this check a staff member browsing the enquiries index
+    would stamp view times across every partner on the platform — and the measure
+    would silently become "how fast does Leapswitch read its own mail". Staff have
+    no `organisation_id`, so the comparison below excludes them by construction
+    rather than by naming them.
+
+    A machine principal or an anonymous caller cannot reach this: the route
+    requires a permission, and neither holds any.
+    """
+    if enquiry.first_viewed_at is not None:
+        return False
+    # `organisation_id` is None for staff and for super admins, so this is False
+    # for both — deliberately. It is the *recipient* whose responsiveness is
+    # being measured, not whoever happened to open the record.
+    if actor.organisation_id is None or actor.organisation_id != enquiry.partner_id:
+        return False
+
+    enquiry.first_viewed_at = datetime.now(timezone.utc)
+    db.flush()
+    return True
 
 
 def set_status(db: Session, enquiry: Enquiry, new_status: str) -> Enquiry:

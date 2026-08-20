@@ -31,12 +31,17 @@
 > reaches exactly one partner, `first_responded_at` is stamped once, and an enquiry to an unlisted
 > partner is refused. 826 tests green.
 >
-> **Phase 3 is 3 of 8 and Phase 4 is 1 of 6** — the core loop's screens exist: the listings index,
-> the authoring form, the enquiry inbox with its thread, and the moderation queue. Those four are
-> what Phase 6's end-to-end walk actually exercises; the organisation and team pages (3.1–3.4, 3.8)
-> and the remaining staff views are additive.
+> ~~**Phase 3 is 3 of 8 and Phase 4 is 1 of 6**~~ · ~~**Next: the organisation pages, then Phase
+> 5**~~ — **both stale, corrected 2026-08-20.** Every box in this file is `[x]`; these two lines
+> were written mid-Phase-3 and never updated as the rest landed on 2026-08-18, so the header
+> contradicted its own checklist. Read the boxes, not this paragraph — and if you are the one
+> ticking the last box in a phase, the summary at the top is part of that change.
 >
-> **Next: the organisation pages, then Phase 5** — pointing the ten public pages at the live API.
+> The organisation and team pages (3.1–3.4, 3.8) exist, and Phase 5 pointed all ten public pages
+> at the live API. What was genuinely outstanding after them was **not in this file**: the eleven
+> back-office routes shipped unreachable, with nothing in the sidebar naming them — fixed
+> 2026-08-19/20 — and PM-41 § 4.5, the data-layer conversion, finished 2026-08-20. See
+> [`CORE_EXTRACTION_PLAN.md`](./CORE_EXTRACTION_PLAN.md) § 4.
 >
 > **How to read a box:** `[ ]` not started · `[~]` in progress · `[x]` done **and verified** ·
 > `[!]` blocked on a decision or on something outside this repo.

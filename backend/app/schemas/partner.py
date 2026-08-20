@@ -212,7 +212,11 @@ class PartnerListItem(BaseModel):
     tier: PartnerTierResponse | None
     city: str | None
     country: str | None
-    user_count: int = 0
+    # No default. `= 0` here was the other half of the bug described on
+    # `partner_service.decorate`: it let an undecorated row validate cleanly and
+    # answer "zero members". Required means a route that forgets to decorate fails
+    # in the response model, loudly, instead of publishing a plausible zero.
+    user_count: int
     created_at: datetime
 
     is_active: bool

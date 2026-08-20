@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 from app.core.dependencies import get_db, require_permission
 from app.core.query import page_meta
 from app.domain.partners.permissions import (
+    ORGANISATION_MANAGE,
     PARTNER_APPROVE,
     PARTNER_CREATE,
     PARTNER_DELETE,
@@ -55,17 +56,23 @@ router = APIRouter(prefix="/partners", tags=["partners"])
 #
 # Declared BEFORE /{partner_id} so "me" is not captured as a partner id.
 #
-# ⚠️ **These are the only partner-writable routes on this router**, and they are
-# gated on PARTNER_VIEW rather than PARTNER_UPDATE — which partners do not hold,
-# because that permission is staff editing *any* partner. The subject here is
-# always the caller's own organisation, resolved from the session, so there is no
-# id to tamper with and no ownership check to forget.
+# ⚠️ **These are the only partner-writable routes on this router.** They are gated
+# on ORGANISATION_MANAGE, which the Partner role holds and staff do not.
+#
+# It was PARTNER_VIEW until 2026-08-18, which staff also hold — so a staff member
+# could call these and receive nothing but a 404, because the organisation is
+# resolved from their session and they have none. A permission-filtered sidebar
+# had the same problem: there was no way to show these items to partners only.
+#
+# Not PARTNER_UPDATE either: that is staff editing *any* partner. The subject here
+# is always the caller's own organisation, so there is no id to tamper with and no
+# ownership check to forget.
 
 
 @router.get("/me", response_model=PartnerDetailResponse)
 def get_my_organisation(
     db: Session = Depends(get_db),
-    actor: User = Depends(require_permission(PARTNER_VIEW)),
+    actor: User = Depends(require_permission(ORGANISATION_MANAGE)),
 ) -> PartnerDetailResponse:
     return PartnerDetailResponse.model_validate(
         partner_service.get_own_organisation(db, actor)
@@ -76,7 +83,7 @@ def get_my_organisation(
 def update_my_organisation(
     payload: UpdateOwnOrganisationRequest,
     db: Session = Depends(get_db),
-    actor: User = Depends(require_permission(PARTNER_VIEW)),
+    actor: User = Depends(require_permission(ORGANISATION_MANAGE)),
 ) -> PartnerDetailResponse:
     """Update the public half of the caller's own record.
 
@@ -96,7 +103,7 @@ def update_my_organisation(
 def set_my_expertise(
     payload: SetExpertiseRequest,
     db: Session = Depends(get_db),
-    actor: User = Depends(require_permission(PARTNER_VIEW)),
+    actor: User = Depends(require_permission(ORGANISATION_MANAGE)),
 ) -> PartnerDetailResponse:
     """What this partner advertises expertise in.
 
@@ -115,7 +122,7 @@ async def upload_my_brand_asset(
     asset: str,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
-    actor: User = Depends(require_permission(PARTNER_VIEW)),
+    actor: User = Depends(require_permission(ORGANISATION_MANAGE)),
 ) -> PartnerDetailResponse:
     """Upload the caller's own logo or banner.
 
@@ -137,7 +144,7 @@ async def upload_my_brand_asset(
 def clear_my_brand_asset(
     asset: str,
     db: Session = Depends(get_db),
-    actor: User = Depends(require_permission(PARTNER_VIEW)),
+    actor: User = Depends(require_permission(ORGANISATION_MANAGE)),
 ) -> PartnerDetailResponse:
     partner = partner_service.get_own_organisation(db, actor)
     partner_service.clear_brand_asset(db, partner, asset=asset)

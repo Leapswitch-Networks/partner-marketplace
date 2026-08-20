@@ -29,7 +29,8 @@ reading: **§ 9.1** (five commitments we publish to partners), **§ 16** (how we
 the two numbers to distrust), **§ 15.2b** (a proposal to build the enquiry loop *before* the public
 surface), plus amendments to § 6.4 (`CATEGORY_BROADCAST` is the B2B loop), § 8 (the SEO surface is the
 taxonomy, not volume), § 10, § 12 and § 13. **One real gap surfaced: nothing enforces
-`partner_tiers.max_listings` — a tier is currently a label** (§ 14.1 row 2b).
+`partner_tiers.max_listings` — ~~a tier is currently a label~~ **enforced at the publish gate
+2026-08-20; `featured_slots` is still unchecked** (§ 14.1 row 2b).
 
 > **Brief, as given (2026-08-07):** *"my admin needs this project to be a Justdial but for our
 > partners — because each of our Leapswitch partners offers different services, so we need this
@@ -1114,7 +1115,7 @@ service, a router, and a row in the permission catalog.
 |---|---|---|---|---|:---:|:---:|
 | 1 | **Partners** — the organisation | `partners` | create · update · status · verify · publish · delete | staff list/detail, scoped to own org for a partner | 1 | ✅ |
 | 2 | **Partner tiers** — entitlement reference data | `partner_tiers` | update what a tier grants | list | 1 | ✅ |
-| 2b | **Entitlement enforcement** — `max_listings` / `featured_slots` actually checked | *(none)* | refuse publish past the tier's limit | usage vs allowance | 4 | 🔵 |
+| 2b | **Entitlement enforcement** — `max_listings` checked; `featured_slots` still not | *(none)* | refuse publish past the tier's limit | usage vs allowance — served on the moderation queue | 4 | 🟡 **`max_listings` + the read done 2026-08-20; `featured_slots` blocked on decision #4** |
 | 3 | **Scoping** — *not CRUD, and the gate in front of everything below* | none | none | `apply_scope` / `assert_can_read` | **2** | 🟡 |
 | 4 | **Partner members** — the logins inside an organisation | `users`, `user_invitations` | invite into a partner · set org role · remove | list scoped to the org | 2 | 🔵 |
 | 5 | **Service categories** — the shared taxonomy | `service_categories` | staff-only CRUD, 2 levels, reorder | tree, public | 3 | 🟡 |
@@ -1191,7 +1192,7 @@ Authenticated, scoped to one organisation, and it looks like the existing dashbo
 | `/dashboard/enquiries` | **The inbox.** The single most important authenticated page in the product | 12 | 6 | 🟡 |
 | `/dashboard/enquiries/[id]` | **Enquiry thread** — reply on-platform, which is the only way response time is measurable rather than self-reported | 13 | 6 | 🟡 |
 | `/dashboard/reviews` | **Reviews received**, and the right of reply | 17 | 8 | 🟡 |
-| `/dashboard/entitlements` | **Tier and usage** — listings used of allowed, featured slots | 2 | 4 | 🔵 |
+| `/dashboard/entitlements` | **Tier and usage** — listings used of allowed, featured slots | 2 | 4 | 🔵 **the data exists** — `listing_service.entitlement` and the `EntitlementResponse` schema landed 2026-08-20; this page is the remaining half |
 | `/settings/*` | **Personal settings** — profile, password, appearance | *(exists)* | — | ✅ |
 
 ### 14.4 Back office — Leapswitch staff only
@@ -1326,7 +1327,7 @@ belongs in `CORE_HARDENING_PLAN.md` and is merely consumed here.
 > "curated directory that became an open one with extra steps". Decide it before 16 ships, not after.
 >
 > **Step 13 also owes entitlement enforcement** (§ 14.1 row 2b), which the plan had not previously
-> called for. `partner_tiers.max_listings` and `featured_slots` are columns that **nothing checks**
+> called for. `featured_slots` is a column that **nothing checks** (`max_listings` is enforced as of 2026-08-20)
 > today — a tier is currently a label. If tier-gated entitlement is the revenue model § 2.1.4 now
 > favours, the check has to exist before it can be sold, and it belongs on the publish path in
 > `service_listings` rather than in the UI. Until then, § 14.3's entitlements page reports a limit
@@ -1478,7 +1479,7 @@ Each is measurable from data the schema already carries. No new tables.
 | 4 | **Moderation queue age** — oldest item in `PENDING_REVIEW` | Bounded. An unbounded queue *is* the failure in § 13 | `service_listings` |
 | 5 | **Category coverage** — categories meeting the § 8 indexing threshold | Rising. Falling means the taxonomy is wrong, not that partners are lazy | `service_categories.listing_count` |
 | 6 | **Enquiries per listed partner per month** | **The one number.** Non-zero and rising | `enquiries` |
-| 6 | **Response rate**, and **median time to first response** | Already the trust signal in § 9 | `enquiries.first_responded_at` |
+| 6 | **Response rate**, and **median time to first response** | Already the trust signal in § 9 | `enquiries.first_responded_at` — ⚠️ computable, but **wrong until PM-47**: with no `SPAM` status, junk enquiries count as unanswered for ever and drag the rate down |
 | 6 | **Unanswered enquiry rate** | Near zero. Every one is a buyer who will not come back | `enquiries` where `first_responded_at IS NULL` |
 | 7 | **Enquiry → self-reported win rate** | Any signal at all; it is self-reported and directional only | `enquiries.status = WON` |
 | 8 | **Reviews tied to a real enquiry** | Most of them. Untied reviews read as astroturf (§ 6.5) | `reviews.enquiry_id` |
@@ -1601,7 +1602,17 @@ Reference data, seeded from `app/core/partner_tiers.py`. Integer PK because it i
 | `created_at` | `DateTime(tz)` | NO | — | |
 | `updated_at` | `DateTime(tz)` | NO | — | `onupdate=` |
 
-No foreign keys. ⚠️ `max_listings` and `featured_slots` are **not enforced anywhere yet** — § 14.1 row 2b.
+No foreign keys. ⚠️ `featured_slots` is **not enforced anywhere yet** — § 14.1 row 2b. `max_listings`
+is enforced in `listing_service.approve` as of 2026-08-20.
+
+> **`featured_slots` is blocked, not merely undone** (checked 2026-08-20). There is nothing to
+> enforce it against: `is_featured` and `featured_until` do not exist as columns — § 10 lists them
+> as *proposed* — and `featured_slots` is the only column in the entire schema matching `%featur%`.
+> So this is not an enforcement task, it is building paid placement: a migration, the ranking rule
+> at § 20 row 31 (verification → featured → response rate → rating → recency), and the public
+> surface that renders it. All of it hangs off **§ 9 decision #4, the revenue model**, which is
+> still open with a default of "free during launch". Building it now would be guessing at a
+> commercial mechanic — which is why `max_listings` was done and this was not.
 
 #### `partners` — module 1 · phase 1 · ✅ **BUILT** (measured 2026-08-10)
 
@@ -1758,8 +1769,9 @@ Category × geography is the atomic search unit (§ 2), so this must be joinable
 | `budget_range` | `String(60)` | YES | — | Optional qualifiers — they raise lead quality sharply |
 | `timeline` | `String(60)` | YES | — | |
 | `source` | `enquiry_source` | NO | `LISTING` | Indexed. `LISTING\|PROFILE\|CATEGORY_BROADCAST`. **See § 6.4 — these are two different products** |
-| `status` | `enquiry_status` | NO | `NEW` | Indexed. `NEW\|VIEWED\|RESPONDED\|WON\|LOST\|CLOSED\|SPAM` |
+| `status` | `enquiry_status` | NO | `NEW` | Indexed. Specified as `NEW\|VIEWED\|RESPONDED\|WON\|LOST\|CLOSED\|SPAM`; ⚠️ **built as `NEW\|RESPONDED\|CLOSED\|WON\|LOST` only** — `VIEWED` and `SPAM` are missing, checked 2026-08-20. See TECH_DEBT PM-47 |
 | `first_viewed_at` | `DateTime(tz)` | YES | — | **The two timestamps the whole trust system depends on** |
+| `first_viewed_at` | `DateTime(tz)` | YES | — | **Added 2026-08-20** (`d4a71b93c8e2`). Stamped write-once when the *recipient partner* opens the enquiry — never on a staff read |
 | `first_responded_at` | `DateTime(tz)` | YES | — | Feeds response rate and time → ranking (§ 9), and § 16's measures |
 | `closed_at` | `DateTime(tz)` | YES | — | |
 | `outcome_note` | `Text` | YES | — | Self-reported |
@@ -2428,7 +2440,24 @@ state. Copy the `_STATUS_TRANSITIONS` pattern from `partner_service.py`.
 - Only `listing-moderate` may reach `PUBLISHED`.
 - Publishing requires the owning partner to be `status == ACTIVE` **and** `is_listed == true`.
 - Publishing checks the tier: count of `PUBLISHED` listings must stay `< tier.max_listings`
-  (`NULL` = unlimited). **This is § 14.1 row 2b** — the enforcement that does not exist yet.
+  (`NULL` = unlimited). **This is § 14.1 row 2b — implemented 2026-08-20** in
+  `listing_service.publish_blockers`, covered by `tests/test_listing_entitlement.py`.
+  Three readings had to be settled, and each is a test:
+    - **A partner with no tier is unlimited.** `partners.tier_id` is nullable and every partner in
+      the database had it NULL, so the other reading would have refused every publication in the
+      system the moment the guard landed. A tier is a *commercial* entitlement; its absence means
+      nobody sold this partner a limit, not that their limit is zero.
+    - **A downgrade never unpublishes anything.** What is live stays live; only new publications are
+      refused until the partner is back under the allowance. Retroactively hiding paid-for listings
+      because a plan changed is a worse failure than letting an over-limit partner sit tight.
+    - **A partner at their limit can still fix a typo.** This falls out of the count rather than
+      needing a special case: editing moves a listing out of `PUBLISHED`, so it stops counting
+      toward its own allowance while in review, and re-approval puts it back in the slot it
+      vacated. Without that, a partner's last listing would be permanently uneditable.
+  Also enforced there, from the two rules above it: the owning partner must be `ACTIVE` and
+  `is_listed`. That one is defence in depth rather than a plugged leak — every public read already
+  joins partner visibility — but it stops a `PUBLISHED` row that is a lie, with `published_at`
+  stamped and nothing on screen explaining why the listing is invisible.
 - An edit to a `PUBLISHED` listing sends it back to `PENDING_REVIEW`. Moderation means nothing if a
   partner can publish and then rewrite.
 

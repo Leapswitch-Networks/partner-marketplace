@@ -29,6 +29,7 @@ from sqlalchemy import select
 from app.core.permissions import USER_VIEW
 from app.core.security import hash_password
 from app.db.session import SessionLocal
+from app.domain.partners.permissions import ORGANISATION_MANAGE, PARTNER_VIEW
 from app.main import app
 from app.models.ai_conversation import AgentConversation
 from app.models.data_access_grant import DataAccessGrant
@@ -697,3 +698,237 @@ class TestTheDelegationGraphIsNotPublicToStaff:
                 db.delete(row)
             db.commit()
             db.close()
+
+
+@pytest.fixture(scope="module")
+def two_organisations_with_logins():
+    """Two organisations, each with a member who can actually call the API.
+
+    Distinct from `TestTheTenantWallBeatsAGrant.two_organisations`, which builds
+    members with **no roles**. That is right for a service-level test, where the
+    permission gate is not in the path — but over HTTP a member with no
+    permissions is refused by `require_permission` before scoping is ever
+    consulted, and a 403 from the wrong layer would make this suite pass while
+    proving nothing.
+
+    So each member here holds a **custom role** carrying exactly what the shipped
+    `Partner` role holds of these: `partner-view` and `organisation-manage`.
+    Custom on purpose: `has_admin_access` is derived from role *names*, so a role
+    with real permissions and an unrecognised name still scopes like a
+    non-admin — which is the account shape the tenant wall exists for, and the
+    shape a seeded roster never contains.
+
+    ⚠️ **`partner-update` is deliberately NOT granted here.** An earlier draft of
+    this fixture did grant it, to drive a cross-tenant *write* test, and that
+    turned out to be testing a configuration that does not exist: `partner-update`
+    means "staff may edit **any** partner", it is reachable only through the four
+    wildcard admin roles, and no account holding it belongs to an organisation.
+    Granting it to an in-organisation account invented the vulnerability the test
+    then found. The real contract is asserted below instead, and the invariant
+    that keeps it true is pinned in `test_partner_write_permissions.py`.
+    """
+    from app.models.partner import Partner
+
+    db = SessionLocal()
+    wanted = [PARTNER_VIEW, ORGANISATION_MANAGE]
+    perms = db.scalars(select(Permission).where(Permission.name.in_(wanted))).all()
+    if len(perms) != len(wanted):
+        db.close()
+        pytest.skip(f"{', '.join(wanted)} are not seeded")
+
+    suffix = uuid.uuid4().hex[:8]
+    orgs, members, roles = [], [], []
+    for label in ("alpha", "beta"):
+        org = Partner(
+            name=f"ZZ Wall {label} {suffix}",
+            slug=f"zz-wall-{label}-{suffix}",
+            status="ACTIVE",
+        )
+        db.add(org)
+        orgs.append(org)
+    db.flush()
+
+    for org, label in zip(orgs, ("alpha", "beta")):
+        role = Role(
+            name=f"ZZWall{label.title()}{suffix}",
+            display_name=f"Test {label} member",
+            is_system=False,
+        )
+        role.permissions = list(perms)
+        db.add(role)
+        db.flush()
+        roles.append(role)
+
+        member = User(
+            email=f"zz-wall-{label}-{suffix}@example.com",
+            password=hash_password(PASSWORD),
+            first_name=label.title(),
+            last_name="Member",
+            account_type="external",
+            status="ACTIVE",
+            auth_provider="password",
+            organisation_id=org.id,
+        )
+        member.roles.append(role)
+        db.add(member)
+        members.append(member)
+    db.commit()
+
+    ids = {
+        "alpha_email": members[0].email,
+        "alpha_org": orgs[0].id,
+        "beta_org": orgs[1].id,
+        "user_ids": [members[0].id, members[1].id],
+        "role_ids": [roles[0].id, roles[1].id],
+    }
+    db.close()
+
+    yield ids
+
+    db = SessionLocal()
+    for user_id in ids["user_ids"]:
+        row = db.get(User, user_id)
+        if row:
+            row.roles = []
+            db.delete(row)
+    db.commit()
+    for role_id in ids["role_ids"]:
+        row = db.get(Role, role_id)
+        if row:
+            db.delete(row)
+    for org_id in (ids["alpha_org"], ids["beta_org"]):
+        row = db.get(Partner, org_id)
+        if row:
+            db.delete(row)
+    db.commit()
+    db.close()
+
+
+class TestTheTenantWallHoldsOverHTTP:
+    """**The suite PM-11 names as missing** — `CORE_EXTRACTION_PLAN.md` § 3.7.
+
+    `test_route_enforcement.py` proves a **stranger** is refused: it calls every
+    route unauthenticated and expects 401/403. Its own docstring says what it
+    does not cover, and this is it — *a valid session from the wrong
+    organisation*. That caller passes authentication, passes the permission
+    check, and is stopped only by row scoping. Nothing exercised that over HTTP.
+
+    The service layer was already covered (`get_partner_for` through
+    `assert_can_read`, above). The gap was the route: a handler that forgot to
+    pass `actor` through, or a response model that leaked a field before scoping
+    ran, would not have been caught by either suite.
+
+    **404 and never 403.** A 403 confirms the organisation exists, which is the
+    enumeration leak the whole "not found, not forbidden" rule exists to close —
+    and it is the assertion most likely to be quietly relaxed by someone
+    debugging a permissions problem, which is why the reason is written here.
+    """
+
+    def _login_as_alpha(self, client, ids):
+        login = client.post(
+            "/api/v1/auth/login",
+            json={"email": ids["alpha_email"], "password": PASSWORD},
+        )
+        assert login.status_code == 200, login.text
+
+    def test_reading_another_organisation_is_404_and_your_own_is_200(
+        self, client, two_organisations_with_logins
+    ):
+        ids = two_organisations_with_logins
+        self._login_as_alpha(client, ids)
+        try:
+            other = client.get(f"/api/v1/partners/{ids['beta_org']}")
+            assert other.status_code == 404, (
+                f"expected 404, got {other.status_code}: an authenticated member "
+                "of one organisation just read another organisation's record "
+                "over HTTP"
+            )
+
+            # The positive half matters as much: a route that 404s for everyone
+            # would pass the assertion above while being completely broken.
+            own = client.get(f"/api/v1/partners/{ids['alpha_org']}")
+            assert own.status_code == 200, own.text
+            assert own.json()["id"] == ids["alpha_org"]
+        finally:
+            client.post("/api/v1/auth/logout")
+
+    def test_the_index_does_not_list_the_other_organisation(
+        self, client, two_organisations_with_logins
+    ):
+        """Scoping has to hold on the *list* as well as the detail.
+
+        A detail route that refuses correctly while the index leaks the same row
+        is a common shape, because the two go through different code paths — and
+        the index is the one that leaks names and slugs in bulk.
+        """
+        ids = two_organisations_with_logins
+        self._login_as_alpha(client, ids)
+        try:
+            listed = client.get("/api/v1/partners", params={"per_page": 100})
+            assert listed.status_code == 200, listed.text
+            returned = {row["id"] for row in listed.json()["items"]}
+            assert ids["beta_org"] not in returned, (
+                "the partners index returned another organisation's row to a "
+                "non-admin member"
+            )
+            assert ids["alpha_org"] in returned, (
+                "the member cannot see their own organisation, so this test is "
+                "asserting nothing"
+            )
+        finally:
+            client.post("/api/v1/auth/logout")
+
+    def test_the_id_taking_write_is_closed_to_a_partner_by_permission(
+        self, client, two_organisations_with_logins
+    ):
+        """The write surface is closed one layer earlier than the read surface.
+
+        `PATCH /partners/{id}` requires `partner-update`, which means "staff may
+        edit any partner" and which **no in-organisation role holds** — so a
+        partner account is refused at the permission gate, before scoping is
+        reached. Hence 403 here and 404 above: the read is a row this actor may
+        not *see*, the write is a capability this actor does not *have*.
+
+        That asymmetry is the finding this suite produced, and it is worth
+        stating rather than smoothing over: `can_edit()` applies **no tenancy
+        narrowing at all** — unlike `can_delete`, `can_change_status` and
+        `can_verify`, which each refuse the actor's own organisation. Today that
+        is safe, because the permission is admin-only by design. It stops being
+        safe the moment `partner-update` is granted to any role whose members sit
+        inside an organisation, and at that point the read path would refuse what
+        the write path allowed. `test_partner_write_permissions.py` fails if that
+        grant is ever added; see TECH_DEBT PM-46.
+
+        The partner's own editing route is `PATCH /partners/me`, which resolves
+        the organisation from the session and takes no id — so there is no
+        cross-tenant write to test there, by design.
+        """
+        from app.models.partner import Partner
+
+        ids = two_organisations_with_logins
+
+        db = SessionLocal()
+        before = db.get(Partner, ids["beta_org"]).name
+        db.close()
+
+        self._login_as_alpha(client, ids)
+        try:
+            written = client.patch(
+                f"/api/v1/partners/{ids['beta_org']}",
+                json={"name": "Renamed by the wrong tenant"},
+            )
+            assert written.status_code == 403, (
+                f"expected 403 (no partner-update), got {written.status_code}. "
+                "A 200 would mean a partner account can edit another "
+                "organisation; a 404 would mean the permission gate moved and "
+                "this test no longer proves what it claims."
+            )
+        finally:
+            client.post("/api/v1/auth/logout")
+
+        # The status code and the database are separate claims: a handler could
+        # refuse *after* committing, so the row is re-read rather than inferred.
+        db = SessionLocal()
+        after = db.get(Partner, ids["beta_org"]).name
+        db.close()
+        assert after == before, "the refused write still changed the row"

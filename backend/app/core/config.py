@@ -191,6 +191,18 @@ class Settings(BaseSettings):
     #: a second installation has not changed it. Left non-empty rather than
     #: blanked, because an empty value silently turns off the internal-account
     #: gate and would let a staff address self-register as external.
+    #:
+    #: ⚠️ **`CORE_EXTRACTION_PLAN.md` § 5.3 proposed blanking this default. That
+    #: was checked against the call sites on 2026-08-20 and rejected**, because
+    #: `is_staff_email()` would then be False for every address and all three of
+    #: its callers change behaviour at once: Google sign-in refuses everyone
+    #: (`google_service`), internal invitations become impossible
+    #: (`invitation_service`), and the guard that stops a staff address
+    #: self-registering with a password stops firing (`auth_service`). The
+    #: plan's underlying concern — that shipping another company's domain is
+    #: wrong for a reusable core — is real, and is answered by the production
+    #: warning in `audit_environment` rather than by a default that breaks the
+    #: application it ships in.
     STAFF_EMAIL_DOMAINS: str = "leapswitch.com"
     #: Renamed from `ALLOW_PARTNER_SELF_REGISTRATION` on 2026-08-17
     #: (`CORE_EXTRACTION_PLAN.md` phase 1). "Partner" is this project's domain
@@ -398,7 +410,21 @@ class Settings(BaseSettings):
     # Where OAuth hands the browser back to, and the CORS allowlist. Comma
     # separated. Configurable so deploying never needs a code edit (PM-9).
     FRONTEND_URL: str = "http://localhost:3001"
-    CORS_ORIGINS: str = "http://localhost:3000,http://localhost:3001"
+    # The loopback IP is listed alongside the hostname because `localhost` and
+    # `127.0.0.1` are DIFFERENT ORIGINS to the browser's same-origin policy, even
+    # though they reach the same machine. A dev server reached over the IP — which
+    # is what VS Code's port forwarding hands you — fails the login preflight with
+    # no Access-Control-Allow-Origin, and axios reports that as an opaque
+    # "Network error" rather than anything mentioning CORS. Both spellings of both
+    # dev ports are allowed so the address bar cannot cause it.
+    #
+    # This is the DEVELOPMENT default only. Production must set CORS_ORIGINS to
+    # real hostnames: with allow_credentials=True a loopback origin left in the
+    # allowlist is flagged by audit_environment() below.
+    CORS_ORIGINS: str = (
+        "http://localhost:3000,http://localhost:3001,"
+        "http://127.0.0.1:3000,http://127.0.0.1:3001"
+    )
 
     # --- Derived helpers ----------------------------------------------------
 
@@ -546,6 +572,28 @@ class Settings(BaseSettings):
                 f"({_SHIPPED_STAFF_DOMAINS!r}). Set it to this installation's own "
                 "domain(s) — it decides who may sign in with SSO, and it is also "
                 "where MAIL_FROM and the seeded root address derive from."
+            )
+
+        # Empty is a legitimate configuration — an installation with no internal
+        # users at all — but it is indistinguishable from having forgotten to set
+        # it, and the three consequences are large enough to be worth stating out
+        # loud rather than discovering:
+        #
+        #   * Google sign-in refuses every address (`google_service`).
+        #   * Internal invitations become impossible (`invitation_service`).
+        #   * The guard that stops a staff address self-registering with a
+        #     password has nothing to match, so it never fires (`auth_service`).
+        #
+        # A warning and not a problem, because a marketplace-only installation
+        # genuinely wants all three. Added 2026-08-20, when CORE_EXTRACTION_PLAN
+        # § 5.3 proposed making *empty* the shipped default — see the note on the
+        # field for why that was rejected.
+        elif not self.staff_domains:
+            warnings.append(
+                "STAFF_EMAIL_DOMAINS is empty, so this installation has no "
+                "internal-account route: Google sign-in will refuse every address "
+                "and staff invitations cannot be issued. Intended for an "
+                "external-only installation; set a domain if not."
             )
 
         # --- Cookies ---------------------------------------------------------

@@ -16,6 +16,8 @@ needs every state to exist at once, because the states are what the product is:
   trivially zero
 * one partner that is **not listed**, so "invisible to the public" can be tested
   rather than assumed
+* one **partner login per listed organisation**, because the partner back office
+  is unreachable without one — see `PARTNER_LOGIN_PASSWORD` below
 
 Idempotent: run it twice and it will not duplicate. Anything already present by
 slug is left alone.
@@ -23,16 +25,21 @@ slug is left alone.
 
 from __future__ import annotations
 
+import os
 import uuid
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.security import hash_password
+from app.domain.partners.permissions import ROLE_PARTNER
 from app.models.enquiry import Enquiry, EnquiryMessage, EnquiryRecipient
 from app.models.partner import Partner
+from app.models.role import Role
 from app.models.service_category import ServiceCategory
 from app.models.service_listing import ServiceListing
+from app.models.user import User
 
 CATEGORIES: list[tuple[str, str, list[str]]] = [
     (
@@ -130,6 +137,24 @@ PARTNERS = [
 ]
 
 
+#: The shared password for every seeded partner login.
+#:
+#: Committed on purpose, and safe to commit for exactly one reason: it only ever
+#: unlocks accounts at `@example.com`, which is RFC 2606 reserved and cannot
+#: receive mail, in a database that only ever holds invented companies. It is
+#: written to be unmistakable at a glance — nobody skims this and wonders whether
+#: it is a real credential (operating contract rule 7).
+#:
+#: ⚠️ It is still a known password in a public repo. `seed()` therefore refuses to
+#: create these accounts unless `ALLOW_DEMO_PARTNER_LOGINS=1` is set, so a
+#: production deploy that runs the seeder cannot quietly acquire nine accounts
+#: whose password is printed in this file.
+PARTNER_LOGIN_PASSWORD = "demo-partner-not-a-real-password"
+
+#: The environment flag that has to be set before the logins above are created.
+DEMO_LOGIN_ENV = "ALLOW_DEMO_PARTNER_LOGINS"
+
+
 def _slug(value: str) -> str:
     import re
 
@@ -137,7 +162,13 @@ def _slug(value: str) -> str:
 
 
 def seed(db: Session) -> dict[str, int]:
-    counts = {"categories": 0, "partners": 0, "listings": 0, "enquiries": 0}
+    counts = {
+        "categories": 0,
+        "partners": 0,
+        "listings": 0,
+        "enquiries": 0,
+        "partner_logins": 0,
+    }
     now = datetime.now(timezone.utc)
 
     # --- Taxonomy ---------------------------------------------------------
@@ -317,8 +348,71 @@ def seed(db: Session) -> dict[str, int]:
         )
         counts["enquiries"] += 1
 
+    # --- Partner logins ---------------------------------------------------
+    #
+    # Added 2026-08-18. Seven partner ORGANISATIONS existed and zero partner
+    # USERS, so the five partner-only back-office pages had nobody who could
+    # open them — the whole partner half of the product was untestable, and the
+    # navigation fix that made those pages reachable could only be verified for
+    # staff. An organisation with no way in is sample data that proves half the
+    # loop.
+    #
+    # Skipped unless the flag is set: see PARTNER_LOGIN_PASSWORD.
+    if os.environ.get(DEMO_LOGIN_ENV, "").strip() in {"1", "true", "yes"}:
+        counts["partner_logins"] = _seed_partner_logins(db, created)
+    else:
+        print(
+            f"[seed_directory] partner logins skipped — set {DEMO_LOGIN_ENV}=1 to create them"
+        )
+
     db.commit()
     return counts
+
+
+def _seed_partner_logins(db: Session, partners: list[Partner]) -> int:
+    """One ACTIVE partner login per listed organisation, idempotent by email.
+
+    The unlisted partner is deliberately included: "this organisation is hidden
+    from the public but its owner can still sign in and edit it" is a real state,
+    and it is the one that proves the public surface hides on `listed`, not on
+    whether anybody is home.
+    """
+    role = db.execute(select(Role).where(Role.name == ROLE_PARTNER)).scalar_one_or_none()
+    if role is None:
+        print(f"[seed_directory] role {ROLE_PARTNER!r} missing — run seed_rbac first")
+        return 0
+
+    hashed = hash_password(PARTNER_LOGIN_PASSWORD)
+    now = datetime.now(timezone.utc)
+    created = 0
+
+    for partner in partners:
+        email = f"owner@{partner.slug}.example.com"
+        if db.execute(select(User).where(User.email == email)).scalar_one_or_none():
+            continue
+
+        user = User(
+            email=email,
+            password=hashed,
+            first_name="Partner",
+            last_name="Owner",
+            account_type="external",
+            auth_provider="password",
+            status="ACTIVE",
+            email_verified_at=now,
+            organisation_id=partner.id,
+            company_name=partner.name,
+        )
+        user.roles.append(role)
+        db.add(user)
+        created += 1
+
+    if created:
+        print(
+            f"[seed_directory] {created} partner logins, password {PARTNER_LOGIN_PASSWORD!r}"
+        )
+
+    return created
 
 
 if __name__ == "__main__":  # pragma: no cover - operational entry point

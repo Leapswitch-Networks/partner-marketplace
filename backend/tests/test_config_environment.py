@@ -147,6 +147,62 @@ def test_all_problems_are_reported_at_once():
         assert expected in message
 
 
+def test_empty_staff_domains_warns_but_does_not_refuse():
+    """An external-only installation is legitimate, so this cannot be a problem.
+
+    Added 2026-08-20 with the rule itself. `CORE_EXTRACTION_PLAN.md` § 5.3
+    proposed making empty the *shipped default*; checking the call sites showed
+    that would refuse every Google sign-in, make internal invitations impossible
+    and stop the self-registration guard firing — so the default stayed, and this
+    warning covers the deployment that genuinely wants none of those.
+
+    Asserted as a warning and an empty `problems` deliberately: promoting it to a
+    problem would refuse to boot a marketplace-only installation, which is the
+    configuration this rule exists to *permit* while making it deliberate.
+    """
+    settings = production_settings(STAFF_EMAIL_DOMAINS="")
+    problems, warnings = settings.audit_environment()
+    assert problems == []
+    assert any("STAFF_EMAIL_DOMAINS is empty" in w for w in warnings)
+
+
+def test_empty_and_shipped_default_warnings_are_mutually_exclusive():
+    """One `STAFF_EMAIL_DOMAINS` warning at a time, never two.
+
+    They are an `if`/`elif` for a reason: a value cannot be both "still the value
+    this project ships" and "empty", and reporting two rules for one field would
+    read as two separate misconfigurations.
+    """
+    shipped = production_settings()
+    _, shipped_warnings = shipped.audit_environment()
+    staff_warnings = [w for w in shipped_warnings if "STAFF_EMAIL_DOMAINS" in w]
+    assert len(staff_warnings) == 1
+    assert "still the shipped default" in staff_warnings[0]
+
+    empty = production_settings(STAFF_EMAIL_DOMAINS="")
+    _, empty_warnings = empty.audit_environment()
+    staff_warnings = [w for w in empty_warnings if "STAFF_EMAIL_DOMAINS" in w]
+    assert len(staff_warnings) == 1
+    assert "is empty" in staff_warnings[0]
+
+
+def test_empty_staff_domains_makes_every_address_external():
+    """The precondition the two service error messages branch on.
+
+    `google_service` and `invitation_service` each render a different sentence
+    when `staff_domains` is empty, because the joined-domain version reads as a
+    truncated error — "Google sign-in is limited to ." — and told the reader
+    nothing. Both branches key on exactly this, so it is pinned here.
+    """
+    settings = production_settings(STAFF_EMAIL_DOMAINS="")
+    assert settings.staff_domains == []
+    assert settings.is_staff_email("anyone@anywhere.com") is False
+    # Whitespace-only is the same case: the property filters empty segments, so
+    # a value of ", ," cannot produce a domain list of [""] that matches nothing
+    # while looking configured.
+    assert production_settings(STAFF_EMAIL_DOMAINS=" , ,").staff_domains == []
+
+
 def test_proxy_and_hsts_warn_but_do_not_refuse():
     """Both are legitimate production choices, so refusing would be wrong.
 

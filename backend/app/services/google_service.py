@@ -189,11 +189,25 @@ def find_or_create_from_google(db: Session, profile: dict) -> User:
         )
 
     if not settings.is_staff_email(email):
+        # `staff_domains` can legitimately be empty — an installation with no
+        # internal users at all — and then this branch refuses *everyone*, which
+        # is correct: Google sign-in is the staff route and there are no staff.
+        # It must not say so with a dangling sentence, though. Before
+        # 2026-08-20 the message read "Google sign-in is limited to ." because
+        # the join produced an empty string, which tells the reader nothing and
+        # looks like a truncated error.
         allowed = ", ".join("@" + d for d in settings.staff_domains)
         raise HTTPException(
             status.HTTP_403_FORBIDDEN,
-            f"Google sign-in is limited to {allowed}. "
-            "Partners should sign in with their email and password.",
+            (
+                f"Google sign-in is limited to {allowed}. "
+                "Partners should sign in with their email and password."
+            )
+            if allowed
+            else (
+                "Google sign-in is not available for this installation. "
+                "Sign in with your email and password instead."
+            ),
         )
 
     avatar = profile.get("picture")

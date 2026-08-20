@@ -252,63 +252,206 @@ The only place in this codebase where a mistake is a data breach rather than a b
       anonymous principal · wrong-tenant principal · internal-staff principal · admin-access
       principal · machine principal · unpublished-vs-published row. This is the narrow testing ask
       `PARTNER_DIRECTORY_PLAN.md` § 11 makes and it is roughly half a day.
-- [ ] **3.3** Retype the stack onto `core/principal.py`'s `Principal` union. **258 sites across 44
-      files** — the heaviest are `user_service.py` (17), `partner_service.py` (15), `api/auth.py`
-      (14), `api/users.py` (12), `api/api_credentials.py` (12). Mechanical and well-specified:
-      **this is the one part of this phase to delegate to `sonnet-implementer`**, in
-      non-overlapping file packages, with the orchestrator validating each.
+- [!] **3.3** ~~Retype the stack onto `core/principal.py`'s `Principal` union. 258 sites across 44
+      files. Mechanical and well-specified: delegate to `sonnet-implementer`.~~
+      **SUPERSEDED — and it was superseded on the day this item was written (2026-08-17). Do not
+      do this.** `scoping.py`'s `_as_principal()` docstring already carries the counter-argument,
+      and it is the better one:
+      > *"blanket-retyping them onto `Principal` would make most of them **less** accurate, not
+      > more: `user_service.update_user` genuinely requires a human and reads `actor.id` and
+      > `actor.has_admin_access`. So the union is normalised at this boundary instead, which is
+      > the boundary that actually has to cope with anonymous and machine callers."*
+      **It is also not mechanical, which is the part that would have hurt.** Measured 2026-08-20:
+      of 165 `actor.*` accesses in `app/`, **55 across six attributes would not compile** — the
+      principals expose `id`, `label`, `has_permission` and `has_ability` and nothing else, while
+      call sites read `has_admin_access` (18), `full_name` (15), `organisation_id` (8),
+      `is_super_admin` (6), `email` (6), `role_names` (1) and `first_name` (1). Retyping would
+      therefore have forced a choice nobody had made — grow `UserPrincipal` into a `User` proxy,
+      or rewrite 55 call sites to reach through `.user` — inside a change advertised as a
+      signature sweep, and a subagent handed "retype these files" would have picked one silently.
+      **The adopted pattern instead:** signatures that genuinely require a human keep `actor:
+      User`; the functions that must cope with anonymous and machine callers take
+      `Principal | User | None` and call `_as_principal()` once. `apply_scope` demonstrates it —
+      it type-narrows on `UserPrincipal`, unwraps to `.user`, and gives machine and anonymous
+      callers the public predicate rather than a human's allowance. **Polymorphism belongs at the
+      boundary where the other principal kinds actually arrive, not spread across 264 signatures
+      that will never see one.**
+      What is genuinely left of the original intent is much smaller and is not this item: any
+      *new* function that can be reached by a token or by the public should take the union from
+      the start.
 - [ ] **3.4** Replace the two hand-rolled filters marked `# PM-5` — `partner_service.py:197`
       (`get_partner_for`) and `:222` (`list_partners`) — with `assert_can_read` / `apply_scope`.
-- [ ] **3.5** Wire the three dead helpers in `data_access_service.py` — `manageable_user_ids:124`,
-      `can_manage_data_of:142`, `narrow_to_creators:158`. They are built, tested, and have **zero
-      production call sites**; a data-access grant currently affects Global Search and nothing else.
-- [ ] **3.6** Flag to the owner, do not silently change: `list_grants:213` shows the whole delegation
-      graph to any `data-access-view` holder, and **Staff holds that permission**. Scoping it is a
-      visible behaviour change.
-- [ ] **3.7** Extend `tests/test_route_enforcement.py` — it proves a stranger is refused, not that a
-      *wrong-tenant authenticated* caller is. That second suite is what PM-11 says is missing.
+- [~] **3.5** Wire the three dead helpers in `data_access_service.py`. **2 of 3 done** (verified
+      2026-08-20): `manageable_user_ids` is called from `data_access_service:154` and
+      `can_manage_data_of` from `user_service:216`. **`narrow_to_creators` still has zero
+      production call sites** — the remaining third of this item.
+      ⚠️ **It should be flagged, not quietly wired.** It restricts a list to rows *created by*
+      users the actor may reach, so adding it to an existing index **removes rows people can see
+      today**. That is the same class of change as 3.6 (`list_grants`), which was deliberately
+      flagged and then closed on the owner's word rather than taken silently. The consequence of
+      leaving it dormant is the one the plan already states — a data-access grant affects Global
+      Search and nothing else — so this is a question about intent, not a defect: **which
+      indexes are grants supposed to widen?** Until that is answered, wiring it into a list
+      chosen by whoever happened to be editing would be a guess with a visible blast radius.
+- [x] **3.6** Flag to the owner: `list_grants` showed the whole delegation graph to any
+      `data-access-view` holder, and Staff holds it. **Done — flagged 2026-08-13, closed
+      2026-08-17** on the stated recommendation; it is now scoped on `has_admin_access`, and the
+      divergence from the reference is recorded in the function's own docstring.
+- [x] **3.7** The wrong-tenant authenticated suite PM-11 says is missing. **Done 2026-08-20** as
+      `TestTheTenantWallHoldsOverHTTP` in `tests/test_visibility_paths.py` rather than in
+      `test_route_enforcement.py` — the tenant-wall fixtures and the other visibility rules already
+      live there, and a second copy of the two-organisation setup would have been the duplication
+      § 5 warns about. Three tests: the detail route is 404 for a valid session from another
+      organisation (and 200 for its own, so the assertion cannot pass vacuously), the index does not
+      list the other organisation, and the id-taking write is refused with the row re-read
+      afterwards — because a status code and the database are separate claims.
+      ⚠️ **It found a real gap on its first run: the partner write surface applies no tenancy
+      narrowing at all.** Reads go through `scoping.assert_can_read`; `can_edit` checks only the
+      permission, and `can_delete`/`can_change_status`/`can_verify` add a check that refuses the
+      actor's *own* organisation — which is self-approval protection, not tenancy scoping. Not
+      exploitable in the shipped configuration (all four permissions are reachable only through the
+      wildcard admin roles, whose members have no `organisation_id`), so it was **flagged rather
+      than silently narrowed**, following 3.6's precedent. Recorded as **PM-46**, with
+      `tests/test_partner_write_permissions.py` turning the configuration fact that keeps it safe
+      into an enforced invariant.
 
 **Gate:** full verification gate + `test_scoping.py` and the extended enforcement suite green.
 
+> **Status 2026-08-20: 3.1, 3.2, 3.4, 3.6 and 3.7 are done.** `scoping.py` exists with
+> `apply_scope`/`assert_can_read` and 32 tests; PM-5's hand-rolled filters were closed 2026-08-17.
+> **3.3 is rejected, not pending** — see the item for why the count was never the problem. 3.5 is
+> 2 of 3, and its last third is an owner question rather than a task.
+
 ---
 
-### Phase 4 — PM-41: the frontend data layer *(largest open item)*
+### Phase 4 — PM-41: the frontend data layer
+
+> **Status 2026-08-20: Phase 4 is closed.** 4.1–4.7 are all done. Every list module is on the layer,
+> and `useResourceList` and `useRowAction` have been **deleted** — the live half of the latter,
+> `useBulkAction`, moved to its own file. What remains is **4.3** (type the endpoints against the
+> *generated* `types/api.d.ts` rather than the hand-written types in `lib/api/*.ts` — that is
+> PM-42's job, and the thirteen slices deliberately did not pre-empt it) and **4.7**
+> The hand-written types in `lib/api/*.ts` stay — deliberately, because they narrow what Pydantic
+> types loosely — and are now drift-asserted against the generated schemas instead.
 
 **Measured 2026-08-17:** 49 files use `useEffect`; 17 of 20 admin modules fetch on mount; Redux
 carries **auth only** (`lib/store/authSlice.ts`), no query layer. Every new module in every future
 project inherits this pattern, which is exactly why it belongs in the core rather than after it.
 
-- [ ] **4.1** Pick the layer. **Recommended: RTK Query** — `@reduxjs/toolkit` and `react-redux` are
+- [x] **4.1** Pick the layer. **RTK Query, and it is built** — `lib/store/api.ts` carries the
+      decision and its reasoning. **Recommended: RTK Query** — `@reduxjs/toolkit` and `react-redux` are
       already dependencies and already wired for auth, so this adds **zero** new packages. That
       matches this codebase's standing preference for one fewer dependency (passlib removed, rate
       limiter hand-rolled). TanStack Query is the better-DX alternative and costs one dependency.
-- [ ] **4.2** Build `lib/api/baseQuery.ts` over the existing `axiosInstance` so the refresh-race fix
+- [x] **4.2** **Built** — `lib/api/baseQuery.ts` over the existing `axiosInstance` so the refresh-race fix
       and cookie handling are not reimplemented.
-- [ ] **4.3** Type every endpoint against the **generated** `types/api.d.ts`, not hand-written
-      interfaces. `types/api-contract.ts` is the hand-copied layer PM-42 exists to retire.
-- [ ] **4.4** Migrate `ResourceIndex` to accept a query hook rather than data + loading props, so all
-      12 list modules convert by changing their call site rather than their body.
-- [~] **4.5** Convert the modules. **3 done 2026-08-18** — listings, enquiries and the enquiry
-      thread, in `lib/api/endpoints/directoryEndpoints.ts`. **11 modules still import
-      `useResourceList`; 5 are fully on RTK Query.**
-      ⚠️ **The counts in this plan were measured by grepping for the word**, which matches prose in
-      comments as well as imports — the "17" above was never reliable. Measure with
-      `grep -rl 'from "@/lib/hooks/useResourceList"' frontend/components/admin/` instead.
-      `PartnersModule` converted next and needed **no new endpoint code at all** —
-      `partnersEndpoints.ts` had existed since the layer was built and this module was its only
-      missing consumer, which is how a data layer ends up with one user and a reputation for not
-      being worth adopting.
-      **Why these three first:** they were added to the old pattern on 2026-08-18 by the directory
-      build, so converting them repays debt created the same day rather than starting on somebody
-      else's module — and it leaves a worked example that is not the partner modules.
-      **What it demonstrated:** the enquiry thread's reply mutation invalidates the *inbox* list, so
-      the badge counts on another page are correct the moment the thread changes something. The
-      hand-rolled reload could not do that, because it did not know the other page existed.
-- [ ] **4.6** Delete the now-dead `useEffect` fetch blocks and confirm the react-hooks lint count
+- [x] **4.3** Type every endpoint against the generated `types/api.d.ts`. **Done 2026-08-20 — but
+      not the way this said, and the difference matters.**
+      Two premises here were stale. **PM-42 was closed on 2026-08-06**, not open; and
+      `types/api-contract.ts` is not "the hand-copied layer" — it is the *drift assertion* PM-42
+      was closed with, and it explains in its own header why replacing the hand-written types
+      wholesale is the wrong move: the generated types come from Pydantic and are **looser**.
+      `DataAccessGrantResponse.access_level` is `string`, while the hand-written `AccessLevel` is
+      `"view" | "manage"` and three modules `switch` on it. Replacing would have traded a real
+      union for a bare string and deleted the exhaustiveness checking with it.
+      **What landed instead:** the assertion mechanism was extended to the seven `lib/api/*.ts`
+      modules it had never reached — 27 new contracts, taking the file from 18 to 45. Every type
+      in `errorApi`, `dataAccessApi`, `credentialApi`, `featureFlagApi`, `searchApi`, `webhookApi`
+      and `platformApi` is now compared against its generated schema in both directions, so the
+      narrowings survive *and* drift became impossible. All 27 passed on the first run — there was
+      no drift to fix, which is the good outcome and also the reason nobody would have noticed the
+      gap.
+      **The guard was tested by breaking it**, because a contract assertion that passes vacuously
+      is worse than none — the file's own header makes that argument. Renaming a field the UI
+      declares produces `["UI declares fields the API does not send:", "occurrence_count_renamed"]`;
+      removing one the API sends produces `["API sends fields the UI has not modelled:",
+      "fingerprint"]`. **The second case is caught by nothing else in the build** — no component
+      error, no failing test — and it is the one that ships a feature half-wired.
+      Prerequisite that made this possible: the committed `openapi.json` was four routes stale and
+      was regenerated the same day, so these assertions compare against the live API rather than
+      2026-08-18's.
+- [x] **4.4** Migrate `ResourceIndex` to accept a query hook rather than data + loading props.
+      **Done 2026-08-20**, as its own change after 4.5 rather than as part of it.
+      `ResourceIndex` takes `result={listQuery}` plus an `errorMessage` fallback and derives
+      the six values itself; **14 call sites** lost six lines each. The props are an
+      **exclusive union** (`?: never` on both arms), so passing a mixture is a type error
+      rather than a silent precedence question.
+      **The two indexes whose rows are not a paged server query keep the primitive arm**, and
+      that is the point of keeping it: `RolesModule` pages a full list in the browser, and
+      `PartnerTiersModule` reads an unpaged array. Forcing either through a paged-result shape
+      would have meant lying about `total` and `pages`.
+      ⚠️ **It also fixed something the conversion had introduced.** Every one of those 14 call
+      sites wrote `error={error ? "Could not load X." : null}`, throwing away the message the
+      transport had already produced — `axiosBaseQuery` normalises every failure to a sentence
+      fit to show a user, and its docstring says components should render it. So a 403
+      explaining *why* a list was refused arrived as "Could not load users." The shell now
+      prefers the server's message and falls back to the static one, which is what
+      `PartnerTiersModule` had been doing by hand all along.
+      Not done: `statsLoading` is still passed separately where a module has stat tiles.
+      Folding it in would mean deciding whether tiles and table always share a loading state,
+      and `EnquiriesModule` is the only caller — not worth a prop for one.
+- [x] **4.5** Convert the modules. **Done 2026-08-20 — every module is on the data
+      layer and `useResourceList` has zero importers.** The eleven that were still on it —
+      Activity, ApiConsumers, Credentials, DataAccess, Errors, FeatureFlags, Invitations,
+      Providers, SearchEntities, Users, Webhooks — moved in one pass, plus `InvitationForm`
+      so the full-page `/dashboard/invitations/new` route stops leaving a stale table behind
+      it. Two endpoint slices became thirteen.
+      ⚠️ **The counts in this plan were measured by grepping for the word**, which matches
+      prose in comments as well as imports — the "17" further up was never reliable. The
+      earlier "11 modules / 5 converted" split *was* right, but a grep for
+      `use[A-Za-z]+Query` is not: it matches `useResourceQuery`, which every module imports,
+      so it reported all 17 as converted when 5 were. Measure imports, not words:
+      `grep -rl 'from "@/lib/hooks/useResourceList"' frontend/components/`.
+      **What the conversion found, in three kinds:**
+        * **`patchRow` was wrong wherever the field written is also a filter.** Users' status,
+          Errors' status, FeatureFlags' `enabled`, SearchEntities' `enabled`, ApiConsumers'
+          `active`/`has_tokens`, Providers' `is_active`. Patching left the row visible,
+          contradicting the filter above it, with no error anywhere. Invalidation re-runs the
+          filtered query and lets the server decide membership.
+        * **Values riding on a list envelope were being copied into state from inside the
+          fetch callback** — `can_manage` in four modules, plus SearchEntities' `groups` and
+          `available_models`, Providers' `categories` and Credentials' `can_reveal` and
+          `environments`. Eleven `useState`s removed; each was a second copy of something
+          already in hand, written during the commit phase.
+        * **`useRowAction` was swallowing rejections**, which made `ConfirmDialog`'s
+          `errorFallback` unreachable in ApiConsumers and SearchEntities: a failed write
+          showed a toast *and closed the dialog*, when the dialog's whole contract is that it
+          renders the failure in place and stays open. Fixed by letting the rejection through.
+      **Both superseded hooks were then deleted** (same day, on the owner's go-ahead):
+      `useResourceList` entirely, and `useRowAction` — whose file-mate `useBulkAction` is still
+      used by Users and moved to `lib/hooks/useBulkAction.ts` rather than sitting in a file
+      named after a deleted function. The reasoning that other modules had been citing by name
+      was relocated first, not discarded: the two rules the list hook encoded ("do not fetch
+      before the filters are restored", "a failed refresh must not blank the table") are now
+      written down in `lib/store/api.ts` next to the layer that keeps them, and every comment
+      that had deferred to a deleted docstring states its reason inline.
+      `PartnersModule` needed **no new endpoint code at all** — `partnersEndpoints.ts` had
+      existed since the layer was built and this module was its only missing consumer, which
+      is how a data layer ends up with one user and a reputation for not being worth adopting.
+      **What it demonstrated:** the enquiry thread's reply mutation invalidates the *inbox*
+      list, so the badge counts on another page are correct the moment the thread changes
+      something. The hand-rolled reload could not do that, because it did not know the other
+      page existed.
+- [x] **4.6** Delete the now-dead `useEffect` fetch blocks and confirm the react-hooks lint count
       stays at 0. PM-30 was closed by fixing symptoms; this retires the cause.
-- [ ] **4.7** Establish server-side fetching for public data via `INTERNAL_API_URL`. The rule in
-      `AGENTS.md` § 5 is real and fails **silently** when reversed — authenticated data must stay
-      client-side because the `httpOnly` cookie cannot be forwarded server-side.
+      **Done 2026-08-20 alongside 4.5.** Every fetch-on-mount `useEffect` in the eleven
+      converted modules is gone — the picker/catalogue fetches (roles, abilities, webhook
+      events, targeting options, activity filter options, data-access options, providers,
+      consumers, organisations) are now shared cache entries, so screens that need the same
+      unchanging list reuse one another's copy instead of refetching. Two of them also carried
+      a hand-written `live` flag against the unmount race; RTK Query owns the subscription, so
+      that whole class of bug goes with them. **react-hooks lint: 0 errors, 0 warnings.**
+      One `useEffect` was deliberately *not* removed but rewritten: `CredentialForm` preloaded
+      the editable field values into state, and the naive conversion — an effect copying query
+      data into state — is both rejected by the React Compiler lint (`set-state-in-effect`)
+      and wrong, because a refetch would overwrite whatever the user had typed. It now derives
+      `{...serverValues, ...edits}` with no effect at all.
+- [x] **4.7** Establish server-side fetching for public data via `INTERNAL_API_URL`.
+      **Already done** (verified 2026-08-20): `lib/api/public.ts` is server-side only, resolves
+      `SERVER_API_URL` from `INTERNAL_API_URL`, and its docstring records both traps — the
+      reversed-rule one that fails silently, and `SERVER_API_URL` vs `SERVER_API_BASE_URL`, where
+      the wrong one 404s and an error boundary turns it into an empty directory that looks
+      exactly like an empty database.
 
 **Gate:** full verification gate + the 43-route browser pass (`scripts/browser-check.mjs`).
 
@@ -316,17 +459,57 @@ project inherits this pattern, which is exactly why it belongs in the core rathe
 
 ### Phase 5 — De-brand the remaining identity constants
 
+> **Status 2026-08-20: 5.1, 5.2, 5.4 and 5.6 are done; 5.3 was rejected on inspection** (it would
+> have broken Google sign-in, staff invitations and a self-registration guard — see the item for
+> what landed instead). Only **5.5** remains, and it needs the owner: it is Protected-File and
+> dump-and-restore territory.
+
 Small, independent, and each one is a fossil that would follow the core into project #2.
 
-- [ ] **5.1** `db/seed_rbac.py:42` — `DEFAULT_ROOT_EMAIL = "root@leapswitch.com"` → derive from a
-      setting, following the `TWO_FACTOR_ISSUER` precedent.
-- [ ] **5.2** `core/config.py:284` — `MAIL_FROM = "no-reply@leapswitch.com"` → same treatment.
-- [ ] **5.3** `core/config.py:181` — `STAFF_EMAIL_DOMAINS = "leapswitch.com"`. Already config, but
-      the **default** should be empty, with `is_staff_email()` returning `False` and the internal/
-      external split degrading to "everyone is external" rather than silently matching a domain
-      belonging to another company.
-- [ ] **5.4** `db/seed_users.py` — reads seven real `@leapswitch.com` addresses. Confirm it is
-      gitignored/env-driven and carries no real addresses into a public repo (rule 7).
+- [x] **5.1** `db/seed_rbac.py` — `DEFAULT_ROOT_EMAIL` → derive from a setting, following the
+      `TWO_FACTOR_ISSUER` precedent. **Already done** (verified 2026-08-20): it returns
+      `f"root@{settings.primary_domain}"`.
+- [x] **5.2** `core/config.py` — `MAIL_FROM` → same treatment. **Already done** (verified
+      2026-08-20): the field defaults to `""` and `model_post_init` resolves it to
+      `f"no-reply@{self.primary_domain}"`.
+- [!] **5.3** `core/config.py` — `STAFF_EMAIL_DOMAINS = "leapswitch.com"`. ~~The **default**
+      should be empty, with `is_staff_email()` returning `False` and the internal/external split
+      degrading to "everyone is external".~~
+      **REJECTED 2026-08-20, after checking the call sites. Do not implement this as written —
+      it would break the application.** `is_staff_email()` has three callers, and an empty
+      domain list changes all three at once:
+        * `google_service` — `if not is_staff_email(...)` becomes true for every address, so
+          **Google sign-in refuses everyone**. For staff, who sign in *only* with Google, that is
+          a total lockout.
+        * `invitation_service` — an `internal` invitation is refused for every address, so **a
+          staff account can never be created by invitation**.
+        * `auth_service` — the guard that stops a staff address self-registering with a password
+          has nothing to match, so **it silently stops firing**. This is the one the field's own
+          comment already warned about, and it is a security regression rather than a broken
+          feature.
+      **The underlying concern is real and was answered differently.** Shipping another
+      company's domain as a code default *is* wrong for a reusable core; the fix is to make it
+      loud, not to make it broken. What landed instead:
+        * `audit_environment()` already warned when the value is still the shipped default. It
+          now **also warns when the value is empty**, naming all three consequences — because an
+          external-only installation legitimately wants them, and "deliberate" and "forgot to
+          set it" were previously indistinguishable. A warning and not a problem, so a
+          marketplace-only deployment still boots.
+        * **Two dangling error messages fixed.** Both callers built their message with
+          `", ".join(...)` over the domain list, so with an empty list they read "Google sign-in
+          is limited to ." and "A staff invitation requires an address at ." — truncated
+          sentences that name no cause. Each now has a second phrasing for the empty case.
+        * The rejection and its reasoning are recorded **on the field itself** in `config.py`, so
+          the next person to read this plan item finds the counter-argument in the code rather
+          than re-deriving it.
+      Three tests were added in `tests/test_config_environment.py`: the empty-value warning, the
+      mutual exclusivity of the two `STAFF_EMAIL_DOMAINS` warnings, and the emptiness
+      precondition both service messages branch on.
+- [x] **5.4** `db/seed_users.py` — confirm it is gitignored/env-driven and carries no real
+      addresses into a public repo (rule 7). **Verified clean 2026-08-20.** The roster is read
+      from `SEED_USERS_FILE` (default `backend/seed_users.json`), that path is gitignored with a
+      comment saying why, and the committed `seed_users.example.json` uses `@example.com`
+      throughout. The only address in the module itself is `ada@example.com`, in a docstring.
 - [ ] **5.5** PM-21's two deferred items, now worth doing because they travel: `docker-compose.yml`
       network `test-platform` and `POSTGRES_DB=test_platformDB`. **Both are Protected-File /
       destructive territory** — compose needs containers stopped, the database rename is

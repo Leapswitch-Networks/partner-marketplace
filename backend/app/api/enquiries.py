@@ -78,7 +78,20 @@ def get_enquiry(
     db: Session = Depends(get_db),
     actor: User = Depends(require_permission(ENQUIRY_VIEW)),
 ) -> EnquiryDetailResponse:
-    return EnquiryDetailResponse.model_validate(_visible_or_404(db, enquiry_id, actor))
+    """One enquiry, and — for its recipient — the moment they first opened it.
+
+    Opening is what records `first_viewed_at`, because there is no other honest
+    moment to record it: a partner has "seen" an enquiry when they have looked at
+    it, not when it arrived or when a list rendered its subject line.
+
+    **A staff read never stamps.** Staff hold `enquiry-view` for oversight, and
+    the rule lives in `mark_viewed` rather than here so that every future caller
+    inherits it instead of re-deciding it. See TECH_DEBT PM-47.
+    """
+    enquiry = _visible_or_404(db, enquiry_id, actor)
+    if enquiry_service.mark_viewed(db, enquiry, actor):
+        db.commit()
+    return EnquiryDetailResponse.model_validate(enquiry)
 
 
 @router.post("/{enquiry_id}/reply", response_model=EnquiryMessageResponse)

@@ -179,8 +179,16 @@ def can_publish(actor: User, partner: Partner) -> bool:
     return actor.has_permission(PARTNER_PUBLISH)
 
 
-def decorate(partner: Partner, actor: User, *, user_count: int = 0) -> Partner:
-    """Attach the per-row flags and counts the schemas read."""
+def decorate(partner: Partner, actor: User, *, user_count: int) -> Partner:
+    """Attach the per-row flags and counts the schemas read.
+
+    ⚠️ **`user_count` has no default, deliberately.** It used to default to 0, and
+    six of the eight call sites relied on that default — so every write route and
+    `/partners/me` reported an organisation as having zero members. Seeding the
+    first partner logins on 2026-08-18 made it visible: an owner opened their own
+    organisation and was told nobody was in it. A default of 0 for a count is a
+    wrong answer that reads exactly like a correct one.
+    """
     partner.can_edit = can_edit(actor, partner)
     partner.can_delete = can_delete(actor, partner)
     partner.can_change_status = can_change_status(actor, partner)
@@ -191,6 +199,11 @@ def decorate(partner: Partner, actor: User, *, user_count: int = 0) -> Partner:
 
 
 # --- Reads ------------------------------------------------------------------
+
+
+def _user_count(db: Session, partner: Partner) -> int:
+    """Members of one partner. For the single-row paths; the list path batches."""
+    return _user_counts(db, [partner.id]).get(partner.id, 0)
 
 
 def _user_counts(db: Session, partner_ids: list[str]) -> dict[str, int]:
@@ -338,7 +351,7 @@ def create_partner(db: Session, data: CreatePartnerRequest, actor: User) -> Part
         "partner.created",
         {"id": partner.id, "name": partner.name, "slug": partner.slug, "status": partner.status},
     )
-    return decorate(partner, actor)
+    return decorate(partner, actor, user_count=_user_count(db, partner))
 
 
 def update_partner(
@@ -380,7 +393,7 @@ def update_partner(
         # is the partner's; the log records that they changed, not what to.
         properties={"fields": sorted(changes)},
     )
-    return decorate(partner, actor)
+    return decorate(partner, actor, user_count=_user_count(db, partner))
 
 
 def change_status(
@@ -403,7 +416,7 @@ def change_status(
         )
 
     if data.status == partner.status:
-        return decorate(partner, actor)
+        return decorate(partner, actor, user_count=_user_count(db, partner))
 
     allowed = _STATUS_TRANSITIONS.get(partner.status, frozenset())
     if data.status not in allowed:
@@ -454,7 +467,7 @@ def change_status(
                 "previous_status": previous,
             },
         )
-    return decorate(partner, actor)
+    return decorate(partner, actor, user_count=_user_count(db, partner))
 
 
 def set_verification(
@@ -498,7 +511,7 @@ def set_verification(
         actor=actor,
         properties={"from": previous, "to": level},
     )
-    return decorate(partner, actor)
+    return decorate(partner, actor, user_count=_user_count(db, partner))
 
 
 def set_listed(db: Session, partner_id: str, is_listed: bool, actor: User) -> Partner:
@@ -541,7 +554,7 @@ def set_listed(db: Session, partner_id: str, is_listed: bool, actor: User) -> Pa
         actor=actor,
         properties={"is_listed": is_listed},
     )
-    return decorate(partner, actor)
+    return decorate(partner, actor, user_count=_user_count(db, partner))
 
 
 def delete_partner(db: Session, partner_id: str, actor: User) -> None:
@@ -651,7 +664,7 @@ def get_own_organisation(db: Session, actor: User) -> Partner:
     partner = db.get(Partner, actor.organisation_id)
     if partner is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Organisation not found")
-    return partner
+    return decorate(partner, actor, user_count=_user_count(db, partner))
 
 
 def update_own_organisation(db: Session, partner: Partner, *, actor: User, **fields) -> Partner:

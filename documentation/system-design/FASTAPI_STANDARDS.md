@@ -324,6 +324,22 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 - **One session per request**, from `get_db()`, closed in `finally`
 - **`autoflush=False`** — flushes are explicit; don't rely on lazy flush ordering
+
+  > **The worked example, because this rule was broken in production code for two days.**
+  > `listing_service.update_listing` moved a listing out of `PUBLISHED` and then called
+  > `category_service.recount_listings`, which runs a `SELECT COUNT(...) WHERE status =
+  > 'PUBLISHED'`. With no autoflush the pending `UPDATE` had not reached the database, so the
+  > count query saw the row *as it was before the function ran* and stored that number.
+  >
+  > It went unnoticed because it was accidentally right: the code recomputed only the listing's
+  > **new** category, which stale-read as "does not contain this listing yet" — the correct
+  > answer, by luck. The bug surfaced only when a second category was recomputed, where the
+  > stale read gave the wrong answer.
+  >
+  > **The rule in practice:** any read that must observe a write you just made needs a
+  > `db.flush()` between them. A denormalised counter recomputed from a query is the shape most
+  > likely to hide it, because the wrong answer is a plausible number rather than an error.
+  > Fixed 2026-08-20; `tests/test_category_counts.py` pins it.
 - **Commit in the service**, once, at the end of the use case
 - **`db.refresh(obj)`** after commit if you return the object
 - **Reads:** prefer `db.get(Model, pk)` for primary-key lookups (uses the identity map) over

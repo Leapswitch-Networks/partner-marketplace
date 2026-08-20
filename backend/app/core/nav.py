@@ -42,6 +42,7 @@ def nav_item(
     exact: bool = False,
     active_prefixes: list[str] | None = None,
     items: list[dict[str, Any]] | None = None,
+    requires_organisation: bool = False,
 ) -> dict[str, Any]:
     """One nav entry.
 
@@ -51,6 +52,9 @@ def nav_item(
     `active_prefixes` exists because "which item is highlighted" is not always
     "which href matches": `/dashboard/all-users` and `/dashboard/add-user` are two
     routes under one conceptual Users item.
+
+    `requires_organisation` hides the item from accounts that belong to no
+    organisation, which permissions cannot express — see the note below.
     """
     entry: dict[str, Any] = {
         "title": title,
@@ -59,6 +63,18 @@ def nav_item(
         "permission": permission,
         "exact": exact,
         "active_prefixes": active_prefixes or ([href] if href != "#" else []),
+        # Added 2026-08-18. Hides an item from accounts with no organisation.
+        #
+        # A permission cannot express this. "Your Organisation" needs a
+        # permission the Partner role holds AND an organisation to resolve — and
+        # Admin holds nearly every permission while having no organisation, so it
+        # would follow the link to a page that can only tell it the account is not
+        # attached to one.
+        #
+        # `users.organisation_id` has been a core column since the tenancy
+        # generalisation, so "only for accounts inside an organisation" is a core
+        # notion rather than a domain one leaking upward.
+        "requires_organisation": requires_organisation,
     }
     if items is not None:
         entry["items"] = items

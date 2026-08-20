@@ -432,6 +432,20 @@
         "title": "Body_upload_asset_api_v1_settings_branding__asset__post",
         "type": "object"
       },
+      "Body_upload_my_brand_asset_api_v1_partners_me_brand__asset__put": {
+        "properties": {
+          "file": {
+            "format": "binary",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_my_brand_asset_api_v1_partners_me_brand__asset__put",
+        "type": "object"
+      },
       "BrandingResponse": {
         "description": "The project's identity, fully resolved.\n\n**Every field is non-optional here even though every column is nullable**, because\nthe service has already applied the environment fallback. A client should never\nhave to know that a value came from the database rather than from `.env`, and it\nmust never have to render a placeholder for a missing name.",
         "properties": {
@@ -1466,7 +1480,7 @@
             ],
             "title": "Company"
           },
-          "listing_id": {
+          "listing_slug": {
             "anyOf": [
               {
                 "type": "string"
@@ -1475,7 +1489,7 @@
                 "type": "null"
               }
             ],
-            "title": "Listing Id"
+            "title": "Listing Slug"
           },
           "message": {
             "maxLength": 5000,
@@ -1483,8 +1497,8 @@
             "title": "Message",
             "type": "string"
           },
-          "partner_id": {
-            "title": "Partner Id",
+          "partner_slug": {
+            "title": "Partner Slug",
             "type": "string"
           },
           "timeline": {
@@ -1512,7 +1526,7 @@
           }
         },
         "required": [
-          "partner_id",
+          "partner_slug",
           "buyer_name",
           "buyer_email",
           "message"
@@ -3041,6 +3055,18 @@
             ],
             "title": "First Responded At"
           },
+          "first_viewed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Viewed At"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -3106,6 +3132,7 @@
           "company",
           "status",
           "source",
+          "first_viewed_at",
           "first_responded_at",
           "created_at",
           "buyer_phone",
@@ -3155,6 +3182,18 @@
             ],
             "title": "First Responded At"
           },
+          "first_viewed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "First Viewed At"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -3197,6 +3236,7 @@
           "company",
           "status",
           "source",
+          "first_viewed_at",
           "first_responded_at",
           "created_at"
         ],
@@ -3230,6 +3270,66 @@
           "created_at"
         ],
         "title": "EnquiryMessageResponse",
+        "type": "object"
+      },
+      "EntitlementResponse": {
+        "description": "What a partner has published against what their tier allows.\n\nThe read half of `PARTNER_DIRECTORY_PLAN.md` § 14.1 row 2b. `max_listings` and\n`remaining` are both nullable and both mean the same thing when null —\nunlimited — which is why `unlimited` is sent explicitly rather than left for\nevery caller to infer from a null.",
+        "properties": {
+          "at_limit": {
+            "title": "At Limit",
+            "type": "boolean"
+          },
+          "max_listings": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Listings"
+          },
+          "published": {
+            "title": "Published",
+            "type": "integer"
+          },
+          "remaining": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Remaining"
+          },
+          "tier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tier"
+          },
+          "unlimited": {
+            "title": "Unlimited",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "tier",
+          "published",
+          "max_listings",
+          "unlimited",
+          "remaining",
+          "at_limit"
+        ],
+        "title": "EntitlementResponse",
         "type": "object"
       },
       "ErrorGroupDetailResponse": {
@@ -5069,6 +5169,161 @@
         "title": "MessageResponse",
         "type": "object"
       },
+      "ModerationQueueItem": {
+        "description": "A queue entry, plus whether approving it would actually work.\n\n**A separate schema rather than two more fields on `ListingDetailResponse`.**\nOnly the queue needs this, and every listing read in the application shares\nthat model — so putting it there would make an entitlement lookup the cost of\nreading any listing, for a value almost nobody wants.\n\n## Why the reviewer needs it before opening the listing\n\nPublishing is refused when the partner is suspended, unlisted, or at their\ntier's allowance (§ 19.9). Those refusals are correct, but a reviewer who\nonly meets them *after* reading a listing and clicking Approve has spent the\nexpensive part of the decision to be told the cheap part was impossible. The\nqueue is worked oldest-first and is meant to be read; telling it what cannot\nbe approved is the difference between a queue and a lottery.\n\n`blockers` empty means approving will succeed.",
+        "properties": {
+          "attributes": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ListingAttributeResponse"
+            },
+            "title": "Attributes",
+            "type": "array"
+          },
+          "blockers": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Blockers",
+            "type": "array"
+          },
+          "category_id": {
+            "title": "Category Id",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "currency": {
+            "title": "Currency",
+            "type": "string"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "entitlement": {
+            "$ref": "#/components/schemas/EntitlementResponse"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "media": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ListingMediaResponse"
+            },
+            "title": "Media",
+            "type": "array"
+          },
+          "partner_id": {
+            "title": "Partner Id",
+            "type": "string"
+          },
+          "partner_name": {
+            "title": "Partner Name",
+            "type": "string"
+          },
+          "price": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Price"
+          },
+          "pricing_model": {
+            "title": "Pricing Model",
+            "type": "string"
+          },
+          "published_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Published At"
+          },
+          "rejection_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rejection Reason"
+          },
+          "slug": {
+            "title": "Slug",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "submitted_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Submitted At"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "partner_id",
+          "category_id",
+          "title",
+          "slug",
+          "summary",
+          "pricing_model",
+          "price",
+          "currency",
+          "status",
+          "rejection_reason",
+          "published_at",
+          "submitted_at",
+          "created_at",
+          "description",
+          "partner_name",
+          "entitlement"
+        ],
+        "title": "ModerationQueueItem",
+        "type": "object"
+      },
       "NavPreferencesResponse": {
         "description": "The role's effective preferences, every catalog section present.\n\nAlways returns the full catalog rather than only what is stored, so the UI can\nrender a complete toggle list without knowing the defaults.",
         "properties": {
@@ -5686,7 +5941,6 @@
         "type": "object"
       },
       "PartnerDetailResponse": {
-        "description": "The full staff-facing record.\n\nCarries `notes`, `gst_number` and `pan_number`. **Never return this from a\npublic route** — use `PartnerPublicResponse`.",
         "properties": {
           "about": {
             "anyOf": [
@@ -5710,6 +5964,17 @@
               }
             ],
             "title": "Agreement Signed At"
+          },
+          "banner_mime": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Banner Mime"
           },
           "banner_path": {
             "anyOf": [
@@ -5856,6 +6121,17 @@
             ],
             "title": "Legal Name"
           },
+          "logo_mime": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Logo Mime"
+          },
           "logo_path": {
             "anyOf": [
               {
@@ -5998,7 +6274,6 @@
             "title": "Updated By"
           },
           "user_count": {
-            "default": 0,
             "title": "User Count",
             "type": "integer"
           },
@@ -6051,6 +6326,7 @@
           "tier",
           "city",
           "country",
+          "user_count",
           "created_at",
           "is_active",
           "is_verified",
@@ -6180,7 +6456,6 @@
             ]
           },
           "user_count": {
-            "default": 0,
             "title": "User Count",
             "type": "integer"
           },
@@ -6199,6 +6474,7 @@
           "tier",
           "city",
           "country",
+          "user_count",
           "created_at",
           "is_active",
           "is_verified",
@@ -7030,6 +7306,16 @@
             ],
             "title": "Founded Year"
           },
+          "has_banner": {
+            "default": false,
+            "title": "Has Banner",
+            "type": "boolean"
+          },
+          "has_logo": {
+            "default": false,
+            "title": "Has Logo",
+            "type": "boolean"
+          },
           "listings": {
             "default": [],
             "items": {
@@ -7037,17 +7323,6 @@
             },
             "title": "Listings",
             "type": "array"
-          },
-          "logo_path": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Logo Path"
           },
           "name": {
             "title": "Name",
@@ -7137,7 +7412,6 @@
           "verification_level",
           "founded_year",
           "employee_range",
-          "logo_path",
           "about",
           "website",
           "public_email",
@@ -7186,16 +7460,15 @@
             ],
             "title": "Founded Year"
           },
-          "logo_path": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Logo Path"
+          "has_banner": {
+            "default": false,
+            "title": "Has Banner",
+            "type": "boolean"
+          },
+          "has_logo": {
+            "default": false,
+            "title": "Has Logo",
+            "type": "boolean"
           },
           "name": {
             "title": "Name",
@@ -7228,8 +7501,7 @@
           "city",
           "verification_level",
           "founded_year",
-          "employee_range",
-          "logo_path"
+          "employee_range"
         ],
         "title": "PublicPartnerSummary",
         "type": "object"
@@ -8394,6 +8666,23 @@
         "title": "SetAssistantEnabledRequest",
         "type": "object"
       },
+      "SetExpertiseRequest": {
+        "description": "Replace the whole expertise selection.\n\nIds, not names: these become pivot rows the public directory filter joins on.",
+        "properties": {
+          "category_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Category Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "category_ids"
+        ],
+        "title": "SetExpertiseRequest",
+        "type": "object"
+      },
       "SetRolePermissionsRequest": {
         "description": "The whole grant set, for `PUT /roles/{id}/permissions`.\n\nA replacement rather than a patch, and required rather than optional: this\nendpoint exists to say what a role grants, so an omitted list would have to\nmean either \"grant nothing\" or \"change nothing\", and no wording makes that\nunambiguous at the call site. `[]` clears the grants and says so.",
         "properties": {
@@ -9262,6 +9551,169 @@
           "preferences"
         ],
         "title": "UpdateNavPreferencesRequest",
+        "type": "object"
+      },
+      "UpdateOwnOrganisationRequest": {
+        "description": "What a partner may change about their own record.\n\n⚠️ **Everything absent is absent on purpose.** No `status`, no\n`verification_level`, no `is_listed`, no `tier_id` — those are Leapswitch's\njudgement about this partner, not theirs. No `notes`, `gst_number` or\n`pan_number` — internal. The service applies a matching allowlist, so a field\nadded here without being added there is inert rather than dangerous.",
+        "properties": {
+          "about": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "About"
+          },
+          "city": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City"
+          },
+          "country": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country"
+          },
+          "employee_range": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Employee Range"
+          },
+          "founded_year": {
+            "anyOf": [
+              {
+                "maximum": 2100.0,
+                "minimum": 1800.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Founded Year"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 160,
+                "minLength": 2,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "postal_code": {
+            "anyOf": [
+              {
+                "maxLength": 20,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Postal Code"
+          },
+          "public_email": {
+            "anyOf": [
+              {
+                "format": "email",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Email"
+          },
+          "public_phone": {
+            "anyOf": [
+              {
+                "maxLength": 30,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Public Phone"
+          },
+          "service_areas": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Service Areas"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          },
+          "tagline": {
+            "anyOf": [
+              {
+                "maxLength": 200,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tagline"
+          },
+          "website": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Website"
+          }
+        },
+        "title": "UpdateOwnOrganisationRequest",
         "type": "object"
       },
       "UpdatePartnerRequest": {
@@ -14719,6 +15171,7 @@
     },
     "/api/v1/enquiries/{enquiry_id}": {
       "get": {
+        "description": "One enquiry, and — for its recipient — the moment they first opened it.\n\nOpening is what records `first_viewed_at`, because there is no other honest\nmoment to record it: a partner has \"seen\" an enquiry when they have looked at\nit, not when it arrived or when a list rendered its subject line.\n\n**A staff read never stamps.** Staff hold `enquiry-view` for oversight, and\nthe rule lives in `mark_viewed` rather than here so that every future caller\ninherits it instead of re-deciding it. See TECH_DEBT PM-47.",
         "operationId": "get_enquiry_api_v1_enquiries__enquiry_id__get",
         "parameters": [
           {
@@ -16349,7 +16802,7 @@
     },
     "/api/v1/moderation/queue": {
       "get": {
-        "description": "Everything awaiting review, **oldest first**.\n\nOldest-first is not a display preference: § 16.2 measures the age of the\noldest item in the queue, and a newest-first list is how the oldest item\nbecomes permanently invisible to the person working it.",
+        "description": "Everything awaiting review, **oldest first**, each with its blockers.\n\nOldest-first is not a display preference: § 16.2 measures the age of the\noldest item in the queue, and a newest-first list is how the oldest item\nbecomes permanently invisible to the person working it.\n\n## Why each row carries its blockers\n\nApproving is refused when the owning partner is suspended, unlisted, or at\nits tier's listing allowance. Computing that here means the reviewer sees it\nbefore opening the listing rather than after clicking Approve — the same\nreasoning that keeps a permission-gated action off screen instead of letting\nit 403.\n\n## The two queries this deliberately does not multiply\n\nPartners are fetched once for the whole queue and published counts are\nbatched into a single grouped query, so a queue of thirty listings across\nfive partners costs two extra queries rather than sixty. Both `entitlement`\nand `publish_blockers` accept a pre-counted value for exactly this.",
         "operationId": "review_queue_api_v1_moderation_queue_get",
         "parameters": [
           {
@@ -16375,7 +16828,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/ListingDetailResponse"
+                    "$ref": "#/components/schemas/ModerationQueueItem"
                   },
                   "title": "Response Review Queue Api V1 Moderation Queue Get",
                   "type": "array"
@@ -16675,6 +17128,298 @@
           }
         },
         "summary": "Create Partner Endpoint",
+        "tags": [
+          "partners"
+        ]
+      }
+    },
+    "/api/v1/partners/me": {
+      "get": {
+        "operationId": "get_my_organisation_api_v1_partners_me_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartnerDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get My Organisation",
+        "tags": [
+          "partners"
+        ]
+      },
+      "patch": {
+        "description": "Update the public half of the caller's own record.\n\nThe writable fields are an allowlist in `partner_service`, not an exclusion\nlist here — `status`, `verification_level` and `is_listed` are staff's\njudgement about this partner and are not reachable from this route.",
+        "operationId": "update_my_organisation_api_v1_partners_me_patch",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateOwnOrganisationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartnerDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Update My Organisation",
+        "tags": [
+          "partners"
+        ]
+      }
+    },
+    "/api/v1/partners/me/brand/{asset}": {
+      "delete": {
+        "operationId": "clear_my_brand_asset_api_v1_partners_me_brand__asset__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset",
+            "required": true,
+            "schema": {
+              "title": "Asset",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartnerDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Clear My Brand Asset",
+        "tags": [
+          "partners"
+        ]
+      },
+      "put": {
+        "description": "Upload the caller's own logo or banner.\n\n`async def` — the one exception to this codebase's synchronous rule, and it is\nforced rather than chosen: `UploadFile.read()` is a coroutine. The database\nwork below is still synchronous and still on the same session.\n\nValidation is `core/images.py`'s, applied in the service. Nothing here trusts\nthe filename or the declared content type.",
+        "operationId": "upload_my_brand_asset_api_v1_partners_me_brand__asset__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "asset",
+            "required": true,
+            "schema": {
+              "title": "Asset",
+              "type": "string"
+            }
+          },
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_my_brand_asset_api_v1_partners_me_brand__asset__put"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartnerDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upload My Brand Asset",
+        "tags": [
+          "partners"
+        ]
+      }
+    },
+    "/api/v1/partners/me/expertise": {
+      "put": {
+        "description": "What this partner advertises expertise in.\n\n**This is what makes the public filter work** — each id becomes a pivot row\nthe directory index joins on, which is why it takes ids from the taxonomy\nrather than free text.",
+        "operationId": "set_my_expertise_api_v1_partners_me_expertise_put",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetExpertiseRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PartnerDetailResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set My Expertise",
         "tags": [
           "partners"
         ]
@@ -17614,6 +18359,56 @@
           }
         },
         "summary": "Public Partner",
+        "tags": [
+          "public"
+        ]
+      }
+    },
+    "/api/v1/public/partners/{slug}/brand/{asset}": {
+      "get": {
+        "description": "Serve a listed partner's logo or banner.\n\n## Why the response carries a content-security policy\n\nAn SVG is a document, not a bitmap: opened directly it can carry script. The\nupload path already refuses anything with script, embedded HTML, external\nreferences or a DOCTYPE — but `core/images.py`'s own docstring makes the case\nfor two independent controls, because either alone is one mistake away from\nfailing. This is the second: even a file that slipped past the check executes\nnothing, because the response forbids script and every external fetch.\n\n`X-Content-Type-Options: nosniff` matters for the same reason — without it a\nbrowser may decide the bytes are HTML regardless of what we said they were.\n\n## Caching\n\nA strong validator from `*_updated_at`, so a replaced logo invalidates\neverywhere rather than lingering, and an unchanged one is not re-downloaded on\nevery profile view. Public and immutable-ish: these are the same bytes for\nevery visitor.",
+        "operationId": "public_brand_asset_api_v1_public_partners__slug__brand__asset__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "slug",
+            "required": true,
+            "schema": {
+              "title": "Slug",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "asset",
+            "required": true,
+            "schema": {
+              "title": "Asset",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Public Brand Asset",
         "tags": [
           "public"
         ]

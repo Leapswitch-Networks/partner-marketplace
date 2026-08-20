@@ -81,6 +81,19 @@ MODERATION_REVIEW = "moderation-review"
 ENQUIRY_VIEW = "enquiry-view"
 ENQUIRY_RESPOND = "enquiry-respond"
 
+# Managing your OWN organisation — the partner-facing profile, expertise and
+# brand assets. **Granted to the Partner role only, and that is the point.**
+#
+# `PARTNER_VIEW` cannot gate these, because staff hold it too: a staff member
+# following a "Your organisation" link would reach `/partners/me`, which resolves
+# the organisation from their session, find none, and get a 404. The sidebar is
+# permission-filtered and has no other notion of "is this account a partner", so
+# the distinction has to be a permission or it cannot exist.
+#
+# It also tightens the API. Those routes were gated on `PARTNER_VIEW` and were
+# therefore reachable by staff, who could only ever receive a 404 from them.
+ORGANISATION_MANAGE = "organisation-manage"
+
 
 # --- Roles -------------------------------------------------------------------
 
@@ -131,6 +144,7 @@ registry.register_permission_group(
         (MODERATION_REVIEW, "Work the moderation queue"),
         (ENQUIRY_VIEW, "View enquiries"),
         (ENQUIRY_RESPOND, "Reply to an enquiry"),
+        (ORGANISATION_MANAGE, "Manage your own organisation's profile and branding"),
     ],
 )
 
@@ -159,6 +173,9 @@ registry.register_role(
         LISTING_DELETE,
         ENQUIRY_VIEW,
         ENQUIRY_RESPOND,
+        # Their own record only. Staff deliberately do not get this — see the
+        # note on the constant.
+        ORGANISATION_MANAGE,
     ],
 )
 
@@ -208,5 +225,6 @@ __all__ = [
     "MODERATION_REVIEW",
     "ENQUIRY_VIEW",
     "ENQUIRY_RESPOND",
+    "ORGANISATION_MANAGE",
     "ROLE_PARTNER",
 ]

@@ -304,10 +304,20 @@ def create_invitation(
     # A staff invitation must point at a staff domain, or the invitee could never
     # complete it — staff sign in with Google, which is domain-gated.
     if data.account_type == "internal" and not settings.is_staff_email(email):
+        # Empty `staff_domains` makes an internal invitation impossible rather
+        # than merely restricted, and the reason is a configuration one — so say
+        # that instead of the dangling "requires an address at ." this produced
+        # until 2026-08-20.
         allowed = ", ".join("@" + d for d in settings.staff_domains)
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
-            f"A staff invitation requires an address at {allowed}.",
+            f"A staff invitation requires an address at {allowed}."
+            if allowed
+            else (
+                "Staff invitations are unavailable: this installation has no staff "
+                "email domain configured (STAFF_EMAIL_DOMAINS). Invite this person "
+                "as an external account instead."
+            ),
         )
 
     now = datetime.now(timezone.utc)

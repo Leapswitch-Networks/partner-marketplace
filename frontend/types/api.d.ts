@@ -1248,7 +1248,18 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get Enquiry */
+        /**
+         * Get Enquiry
+         * @description One enquiry, and — for its recipient — the moment they first opened it.
+         *
+         *     Opening is what records `first_viewed_at`, because there is no other honest
+         *     moment to record it: a partner has "seen" an enquiry when they have looked at
+         *     it, not when it arrived or when a list rendered its subject line.
+         *
+         *     **A staff read never stamps.** Staff hold `enquiry-view` for oversight, and
+         *     the rule lives in `mark_viewed` rather than here so that every future caller
+         *     inherits it instead of re-deciding it. See TECH_DEBT PM-47.
+         */
         get: operations["get_enquiry_api_v1_enquiries__enquiry_id__get"];
         put?: never;
         post?: never;
@@ -1659,11 +1670,26 @@ export interface paths {
         };
         /**
          * Review Queue
-         * @description Everything awaiting review, **oldest first**.
+         * @description Everything awaiting review, **oldest first**, each with its blockers.
          *
          *     Oldest-first is not a display preference: § 16.2 measures the age of the
          *     oldest item in the queue, and a newest-first list is how the oldest item
          *     becomes permanently invisible to the person working it.
+         *
+         *     ## Why each row carries its blockers
+         *
+         *     Approving is refused when the owning partner is suspended, unlisted, or at
+         *     its tier's listing allowance. Computing that here means the reviewer sees it
+         *     before opening the listing rather than after clicking Approve — the same
+         *     reasoning that keeps a permission-gated action off screen instead of letting
+         *     it 403.
+         *
+         *     ## The two queries this deliberately does not multiply
+         *
+         *     Partners are fetched once for the whole queue and published counts are
+         *     batched into a single grouped query, so a queue of thirty listings across
+         *     five partners costs two extra queries rather than sixty. Both `entitlement`
+         *     and `publish_blockers` accept a pre-counted value for exactly this.
          */
         get: operations["review_queue_api_v1_moderation_queue_get"];
         put?: never;
@@ -1706,6 +1732,83 @@ export interface paths {
         put?: never;
         /** Create Partner Endpoint */
         post: operations["create_partner_endpoint_api_v1_partners_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/partners/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get My Organisation */
+        get: operations["get_my_organisation_api_v1_partners_me_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update My Organisation
+         * @description Update the public half of the caller's own record.
+         *
+         *     The writable fields are an allowlist in `partner_service`, not an exclusion
+         *     list here — `status`, `verification_level` and `is_listed` are staff's
+         *     judgement about this partner and are not reachable from this route.
+         */
+        patch: operations["update_my_organisation_api_v1_partners_me_patch"];
+        trace?: never;
+    };
+    "/api/v1/partners/me/brand/{asset}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Upload My Brand Asset
+         * @description Upload the caller's own logo or banner.
+         *
+         *     `async def` — the one exception to this codebase's synchronous rule, and it is
+         *     forced rather than chosen: `UploadFile.read()` is a coroutine. The database
+         *     work below is still synchronous and still on the same session.
+         *
+         *     Validation is `core/images.py`'s, applied in the service. Nothing here trusts
+         *     the filename or the declared content type.
+         */
+        put: operations["upload_my_brand_asset_api_v1_partners_me_brand__asset__put"];
+        post?: never;
+        /** Clear My Brand Asset */
+        delete: operations["clear_my_brand_asset_api_v1_partners_me_brand__asset__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/partners/me/expertise": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set My Expertise
+         * @description What this partner advertises expertise in.
+         *
+         *     **This is what makes the public filter work** — each id becomes a pivot row
+         *     the directory index joins on, which is why it takes ids from the taxonomy
+         *     rather than free text.
+         */
+        put: operations["set_my_expertise_api_v1_partners_me_expertise_put"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1996,6 +2099,45 @@ export interface paths {
         };
         /** Public Partner */
         get: operations["public_partner_api_v1_public_partners__slug__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/public/partners/{slug}/brand/{asset}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Public Brand Asset
+         * @description Serve a listed partner's logo or banner.
+         *
+         *     ## Why the response carries a content-security policy
+         *
+         *     An SVG is a document, not a bitmap: opened directly it can carry script. The
+         *     upload path already refuses anything with script, embedded HTML, external
+         *     references or a DOCTYPE — but `core/images.py`'s own docstring makes the case
+         *     for two independent controls, because either alone is one mistake away from
+         *     failing. This is the second: even a file that slipped past the check executes
+         *     nothing, because the response forbids script and every external fetch.
+         *
+         *     `X-Content-Type-Options: nosniff` matters for the same reason — without it a
+         *     browser may decide the bytes are HTML regardless of what we said they were.
+         *
+         *     ## Caching
+         *
+         *     A strong validator from `*_updated_at`, so a replaced logo invalidates
+         *     everywhere rather than lingering, and an unchanged one is not re-downloaded on
+         *     every profile view. Public and immutable-ish: these are the same bytes for
+         *     every visitor.
+         */
+        get: operations["public_brand_asset_api_v1_public_partners__slug__brand__asset__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -3470,6 +3612,14 @@ export interface components {
              */
             file: string;
         };
+        /** Body_upload_my_brand_asset_api_v1_partners_me_brand__asset__put */
+        Body_upload_my_brand_asset_api_v1_partners_me_brand__asset__put: {
+            /**
+             * File
+             * Format: binary
+             */
+            file: string;
+        };
         /**
          * BrandingResponse
          * @description The project's identity, fully resolved.
@@ -3878,12 +4028,12 @@ export interface components {
             buyer_phone?: string | null;
             /** Company */
             company?: string | null;
-            /** Listing Id */
-            listing_id?: string | null;
+            /** Listing Slug */
+            listing_slug?: string | null;
             /** Message */
             message: string;
-            /** Partner Id */
-            partner_id: string;
+            /** Partner Slug */
+            partner_slug: string;
             /** Timeline */
             timeline?: string | null;
             /** Website */
@@ -4426,6 +4576,8 @@ export interface components {
             created_at: string;
             /** First Responded At */
             first_responded_at: string | null;
+            /** First Viewed At */
+            first_viewed_at: string | null;
             /** Id */
             id: string;
             /** Listing Id */
@@ -4466,6 +4618,8 @@ export interface components {
             created_at: string;
             /** First Responded At */
             first_responded_at: string | null;
+            /** First Viewed At */
+            first_viewed_at: string | null;
             /** Id */
             id: string;
             /** Listing Id */
@@ -4492,6 +4646,29 @@ export interface components {
             direction: string;
             /** Id */
             id: string;
+        };
+        /**
+         * EntitlementResponse
+         * @description What a partner has published against what their tier allows.
+         *
+         *     The read half of `PARTNER_DIRECTORY_PLAN.md` § 14.1 row 2b. `max_listings` and
+         *     `remaining` are both nullable and both mean the same thing when null —
+         *     unlimited — which is why `unlimited` is sent explicitly rather than left for
+         *     every caller to infer from a null.
+         */
+        EntitlementResponse: {
+            /** At Limit */
+            at_limit: boolean;
+            /** Max Listings */
+            max_listings: number | null;
+            /** Published */
+            published: number;
+            /** Remaining */
+            remaining: number | null;
+            /** Tier */
+            tier: string | null;
+            /** Unlimited */
+            unlimited: boolean;
         };
         /**
          * ErrorGroupDetailResponse
@@ -5165,6 +5342,79 @@ export interface components {
             message: string;
         };
         /**
+         * ModerationQueueItem
+         * @description A queue entry, plus whether approving it would actually work.
+         *
+         *     **A separate schema rather than two more fields on `ListingDetailResponse`.**
+         *     Only the queue needs this, and every listing read in the application shares
+         *     that model — so putting it there would make an entitlement lookup the cost of
+         *     reading any listing, for a value almost nobody wants.
+         *
+         *     ## Why the reviewer needs it before opening the listing
+         *
+         *     Publishing is refused when the partner is suspended, unlisted, or at their
+         *     tier's allowance (§ 19.9). Those refusals are correct, but a reviewer who
+         *     only meets them *after* reading a listing and clicking Approve has spent the
+         *     expensive part of the decision to be told the cheap part was impossible. The
+         *     queue is worked oldest-first and is meant to be read; telling it what cannot
+         *     be approved is the difference between a queue and a lottery.
+         *
+         *     `blockers` empty means approving will succeed.
+         */
+        ModerationQueueItem: {
+            /**
+             * Attributes
+             * @default []
+             */
+            attributes: components["schemas"]["ListingAttributeResponse"][];
+            /**
+             * Blockers
+             * @default []
+             */
+            blockers: string[];
+            /** Category Id */
+            category_id: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Currency */
+            currency: string;
+            /** Description */
+            description: string | null;
+            entitlement: components["schemas"]["EntitlementResponse"];
+            /** Id */
+            id: string;
+            /**
+             * Media
+             * @default []
+             */
+            media: components["schemas"]["ListingMediaResponse"][];
+            /** Partner Id */
+            partner_id: string;
+            /** Partner Name */
+            partner_name: string;
+            /** Price */
+            price: string | null;
+            /** Pricing Model */
+            pricing_model: string;
+            /** Published At */
+            published_at: string | null;
+            /** Rejection Reason */
+            rejection_reason: string | null;
+            /** Slug */
+            slug: string;
+            /** Status */
+            status: string;
+            /** Submitted At */
+            submitted_at: string | null;
+            /** Summary */
+            summary: string;
+            /** Title */
+            title: string;
+        };
+        /**
          * NavPreferencesResponse
          * @description The role's effective preferences, every catalog section present.
          *
@@ -5408,18 +5658,14 @@ export interface components {
             /** Total */
             total: number;
         };
-        /**
-         * PartnerDetailResponse
-         * @description The full staff-facing record.
-         *
-         *     Carries `notes`, `gst_number` and `pan_number`. **Never return this from a
-         *     public route** — use `PartnerPublicResponse`.
-         */
+        /** PartnerDetailResponse */
         PartnerDetailResponse: {
             /** About */
             about: string | null;
             /** Agreement Signed At */
             agreement_signed_at: string | null;
+            /** Banner Mime */
+            banner_mime?: string | null;
             /** Banner Path */
             banner_path: string | null;
             /** Billing Address */
@@ -5476,6 +5722,8 @@ export interface components {
             is_verified: boolean;
             /** Legal Name */
             legal_name: string | null;
+            /** Logo Mime */
+            logo_mime?: string | null;
             /** Logo Path */
             logo_path: string | null;
             /** Name */
@@ -5510,10 +5758,7 @@ export interface components {
             updated_at: string;
             /** Updated By */
             updated_by: string | null;
-            /**
-             * User Count
-             * @default 0
-             */
+            /** User Count */
             user_count: number;
             /** Verification Level */
             verification_level: string;
@@ -5584,10 +5829,7 @@ export interface components {
             /** Status */
             status: string;
             tier: components["schemas"]["PartnerTierResponse"] | null;
-            /**
-             * User Count
-             * @default 0
-             */
+            /** User Count */
             user_count: number;
             /** Verification Level */
             verification_level: string;
@@ -5883,12 +6125,20 @@ export interface components {
             /** Founded Year */
             founded_year: number | null;
             /**
+             * Has Banner
+             * @default false
+             */
+            has_banner: boolean;
+            /**
+             * Has Logo
+             * @default false
+             */
+            has_logo: boolean;
+            /**
              * Listings
              * @default []
              */
             listings: components["schemas"]["PublicListing"][];
-            /** Logo Path */
-            logo_path: string | null;
             /** Name */
             name: string;
             /** Public Email */
@@ -5923,8 +6173,16 @@ export interface components {
             employee_range: string | null;
             /** Founded Year */
             founded_year: number | null;
-            /** Logo Path */
-            logo_path: string | null;
+            /**
+             * Has Banner
+             * @default false
+             */
+            has_banner: boolean;
+            /**
+             * Has Logo
+             * @default false
+             */
+            has_logo: boolean;
             /** Name */
             name: string;
             /** Slug */
@@ -6422,6 +6680,16 @@ export interface components {
             enabled: boolean;
         };
         /**
+         * SetExpertiseRequest
+         * @description Replace the whole expertise selection.
+         *
+         *     Ids, not names: these become pivot rows the public directory filter joins on.
+         */
+        SetExpertiseRequest: {
+            /** Category Ids */
+            category_ids: number[];
+        };
+        /**
          * SetRolePermissionsRequest
          * @description The whole grant set, for `PUT /roles/{id}/permissions`.
          *
@@ -6782,6 +7050,44 @@ export interface components {
                     [key: string]: boolean;
                 };
             };
+        };
+        /**
+         * UpdateOwnOrganisationRequest
+         * @description What a partner may change about their own record.
+         *
+         *     ⚠️ **Everything absent is absent on purpose.** No `status`, no
+         *     `verification_level`, no `is_listed`, no `tier_id` — those are Leapswitch's
+         *     judgement about this partner, not theirs. No `notes`, `gst_number` or
+         *     `pan_number` — internal. The service applies a matching allowlist, so a field
+         *     added here without being added there is inert rather than dangerous.
+         */
+        UpdateOwnOrganisationRequest: {
+            /** About */
+            about?: string | null;
+            /** City */
+            city?: string | null;
+            /** Country */
+            country?: string | null;
+            /** Employee Range */
+            employee_range?: string | null;
+            /** Founded Year */
+            founded_year?: number | null;
+            /** Name */
+            name?: string | null;
+            /** Postal Code */
+            postal_code?: string | null;
+            /** Public Email */
+            public_email?: string | null;
+            /** Public Phone */
+            public_phone?: string | null;
+            /** Service Areas */
+            service_areas?: string | null;
+            /** State */
+            state?: string | null;
+            /** Tagline */
+            tagline?: string | null;
+            /** Website */
+            website?: string | null;
         };
         /**
          * UpdatePartnerRequest
@@ -10222,7 +10528,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ListingDetailResponse"][];
+                    "application/json": components["schemas"]["ModerationQueueItem"][];
                 };
             };
             /** @description Validation Error */
@@ -10325,6 +10631,177 @@ export interface operations {
         responses: {
             /** @description Successful Response */
             201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartnerDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_my_organisation_api_v1_partners_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartnerDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_my_organisation_api_v1_partners_me_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateOwnOrganisationRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartnerDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_my_brand_asset_api_v1_partners_me_brand__asset__put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_my_brand_asset_api_v1_partners_me_brand__asset__put"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartnerDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    clear_my_brand_asset_api_v1_partners_me_brand__asset__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                asset: string;
+            };
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PartnerDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_my_expertise_api_v1_partners_me_expertise_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetExpertiseRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -10858,6 +11335,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PublicPartnerDetail"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    public_brand_asset_api_v1_public_partners__slug__brand__asset__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                slug: string;
+                asset: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

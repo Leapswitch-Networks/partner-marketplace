@@ -10,32 +10,85 @@ action is how a queue that is meant to be read becomes a queue that is cleared.
 """
 
 from fastapi import APIRouter, Depends
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.dependencies import get_db, require_permission
 from app.domain.partners.permissions import LISTING_PUBLISH, MODERATION_REVIEW
+from app.models.partner import Partner
 from app.models.user import User
-from app.schemas.directory import ListingDetailResponse, RejectListingRequest
+from app.schemas.directory import (
+    EntitlementResponse,
+    ListingDetailResponse,
+    ModerationQueueItem,
+    RejectListingRequest,
+)
 from app.services import listing_service
 
 router = APIRouter(prefix="/moderation", tags=["moderation"])
 
 
-@router.get("/queue", response_model=list[ListingDetailResponse])
+@router.get("/queue", response_model=list[ModerationQueueItem])
 def review_queue(
     db: Session = Depends(get_db),
     _: User = Depends(require_permission(MODERATION_REVIEW)),
-) -> list[ListingDetailResponse]:
-    """Everything awaiting review, **oldest first**.
+) -> list[ModerationQueueItem]:
+    """Everything awaiting review, **oldest first**, each with its blockers.
 
     Oldest-first is not a display preference: § 16.2 measures the age of the
     oldest item in the queue, and a newest-first list is how the oldest item
     becomes permanently invisible to the person working it.
+
+    ## Why each row carries its blockers
+
+    Approving is refused when the owning partner is suspended, unlisted, or at
+    its tier's listing allowance. Computing that here means the reviewer sees it
+    before opening the listing rather than after clicking Approve — the same
+    reasoning that keeps a permission-gated action off screen instead of letting
+    it 403.
+
+    ## The two queries this deliberately does not multiply
+
+    Partners are fetched once for the whole queue and published counts are
+    batched into a single grouped query, so a queue of thirty listings across
+    five partners costs two extra queries rather than sixty. Both `entitlement`
+    and `publish_blockers` accept a pre-counted value for exactly this.
     """
-    return [
-        ListingDetailResponse.model_validate(listing)
-        for listing in listing_service.pending_queue(db)
-    ]
+    listings = listing_service.pending_queue(db)
+    if not listings:
+        return []
+
+    partner_ids = list({listing.partner_id for listing in listings})
+    partners = {
+        partner.id: partner
+        for partner in db.scalars(select(Partner).where(Partner.id.in_(partner_ids))).all()
+    }
+    counts = listing_service.published_counts(db, partner_ids)
+
+    items: list[ModerationQueueItem] = []
+    for listing in listings:
+        partner = partners.get(listing.partner_id)
+        published = counts.get(listing.partner_id, 0)
+        item = ModerationQueueItem.model_validate(listing)
+        item.partner_name = partner.name if partner is not None else "Unknown organisation"
+        item.blockers = listing_service.publish_blockers(db, listing, published=published)
+        item.entitlement = EntitlementResponse.model_validate(
+            listing_service.entitlement(db, partner, published=published)
+            if partner is not None
+            # Unreachable while the FK holds; a partnerless listing is not a
+            # crash, it is a blocker reported above.
+            else {
+                "tier": None,
+                "published": 0,
+                "max_listings": None,
+                "unlimited": True,
+                "remaining": None,
+                "at_limit": False,
+            }
+        )
+        items.append(item)
+
+    return items
 
 
 @router.post("/listings/{listing_id}/approve", response_model=ListingDetailResponse)

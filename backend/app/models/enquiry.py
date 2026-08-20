@@ -112,6 +112,29 @@ class Enquiry(Base):
         EnquiryStatusEnum, nullable=False, default="NEW", index=True
     )
 
+    #: Stamped once, the first time the **recipient partner** opens the enquiry.
+    #:
+    #: § 10 of `PARTNER_DIRECTORY_PLAN.md` calls this and `first_responded_at`
+    #: "the two timestamps the entire trust system depends on": together they give
+    #: time-to-first-view and time-to-first-response, which feed § 16's measures
+    #: and the ranking in § 9.
+    #:
+    #: ⚠️ **Staff opening an enquiry must never set this.** Staff hold
+    #: `enquiry-view` for oversight, and stamping on their read would turn a
+    #: measure of partner responsiveness into a measure of staff browsing. The
+    #: rule lives in `enquiry_service.mark_viewed`.
+    first_viewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+        # Kept identical to the migration's comment. `0e6d123d0fa3` exists
+        # precisely because model and database comments had drifted apart, and
+        # `--autogenerate` reports a mismatch here as an `alter_column`.
+        comment=(
+            "Stamped once, when the recipient partner first opens the enquiry. "
+            "Never on a staff read — see enquiry_service.mark_viewed"
+        ),
+    )
+
     first_responded_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

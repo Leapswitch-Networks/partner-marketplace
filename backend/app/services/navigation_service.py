@@ -396,6 +396,21 @@ def _permitted(user: User, permission: str | list[str] | None) -> bool:
     return any(user.has_permission(name) for name in permission)
 
 
+def _visible(user: User, item: dict[str, Any]) -> bool:
+    """Whether this user should see this single item.
+
+    Permission is the usual gate. `requires_organisation` is the second one, for
+    items that need an organisation to resolve at all: Admin holds nearly every
+    permission and belongs to no organisation, so "Your Organisation" passed the
+    permission check and then led to a page whose only possible answer was that the
+    account is not attached to one.
+    """
+    if item.get("requires_organisation") and user.organisation_id is None:
+        return False
+
+    return _permitted(user, item["permission"])
+
+
 def _filter_items(user: User, items: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Keep the items this user may use, recursing into children.
 
@@ -412,12 +427,36 @@ def _filter_items(user: User, items: list[dict[str, Any]]) -> list[dict[str, Any
             visible_children = _filter_items(user, children)
             if visible_children:
                 kept.append({**item, "items": visible_children})
-            elif item["href"] != "#" and _permitted(user, item["permission"]):
+            elif item["href"] != "#" and _visible(user, item):
                 kept.append({k: v for k, v in item.items() if k != "items"})
             continue
 
-        if _permitted(user, item["permission"]):
+        if _visible(user, item):
             kept.append(item)
+
+    return kept
+
+
+def _filter_organisation_items(
+    user: User, items: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Apply only the organisation gate, leaving permissions alone.
+
+    This is the super-admin path: they may reach every route regardless of
+    permission, but no permission attaches an account to an organisation.
+    """
+    kept: list[dict[str, Any]] = []
+
+    for item in items:
+        if item.get("requires_organisation") and user.organisation_id is None:
+            continue
+
+        children = item.get("items")
+        if children is not None:
+            kept.append({**item, "items": _filter_organisation_items(user, children)})
+            continue
+
+        kept.append(item)
 
     return kept
 
@@ -454,7 +493,17 @@ def get_navigation(db: Session, user: User) -> list[dict[str, Any]]:
 
     # A super admin bypasses every permission check elsewhere in the app; the nav
     # has to agree, or they would be shown less than they can actually reach.
+    #
+    # The bypass is over PERMISSIONS only. `requires_organisation` is not a
+    # permission and is therefore still enforced: being a super admin does not
+    # attach you to an organisation, so "Your Organisation" would resolve for root
+    # to the same dead end it did for Admin. Skipping the whole filter here is what
+    # left root seeing all nine items on 2026-08-18 after the Admin case was fixed.
     if user.is_super_admin:
+        sections = [
+            {**section, "items": _filter_organisation_items(user, section["items"])}
+            for section in sections
+        ]
         return [section for section in sections if section["items"]]
 
     return filter_sections(user, sections)

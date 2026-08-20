@@ -98,6 +98,8 @@ an ordering that only reads correctly together.
 | PM-43 | 🟡 | ~~Two purge functions exist and nothing runs them~~ — `worker.py` + `db/maintenance.py` | ✅ closed 2026-08-06 |
 | PM-44 | 🟡 | Three pieces of state live in process memory | Open — deferred to the production topology |
 | PM-45 | 🟡 | Model/database drift — `--autogenerate` proposed 80 unrelated operations | ✅ **closed 2026-08-18** — drift is 0; a generated migration is now empty |
+| [PM-46](#pm-46--the-partner-write-surface-is-not-tenancy-scoped) | 🟠 | The id-taking partner writes apply no tenancy narrowing — safe only while `partner-update` stays admin-only | ⏳ **found 2026-08-20** — not exploitable today; invariant now enforced by a test |
+| [PM-47](#pm-47--the-enquiry-state-machine-is-half-built-and-the-trust-metric-pays-for-it) | 🟠 | No `SPAM` state, so junk enquiries count against a partner's response rate for ever | ⏳ **`first_viewed_at` landed 2026-08-20**; the two enum values remain, and need the UI half |
 
 > **This table was wrong for eleven days and that is worth a line.** PM-40, PM-42 and PM-43 were
 > closed in `CORE_HARDENING_PLAN.md` on 2026-08-06 and still read "Open" here on 2026-08-17, found by
@@ -1621,3 +1623,186 @@ declared, rather than renaming a working index to match a generated default.
 ⚠️ **A generated migration being empty is the point of all this** — it means the
 next real change produces a diff short enough to read, which is how four
 constraint drops nearly rode into a migration named after something else.
+
+## PM-46 — the partner write surface is not tenancy-scoped
+
+**Found 2026-08-20**, by writing the HTTP-level wrong-tenant suite that
+`CORE_EXTRACTION_PLAN.md` § 3.7 asked for. Severity 🟠 for the shape of the
+defect, not for present exposure: **it is not exploitable in the shipped
+configuration.**
+
+### The asymmetry
+
+Reads of a partner row are tenancy-scoped. Writes are not.
+
+| Path | Guard | Narrows to the actor's tenant? |
+|---|---|---|
+| `get_partner_for` (read) | `scoping.assert_can_read` | **Yes** — 404 for another organisation |
+| `can_edit` → `PATCH /partners/{id}` | `actor.has_permission(PARTNER_UPDATE)` | **No** |
+| `can_delete` → `DELETE /partners/{id}` | permission + refuses the actor's **own** org | No |
+| `can_change_status` → `POST /{id}/status` | permission + refuses own org | No |
+| `can_verify` → `POST /{id}/verification` | permission + refuses own org | No |
+
+The three `own org` checks are easy to misread as tenancy scoping. They are the
+opposite: they stop **self**-approval — lifting your own suspension, verifying
+yourself. None of them stops an actor acting on **someone else's** organisation.
+
+`Partner` *is* registered for scoping (`scoping.register_scope(Partner,
+owner_column=Partner.id, …)` in `partner_service`), and the read path honours
+that registration. The write path never consults it.
+
+### Why it is not exploitable today
+
+`partner-update`, `partner-delete`, `partner-approve` and `partner-verify` are
+reachable **only through the four wildcard roles** — Admin, BackendDeveloper,
+RootUser, SuperAdmin — and no account holding any of them has an
+`organisation_id` (verified against the database, 2026-08-20). For those roles,
+"edit any partner" is the intended meaning of the permission; `api/partners.py`
+says so where it explains why `/partners/me` uses `ORGANISATION_MANAGE` instead.
+
+So the safety of the whole surface rests on a configuration fact that nothing
+enforced.
+
+### What was done
+
+Not a behaviour change — narrowing an authorization rule is the owner's call, and
+the same judgement was applied to `list_grants` on 2026-08-13 (flag, recommend,
+then close on the owner's word). What landed instead:
+
+* **`tests/test_partner_write_permissions.py`** turns the configuration fact into
+  an enforced invariant. It fails if any of those four permissions is granted to
+  a named (non-wildcard) role, with the reasoning in the failure message. It is a
+  registry test, so it runs in CI without a seeded database.
+* **`TestTheTenantWallHoldsOverHTTP`** in `tests/test_visibility_paths.py` proves
+  the read side over HTTP — a valid session from the wrong organisation gets 404
+  on the detail route and does not see the row in the index — and pins the write
+  side as a **403 by permission**, documenting that the refusal comes from the
+  permission gate rather than from scoping.
+
+### The decision the owner still owns
+
+**Should `can_edit` and its three siblings narrow to the actor's tenant?**
+
+* **Argument for:** defence in depth. The read and write paths currently disagree
+  about the same row, and the only thing keeping them from contradicting each
+  other in production is that nobody has granted a permission. Yesterday's work
+  (splitting `ORGANISATION_MANAGE` out of `PARTNER_VIEW`) is exactly the kind of
+  change that grants one.
+* **Argument against:** these permissions *mean* "staff acting across all
+  partners". Adding a tenancy check would need an explicit carve-out for staff —
+  who have `organisation_id = None` — and getting that carve-out wrong locks
+  staff out of partner administration entirely. The check is not free.
+* **Recommended:** leave the predicates alone and keep the invariant test. Revisit
+  the moment any partner-facing role is proposed for one of these permissions,
+  and treat the test failing as the trigger for that conversation.
+
+## PM-47 — the enquiry state machine is half-built, and the trust metric pays for it
+
+**Found 2026-08-20**, while looking for what would make the Enquiries module more
+useful. Severity 🟠: it silently corrupts the only trust measure the product has,
+and that measure feeds partner ranking.
+
+### What is specified versus what exists
+
+`PARTNER_DIRECTORY_PLAN.md` § 10 (line 683) and the schema table (line 1772) both
+give the machine as:
+
+    NEW → VIEWED → RESPONDED → WON | LOST | CLOSED | SPAM
+
+and § 10 calls `first_viewed_at` and `first_responded_at` *"the two timestamps the
+entire trust system depends on"*. § 19.9 adds that both are **write-once** and
+that `SPAM` is reachable from any state.
+
+What is actually built:
+
+| Specified | Built | Consequence |
+|---|---|---|
+| `VIEWED` status | ❌ absent from the `enquiry_status` enum | "time to first view" cannot be measured at all |
+| `first_viewed_at` | ✅ **added 2026-08-20** (`d4a71b93c8e2`), stamped write-once on the recipient partner's read | — |
+| `SPAM` status | ❌ absent from the enum | **see below — this is the defect** |
+| `first_responded_at` | ✅ present, write-once, tested | the half that works |
+| A transition table | ❌ `set_status` accepts any of the five, in any order | `RESPONDED → NEW` is reachable and is a lie about history |
+
+### The defect, stated plainly
+
+Enquiries are created by **anonymous public visitors** through a rate-limited,
+honeypot-protected form. Some of them will be junk — that is what a public form
+means. There is no `SPAM` status to put them in, so a junk enquiry stays
+`first_responded_at IS NULL` for ever, and `enquiry_service.partner_metrics`
+counts exactly that as `unanswered`.
+
+So a partner's response rate is dragged down by spam they were right to ignore,
+and § 9 ranks partners on that number. The only alternatives available to them
+today are `CLOSED` or `LOST`, which are legitimate commercial outcomes and would
+misreport the pipeline instead.
+
+**`partner_metrics` is also entirely dead** — zero call sites. So the corrupted
+number is not on screen anywhere yet, which is the only reason this is 🟠 and not
+🔴. It becomes visible the moment `/dashboard/entitlements` or a partner dashboard
+consumes it.
+
+### Why it was not fixed on discovery
+
+Adding the two enum values is a hand-written `ALTER TYPE … ADD VALUE` migration —
+`DATABASE_MIGRATIONS.md` § 201 anticipates exactly this case and says so. That
+part is small. The reason it stopped is that **a new status the frontend cannot
+render is a half-shipped change**: `frontend/lib/api/directoryApi.ts` narrows
+`EnquiryStatus` to the five current values deliberately, and the label and tone
+maps live in `EnquiriesModule.tsx` — which was being actively edited by another
+agent at the time (along with `EnquiryThread.tsx`). Shipping the backend half
+would have produced unlabelled grey badges for a status nobody could set.
+
+The same reasoning applies to the missing transition table: forbidding
+`RESPONDED → NEW` is correct, but it changes what the existing status dropdown is
+allowed to do, and that dropdown is in a file owned elsewhere right now.
+
+### The fix, specified
+
+### ✅ Done 2026-08-20 — the timestamp half
+
+Split out and shipped because it needed **no enum change and no UI change**, which
+is what made it safe to do while the enquiries screens were owned elsewhere. The
+measure needs a *timestamp*; the `VIEWED` badge is presentation.
+
+* Migration `d4a71b93c8e2` adds `enquiries.first_viewed_at`, nullable, no
+  backfill — NULL means "not opened yet", which is honestly true of every row
+  that predates it. Inventing a view time from `created_at` would fabricate the
+  measure the column exists to report (§ 16.4's honest zero). It round-trips:
+  `upgrade → downgrade → upgrade` verified against the live database.
+* `enquiry_service.mark_viewed` stamps it write-once, and **only for the
+  recipient partner** — `actor.organisation_id == enquiry.partner_id`. Staff have
+  no organisation, so they are excluded by construction rather than by being
+  named. Without that rule the measure would become "how fast does Leapswitch
+  read its own mail". Two tests cover exactly these two rules.
+* Exposed on the authenticated enquiry shapes only. It was briefly added to
+  `PublicEnquiryStatus` by mistake, which would have told an anonymous buyer when
+  the partner opened their enquiry **and** broken that page — the field is
+  required and `api/public.py` does not pass it. Caught by inspecting where the
+  edit landed, then confirmed by calling the public route: 200, and the field
+  absent.
+
+### What remains — the enum half
+
+One migration on head `d4a71b93c8e2`:
+
+1. `ALTER TYPE enquiry_status ADD VALUE 'VIEWED'` and `… ADD VALUE 'SPAM'`,
+   hand-written — SQLAlchemy emits no DDL for an enum value addition, and the
+   inserts simply fail. PostgreSQL 16 permits this inside a transaction provided
+   the new value is not *used* in the same one.
+2. `downgrade()` **cannot remove them** — PostgreSQL has no `DROP VALUE`. Follow
+   the precedent of `e7b41c9a2d10` and `c1e70a5d94b2` and raise
+   `NotImplementedError` with that reason rather than half-reversing.
+
+Then:
+
+3. `mark_viewed` additionally moves `NEW → VIEWED` (the stamp already happens).
+4. `set_status` gains `SPAM` (reachable from any state) and a transition table for
+   the rest, mirroring `listing_service._TRANSITIONS`, so `RESPONDED → NEW` stops
+   being reachable.
+5. `partner_metrics` excludes `SPAM` from both numerator and denominator — spam is
+   not an enquiry a partner failed to answer, it is not an enquiry. **This is the
+   defect; everything else here is the scaffolding for it.**
+6. Widen `EnquiryStatus` in `directoryApi.ts` and add the label/tone entries in
+   `EnquiriesModule.tsx`. **This is the half to coordinate**, not to race — and
+   note the tone map may be an exhaustive `Record`, in which case widening the
+   union breaks that file's build until the entries are added.

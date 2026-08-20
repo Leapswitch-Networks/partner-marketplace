@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import ast
 import pathlib
+import re
 
 import pytest
 
@@ -33,6 +34,7 @@ from app.core.permissions import (
 from app.core.roles import CORE_ROLE_DESCRIPTIONS, ROLE_STAFF, ROLE_USER
 
 BACKEND = pathlib.Path(__file__).resolve().parents[1]
+FRONTEND = BACKEND.parent / "frontend"
 CORE_DIR = BACKEND / "app" / "core"
 DOMAIN_DIR = BACKEND / "app" / "domain"
 MODELS_INIT = BACKEND / "app" / "models" / "__init__.py"
@@ -353,6 +355,50 @@ class TestTheAssembledCatalog:
         entry — that mismatch would render a toggle the seeder never wrote a
         default for."""
         assert "partner-directory" in nav.collapsible_sections()
+
+    def test_every_registered_icon_key_exists_in_the_frontend_map(self):
+        """`navIcon()` falls back to a grey dot for a key it does not know, and says
+        nothing about it.
+
+        Added 2026-08-18, after seven nav items shipped and four of them pointed at
+        keys chosen from memory. Two (`listings`, `enquiries`) did not exist, so they
+        rendered as dots in the sidebar with no error anywhere — not in typecheck,
+        not in lint, not in a test. Nothing connected the backend's icon *names* to
+        the frontend's icon *map* until this assertion did.
+
+        **This skips inside the backend container**, which mounts `./backend:/app`
+        and cannot see the frontend tree — so it does NOT fire in the verification
+        gate, only when pytest runs on the host or in a CI job with a full checkout.
+        `navIcon()` therefore also warns in development for an unknown key; that
+        warning, not this test, is what catches it in the container.
+        """
+        icons = FRONTEND / "components" / "dashboard" / "navIcons.tsx"
+        if not icons.exists():
+            pytest.skip(f"frontend tree not mounted at {FRONTEND} — see this test's docstring")
+
+        source = icons.read_text(encoding="utf-8")
+        # The map is a plain object literal, so the keys are the identifiers
+        # declared at one indent level. Matching on `key: (` avoids picking up
+        # JSX attributes and the `NAV_ICONS[name]` lookup itself.
+        available = set(re.findall(r"^  ([A-Za-z][A-Za-z0-9]*): \(", source, re.MULTILINE))
+        assert "dot" in available, "the fallback vanished — this test is reading the wrong thing"
+
+        used: set[str] = set()
+
+        def walk(items):
+            for item in items:
+                if item.get("icon"):
+                    used.add(item["icon"])
+                walk(item.get("items") or [])
+
+        for _order, section in nav.registered_sections():
+            walk(section.get("items") or [])
+
+        missing = sorted(used - available)
+        assert not missing, (
+            f"nav items point at icon keys the frontend does not have: {missing}. "
+            f"Each renders as a dot. Add them to {icons.name} or use an existing key."
+        )
 
 
 class TestTheCoreAssemblesWithNoDomain:

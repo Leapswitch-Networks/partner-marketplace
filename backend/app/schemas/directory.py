@@ -114,6 +114,55 @@ class ListingDetailResponse(ListingListItem):
     attributes: list[ListingAttributeResponse] = []
 
 
+class EntitlementResponse(BaseModel):
+    """What a partner has published against what their tier allows.
+
+    The read half of `PARTNER_DIRECTORY_PLAN.md` § 14.1 row 2b. `max_listings` and
+    `remaining` are both nullable and both mean the same thing when null —
+    unlimited — which is why `unlimited` is sent explicitly rather than left for
+    every caller to infer from a null.
+    """
+
+    #: The tier's display name, or null when the partner is on no tier at all.
+    tier: str | None
+    published: int
+    max_listings: int | None
+    unlimited: bool
+    #: Null when unlimited. Never negative — a partner moved to a smaller tier can
+    #: be over their allowance, and "-2 remaining" is not a thing to render.
+    remaining: int | None
+    at_limit: bool
+
+
+class ModerationQueueItem(ListingDetailResponse):
+    """A queue entry, plus whether approving it would actually work.
+
+    **A separate schema rather than two more fields on `ListingDetailResponse`.**
+    Only the queue needs this, and every listing read in the application shares
+    that model — so putting it there would make an entitlement lookup the cost of
+    reading any listing, for a value almost nobody wants.
+
+    ## Why the reviewer needs it before opening the listing
+
+    Publishing is refused when the partner is suspended, unlisted, or at their
+    tier's allowance (§ 19.9). Those refusals are correct, but a reviewer who
+    only meets them *after* reading a listing and clicking Approve has spent the
+    expensive part of the decision to be told the cheap part was impossible. The
+    queue is worked oldest-first and is meant to be read; telling it what cannot
+    be approved is the difference between a queue and a lottery.
+
+    `blockers` empty means approving will succeed.
+    """
+
+    #: Denormalised so the queue does not need a second request per row to name
+    #: the company — the reviewer is deciding about an organisation, not an id.
+    partner_name: str
+    #: Human-readable, and every applicable reason at once. Same list the refusal
+    #: would raise, so the screen and the error cannot disagree.
+    blockers: list[str] = []
+    entitlement: EntitlementResponse
+
+
 class CreateListingRequest(BaseModel):
     title: str = Field(min_length=3, max_length=160)
     summary: str = Field(min_length=10, max_length=280)
@@ -164,6 +213,8 @@ class EnquiryListItem(BaseModel):
     company: str | None
     status: str
     source: str
+    #: NULL until the recipient partner opens it. Never set by a staff read.
+    first_viewed_at: datetime | None
     first_responded_at: datetime | None
     created_at: datetime
 

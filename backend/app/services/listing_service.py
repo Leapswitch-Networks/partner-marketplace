@@ -25,7 +25,7 @@ import uuid
 from datetime import datetime, timezone
 
 from fastapi import HTTPException, status as http_status
-from sqlalchemy import Select, and_, select
+from sqlalchemy import Select, and_, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.partner import Partner
@@ -155,6 +155,11 @@ def update_listing(db: Session, listing: ServiceListing, **fields) -> ServiceLis
     a form that resubmits every field unchanged would otherwise send a published
     listing back to the queue every time somebody opened and saved it.
     """
+    # Captured before the loop below writes over it. `category_id` is a material
+    # field, so an edit can move a listing between categories — and the recount
+    # after the loop would then only ever see the *new* one.
+    original_category_id = listing.category_id
+
     changed_material = False
     for field, value in fields.items():
         if value is None or not hasattr(listing, field):
@@ -169,24 +174,219 @@ def update_listing(db: Session, listing: ServiceListing, **fields) -> ServiceLis
     if changed_material and listing.status == "PUBLISHED":
         listing.status = "PENDING_REVIEW"
         listing.submitted_at = datetime.now(timezone.utc)
+        # ⚠️ **Flushed before counting, and it has to be.** `SessionLocal` is
+        # `autoflush=False`, so the SELECT inside `recount_listings` would
+        # otherwise read the row as it was before this function touched it —
+        # still PUBLISHED, still in the old category — and store that count.
+        #
+        # This is also why the pre-2026-08-20 code appeared to work: it
+        # recomputed only the *destination* category, which stale-read as "does
+        # not contain this listing yet" and happened to be the right answer. The
+        # origin was both unflushed and unvisited. Every other recount call site
+        # in this module already flushes first.
+        db.flush()
         # It leaves the public site immediately, so the category count is wrong
         # until recomputed. Doing it here rather than in the router means it
         # cannot be forgotten by the next caller.
-        category_service.recount_listings(db, listing.category_id)
+        #
+        # **Both categories, not just the current one.** Moving a published
+        # listing from A to B leaves it counted in A for ever otherwise: the
+        # recount ran against `listing.category_id`, which the loop above had
+        # already changed to B. A `set` because the common case is that they are
+        # the same category and one recount is enough. Fixed 2026-08-20.
+        for category_id in {original_category_id, listing.category_id}:
+            category_service.recount_listings(db, category_id)
 
     db.flush()
     return listing
 
 
 def submit_for_review(db: Session, listing: ServiceListing) -> ServiceListing:
+    """Send a listing to the review queue.
+
+    Usually `DRAFT → PENDING_REVIEW`, where nothing public changes. But
+    `PUBLISHED → PENDING_REVIEW` is a legal transition and is reachable from
+    `POST /listings/{id}/submit`, and *that* takes the listing off the public
+    site — so the category count has to be recomputed or it keeps counting a
+    listing nobody can see. Missed until 2026-08-20, because the same rule was
+    written into `update_listing` and not here.
+    """
+    was_published = listing.status == "PUBLISHED"
     _transition(listing, "PENDING_REVIEW")
     listing.submitted_at = datetime.now(timezone.utc)
     listing.rejection_reason = None
     db.flush()
+    if was_published:
+        category_service.recount_listings(db, listing.category_id)
     return listing
 
 
+# --- Entitlement (PARTNER_DIRECTORY_PLAN.md § 14.1 row 2b) -------------------
+#
+# `partner_tiers.max_listings` and `featured_slots` have been columns that
+# **nothing checked** since they were created — the plan says so in three places,
+# and calls a tier "currently a label". This is the enforcement half of row 2b;
+# `entitlement()` below is its read half.
+#
+# The rule, quoted from § 19.9: *"Publishing checks the tier: count of PUBLISHED
+# listings must stay < tier.max_listings (NULL = unlimited)."*
+
+
+def published_counts(db: Session, partner_ids: list[str]) -> dict[str, int]:
+    """Published listings per partner, in one query rather than one per row.
+
+    Soft-deleted rows are excluded: a deleted listing is not occupying a slot,
+    and counting it would mean a partner who tidied up could not replace what
+    they removed.
+
+    Batched for the same reason `partner_service._user_counts` is — the
+    moderation queue asks this about every row it shows, and a per-row count is
+    the N+1 that only appears once the queue has a realistic length.
+    """
+    if not partner_ids:
+        return {}
+    rows = db.execute(
+        select(ServiceListing.partner_id, func.count(ServiceListing.id))
+        .where(
+            ServiceListing.partner_id.in_(partner_ids),
+            ServiceListing.status == "PUBLISHED",
+            ServiceListing.deleted_at.is_(None),
+        )
+        .group_by(ServiceListing.partner_id)
+    ).all()
+    return {partner_id: count for partner_id, count in rows}
+
+
+def published_count(db: Session, partner_id: str) -> int:
+    """Live published listings for one partner. The single-row path."""
+    return published_counts(db, [partner_id]).get(partner_id, 0)
+
+
+def entitlement(
+    db: Session, partner: Partner, *, published: int | None = None
+) -> dict[str, object]:
+    """What this partner has published against what their tier allows.
+
+    The read half of § 14.1 row 2b — "usage vs allowance". Returned as a plain
+    dict rather than a schema because three different callers want it at
+    different shapes (a partner's own dashboard, the staff partner row, and the
+    refusal message below), and none of them wants a new response model.
+
+    **A partner with no tier is unlimited, deliberately.** `partners.tier_id` is
+    nullable and — measured 2026-08-20 — *every* partner in this database has it
+    NULL, so the alternative reading ("no tier means no entitlement") would have
+    refused every publication in the system the moment this landed. A tier is a
+    *commercial* entitlement; its absence means nobody has sold this partner a
+    limit, not that their limit is zero. The same reasoning applies to a tier
+    whose `max_listings` is NULL, which is the documented spelling of unlimited.
+
+    Pass `published` when the caller has already counted — the moderation queue
+    batches one count across every partner in the queue and would otherwise
+    re-query per row.
+    """
+    tier = partner.tier
+    allowance = tier.max_listings if tier is not None else None
+    used = published_count(db, partner.id) if published is None else published
+
+    return {
+        "tier": tier.display_name if tier is not None else None,
+        "published": used,
+        "max_listings": allowance,
+        "unlimited": allowance is None,
+        "remaining": None if allowance is None else max(0, allowance - used),
+        "at_limit": allowance is not None and used >= allowance,
+    }
+
+
+def publish_blockers(
+    db: Session, listing: ServiceListing, *, published: int | None = None
+) -> list[str]:
+    """Every reason this listing may not be published, in plain English.
+
+    A list rather than a first-failure raise so a reviewer is told everything at
+    once. Being told "the partner is suspended", fixing it, and then being told
+    "and they are at their listing limit" is two round trips for one decision.
+
+    Empty means publishable. `assert_publishable` is the raising wrapper.
+    """
+    # Fetched by id: `ServiceListing` deliberately has no `partner`
+    # relationship — see the note on the model about hiding a company being a
+    # join rather than an update of thirty rows. `db.get` is identity-mapped, so
+    # this is free once per session.
+    partner = db.get(Partner, listing.partner_id)
+    if partner is None:  # pragma: no cover - the FK makes this unreachable
+        return ["The owning organisation no longer exists."]
+
+    blockers: list[str] = []
+
+    # § 19.9: "Publishing requires the owning partner to be status == ACTIVE and
+    # is_listed == true." Both halves, for the reason `publicly_visible` gives.
+    #
+    # This is defence in depth rather than a live leak — every public read
+    # already joins partner visibility, so a suspended partner's listings are
+    # invisible whatever their status says. What it prevents is a PUBLISHED row
+    # that is a lie about reality: `published_at` gets stamped, the listing
+    # claims to be live, and nothing on screen explains why it is not.
+    if partner.status != "ACTIVE":
+        blockers.append(
+            f"{partner.name} is {partner.status.lower()}, so its listings cannot be "
+            "published. Reactivate the organisation first."
+        )
+    if not partner.is_listed:
+        blockers.append(
+            f"{partner.name} is not listed in the directory, so publishing this "
+            "would have no public effect. List the organisation first."
+        )
+
+    # `listing.status != "PUBLISHED"` is for the *read* path, not for `approve`:
+    # `_TRANSITIONS` has no PUBLISHED → PUBLISHED edge, so approve can never see
+    # one. It matters when this function is called to explain why a listing is
+    # blocked, where reporting "at their limit" about an already-live listing
+    # would be describing a slot it is itself occupying.
+    ent = entitlement(db, partner, published=published)
+    if ent["at_limit"] and listing.status != "PUBLISHED":
+        blockers.append(
+            f"{partner.name} has {ent['published']} of {ent['max_listings']} "
+            f"published listings allowed by the {ent['tier']} tier. Archive one, "
+            "or move the organisation to a larger tier."
+        )
+
+    return blockers
+
+
+def assert_publishable(db: Session, listing: ServiceListing) -> None:
+    """Raise 409 unless every publishing rule holds.
+
+    409 rather than 422: nothing about the *request* is malformed, and nothing
+    the reviewer can retype would fix it. It is the state of the system that
+    forbids the transition, which is what Conflict means.
+    """
+    blockers = publish_blockers(db, listing)
+    if blockers:
+        raise HTTPException(
+            http_status.HTTP_409_CONFLICT,
+            " ".join(blockers)
+            if len(blockers) == 1
+            else "This listing cannot be published yet: " + " ".join(blockers),
+        )
+
+
 def approve(db: Session, listing: ServiceListing, *, reviewer_id: str) -> ServiceListing:
+    """Publish, if the partner and their tier allow it.
+
+    The entitlement check runs **before** the transition, so a refusal leaves the
+    listing in `PENDING_REVIEW` where the reviewer found it rather than in a
+    half-moved state.
+
+    ⚠️ **A partner at their limit can still fix a typo**, which is the case worth
+    getting right because § 19.9 sends every edit of a published listing back
+    through review. It works without a special case: editing moves the listing
+    out of `PUBLISHED`, so it stops counting toward its own allowance while it
+    sits in review, and re-approving puts it back in the slot it just vacated.
+    The count does the work — there is no "is this a re-approval" branch to get
+    wrong.
+    """
+    assert_publishable(db, listing)
     _transition(listing, "PUBLISHED")
     now = datetime.now(timezone.utc)
     listing.reviewed_at = now

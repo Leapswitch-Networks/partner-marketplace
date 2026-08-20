@@ -313,3 +313,95 @@ def _reviewer_placeholder(db):
     """Any active user — the scoping branch under test reads `organisation_id`
     and `has_admin_access`, never the identity."""
     return db.scalars(select(User).where(User.status == "ACTIVE")).first()
+
+
+class TestTheViewTimestampMeasuresThePartnerNotUs:
+    """`first_viewed_at` — the other half of the trust pair, added 2026-08-20.
+
+    § 10 calls `first_viewed_at` and `first_responded_at` *"the two timestamps the
+    entire trust system depends on"*. Only the second existed; TECH_DEBT PM-47
+    records the rest of that gap. These cover the two rules that make the new one
+    mean something.
+    """
+
+    def test_the_recipient_partner_opening_it_stamps_once(self, world):
+        db, category, partner, _other, reviewer = world
+
+        listing = listing_service.create_listing(
+            db,
+            partner_id=partner.id,
+            title="Viewed once",
+            summary="A service to enquire about.",
+            category_id=category.id,
+        )
+        listing_service.submit_for_review(db, listing)
+        listing_service.approve(db, listing, reviewer_id=reviewer.id)
+        db.commit()
+
+        enquiry = enquiry_service.create_enquiry(
+            db,
+            partner_id=partner.id,
+            listing_id=listing.id,
+            buyer_name="Vera Viewer",
+            buyer_email="vera@example.com",
+            message="Is this available next month?",
+        )
+        db.commit()
+        assert enquiry.first_viewed_at is None
+
+        member = _actor(reviewer, partner)
+
+        assert enquiry_service.mark_viewed(db, enquiry, member) is True
+        first = enquiry.first_viewed_at
+        assert first is not None
+
+        # Write-once: a second open must not move it. Re-stamping would turn "how
+        # long did they take to look" into "when did they last look", which is a
+        # different question from the one ranking asks.
+        assert enquiry_service.mark_viewed(db, enquiry, member) is False
+        assert enquiry.first_viewed_at == first
+
+    def test_a_staff_read_never_stamps_it(self, world):
+        """**The rule that keeps the measure honest.**
+
+        Staff hold `enquiry-view` for oversight, so without this a staff member
+        working the enquiries index would stamp view times across every partner
+        on the platform — and the measure would quietly become "how fast does
+        Leapswitch read its own mail" rather than how responsive a partner is.
+
+        Staff have no `organisation_id`, so they are excluded by construction
+        rather than by being named.
+        """
+        db, category, partner, other, reviewer = world
+
+        listing = listing_service.create_listing(
+            db,
+            partner_id=partner.id,
+            title="Not viewed by staff",
+            summary="A service to enquire about.",
+            category_id=category.id,
+        )
+        listing_service.submit_for_review(db, listing)
+        listing_service.approve(db, listing, reviewer_id=reviewer.id)
+        db.commit()
+
+        enquiry = enquiry_service.create_enquiry(
+            db,
+            partner_id=partner.id,
+            listing_id=listing.id,
+            buyer_name="Sam Staffwatch",
+            buyer_email="sam@example.com",
+            message="Asking about availability.",
+        )
+        db.commit()
+
+        # `reviewer` is a real staff row: internal, and belonging to no organisation.
+        assert reviewer.organisation_id is None
+        assert enquiry_service.mark_viewed(db, enquiry, reviewer) is False
+        assert enquiry.first_viewed_at is None
+
+        # And a member of the *wrong* partner is refused too — the recipient is
+        # the only one whose attention is being measured.
+        outsider = _actor(reviewer, other)
+        assert enquiry_service.mark_viewed(db, enquiry, outsider) is False
+        assert enquiry.first_viewed_at is None

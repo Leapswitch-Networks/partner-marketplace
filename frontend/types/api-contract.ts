@@ -66,6 +66,46 @@ import type {
   RoleUserItem,
 } from "@/lib/api/rbacApi";
 import type { Branding } from "@/lib/branding";
+import type {
+  DataAccessGrant,
+  DataAccessOptions,
+  DataAccessPage,
+  CreateGrantResult,
+  GrantParty,
+  ScopeOption,
+} from "@/lib/api/dataAccessApi";
+import type {
+  ErrorGroup,
+  ErrorGroupDetail,
+  ErrorOccurrence,
+} from "@/lib/api/errorApi";
+import type {
+  ApiCredential,
+  ApiProvider,
+  CredentialFieldSchema,
+  CredentialPage,
+  MaskedFieldValue,
+  ProviderPage,
+  ProviderSummary,
+} from "@/lib/api/credentialApi";
+import type {
+  FeatureFlag,
+  FeatureFlagOptions,
+  FeatureFlagPage,
+  RoleOption,
+  UserOption,
+} from "@/lib/api/featureFlagApi";
+import type {
+  SearchableEntity,
+  SearchableEntityPage,
+} from "@/lib/api/searchApi";
+import type {
+  DeliverySummary,
+  WebhookDelivery,
+  WebhookEndpoint,
+} from "@/lib/api/webhookApi";
+import type { ApiConsumer, ConsumerUsage } from "@/lib/api/platformApi";
+import type { Entitlement, ModerationQueueEntry } from "@/lib/api/directoryApi";
 
 type Schemas = components["schemas"];
 
@@ -156,6 +196,108 @@ export type RoleUserItemContract = Assert<KeysMatch<RoleUserItem, Schemas["RoleU
 export type MatrixRowContract = Assert<KeysMatch<MatrixRow, Schemas["MatrixRow"]>>;
 export type MatrixGroupCellContract = Assert<
   KeysMatch<MatrixGroupCell, Schemas["MatrixGroupCell"]>
+>;
+
+// --- Added 2026-08-20: the seven `lib/api/*.ts` modules -------------------
+//
+// Every type below crosses the wire and **none of them was asserted**, which the
+// header has warned about since this file was written: "a schema with no
+// assertion is a schema that can drift". The five originally-asserted types grew
+// to seventeen on 2026-08-07 after three drifts cost a day; these are the rest.
+//
+// ## Why these are asserted rather than replaced
+//
+// Four of these modules carry a comment saying their types should be *replaced*
+// by the generated schemas at the next regeneration (`CORE_EXTRACTION_PLAN.md`
+// § 4.3, citing PM-42). The regeneration happened on 2026-08-20 — and replacing
+// them is still the wrong move, for the reason this file's own header gives:
+// the generated types come from Pydantic and are **looser**.
+// `DataAccessGrantResponse.access_level` is `string`; the hand-written
+// `AccessLevel` is `"view" | "manage"`, and three modules `switch` on it.
+// Replacing would trade a real union for a bare string and silently delete the
+// exhaustiveness checking with it.
+//
+// So the narrowings stay and drift becomes impossible instead — which is exactly
+// the bargain PM-42 was closed on, applied to the files it never reached.
+
+export type ErrorGroupContract = Assert<KeysMatch<ErrorGroup, Schemas["ErrorGroupResponse"]>>;
+export type ErrorOccurrenceContract = Assert<
+  KeysMatch<ErrorOccurrence, Schemas["ErrorOccurrenceResponse"]>
+>;
+export type ErrorGroupDetailContract = Assert<
+  KeysMatch<ErrorGroupDetail, Schemas["ErrorGroupDetailResponse"]>
+>;
+
+export type DataAccessGrantContract = Assert<
+  KeysMatch<DataAccessGrant, Schemas["DataAccessGrantResponse"]>
+>;
+export type GrantPartyContract = Assert<KeysMatch<GrantParty, Schemas["GrantParty"]>>;
+export type ScopeOptionContract = Assert<KeysMatch<ScopeOption, Schemas["ScopeOption"]>>;
+export type DataAccessPageContract = Assert<
+  KeysMatch<DataAccessPage, Schemas["DataAccessListResponse"]>
+>;
+export type DataAccessOptionsContract = Assert<
+  KeysMatch<DataAccessOptions, Schemas["DataAccessOptionsResponse"]>
+>;
+export type CreateGrantResultContract = Assert<
+  KeysMatch<CreateGrantResult, Schemas["CreateDataAccessResult"]>
+>;
+
+export type CredentialFieldSchemaContract = Assert<
+  KeysMatch<CredentialFieldSchema, Schemas["CredentialFieldSchema"]>
+>;
+export type MaskedFieldValueContract = Assert<
+  KeysMatch<MaskedFieldValue, Schemas["MaskedFieldValue"]>
+>;
+export type ApiProviderContract = Assert<KeysMatch<ApiProvider, Schemas["ProviderResponse"]>>;
+export type ProviderSummaryContract = Assert<
+  KeysMatch<ProviderSummary, Schemas["ProviderSummary"]>
+>;
+export type ApiCredentialContract = Assert<
+  KeysMatch<ApiCredential, Schemas["CredentialResponse"]>
+>;
+export type ProviderPageContract = Assert<KeysMatch<ProviderPage, Schemas["ProviderPage"]>>;
+export type CredentialPageContract = Assert<KeysMatch<CredentialPage, Schemas["CredentialPage"]>>;
+
+export type FeatureFlagContract = Assert<KeysMatch<FeatureFlag, Schemas["FeatureFlagResponse"]>>;
+export type FeatureFlagPageContract = Assert<
+  KeysMatch<FeatureFlagPage, Schemas["FeatureFlagPage"]>
+>;
+export type RoleOptionContract = Assert<KeysMatch<RoleOption, Schemas["RoleOption"]>>;
+export type UserOptionContract = Assert<KeysMatch<UserOption, Schemas["UserOption"]>>;
+export type FeatureFlagOptionsContract = Assert<
+  KeysMatch<FeatureFlagOptions, Schemas["FeatureFlagOptionsResponse"]>
+>;
+
+export type SearchableEntityContract = Assert<
+  KeysMatch<SearchableEntity, Schemas["SearchableEntityResponse"]>
+>;
+export type SearchableEntityPageContract = Assert<
+  KeysMatch<SearchableEntityPage, Schemas["SearchableEntityPage"]>
+>;
+
+export type WebhookEndpointContract = Assert<
+  KeysMatch<WebhookEndpoint, Schemas["WebhookResponse"]>
+>;
+export type WebhookDeliveryContract = Assert<
+  KeysMatch<WebhookDelivery, Schemas["DeliveryResponse"]>
+>;
+export type DeliverySummaryContract = Assert<
+  KeysMatch<DeliverySummary, Schemas["DeliverySummary"]>
+>;
+
+export type ApiConsumerContract = Assert<KeysMatch<ApiConsumer, Schemas["ConsumerResponse"]>>;
+export type ConsumerUsageContract = Assert<KeysMatch<ConsumerUsage, Schemas["ConsumerUsage"]>>;
+
+// The moderation queue's own response, added with the entitlement guard on
+// 2026-08-20. Asserted from the start rather than added to the backlog — the
+// whole point of the previous block is that an unasserted schema is one that
+// drifts, and a brand new schema is the cheapest possible moment to pin it.
+export type EntitlementContract = Assert<
+  KeysMatch<Entitlement, Schemas["EntitlementResponse"]>
+>;
+export type ModerationQueueEntryContract = Assert<
+  KeysMatch<ModerationQueueEntry, Schemas["ModerationQueueItem"]>
 >;
 
 // --- The deliberate narrowings ---------------------------------------------

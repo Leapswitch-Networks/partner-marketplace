@@ -133,15 +133,56 @@ const DYNAMIC = [
  * would report success without ever rendering them.
  */
 const PUBLIC_PAGES = [
-  // The root path is a middleware redirect to /sign-in — unconditionally, so
-  // this pass (not the signed-in one) is where it can be observed.
-  ["/", "Sign", "/sign-in"],
   ["/sign-in", "Sign"],
   ["/sign-up", "Sign"],
   ["/forgot-password", "Password"],
   ["/reset-password", "Password"],
   ["/verify-email", "Verif"],
   ["/accept-invitation", "Invit"],
+];
+
+/**
+ * The public marketing and directory surface — **server-rendered, and therefore
+ * a completely different data path from every page above.**
+ *
+ * The signed-in screens fetch client-side through RTK Query and the browser's
+ * cookie. These fetch on the server through `INTERNAL_API_URL`, which resolves
+ * to the Compose service name — so a page here can only render if the *frontend
+ * container* can reach the *backend container*, which nothing else in this
+ * harness exercises. `AGENTS.md` § 5 warns that getting the two round the wrong
+ * way fails **silently**: the server-side fetch to a browser-facing URL gets
+ * ECONNREFUSED, the error boundary catches it, and the route still answers 200
+ * with an empty page. That is exactly what the text floor below catches.
+ *
+ * Checked signed out, deliberately: these pages must work for a visitor with no
+ * session, and running them after the logout above proves it rather than
+ * assuming it.
+ *
+ * ⚠️ Each `expected` string is taken from the page's **own content**, never from
+ * the shared header. Every page here renders the same nav ("Find a partner",
+ * "Why us", "Become a partner", "About", "Partner sign in"), so asserting on any
+ * of those would pass on all fourteen routes and prove only that the layout
+ * rendered.
+ *
+ * Added 2026-08-20. Before that this list held a single entry — `["/", "Sign",
+ * "/sign-in"]`, asserting that the root path redirected to the sign-in screen.
+ * That was true when it was written and stopped being true on 2026-08-18, when
+ * the public home page was built; the harness had been reporting it as a failure
+ * ever since, which is how a checker that nobody trusts gets ignored wholesale.
+ */
+const PUBLIC_SURFACE = [
+  ["/", "Find the right company"],
+  // "The directory." is the h1; "Partner directory" is only the <title>, which
+  // `innerText` does not contain — the mistake this line was written with.
+  ["/partners", "The directory"],
+  ["/services", "Browse"],
+  ["/search", "What"],
+  ["/become-a-partner", "Free during"],
+  ["/contact", "Support"],
+  ["/verification", "verification"],
+  ["/about", "A short list"],
+  ["/terms", "Last updated"],
+  ["/privacy", "Last updated"],
 ];
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -418,6 +459,11 @@ try {
   await cdp.send("Network.clearBrowserCookies");
   for (const [path, expected, destination] of PUBLIC_PAGES) {
     await check(path, expected, { signedOut: true, expect: destination ?? path });
+  }
+
+  console.log("\n--- public surface (server-rendered) ---");
+  for (const [path, expected] of PUBLIC_SURFACE) {
+    await check(path, expected, { signedOut: true });
   }
 } catch (err) {
   console.error("\nHARNESS ERROR:", err.message);
