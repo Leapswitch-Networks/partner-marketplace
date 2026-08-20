@@ -61,14 +61,14 @@ export default function RolesModule() {
   const modal = useModalState<ModalMode, Role>();
 
   /*
-    **Not `useResourceList`, and that is a decision rather than an oversight.**
+    **Not a paged server query, and that is a decision rather than an oversight.**
 
     `/api/roles` returns the whole list — it is not paged and has no server-side
     search, because there are six roles and adding an endpoint to satisfy a hook
     would be the tail wagging the dog. So this loads once and the filtering and
     paging below happen in the browser.
 
-    `useResourceList` refetches whenever its `deps` change, which for a
+    A paged query refetches whenever its arguments change, which for a
     client-filtered list would mean a network round trip on every keystroke.
     Recorded in `MODULE_PARITY_PLAN.md` § 4 as the one module that stays
     open-coded; revisit if roles ever become a list you scroll.

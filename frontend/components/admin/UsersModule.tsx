@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Avatar from "@/components/common/Avatar";
 import Badge from "@/components/common/Badge";
 import Button from "@/components/common/Button";
@@ -20,19 +20,27 @@ import {
   stackedCell,
 } from "@/components/common/columns";
 import { navIcon } from "@/components/dashboard/navIcons";
-import { adminApi } from "@/lib/api/adminApi";
-import { roleApi } from "@/lib/api/rbacApi";
-import { partnersApi } from "@/lib/api/partnersApi";
+import { extractApiError } from "@/lib/utils/apiError";
 import useModalState from "@/lib/hooks/useModalState";
 import usePermissions from "@/lib/hooks/usePermissions";
-import useResourceList from "@/lib/hooks/useResourceList";
 import useResourceQuery from "@/lib/hooks/useResourceQuery";
-import useRowAction, { useBulkAction } from "@/lib/hooks/useRowAction";
+import { useBulkAction } from "@/lib/hooks/useBulkAction";
+import { useListPartnersQuery } from "@/lib/api/endpoints/partnersEndpoints";
+import { useListRolesQuery } from "@/lib/api/endpoints/rolesEndpoints";
+import {
+  useApproveUserMutation,
+  useBulkDeleteUsersMutation,
+  useBulkUserStatusMutation,
+  useDeleteUserMutation,
+  useListUsersQuery,
+  useResetUserTwoFactorMutation,
+  useToggleUserStatusMutation,
+  useUnlockUserMutation,
+} from "@/lib/api/endpoints/usersEndpoints";
 import {
   ACCOUNT_TYPE_LABELS,
   type AccountType,
   type ManagedUser,
-  type Role,
   type UserStatus,
 } from "@/types";
 
@@ -74,8 +82,7 @@ type ModalMode = "delete" | "email" | "create" | "edit" | "view" | "status";
  * |---|---|
  * | Page shell — header, filter row, table, paging | `ResourceIndex` |
  * | Filter/sort/page/selection state, URL round-trip | `useResourceQuery` |
- * | Fetching, loading, error, refetch, row patching | `useResourceList` |
- * | Per-row write: busy row, toast, apply result | `useRowAction` |
+ * | Fetching, caching, loading, error, invalidation | `lib/api/endpoints/usersEndpoints` |
  * | Bulk write: skipped reasons, clear selection | `useBulkAction` |
  * | Which dialog is open, and on which row | `useModalState` |
  * | `#`, `Actions`, badge and date columns | `columns.tsx` |
@@ -117,43 +124,59 @@ export default function UsersModule({ initialModal }: { initialModal?: ModalMode
   });
 
   // --- data ---
-  const list = useResourceList<ManagedUser>({
-    ready: q.ready,
-    deps: [q.applied, q.sortBy, q.sortOrder, q.page, q.perPage],
-    errorMessage: "Could not load users.",
-    fetch: () =>
-      adminApi
-        .listUsers({
-          search: q.applied.search || undefined,
-          status: (q.applied.status as UserStatus) || undefined,
-          account_type: (q.applied.account_type as AccountType) || undefined,
-          role_id: q.applied.role_id ? Number(q.applied.role_id) : undefined,
-          organisation_id: q.applied.organisation_id || undefined,
-          sort_by: q.sortBy,
-          sort_order: q.sortOrder,
-          page: q.page,
-          per_page: q.perPage,
-        })
-        .then((res) => res.data),
-  });
+  // PM-41 § 4.5. `status`, `account_type`, `role_id` and `organisation_id` are
+  // all filters *and* things the writes here change, so a patched row could sit
+  // in a view it no longer belongs to. Invalidation re-runs the filtered query.
+  const listQuery = useListUsersQuery(
+    {
+      search: q.applied.search || undefined,
+      status: (q.applied.status as UserStatus) || undefined,
+      account_type: (q.applied.account_type as AccountType) || undefined,
+      role_id: q.applied.role_id ? Number(q.applied.role_id) : undefined,
+      organisation_id: q.applied.organisation_id || undefined,
+      sort_by: q.sortBy,
+      sort_order: q.sortOrder,
+      page: q.page,
+      per_page: q.perPage,
+    },
+    { skip: !q.ready },
+  );
 
   const modal = useModalState<ModalMode, ManagedUser>(initialModal);
 
-  const [roles, setRoles] = useState<Role[]>([]);
-
-  // Roles drive both the filter and the pickers; fetched once. Not a
-  // `useResourceList` — it is not paged, not filtered, and a failure must be
-  // silent rather than blocking the page, so the hook's rules do not apply.
-  useEffect(() => {
-    if (!can("role-view")) return;
-    roleApi
-      .list()
-      .then((res) => setRoles(res.data))
-      .catch(() => setRoles([]));
-  }, [can]);
+  // Roles drive both the filter and the pickers. Now a shared cache entry rather
+  // than a fetch-on-mount, so arriving here from the invite form — which needs
+  // the same unchanging list — costs nothing. `?? []` keeps the old rule that a
+  // failure leaves the picker empty instead of blocking the table.
+  const { data: roles = [] } = useListRolesQuery(undefined, { skip: !can("role-view") });
 
   // --- row actions ---
-  const { busy, run } = useRowAction<ManagedUser>({ onSuccess: list.patchRow, show });
+  const [approveUser] = useApproveUserMutation();
+  const [unlockUser] = useUnlockUserMutation();
+  const [resetTwoFactor] = useResetUserTwoFactorMutation();
+  const [toggleUserStatus] = useToggleUserStatusMutation();
+  const [removeUser] = useDeleteUserMutation();
+
+  /*
+    An id, not a boolean. It disables the one row being written rather than the
+    whole table: a boolean would either freeze every row while one writes, or
+    freeze none and let the same row be clicked twice — and a second click on a
+    toggle sends it straight back, which reads as the action having silently
+    failed.
+  */
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const run = async (id: string, action: () => Promise<unknown>, successMessage: string) => {
+    setBusy(id);
+    try {
+      await action();
+      show(successMessage);
+    } catch (err) {
+      show(extractApiError(err, "Action failed."), "error");
+    } finally {
+      setBusy(null);
+    }
+  };
 
   /*
     **`q.selected`, not a local one.** This module used to keep its own
@@ -164,9 +187,20 @@ export default function UsersModule({ initialModal }: { initialModal?: ModalMode
     Selected buttons did nothing at all**, silently, for as long as they have
     existed. Two states meaning one thing is how that happens; there is one now.
   */
+  const [bulkDeleteUsers] = useBulkDeleteUsersMutation();
+  const [bulkUserStatus] = useBulkUserStatusMutation();
+
+  /*
+    `onChanged` is now a no-op, and that is the point: the bulk mutations
+    invalidate the collection themselves. It stays a required prop because
+    `useBulkAction`'s other two jobs — surfacing `skipped_reasons` so a partial
+    success cannot read as a total one, and only clearing the selection when
+    something actually changed — are still worth having, and are the reason this
+    hook survived the conversion while the per-row one did not.
+  */
   const bulk = useBulkAction({
     show,
-    onChanged: list.refetch,
+    onChanged: () => {},
     clearSelection: () => q.setSelected(new Set()),
   });
 
@@ -174,28 +208,33 @@ export default function UsersModule({ initialModal }: { initialModal?: ModalMode
     const ids = Array.from(q.selected);
     if (ids.length === 0) return;
     return bulk.run(() =>
-      kind === "delete" ? adminApi.bulkDelete(ids) : adminApi.bulkStatus(ids, kind)
+      kind === "delete"
+        ? bulkDeleteUsers(ids)
+            .unwrap()
+            .then((data) => ({ data }))
+        : bulkUserStatus({ user_ids: ids, status: kind })
+            .unwrap()
+            .then((data) => ({ data }))
     );
   };
 
   const toggleStatus = (user: ManagedUser) =>
     run(
       user.id,
-      () => adminApi.toggleStatus(user.id),
+      () => toggleUserStatus(user.id).unwrap(),
       `${user.full_name} is now ${user.status === "ACTIVE" ? "inactive" : "active"}.`
     );
 
   // --- columns: #, Actions, Status, then data (LeapDesk's fixed order) ---
-  // Organisations, fetched once. Not a `useResourceList` — unpaged, unfiltered,
-  // and a failure here must leave the users table readable rather than blocking
-  // it. Same pattern the flags module uses for its targeting pickers.
-  const [organisations, setOrganisations] = useState<{ id: string; name: string }[]>([]);
-  useEffect(() => {
-    partnersApi
-      .list({ per_page: 100 })
-      .then((res) => setOrganisations(res.data.items.map((p) => ({ id: p.id, name: p.name }))))
-      .catch(() => setOrganisations([]));
-  }, []);
+  // Organisations for the filter and the "belongs to" column. A shared cache
+  // entry — `PartnersModule` reads the same query — replacing a fetch-on-mount.
+  // A failure still leaves the users table readable rather than blocking it,
+  // because an absent list only empties the picker.
+  const { data: organisationPage } = useListPartnersQuery({ per_page: 100 });
+  const organisations = useMemo(
+    () => (organisationPage?.items ?? []).map((p) => ({ id: p.id, name: p.name })),
+    [organisationPage]
+  );
   const organisationName = (id: string | null | undefined) =>
     id ? organisations.find((o) => o.id === id)?.name ?? "—" : "Internal";
 
@@ -222,7 +261,7 @@ export default function UsersModule({ initialModal }: { initialModal?: ModalMode
           visible: row.can_approve,
           disabled: busy === row.id,
           onSelect: () =>
-            run(row.id, () => adminApi.approveUser(row.id), `${row.full_name} approved.`),
+            run(row.id, () => approveUser(row.id).unwrap(), `${row.full_name} approved.`),
         },
         {
           label: "Send Email",
@@ -246,7 +285,7 @@ export default function UsersModule({ initialModal }: { initialModal?: ModalMode
           disabled: busy === row.id,
           hint: "Clears failed sign-in attempts",
           onSelect: () =>
-            run(row.id, () => adminApi.unlockUser(row.id), `${row.full_name} unlocked.`),
+            run(row.id, () => unlockUser(row.id).unwrap(), `${row.full_name} unlocked.`),
         },
         {
           label: "Reset 2FA",
@@ -262,7 +301,7 @@ export default function UsersModule({ initialModal }: { initialModal?: ModalMode
           onSelect: () =>
             run(
               row.id,
-              () => adminApi.resetTwoFactor(row.id),
+              () => resetTwoFactor(row.id).unwrap(),
               `Two-factor cleared for ${row.full_name}. They have been signed out everywhere and can set it up again.`
             ),
         },
@@ -413,13 +452,9 @@ export default function UsersModule({ initialModal }: { initialModal?: ModalMode
         },
       ]}
       columns={columns}
-      rows={list.rows}
+      result={listQuery}
       rowKey={(r) => r.id}
-      loading={list.loading}
-      error={list.error}
-      onRetry={list.refetch}
-      total={list.total}
-      pages={list.pages}
+      errorMessage="Could not load users."
       selectable={can("user-update") || can("user-delete")}
       bulkActions={
         <>
@@ -491,8 +526,8 @@ export default function UsersModule({ initialModal }: { initialModal?: ModalMode
             const wasEdit = modal.is("edit");
             modal.close();
             if (action === "saved") {
+              // `UserForm`'s own save invalidates the collection.
               show(wasEdit ? "User updated." : "User created.");
-              list.refetch();
             }
           }}
         />
@@ -523,10 +558,11 @@ export default function UsersModule({ initialModal }: { initialModal?: ModalMode
           tone={modal.target.status === "ACTIVE" ? "danger" : "primary"}
           errorFallback="Could not change status."
           onConfirm={async () => {
-            // Patch the row in place rather than refetching: the response is the
-            // updated record, so a round trip would only re-fetch what we hold.
-            const res = await adminApi.toggleStatus(modal.target!.id);
-            list.patchRow(res.data);
+            // No `patchRow`: `status` is a filter on this table, so the toggled
+            // row may no longer belong in the current view — which only the
+            // server can decide. The mutation invalidates the collection and the
+            // filtered query re-runs.
+            await toggleUserStatus(modal.target!.id).unwrap();
           }}
           onConfirmed={() => {
             const name = modal.target!.full_name;
@@ -561,12 +597,11 @@ export default function UsersModule({ initialModal }: { initialModal?: ModalMode
           noun="user"
           name={modal.target.full_name}
           subtitle={modal.target.email}
-          onConfirm={() => adminApi.deleteUser(modal.target!.id)}
+          onConfirm={() => removeUser(modal.target!.id).unwrap()}
           onDeleted={() => {
             const name = modal.target!.full_name;
             modal.close();
             show(`${name} deleted.`);
-            list.refetch();
           }}
           onClose={modal.close}
         />

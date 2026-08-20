@@ -24,7 +24,14 @@ export default function ProfileSettingsPage() {
       <ProfileIdCard />
       <EditProfileForm />
 
-      <div className="rounded-none bg-white p-6 ring-1 ring-surface-border dark:bg-night-card dark:ring-night-border">
+      {/* `id` is the target of the dashboard's two-factor prompt
+          (`WelcomeBanner`), which links here rather than to a security page —
+          there isn't one. `scroll-mt-6` keeps the panel clear of the sticky
+          header when the browser jumps to it. */}
+      <div
+        id="two-factor"
+        className="scroll-mt-6 rounded-none bg-white p-6 ring-1 ring-surface-border dark:bg-night-card dark:ring-night-border"
+      >
         <TwoFactorSettings />
       </div>
 

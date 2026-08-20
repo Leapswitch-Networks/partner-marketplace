@@ -19,16 +19,20 @@ import {
   stackedCell,
 } from "@/components/common/columns";
 import { navIcon } from "@/components/dashboard/navIcons";
-import errorApi, {
+import {
   type ErrorGroup,
   type ErrorGroupDetail,
   type ErrorStatus,
 } from "@/lib/api/errorApi";
 import useModalState from "@/lib/hooks/useModalState";
 import usePermissions from "@/lib/hooks/usePermissions";
-import useResourceList from "@/lib/hooks/useResourceList";
 import useResourceQuery from "@/lib/hooks/useResourceQuery";
-import useRowAction from "@/lib/hooks/useRowAction";
+import {
+  useDeleteErrorMutation,
+  useGetErrorQuery,
+  useListErrorsQuery,
+  useSetErrorStatusMutation,
+} from "@/lib/api/endpoints/errorsEndpoints";
 import { extractApiError } from "@/lib/utils/apiError";
 import { formatDateTime } from "@/lib/utils/format";
 
@@ -78,45 +82,72 @@ export default function ErrorsModule() {
     defaultPerPage: 30,
   });
 
-  const list = useResourceList<ErrorGroup>({
-    ready: q.ready,
-    deps: [q.applied, q.sortBy, q.sortOrder, q.page, q.perPage],
-    errorMessage: "Could not load errors.",
-    fetch: () =>
-      errorApi
-        .list({
-          search: q.applied.search || undefined,
-          status: (q.applied.status as ErrorStatus) || undefined,
-          module: q.applied.module || undefined,
-          sort_by: q.sortBy,
-          sort_order: q.sortOrder,
-          page: q.page,
-          per_page: q.perPage,
-        })
-        .then((res) => res.data),
-  });
+  // PM-41 § 4.5. `status` is both a filter here and the thing every write
+  // changes, so `patchRow` could leave a resolved group sitting in a list
+  // filtered to `open`. Invalidation re-runs the filtered query instead.
+  const listQuery = useListErrorsQuery(
+    {
+      search: q.applied.search || undefined,
+      status: (q.applied.status as ErrorStatus) || undefined,
+      module: q.applied.module || undefined,
+      sort_by: q.sortBy,
+      sort_order: q.sortOrder,
+      page: q.page,
+      per_page: q.perPage,
+    },
+    { skip: !q.ready },
+  );
 
   const modal = useModalState<ModalMode, ErrorGroup>();
-  const { busy, run } = useRowAction<ErrorGroup>({ onSuccess: list.patchRow, show });
+  const [setErrorStatus] = useSetErrorStatusMutation();
+  const [deleteError] = useDeleteErrorMutation();
 
-  const [detail, setDetail] = useState<ErrorGroupDetail | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
+  /*
+    An id, not a boolean. It disables the one row being written rather than the
+    whole table: a boolean would either freeze every row while one writes, or
+    freeze none and let the same row be clicked twice — and a second click on a
+    toggle sends it straight back, which reads as the action having silently
+    failed.
+  */
+  const [busy, setBusy] = useState<string | null>(null);
+
+  /*
+    The detail is a cache entry keyed on the row id, replacing the
+    fetch-into-state that used to run here. Two things fall out of that: reopening
+    a group is free, and a triage invalidates that id — so the modal's copy of
+    `status` and `notes` cannot drift behind the table it was opened from.
+
+    The `skip` gate is the same one the other converted modules use, rather than
+    RTK Query's `skipToken` — one way of expressing "not yet" per § 5. The `?? 0`
+    is never requested: `skip` is true for exactly the states where there is no
+    row, and it keeps the argument honestly a `number` instead of a cast.
+  */
+  const viewing = modal.is("view") ? modal.target : null;
+  const { data: detail, isFetching: detailLoading } = useGetErrorQuery(viewing?.id ?? 0, {
+    skip: !viewing,
+  });
 
   const openDetail = useCallback(
-    async (row: ErrorGroup) => {
+    (row: ErrorGroup) => {
       modal.open("view", row);
-      setDetail(null);
-      setDetailLoading(true);
-      try {
-        setDetail((await errorApi.get(row.id)).data);
-      } catch (err) {
-        show(extractApiError(err, "Could not load that error."), "error");
-      } finally {
-        setDetailLoading(false);
-      }
     },
-    [modal, show]
+    [modal]
   );
+
+  const toggleResolved = async (row: ErrorGroup) => {
+    setBusy(String(row.id));
+    try {
+      await setErrorStatus({
+        id: row.id,
+        status: row.status === "resolved" ? "open" : "resolved",
+      }).unwrap();
+      show(row.status === "resolved" ? "Reopened." : "Marked resolved.");
+    } catch (err) {
+      show(extractApiError(err, "Action failed."), "error");
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const columns = useMemo<Column<ErrorGroup>[]>(
     () => [
@@ -133,15 +164,7 @@ export default function ErrorsModule() {
           label: row.status === "resolved" ? "Reopen" : "Mark resolved",
           visible: can("error-manage"),
           disabled: busy === String(row.id),
-          onSelect: () =>
-            run(
-              String(row.id),
-              () =>
-                errorApi
-                  .setStatus(row.id, row.status === "resolved" ? "open" : "resolved")
-                  .then((r) => ({ data: r.data })),
-              row.status === "resolved" ? "Reopened." : "Marked resolved."
-            ),
+          onSelect: () => void toggleResolved(row),
         },
         {
           label: "Delete",
@@ -226,13 +249,9 @@ export default function ErrorsModule() {
         },
       ]}
       columns={columns}
-      rows={list.rows}
+      result={listQuery}
       rowKey={(r) => String(r.id)}
-      loading={list.loading}
-      error={list.error}
-      onRetry={list.refetch}
-      total={list.total}
-      pages={list.pages}
+      errorMessage="Could not load errors."
       table="vendor"
       rowNoun="error"
       emptyTitle="No errors recorded"
@@ -241,12 +260,9 @@ export default function ErrorsModule() {
       {modal.is("view") && modal.target && (
         <ErrorDetailModal
           group={modal.target}
-          detail={detail}
+          detail={detail ?? null}
           loading={detailLoading}
-          onClose={() => {
-            modal.close();
-            setDetail(null);
-          }}
+          onClose={modal.close}
         />
       )}
 
@@ -255,7 +271,8 @@ export default function ErrorsModule() {
           group={modal.target}
           onClose={modal.close}
           onDone={(updated) => {
-            list.patchRow(updated);
+            // No `patchRow`: the mutation invalidated this row and the
+            // collection, so the table already has the server's version.
             modal.close();
             show(`Marked ${STATUS_META[updated.status].label.toLowerCase()}.`);
           }}
@@ -267,11 +284,10 @@ export default function ErrorsModule() {
           noun="error"
           name={modal.target.exception_class}
           subtitle={modal.target.path ?? undefined}
-          onConfirm={() => errorApi.remove(modal.target!.id)}
+          onConfirm={() => deleteError(modal.target!.id).unwrap()}
           onDeleted={() => {
             modal.close();
             show("Error deleted.");
-            list.refetch();
           }}
           onClose={modal.close}
         >
@@ -409,6 +425,7 @@ function TriageModal({
   // it does not close on failure.
   const [status, setStatus] = useState<ErrorStatus>(group.status);
   const [notes, setNotes] = useState(group.notes ?? "");
+  const [setErrorStatus] = useSetErrorStatusMutation();
 
   return (
     <ConfirmDialog
@@ -419,8 +436,14 @@ function TriageModal({
       tone="primary"
       errorFallback="Could not update this error."
       onConfirm={async () => {
-        const res = await errorApi.setStatus(group.id, status, notes.trim() || null);
-        onDone(res.data);
+        // Deliberately not caught: `ConfirmDialog` renders a rejection in place
+        // and stays open, which is why there is no `onError` here.
+        const updated = await setErrorStatus({
+          id: group.id,
+          status,
+          notes: notes.trim() || null,
+        }).unwrap();
+        onDone(updated);
       }}
       onClose={onClose}
     >

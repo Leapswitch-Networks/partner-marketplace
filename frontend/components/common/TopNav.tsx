@@ -188,21 +188,51 @@ export default function TopNav({
           href="/settings/profile"
           aria-label={`${displayName || "Account"} — profile settings`}
           title={displayName || "Profile settings"}
-          className={`ml-4 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[10px] font-bold text-white transition-colors focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 ring-offset-surface-wash dark:ring-offset-night-card ${
-            inSettings ? "bg-brand-dark ring-2 ring-brand/30" : "bg-brand hover:bg-brand-dark"
+          /*
+            The account disc, in the action colour — 2026-08-20. Lilac fill, ink
+            initials at 11.01:1, and an ink border because a lilac fill measures
+            **1.23:1 against the chrome** and would otherwise have no edge at all
+            (`BACKOFFICE_DESIGN.md` § 4.2). The public surface's own precedent for a
+            lilac disc with an ink border is `VerificationBadge`'s middle tier.
+
+            **The active state inverts the same two colours** rather than reaching
+            for a third: on `/settings/*` it becomes an ink disc with lilac
+            initials, which is the same 11.01:1 read the other way round. It
+            replaces `bg-brand-dark`, which is no longer in the pair.
+
+            No `dark:` colours: lilac and ink are absolute, so one declaration
+            serves both themes. Lilac on `night-card` is 13.50:1.
+          */
+          className={`ml-4 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-ink text-[10px] font-bold transition-transform hover:scale-[.98] motion-reduce:transform-none focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 ring-offset-surface-wash dark:ring-offset-night-card ${
+            inSettings
+              ? "bg-ink text-primary ring-2 ring-ink/25"
+              : "bg-primary text-primary-foreground"
           }`}
         >
           {initials}
         </Link>
 
-        {/* Viho's btn-primary-light: tinted brand fill, brand text, no border.
-            Last in the row, hard against the corner — the theme puts it there and
-            so does the owner. The avatar badge sits to its left. */}
+        {/* Log out, in the action colour — 2026-08-20. This was Viho's
+            `btn-primary-light` (a brand-tinted fill inverting to solid brand on
+            hover); it is now the same lilac-on-ink treatment as every other primary
+            control, so the header's two controls read as one pair.
+
+            Hover **shrinks** rather than recolouring, which is the reference's
+            whole motion vocabulary and what `common/Button.tsx` now does too.
+
+            ⚠️ Still hand-rolled rather than using `<Button variant="primary">`,
+            and only because the geometry is bespoke — `px-4 py-2.5 text-xs`,
+            `rounded-[8px]`, hard against the corner, which the owner placed
+            deliberately. The colours are tokens, so it can no longer drift from the
+            shared definition on colour; it can still drift on geometry.
+
+            Last in the row, hard against the corner. The avatar disc sits to its
+            left. */}
         <button
           type="button"
           onClick={handleLogout}
           disabled={loggingOut}
-          className="ml-4 inline-flex items-center gap-2 rounded-[8px] bg-brand/10 px-4 py-2.5 text-xs font-semibold text-brand transition-colors hover:bg-brand hover:text-white focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 ring-offset-surface-wash dark:ring-offset-night-card disabled:cursor-not-allowed disabled:opacity-60 dark:bg-brand/20 dark:text-brand-on-dark dark:hover:bg-brand dark:hover:text-white"
+          className="ml-4 inline-flex items-center gap-2 rounded-[8px] border border-ink bg-primary px-4 py-2.5 text-xs font-semibold text-primary-foreground transition-transform hover:scale-[.98] active:scale-[.96] motion-reduce:transform-none focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 ring-offset-surface-wash dark:ring-offset-night-card disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100"
         >
           <svg className="h-[18px] w-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h6a2 2 0 012 2v1" />

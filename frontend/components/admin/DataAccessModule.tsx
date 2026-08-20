@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import Button from "@/components/common/Button";
 import DeleteDialog from "@/components/common/DeleteDialog";
@@ -19,15 +19,19 @@ import {
 } from "@/components/common/columns";
 import { navIcon } from "@/components/dashboard/navIcons";
 import {
-  dataAccessApi,
   type AccessLevel,
   type DataAccessGrant,
   type GrantParty,
   type ScopeOption,
 } from "@/lib/api/dataAccessApi";
 import useModalState from "@/lib/hooks/useModalState";
-import useResourceList from "@/lib/hooks/useResourceList";
 import useResourceQuery from "@/lib/hooks/useResourceQuery";
+import {
+  useCreateGrantMutation,
+  useDataAccessOptionsQuery,
+  useDeleteGrantMutation,
+  useListGrantsQuery,
+} from "@/lib/api/endpoints/dataAccessEndpoints";
 
 const ACCESS_LEVEL_OPTIONS = [
   { value: "view", label: "View" },
@@ -63,7 +67,7 @@ type ModalMode = "create" | "delete";
  * grants, and a checkbox column wired to nothing is the exact failure that
  * contract was written to stop.
  *
- * **2. No `useRowAction`.** It runs a per-row write and applies the record the
+ * **2. No per-row write helper.** The retired one applied the record the
  * write returned. The only per-row write here is delete, which `DeleteDialog`
  * owns end to end — including its own busy state — and which returns no record
  * to patch. Adding a row action purely to give the hook a job would mean
@@ -84,51 +88,42 @@ export default function DataAccessModule() {
     defaultPerPage: 30,
   });
 
-  const list = useResourceList<DataAccessGrant>({
-    ready: q.ready,
-    deps: [q.applied, q.sortBy, q.sortOrder, q.page, q.perPage],
-    errorMessage: "Could not load data access grants.",
-    fetch: () =>
-      dataAccessApi
-        .list({
-          search: q.applied.search || undefined,
-          scope: q.applied.scope || undefined,
-          access_level: (q.applied.access_level as AccessLevel) || undefined,
-          sort_by: q.sortBy,
-          sort_order: q.sortOrder,
-          page: q.page,
-          per_page: q.perPage,
-        })
-        .then((res) => {
-          // `can_manage` rides on the list envelope, so it refreshes with the
-          // data rather than being read once from a client-side permission set.
-          setCanManage(res.data.can_manage);
-          return res.data;
-        }),
-  });
+  // PM-41 § 4.5.
+  const listQuery = useListGrantsQuery(
+    {
+      search: q.applied.search || undefined,
+      scope: q.applied.scope || undefined,
+      access_level: (q.applied.access_level as AccessLevel) || undefined,
+      sort_by: q.sortBy,
+      sort_order: q.sortOrder,
+      page: q.page,
+      per_page: q.perPage,
+    },
+    { skip: !q.ready },
+  );
+  const page = listQuery.data;
 
   const modal = useModalState<ModalMode, DataAccessGrant>();
 
-  const [canManage, setCanManage] = useState(false);
-  const [users, setUsers] = useState<GrantParty[]>([]);
-  const [scopes, setScopes] = useState<ScopeOption[]>([]);
+  /*
+    `can_manage` rides on the list envelope, computed by the API from the same
+    permission constant the write routes are guarded on — so the button and the
+    guard cannot drift apart. It used to be copied into a `useState` from inside
+    the fetch callback, which was both a write during the commit phase and a
+    second copy of something already in hand. Read straight off the response now.
+  */
+  const canManage = page?.can_manage ?? false;
+  const [deleteGrant] = useDeleteGrantMutation();
 
-  // The pickers, fetched once. Not a `useResourceList` — it is neither paged nor
-  // filtered, and a failure must leave the table readable rather than blocking
-  // it, so that hook's rules do not apply. Same call the Users module makes for
-  // roles, and for the same reasons.
-  useEffect(() => {
-    dataAccessApi
-      .options()
-      .then((res) => {
-        setUsers(res.data.users);
-        setScopes(res.data.scopes);
-      })
-      .catch(() => {
-        setUsers([]);
-        setScopes([]);
-      });
-  }, []);
+  /*
+    The pickers. One shared cache entry rather than a fetch on every mount — it
+    is neither paged nor filtered, and a failure must leave the table readable
+    rather than blocking it, which the `?? []` fallbacks preserve exactly
+    (PM-41 § 4.6).
+  */
+  const { data: options } = useDataAccessOptionsQuery();
+  const users = options?.users ?? [];
+  const scopes = options?.scopes ?? [];
 
   // --- columns: #, Actions, Status, then data (the fixed order) -------------
   const columns = useMemo<Column<DataAccessGrant>[]>(
@@ -236,13 +231,9 @@ export default function DataAccessModule() {
         },
       ]}
       columns={columns}
-      rows={list.rows}
+      result={listQuery}
       rowKey={(r) => r.id}
-      loading={list.loading}
-      error={list.error}
-      onRetry={list.refetch}
-      total={list.total}
-      pages={list.pages}
+      errorMessage="Could not load data access grants."
       // No selection: there is no bulk endpoint. See the deviation note above.
       selectable={false}
       table="vendor"
@@ -271,7 +262,6 @@ export default function DataAccessModule() {
               result.skipped > 0 ? "info" : "success",
               result.skipped > 0 ? result.skipped_reasons : undefined
             );
-            list.refetch();
           }}
         />
       )}
@@ -283,12 +273,11 @@ export default function DataAccessModule() {
           noun="grant"
           name={`${modal.target.grantee.name} → ${modal.target.subject.name}`}
           subtitle={`${LEVEL_TONE[modal.target.access_level].label} access · ${modal.target.scope_label}`}
-          onConfirm={() => dataAccessApi.remove(modal.target!.id)}
+          onConfirm={() => deleteGrant(modal.target!.id).unwrap()}
           onDeleted={() => {
             const who = modal.target!.grantee.name;
             modal.close();
             show(`Data access for ${who} removed.`);
-            list.refetch();
           }}
           onClose={modal.close}
         />
@@ -330,6 +319,7 @@ function GrantForm({
   const [subjectSearch, setSubjectSearch] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [createGrant] = useCreateGrantMutation();
 
   // The grantee can never be their own subject, so they are removed from the
   // list rather than offered and then rejected. The API skips the pair anyway —
@@ -359,13 +349,13 @@ function GrantForm({
     setSaving(true);
     setError(null);
     try {
-      const res = await dataAccessApi.create({
+      const result = await createGrant({
         grantee_id: granteeId,
         subject_ids: Array.from(subjectIds),
         scope,
         access_level: accessLevel,
-      });
-      onSaved(res.data);
+      }).unwrap();
+      onSaved(result);
     } catch (err) {
       const { extractApiError } = await import("@/lib/utils/apiError");
       setError(extractApiError(err, "Could not save the grant."));

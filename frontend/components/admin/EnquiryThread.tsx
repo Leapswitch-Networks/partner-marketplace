@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { headingClasses } from "@/components/common/PageHeading";
 import Button from "@/components/common/Button";
 import Textarea from "@/components/common/Textarea";
 import Toast, { useToast } from "@/components/common/Toast";
@@ -79,7 +80,7 @@ export default function EnquiryThread({ enquiryId }: { enquiryId: string }) {
     <div className="mx-auto max-w-4xl p-4 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <h1 className="text-lg font-semibold text-ink dark:text-gray-100">
+          <h1 className={`${headingClasses()} text-ink dark:text-gray-100`}>
             {enquiry.buyer_name}
           </h1>
           <p className="text-sm text-ink-muted dark:text-night-muted">

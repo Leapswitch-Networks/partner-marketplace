@@ -50,7 +50,7 @@ function AuthHubInner({ mode = "signin" }: AuthHubProps) {
 
   return (
     <div className="w-full max-w-[450px] bg-white p-[30px] dark:bg-night-card">
-      <h1 className="text-[22px] font-semibold capitalize text-ink dark:text-white">
+      <h1 className="app-display text-[26px] capitalize text-ink dark:text-white">
         {isSignIn ? "Login" : "Create Your Account"}
       </h1>
       <p className="mb-[25px] mt-[5px] text-sm text-ink-muted dark:text-night-muted">

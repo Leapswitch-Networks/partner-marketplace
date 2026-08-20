@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import WelcomeBanner from "@/components/dashboard/WelcomeBanner";
 import PartnerOverview from "@/components/dashboard/PartnerOverview";
 import DashboardOverview from "@/components/dashboard/DashboardOverview";
+import ComponentPreview from "@/components/dashboard/ComponentPreview";
 import { type AdminSection, urlForSection } from "@/components/dashboard/Sidebar";
 import useAppSelector from "@/lib/hooks/useAppSelector";
 
@@ -50,6 +51,11 @@ export default function DashboardHome() {
       <div className="mx-auto w-full animate-fade-in">
         <DashboardOverview onNavigate={handleNavigate} />
       </div>
+      {/* Admin-access roles only (RootUser, SuperAdmin, BackendDeveloper, Admin),
+          and last on the page. It renders no real data — every figure in it is
+          illustrative and labelled as such — so the gate is a presentation choice,
+          not a security boundary. The component owns the check. */}
+      <ComponentPreview />
     </>
   );
 }

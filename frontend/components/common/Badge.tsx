@@ -1,6 +1,13 @@
 import type { ReactNode } from "react";
 
-export type BadgeTone = "neutral" | "success" | "warning" | "danger" | "brand" | "info";
+export type BadgeTone =
+  | "neutral"
+  | "success"
+  | "warning"
+  | "danger"
+  | "brand"
+  | "info"
+  | "pending";
 
 const TONES: Record<BadgeTone, string> = {
   neutral:
@@ -14,6 +21,22 @@ const TONES: Record<BadgeTone, string> = {
   brand:
     "border-brand bg-brand/10 text-brand dark:text-brand-on-dark dark:border-brand/40 dark:bg-brand/20 dark:text-brand-on-dark",
   info: "border-brand/30 bg-brand/10 text-brand dark:border-brand/40 dark:bg-brand/15 dark:text-brand-on-dark",
+  // Added 2026-08-20. **The one place the action colour is not an action.**
+  //
+  // `VerificationBadge` on the public surface is a three-tier scale — pine ground
+  // for the top tier, lilac ground for the middle, cream for the base — so lilac
+  // carrying a *status* rather than a control is the reference's own usage
+  // (`BACKOFFICE_DESIGN.md` § 4.4). Use it for pending / in-review / awaiting
+  // states: the things that are neither settled-good (`success`) nor wrong
+  // (`danger`), which previously had to borrow `warning` and so read as a problem.
+  //
+  // Solid rather than tinted, unlike every tone above it. `bg-primary/10` over a
+  // white card is very nearly white, and the whole point of lilac is that it is
+  // recognisably the marketing site's colour. Ink on lilac is **11.01:1**, and
+  // both are absolute colours, so one declaration serves light and dark — hence no
+  // `dark:` fill. The border is `ink`, matching the button, because a lilac fill
+  // has almost no edge of its own against a light ground.
+  pending: "border-ink/25 bg-primary text-ink dark:border-ink/50 dark:text-ink",
 };
 
 /**

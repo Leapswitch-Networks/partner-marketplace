@@ -230,6 +230,51 @@ export const NAV_ICONS: Record<string, ReactNode> = {
     </svg>
   ),
 
+  /**
+   * A partner's service listings — stacked rows, because a listing is one entry
+   * in a catalogue. Added 2026-08-18; the item shipped on `apiDocs` (a document)
+   * for a few hours because no better key existed yet.
+   */
+  listings: (
+    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M4 6h.01M4 12h.01M4 18h.01M9 6h11M9 12h11M9 18h11"
+      />
+    </svg>
+  ),
+
+  /**
+   * An enquiry — a chat bubble, because an enquiry is a thread the partner replies
+   * on, not a one-way notification. Distinct from `invitations` (an envelope),
+   * which both the nav item and the module borrowed until 2026-08-18.
+   */
+  enquiries: (
+    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"
+      />
+    </svg>
+  ),
+
+  /**
+   * The moderation queue — a clipboard with a tick. Deliberately NOT `recycleBin`,
+   * which it briefly used: a bin says "delete these", and the queue's ordinary
+   * outcome is approval.
+   */
+  moderation: (
+    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
+      />
+    </svg>
+  ),
+
   /** Fallback for an icon name the frontend does not recognise. */
   dot: (
     <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -239,5 +284,23 @@ export const NAV_ICONS: Record<string, ReactNode> = {
 };
 
 export function navIcon(name: string): ReactNode {
-  return NAV_ICONS[name] ?? NAV_ICONS.dot;
+  const icon = NAV_ICONS[name];
+
+  if (icon) return icon;
+
+  // Warn rather than fail. A missing icon must never take a page down — but it
+  // must not be silent either, which it was until 2026-08-18: seven new nav items
+  // shipped, two pointed at keys that did not exist, and both rendered as grey
+  // dots with nothing reported anywhere. The icon name is chosen in the *backend*
+  // nav registration, so neither typecheck nor lint can see the mismatch, and the
+  // cross-tree test in `test_core_extraction.py` skips inside the backend
+  // container. This warning is what actually catches it.
+  if (process.env.NODE_ENV !== "production") {
+    console.warn(
+      `[navIcons] unknown icon key "${name}" — rendering the fallback dot. ` +
+        `Add it to NAV_ICONS or point the backend nav item at an existing key.`,
+    );
+  }
+
+  return NAV_ICONS.dot;
 }

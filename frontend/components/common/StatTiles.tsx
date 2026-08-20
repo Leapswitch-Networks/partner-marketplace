@@ -20,11 +20,36 @@ import { cn } from "@/lib/utils/cn";
  * it. None of that means anything for a tile, and `flex-1` on a grid child is a
  * contradiction waiting to be read as intentional. A tile is its own thing.
  *
- * **The surface reads on all four backgrounds.** These tiles render both on the
- * page body (`ApiDocs`, `WorkerJobs`) and inside the index `Card` (`Invitations`),
- * in light and dark — four surfaces, and `night-card` tiles on a `night-card` card
- * would be invisible. So the fill is a faint tint rather than a named surface, and
- * the border does the separating.
+ * ## The tile is an INK SLAB — changed 2026-08-20
+ *
+ * At the owner's request, this row now wears the public surface's "black card,
+ * light text" treatment (`SectionSlab ground="ink"`, `BACKOFFICE_DESIGN.md` § 2.4).
+ * It is the one component in the back office where that slab genuinely fits: a KPI
+ * row is a small number of large figures, which is exactly what the reference uses
+ * an ink slab for.
+ *
+ * **Light and dark are asymmetric, and that is deliberate.** Measured:
+ *
+ * | tile fill | vs chrome | vs white card | vs `night-card` |
+ * |---|---|---|---|
+ * | `bg-ink` `#242934` | **13.58:1** | **14.57:1** | **1.23:1** ❌ |
+ *
+ * So ink is superb on both light surfaces and **invisible on the dark card** —
+ * which is the original four-surfaces warning this docstring used to carry, and it
+ * still holds. Dark mode therefore keeps the faint lift (`bg-white/[0.03]`): the
+ * ink slab reads as striking *because* it contrasts with a light ground, and on an
+ * already-dark page the equivalent gesture is to lift, not to darken.
+ *
+ * **Both modes are a dark ground, so both take § 2.2's dark-ground row** — amber
+ * emphasis, light body text, translucent-light hairlines. That is why the figure is
+ * `text-accent` in light mode too: on the public surface the display numeral on an
+ * ink slab is amber (`StepList` when `dark`, and the home page's step list), and
+ * amber on ink measures 7.64:1.
+ *
+ * ⚠️ This does **not** contradict the `tone` rule below. That rule forbids putting
+ * a *semantic status* colour on the figure, because a semantic fill is designed to
+ * sit behind white text. The figure's amber is a uniform display treatment — every
+ * tile gets it, so it carries no status at all.
  */
 
 export type StatTone = "neutral" | "brand" | "success" | "warning" | "danger";
@@ -62,12 +87,33 @@ export interface StatTile {
   textual?: boolean;
 }
 
-/** Tone → dot fill. `neutral` renders no dot at all rather than a grey one. */
+/**
+ * Tone → dot fill. `neutral` renders no dot at all rather than a grey one.
+ *
+ * **Every value is the DARK-GROUND variant**, because the tile is a dark ground in
+ * both modes now. Measured on the ink tile / on `night-card`:
+ *
+ * | tone | was | on ink | on night.card |
+ * |---|---|---|---|
+ * | brand | `bg-brand` (pine) | 1.53:1 ❌ | — |
+ * | success | `bg-tone-success` | 1.15:1 ❌ | **1.41:1 ❌** |
+ * | warning | `bg-tone-warning` | 8.58:1 ✅ | 10.52:1 ✅ |
+ * | danger | `bg-tone-danger` | 2.90:1 ❌ | 3.56:1 |
+ *
+ * 🐛 **The `success` row was already broken in dark mode before this change** —
+ * 1.41:1 on `night-card`, i.e. invisible, on every screen with a success tile.
+ * `tone-success` is the brand darkened 27% by the owner's 2026-08-13 decision, so
+ * `brand-on-dark` is its correct counterpart and fixes both grounds at once. It
+ * does make `brand` and `success` the same colour on a dark ground — they are
+ * already near-identical on a light one for the same reason.
+ *
+ * Only `warning` survived unchanged.
+ */
 const DOT: Record<Exclude<StatTone, "neutral">, string> = {
-  brand: "bg-brand dark:bg-brand-on-dark",
-  success: "bg-tone-success",
+  brand: "bg-brand-on-dark",
+  success: "bg-brand-on-dark",
   warning: "bg-tone-warning",
-  danger: "bg-tone-danger",
+  danger: "bg-[rgb(var(--tone-danger-on-dark))]",
 };
 
 /**
@@ -105,48 +151,78 @@ export function formatStatValue(value: ReactNode): ReactNode {
 function Tile({ label, value, hint, tone = "neutral", textual }: StatTile) {
   return (
     /*
-      `h-full` + `flex-col`: grid children stretch to the tallest tile, and without
-      this the content of a short tile floats against the top of a box sized by its
-      neighbour's two-line hint. The hint takes `mt-auto` for the same reason — it
-      sits on the floor, so a row of tiles has its hints on one line.
+      ## Layout: label and hint LEFT, figure RIGHT — changed 2026-08-20
+
+      The figure used to sit stacked above the label. It now shares a row with it,
+      at the owner's request, which retired two mechanisms whose reasoning is worth
+      keeping here because both were load-bearing before:
+
+      * **The figure's fixed 30px bottom-aligned box is gone.** It existed so a
+        `textual` tile's short line did not leave its label riding ~16px higher
+        than the numeric tiles beside it. With the figure beside the label rather
+        than above it, `items-baseline` does that job directly and for both kinds
+        at once.
+      * **The hint's `mt-auto` is gone.** It pushed the hint to the tile's floor so
+        a row of tiles had its hints on one line. The hint now sits directly under
+        the label — which is the point of the change — and hints still align across
+        the row, because every label is a single truncated line, so every hint
+        starts at the same offset.
+
+      `min-h-[62px]` and the skeleton's `h-[62px]` are deliberately the same
+      number. That is what stops the row changing height when the data lands and
+      shoving the table down, and it is more robust than the previous pair of
+      independently-chosen heights. **Change one and you must change the other.**
     */
-    <div className="flex h-full flex-col rounded-none border border-brand/20 bg-surface-tile/60 px-3 py-2.5 transition-colors hover:border-brand/40 dark:border-night-border dark:bg-white/[0.03] dark:hover:border-brand/40">
+    <div className="flex h-full min-h-[62px] flex-col justify-center rounded-none border border-white/10 bg-ink px-3 py-2.5 transition-colors hover:border-white/25 dark:border-night-border dark:bg-white/[0.03] dark:hover:border-brand/40">
       {/*
-        The value sits in a fixed 30px box, bottom-aligned — 30px being what
-        `text-2xl`/`leading-tight` occupies. Without it a `textual` tile's short
-        line leaves its label riding ~16px higher than the numeric tiles beside
-        it, and a row of labels that nearly lines up looks like a bug rather than
-        a variant. Bottom-aligned rather than centred so both kinds share a
-        baseline, which is the edge the eye actually tracks.
+        `items-baseline`, not `items-start`: it aligns the figure's baseline with
+        the label's, so the two read as one row even though one is `text-2xl` and
+        the other `text-xs`. A flex item that is itself a block aligns on its
+        FIRST line box, which is the label — so the hint hanging below does not
+        move the figure, and every figure in the row lands on the same line
+        whether its neighbour's hint wrapped or not.
       */}
-      <div className="flex min-h-[30px] items-end">
+      <div className="flex items-baseline justify-between gap-3">
+        <div className="min-w-0">
+          <p className="flex items-center gap-1.5 text-xs font-medium text-white dark:text-gray-200">
+            {tone !== "neutral" && (
+              <span
+                aria-hidden="true"
+                className={cn("inline-block h-1.5 w-1.5 shrink-0 rounded-full", DOT[tone])}
+              />
+            )}
+            {/* Tiles go 2-up under 640px — truncate so a narrow tile shrinks its
+                label rather than overflowing the row. */}
+            <span className="truncate">{label}</span>
+          </p>
+
+          {/* `ink-label` was right on a tinted fill and is unreadable on ink. The
+              reference's muted-on-dark is its cream at 70%; white/70 over ink is
+              the same idea and measures 7.82:1. */}
+          {hint && (
+            <p className="mt-0.5 text-[11px] leading-snug text-white/70 dark:text-night-muted">
+              {hint}
+            </p>
+          )}
+        </div>
+
         <p
           className={cn(
-            "font-semibold leading-tight text-ink dark:text-white",
+            // Amber on a dark ground — 7.64:1 on ink, 9.37:1 on night.card. This
+            // is the reference's own treatment for a display figure on an ink
+            // slab. NEVER reuse `text-accent` on a light ground: 1.91:1.
+            //
+            // `shrink-0` + `whitespace-nowrap`: the figure is the one thing on the
+            // tile that must never wrap or be clipped. The label truncates
+            // instead — `formatStatValue` already caps the figure's width by
+            // compacting past five digits.
+            "shrink-0 whitespace-nowrap font-semibold leading-none text-accent",
             textual ? "text-xs" : "text-2xl"
           )}
         >
           {textual ? value : formatStatValue(value)}
         </p>
       </div>
-
-      <p className="mt-1 flex items-center gap-1.5 text-xs font-medium text-ink dark:text-gray-200">
-        {tone !== "neutral" && (
-          <span
-            aria-hidden="true"
-            className={cn("inline-block h-1.5 w-1.5 shrink-0 rounded-full", DOT[tone])}
-          />
-        )}
-        {/* Tiles go 2-up under 640px — truncate so a narrow tile shrinks its
-            label rather than overflowing the row. */}
-        <span className="truncate">{label}</span>
-      </p>
-
-      {hint && (
-        <p className="mt-auto pt-1 text-[11px] leading-snug text-ink-label dark:text-night-muted">
-          {hint}
-        </p>
-      )}
     </div>
   );
 }
@@ -172,7 +248,8 @@ export default function StatTiles({
   return (
     <div className={cn("grid grid-cols-2 gap-2 sm:grid-cols-3", columns, className)}>
       {loading
-        ? items.map((item, i) => <Skeleton key={item.label || i} className="h-[86px] rounded-none" />)
+        ? // `h-[62px]` mirrors `Tile`'s `min-h-[62px]` exactly — see the note there.
+          items.map((item, i) => <Skeleton key={item.label || i} className="h-[62px] rounded-none" />)
         : items.map((item) => <Tile key={item.label} {...item} />)}
     </div>
   );

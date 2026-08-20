@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { Briefcase, Layers, TrendingUp, User, UserPlus, Users } from "lucide-react";
+
 import useHydrated from "@/lib/hooks/useHydrated";
-import StatCard from "./StatCard";
-import QuickActionsCard from "./QuickActionsCard";
+import { ActionCard, MetricCard } from "@/components/common/cards";
 import usePermissions from "@/lib/hooks/usePermissions";
 import { adminApi } from "@/lib/api/adminApi";
 import { roleApi, permissionApi, activityApi } from "@/lib/api/rbacApi";
@@ -20,6 +21,24 @@ import type { AdminSection } from "@/components/dashboard/Sidebar";
  * **The old figures were all hardcoded `"0"`.** Nothing was ever fetched, so the
  * dashboard had been reporting four fake zeros. These are real counts.
  */
+
+/**
+ * The data carries icon *names*; this is the only place they become elements.
+ *
+ * `StatCard` and `QuickActionsCard` each shipped their own inline-SVG `iconMap` —
+ * two copies of the same six glyphs, at two sizes. `lucide-react` is already a
+ * dependency and is what every other screen uses.
+ */
+const ICON = {
+  users: <Users />,
+  "user-plus": <UserPlus />,
+  user: <User />,
+  briefcase: <Briefcase />,
+  layers: <Layers />,
+  "trending-up": <TrendingUp />,
+} as const;
+
+type IconName = keyof typeof ICON;
 
 interface Counts {
   users: number | null;
@@ -86,28 +105,24 @@ export default function DashboardOverview({
       title: "Users",
       value: fmt(counts.users),
       icon: "users" as const,
-      color: "blue" as const,
       description: "Accounts on the platform",
     },
     {
       title: "Roles",
       value: fmt(counts.roles),
       icon: "briefcase" as const,
-      color: "purple" as const,
       description: "Role definitions",
     },
     {
       title: "Permissions",
       value: fmt(counts.permissions),
       icon: "layers" as const,
-      color: "emerald" as const,
       description: "Grants in the catalogue",
     },
     {
       title: "Activity",
       value: fmt(counts.activity),
       icon: "trending-up" as const,
-      color: "amber" as const,
       description: "Recorded actions",
     },
   ];
@@ -118,10 +133,9 @@ export default function DashboardOverview({
   const actions: {
     title: string;
     description: string;
-    icon: "users" | "briefcase" | "layers" | "trending-up" | "user";
+    icon: IconName;
     section: AdminSection;
     permission: string | null;
-    color: "blue" | "purple" | "amber" | "emerald" | "rose" | "slate";
   }[] = [
     {
       title: "Manage Users",
@@ -129,15 +143,15 @@ export default function DashboardOverview({
       icon: "users",
       section: "user-info",
       permission: "user-view",
-      color: "blue",
     },
     {
       title: "Add User",
+      // `user-plus`, not `user` — this and My Profile both said `user`, so two
+      // different actions carried the same glyph.
+      icon: "user-plus",
       description: "Create an account or send an invitation",
-      icon: "user",
       section: "user-add",
       permission: "user-create",
-      color: "purple",
     },
     {
       title: "Roles & Permissions",
@@ -145,7 +159,6 @@ export default function DashboardOverview({
       icon: "briefcase",
       section: "roles",
       permission: "role-view",
-      color: "emerald",
     },
     {
       title: "Activity Log",
@@ -153,7 +166,6 @@ export default function DashboardOverview({
       icon: "trending-up",
       section: "activity",
       permission: "activity-view",
-      color: "amber",
     },
     {
       title: "My Profile",
@@ -161,7 +173,6 @@ export default function DashboardOverview({
       icon: "user",
       section: "profile",
       permission: null,
-      color: "slate",
     },
   ];
 
@@ -174,7 +185,7 @@ export default function DashboardOverview({
           isLoaded ? "translate-y-0 opacity-100" : "translate-y-4 opacity-0"
         }`}
       >
-        <h3 className="mb-4 text-lg font-bold text-ink dark:text-white">Overview</h3>
+        <h3 className="app-display mb-4 text-[21px] text-ink dark:text-white">Overview</h3>
         <div className="grid w-full auto-rows-max grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {stats.map((stat, index) => (
             <div
@@ -184,12 +195,23 @@ export default function DashboardOverview({
               }`}
               style={{ transitionDelay: isLoaded ? `${index * 50}ms` : "0ms" }}
             >
-              <StatCard
-                title={stat.title}
+              {/*
+                `ground="ink"` — the same treatment `StatTiles` carries above every
+                index table, so headline counts look the same wherever they appear.
+                The page still alternates: the pine `WelcomeBanner`, the chrome
+                showing through around this heading, then this row, then white
+                action cards below (`BACKOFFICE_DESIGN.md` § 4.10).
+
+                **No `delta`.** There is no trend data behind these counts, and a
+                made-up "+12%" is exactly the invented figure `ANTI_SLOP.md` § 3
+                exists to stop. When the API grows a comparison, it lands here.
+              */}
+              <MetricCard
+                ground="ink"
+                label={stat.title}
                 value={stat.value}
-                icon={stat.icon}
-                color={stat.color}
-                description={stat.description}
+                hint={stat.description}
+                icon={ICON[stat.icon]}
               />
             </div>
           ))}
@@ -203,7 +225,7 @@ export default function DashboardOverview({
           }`}
           style={{ transitionDelay: isLoaded ? "150ms" : "0ms" }}
         >
-          <h3 className="mb-4 text-lg font-bold text-ink dark:text-white">Quick Actions</h3>
+          <h3 className="app-display mb-4 text-[21px] text-ink dark:text-white">Quick Actions</h3>
           <div className="grid w-full auto-rows-max grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {visibleActions.map((action, index) => (
               <div
@@ -213,12 +235,24 @@ export default function DashboardOverview({
                 }`}
                 style={{ transitionDelay: isLoaded ? `${200 + index * 50}ms` : "0ms" }}
               >
-                <QuickActionsCard
+                {/*
+                  `onClick`, not `href`: `handleNavigate` in `DashboardHome`
+                  special-cases `profile` to `/settings/profile`, so the URL is not
+                  derivable from the section alone here. Worth converting to real
+                  anchors — middle-click, open-in-new-tab — once that mapping moves
+                  somewhere both can read.
+
+                  The old card ended every one of these with a **"Get Started"**
+                  button. Five identical labels that named neither the destination
+                  nor the action; `ActionCard`'s arrow says the same thing without
+                  claiming to be a control.
+                */}
+                <ActionCard
+                  ground="paper"
                   title={action.title}
                   description={action.description}
-                  icon={action.icon}
-                  color={action.color}
-                  action={() => onNavigate(action.section)}
+                  icon={ICON[action.icon]}
+                  onClick={() => onNavigate(action.section)}
                 />
               </div>
             ))}

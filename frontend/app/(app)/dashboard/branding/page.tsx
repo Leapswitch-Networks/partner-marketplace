@@ -1,4 +1,5 @@
 import { Metadata } from "next";
+import PageHeading from "@/components/common/PageHeading";
 import BrandingForm from "@/components/settings/BrandingForm";
 import { getBranding, getThemePresets } from "@/lib/branding";
 import { APP_NAME, pageTitle } from "@/lib/utils/constants";
@@ -23,19 +24,21 @@ export const metadata: Metadata = {
 export default async function BrandingSettingsPage() {
   // Both resolved server-side and passed as props, so the form needs no
   // fetch-on-mount and renders populated on first paint.
-  const [branding, themes] = await Promise.all([getBranding(), getThemePresets()]);
+  const [branding, catalog] = await Promise.all([getBranding(), getThemePresets()]);
 
   return (
     <div className="rounded-none bg-white p-6 ring-1 ring-surface-border dark:bg-night-card dark:ring-night-border">
-      <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">
-        Branding
-      </h3>
+      <PageHeading size="section" as="h3" title="Branding" />
       <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">
         The name and identity of this installation. These change what{" "}
         <strong className="font-semibold">every user</strong> sees, not just you.
       </p>
       <div className="mt-5">
-        <BrandingForm initial={branding} themes={themes} />
+        <BrandingForm
+          initial={branding}
+          themes={catalog.presets}
+          defaultKey={catalog.defaultKey}
+        />
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 "use client";
 
+import { headingClasses } from "@/components/common/PageHeading";
 import Button from "@/components/common/Button";
 
 /**
@@ -57,7 +58,7 @@ export default function ErrorState({
         </svg>
       </span>
 
-      <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">{title}</h2>
+      <h2 className={`${headingClasses("section")} text-gray-900 dark:text-gray-100`}>{title}</h2>
       <p className="mt-1 max-w-md text-sm text-gray-500 dark:text-gray-400">{description}</p>
 
       {error.digest && (

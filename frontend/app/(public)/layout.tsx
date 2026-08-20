@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import { EB_Garamond } from "next/font/google";
 
 import PublicHeader from "@/components/public/PublicHeader";
 import PublicFooter from "@/components/public/PublicFooter";
@@ -43,13 +42,6 @@ import "./public.css";
  * `vh`: on mobile `100vh` is the URL-bar-hidden height and the page's bottom
  * edge ends up below the visible screen.
  */
-const ebGaramond = EB_Garamond({
-  subsets: ["latin"],
-  weight: ["400"],
-  variable: "--font-eb-garamond",
-  display: "swap",
-});
-
 export const metadata: Metadata = {
   title: {
     default: `${APP_NAME} — verified companies for cloud, hosting and infrastructure work`,
@@ -60,8 +52,12 @@ export const metadata: Metadata = {
 };
 
 export default function PublicLayout({ children }: { children: React.ReactNode }) {
+  // `--font-eb-garamond` now comes from the ROOT layout (2026-08-20) — the back
+  // office renders the display face too, so loading it in both places would emit
+  // the same @font-face from two hashed classes. `.pub-display` is unchanged and
+  // still reads the same variable, so this surface renders exactly as before.
   return (
-    <div className={`public-root ${ebGaramond.variable} flex min-h-dvh flex-col`}>
+    <div className="public-root flex min-h-dvh flex-col">
       {/* § 20.2 rule 8. First focusable thing on the page, visible only when
           focused — a keyboard user should not tab through five nav links and a
           search box to reach the content on every page. */}

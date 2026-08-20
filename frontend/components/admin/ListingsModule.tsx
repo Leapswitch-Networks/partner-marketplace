@@ -81,7 +81,7 @@ export default function ListingsModule() {
   });
 
   // PM-41: RTK Query rather than fetch-on-mount. Three things this buys that
-  // `useResourceList` could not — and each was a real defect class in the old
+  // the old fetch-on-mount hook could not — and each was a real defect class in the old
   // pattern rather than a nicety:
   //
   //  * a cache, so navigating away and back does not refetch what was on screen
@@ -89,23 +89,19 @@ export default function ListingsModule() {
   //  * invalidation, so a mutation refreshes the table without a hand-written
   //    `refetch()` that is silent when forgotten
   //  * deduplication, so two components needing this list make one request
-  const {
-    data: page,
-    isFetching,
-    error,
-    refetch,
-  } = useListListingsQuery(
+  const listQuery = useListListingsQuery(
     {
       page: q.page,
       per_page: q.perPage,
       status: (q.applied.status || undefined) as ListingStatus | undefined,
     },
-    // The query hook has no equivalent of `useResourceList`'s `ready` gate, so
+    // The query hook has no `ready` gate of its own, so
     // the URL-restore race is handled here: skip until the query state has been
     // read from the address bar, or the first render fires a throwaway request
     // with default filters.
     { skip: !q.ready },
   );
+  const page = listQuery.data;
   const rows = page?.items ?? [];
 
   // Reference data, and now shared: the taxonomy admin and the authoring form
@@ -123,7 +119,7 @@ export default function ListingsModule() {
   const [deleteListing] = useDeleteListingMutation();
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  // No `useRowAction` here, and no `patchRow`. The mutation's `invalidatesTags`
+  // No local row patching. The mutation's `invalidatesTags`
   // refreshes the row and the list, so patching local state by hand would be a
   // second source of truth racing the first.
   const onSubmitForReview = async (row: Listing) => {
@@ -225,13 +221,9 @@ export default function ListingsModule() {
           },
         ]}
         columns={columns}
-        rows={rows}
+        result={listQuery}
         rowKey={(row) => row.id}
-        loading={isFetching}
-        error={error ? "Could not load listings." : null}
-        onRetry={refetch}
-        total={page?.total ?? 0}
-        pages={page?.pages ?? 0}
+        errorMessage="Could not load listings."
         rowNoun="listing"
         table="vendor"
         emptyTitle="No listings yet"

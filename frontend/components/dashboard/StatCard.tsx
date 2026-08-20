@@ -78,7 +78,7 @@ export default function StatCard({
   const tone = TONE[color];
 
   return (
-    <div className="group relative h-full overflow-hidden rounded-none border border-surface-border bg-white p-6 text-center transition-colors hover:border-brand/40 dark:border-night-border dark:bg-night-card">
+    <div className="group relative h-full overflow-hidden rounded-none border border-brand/20 bg-white p-6 text-center transition-colors hover:border-brand/40 dark:border-night-border dark:bg-night-card">
       {/* Oversized watermark glyph, behind everything */}
       <span
         aria-hidden="true"

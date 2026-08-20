@@ -54,7 +54,7 @@ import type { PartnerTier } from "@/types";
  * the point of the exercise:
  *
  * * **The fetch is cached.** Navigating away and back renders from cache instead
- *   of re-requesting. With `useResourceList` every mount was a round trip.
+ *   of re-requesting. Under the old fetch-on-mount hook every mount was a round trip.
  * * **There is no `refetch()` after a save.** The mutation declares
  *   `invalidatesTags`, so the list updates itself. That manual synchronisation
  *   was the thing most likely to be forgotten, and forgetting it showed stale

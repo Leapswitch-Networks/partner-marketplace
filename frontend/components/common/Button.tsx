@@ -65,8 +65,18 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
  * `focus:ring-offset-2` with no `ring-offset-*` colour defaults to white, and on
  * the green chrome that draws a white halo around every focused button.
  */
+// `hover:scale-[.98]` / `active:scale-[.96]` is the public surface's entire motion
+// vocabulary, ported 2026-08-20 (BACKOFFICE_DESIGN.md § 7). **Buttons only** — a
+// table row or sidebar item that shrinks under the cursor reads as a glitch, and
+// the public cards darken their border instead for the same reason.
+// `transition-colors` became an explicit list because `transform` has to be in it
+// or the scale snaps; and `motion-reduce` neutralises it rather than speeding it up.
 const BASE =
-  "inline-flex items-center justify-center gap-2 rounded-[5px] font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ring-offset-surface-wash dark:ring-offset-night-card disabled:cursor-not-allowed disabled:opacity-60";
+  "inline-flex items-center justify-center gap-2 rounded-[5px] font-semibold " +
+  "transition-[color,background-color,border-color,transform] duration-200 " +
+  "hover:scale-[.98] active:scale-[.96] motion-reduce:transform-none " +
+  "focus:outline-none focus:ring-2 focus:ring-offset-2 ring-offset-surface-wash dark:ring-offset-night-card " +
+  "disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100";
 
 const SIZES = {
   // Viho's `.375rem 1.75rem` — see the padding note above.
@@ -74,13 +84,44 @@ const SIZES = {
   sm: "px-3 py-1 text-[11px]",
 };
 
+/**
+ * ## `primary` is lilac, not the brand — changed 2026-08-20
+ *
+ * `--primary` is the marketing site's action colour (`#f0d7ff`) and `--brand` is
+ * pine, which carries structure. That is the split the public surface already
+ * runs, and porting it is what makes the two surfaces read as one product
+ * (`BACKOFFICE_DESIGN.md` § 2.1, § 4.2).
+ *
+ * 🔴 **The border on `primary` is load-bearing, not decoration.** A lilac fill
+ * measures **1.11:1 against the chrome ground** — it has essentially no edge of
+ * its own, and WCAG 1.4.11 wants 3:1 for a component boundary. Ink on the chrome
+ * is 12.27:1, so the border is what makes the button a shape. Remove it and the
+ * primary action dissolves into the page.
+ *
+ * 🔴 **Never `text-white` here.** White on lilac is 1.32:1;
+ * `text-primary-foreground` resolves to ink at 11.01:1.
+ *
+ * **Every variant now carries a border, transparent where it is not wanted**, so
+ * all four render the same box. Before this, `outline` had one and `primary`,
+ * `light` and `danger` did not — so a primary button was 2px smaller than the
+ * outline button beside it, which is the kind of difference nobody chooses.
+ *
+ * Hover does not recolour `primary`: the reference's buttons shrink and hold their
+ * colour, and `BASE` supplies that. The other three keep their colour hover,
+ * because a tinted fill inverting on hover is Viho's own behaviour.
+ *
+ * The focus ring stays `brand` on `primary` — a lilac ring on a lilac fill would
+ * be invisible, and pine is the house focus colour.
+ */
 const VARIANTS = {
-  primary: "bg-brand text-white hover:bg-brand-dark focus:ring-brand",
+  primary:
+    "border border-ink bg-primary text-primary-foreground focus:ring-brand",
   outline:
     "border border-brand bg-transparent text-brand dark:text-brand-on-dark hover:bg-brand/10 focus:ring-brand",
   light:
-    "bg-brand/10 text-brand dark:text-brand-on-dark hover:bg-brand/50 hover:text-white focus:ring-brand",
-  danger: "bg-tone-danger text-white hover:bg-tone-danger/85 focus:ring-tone-danger",
+    "border border-transparent bg-brand/10 text-brand dark:text-brand-on-dark hover:bg-brand/50 hover:text-white focus:ring-brand",
+  danger:
+    "border border-transparent bg-tone-danger text-white hover:bg-tone-danger/85 focus:ring-tone-danger",
 };
 
 /**

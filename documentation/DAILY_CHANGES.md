@@ -6,6 +6,1258 @@
 > Update this file as part of the same change as the code. A task that isn't here is invisible to the
 > next person.
 
+## August 20, 2026 — Every selectable theme now has its own matching palette, not the primary's
+
+**A defect I introduced this morning, and the owner spotted it.** Warming the
+signed-in background made it warm for *every* theme, not just the primary one. The
+warm cream belongs to the primary theme because it matches the public website; it was
+applied to all eleven, so a blue-violet theme sat on a cream background and the two
+deliberately grey themes came out faintly yellow. Every one of them measured warm.
+
+**Each theme now derives its own background from its own colour.** The primary keeps
+its declared cream, because matching the website is the entire point of that theme.
+Everything else gets a 6% wash of its own brand over white, so the blue themes read
+cool, the red and brown ones read warm, and the grey ones read genuinely grey.
+
+**The accent colour now follows the theme too, which reverses an earlier decision.**
+There was a test asserting the accent was deliberately *not* themed, and that was
+right while the accent was a single fixed tan chosen to sit beside any brand. It
+stopped being right once the accent became a choice made from the brand's own
+temperature: left fixed, the two grey themes carried a yellow accent, and the red theme
+carried an orange one — two warm colours doing the same job. Cool brands now get the
+amber, warm brands get a teal, and low-colour brands get a grey. The old test was
+rewritten to state the new direction rather than quietly deleted.
+
+**None of it is hand-picked, and the reason is the custom colour picker.** An
+administrator can set any colour at all, and there is no preset to hand-pick a
+background or an accent for — so both had to be calculated from the colour itself,
+or a custom theme would arrive half-dressed. Three custom colours were checked:
+a violet gets a cool background and the amber accent, a red gets a warm background and
+the teal, a near-grey gets a neutral background and the grey accent.
+
+**The chart magnitude scale follows the theme as well** — a green heatmap under a red
+theme reads as something borrowed from another product. Its palest step is now found
+by measurement rather than a fixed recipe: the recipe tuned on the primary theme put
+**seven of the eleven** themes' palest step just under the visibility floor, because
+the primary's colour is far darker than the rest. That was only caught because all
+eleven were checked, and all eleven are now checked automatically.
+
+**The series colours for charts deliberately do not follow the theme.** A line's colour
+has to mean the same thing whichever skin the reader picked.
+
+**One correction to this morning's claim.** Warming the background was reported as
+fixing an accessibility failure in the muted grey text. That was true for the primary
+theme only; on a derived background the same grey lands just under the threshold
+again, so the slightly darker grey remains the rule for small text — which is what the
+guidelines already said.
+
+## August 20, 2026 — The component preview is now visible to every role that manages the platform
+
+**It was visible to the root account only; it is now visible to RootUser, SuperAdmin,
+BackendDeveloper and Admin.** That is exactly the set the owner asked for, and it is
+not a new list — the platform already defines it as the roles that see all data and
+manage the system, and the account record already carries a flag saying whether you
+are in it. The preview reads that flag.
+
+**It deliberately does not check role names.** The roles file makes the argument
+itself, about the backend-developer role: a role whose *name* is a rule must never be
+renameable, because renaming it silently detaches the rule. The same trap runs the
+other way here — a list of names sitting in a dashboard component would need editing
+every time a core role is added, and until somebody remembered, the new role would
+quietly lose access. Reading the derived flag keeps the decision in one place, on the
+server, beside the roles themselves.
+
+**There is no Director role.** It was asked for; the roles that exist are RootUser,
+SuperAdmin, Admin, Staff, Partner, User, BackendDeveloper and Sales. Nothing was
+invented to cover it. If a Director role is created and given management access it
+will appear here on its own, which is the advantage of not hardcoding the list.
+
+**Staff and Sales do not see it.** They are internal but sit outside the
+manages-the-platform set — an existing distinction in the platform, not a new line
+drawn for this. Moving them in is a one-word change if that is wanted.
+
+## August 20, 2026 — Seven more dashboard components, and a gap closed in the one shipped this morning
+
+**The set is now twenty components.** Added: an ordered-stage breakdown with the
+fall-off between each step; a satisfaction scale that reads outward from a neutral
+centre; a progress bar carrying a target mark and a verdict; a ranked table with the
+size drawn behind each row; the key that explains a colour scale; the two states every
+panel needs and nobody builds — loading, and nothing-to-show; and a run of recent
+events.
+
+**A real gap in this morning's work: the calendar grid had no key.** Hovering a cell
+gave its number, and hovering reaches nobody using a keyboard, a screen reader, a
+touch screen or a printout. A shaded grid without a key tells a reader that one square
+is darker than another and gives them no way to turn that into a figure. Every shaded
+scale now carries one.
+
+**The ranked table is the honest answer to having too many categories.** Past about
+seven, colours stop being tellable apart and a chart stops helping. This shows the
+exact figures in order with the size drawn behind each row, and the leftovers are
+gathered into one "Other" line rather than quietly cut — a top-five list that looks
+like the whole list is worse than showing nothing.
+
+**The stage breakdown deliberately isn't the tapering funnel shape** everyone draws.
+The taper states the value twice, in the width and in the sloping edge, and the slope
+makes neighbouring stages look closer together than they are.
+
+**The satisfaction scale reads outward from the middle**, so which way a row leans *is*
+the answer. Stacked from one end instead, the reader has to add the segments up to work
+out whether the result is good news.
+
+**The progress bar was chosen over a dial.** A dial says the same thing in five times
+the space and asks people to compare angles. This adds the one thing a plain bar
+lacks — a mark for the target — and then says "met" or "short" in words, because a
+mark on its own leaves the reader doing the comparison for themselves.
+
+**The events list is deliberately not a chart.** A row of things that happened has no
+size to it, so drawing it as a graph would invent a measurement that does not exist.
+
+## August 20, 2026 — Seven more chart forms, and a list of the fashionable ones deliberately refused
+
+**Seven new forms, taking the set to thirteen**: the single lead number a screen opens
+with; grouped bars; a bar that grows either side of a target line; a calendar-style
+grid; a chart where one line is coloured and the rest are grey; a before-and-after
+comparison; and a wall of small charts, one per category.
+
+**The two-directional chart needed a colour scale the project did not have**, and it
+has rules of its own: the two ends must read as *opposite*, not merely different, so
+one is warm and one is cool, and the middle has to read as nothing at all — a colour
+at the midpoint would suggest the zero point means something. Both halves were checked
+as ramps in their own right and the two ends against each other.
+
+**The chart with one coloured line and the rest grey is the most useful of the seven**
+and the least used anywhere. When a dashboard gives eight series eight colours,
+everything shouts and nothing is said; colouring the one that matters and greying the
+rest is usually what "make this clearer" actually means.
+
+**The wall of small charts is how the colour limit stops mattering.** Every small
+chart is the same colour, because which one you are looking at is answered by its
+heading, not its hue. They all share one scale — scaling each independently would make
+a flat line look as dramatic as a steep one, which is the same deception as a chart
+with two different vertical axes.
+
+**Two components now refuse instructions rather than degrade.** Asking the grouped
+bars for a fourth series, or the palette for a sixth colour, raises an error naming
+the alternative. Silently reusing a colour is the failure that draws perfectly and so
+goes unnoticed until two things mean different things and look identical.
+
+**The lead number is set in the sans face, not the shared serif** — the one place the
+serif would be wrong, because a number in a display face reads as ornament rather than
+data.
+
+**Also recorded: the fashionable things deliberately not built.** Doughnuts and pie
+charts, radar charts, gauges, combined charts with two vertical axes, gradient fills,
+frosted-glass panels, card shadows, counting-up animations and anything in 3D. Each
+either misstates the data or contradicts a decision this project already made and
+wrote down — the frosted-glass effect was removed from the dashboard's own welcome
+panel earlier today for doing nothing at all.
+
+## August 20, 2026 — The whole component set is now on the dashboard, for the root account only
+
+**Every card and chart is on a real screen at last, at the bottom of the dashboard,
+visible only to the root account.** They had all been built ready-to-use and connected
+to nothing, which meant the person who asked for them could not see them. Now they
+render in the real theme, in whichever colour mode the viewer is using, and can be
+judged instead of described.
+
+**Every figure in that section is invented, and the section says so in three places.**
+A chart of made-up numbers sitting on a dashboard is indistinguishable from a chart of
+real ones, and this is the screen people come to precisely to find out what is
+actually happening — so a plausible-looking fake here is worse than on any other page.
+The heading names it a preview, a warning label sits beside it, and each chart repeats
+"sample figures" in its own description. The component carries an instruction never to
+connect it to a live endpoint: if one of these charts turns out to be useful, it moves
+into the dashboard proper with its own data and comes out of the preview.
+
+**The restriction is about presentation, not secrecy, and the code says which.** The
+section renders no real data, so there is nothing in it to protect; hiding it from
+other users just keeps a development aid out of their way. That distinction is written
+down where someone might otherwise mistake a client-side check for a security control —
+if this ever grew a real query, it would need a guard on the server.
+
+**What is on show:** the opening slab on both its grounds; a headline number on each of
+the four grounds it supports, with rising, falling and unchanged states; a two-series
+trend with a crosshair readout; a comparison across services; a part-to-whole bar;
+three meters at healthy, warning and critical; an inline twelve-week trend; four
+action cards; and two entity cards with live and in-review states.
+
+## August 20, 2026 — A chart set for the dashboard, with the palette computed rather than chosen
+
+**Six chart components, ready to use and wired into nothing yet**: a trend line with
+a crosshair readout, horizontal bars, a part-to-whole bar, a sparkline for inside a
+stat tile, a single-ratio meter, and the frame they all sit in. **No charting library
+was added** — every mark is drawn directly. A library would have cost more than the
+entire page's JavaScript allowance, and none of these shapes need one.
+
+**The colours were produced by a validator, not picked by eye.** Five series colours,
+in a fixed order that is itself the colourblind-safety mechanism, checked for
+lightness, saturation, separation under two kinds of colour blindness, separation for
+full-colour vision, and contrast against the surface — run once for the light card
+and again for the dark one. Several plausible orders were rejected outright: two
+blue-greens next to each other are hard to tell apart even with normal vision, and
+blue beside violet collapses almost completely for the commonest form of colour
+blindness.
+
+**There is no red among the series colours, on purpose.** Red is reserved for
+"critical". Two orders passed every check with a red in second place and were thrown
+away anyway, because a status colour that can pass for an ordinary series is a
+status colour that will be misread.
+
+**Asking for a sixth series raises an error rather than reusing a colour.** Quietly
+cycling back to the first colour is the failure that draws perfectly and so nobody
+notices, until two lines mean different things and look identical.
+
+**Every chart carries a table view, and it is not optional.** It is what makes the
+numbers reachable without seeing colour, without hovering, and without seeing the
+chart at all — and it is why the occasional low-contrast fill is survivable.
+
+**Two faults in my own first draft, found by checking against a catalogue of known
+chart mistakes.** The bar chart shaded each bar darker the bigger it was — which
+sounds sensible and is wrong, because the bar's length already says that, so the
+shading spends the one remaining channel on nothing. And the part-to-whole bar
+dropped empty segments before assigning colours, so the moment one category emptied,
+every remaining colour shifted along — anyone who had learned which colour meant
+which category would then be misreading it. Both render flawlessly. Both were wrong.
+
+**Still to do: nobody has looked at these.** The validator checks colour, not layout,
+and the components are not on any screen yet, so label collisions and overflow are
+unverified by eye.
+
+## August 20, 2026 — The dashboard welcome panel stopped claiming the system was healthy
+
+**The panel every user lands on said "All systems operational", and nothing was checking.** It was a
+fixed piece of text. It would have said the same thing with the database unreachable — a false
+assurance, shown to everyone, on every visit. That is worse than showing nothing, so it is gone.
+
+**A real version was available and was still the wrong thing to use here.** There is a system-health
+endpoint, but it returns table sizes, row counts and open error tallies: an administrator's diagnostic,
+which is also not something to run behind every partner's dashboard in order to draw a small green tick.
+The System Health screen is where that belongs.
+
+**Three other things came off the panel.** A chip naming the application — inside the application,
+below a sidebar naming it and a browser tab naming it. Three emoji, where the public website uses
+none. And a blur effect applied three times to elements sitting on a solid colour, so there was
+nothing behind them to blur: it cost the browser a rendering layer per chip and produced no visible
+pixels.
+
+**"Member since August 2026" is replaced by two facts worth the space.** Which role you are signed in
+as, and when you previously signed in. The second is the one genuinely worth a second look: if it
+wasn't you, that matters. Both were already loaded, so the panel still makes no extra request.
+
+**A two-factor prompt now appears only for people who have not switched it on**, and disappears once
+they have — a task rather than an ornament that never changes.
+
+**The description was wrong for half the people reading it.** It promised "manage users, roles and
+permissions" to every visitor, including partners who can do none of those things. It now splits on
+whether the reader actually has administrative access.
+
+**Two mistakes caught while building it, both worth recording.** The two-factor prompt originally
+linked to a security page that does not exist — the panel lives on the profile page, and the only
+settings pages are profile, password and appearance; the anchor it now points at had to be added as
+well, or the link would have landed at the top of the page. And the role was being shown from the field
+the permission system keys on, which would have displayed a person's role to them as a slug rather than
+a name.
+
+## August 20, 2026 — One heading component for the whole admin area, and the shared typeface reaches every page
+
+**Every page's title and description now come from one component.** Nine admin modules had each
+written the same three lines by hand — a title, then a description under it — and the detail-page
+header, the index-page header, the settings shell and six section headings each had their own variant.
+Twelve definitions of one idea. That is why the shared typeface could not simply be "applied
+everywhere": there was no single place to apply it. There is now, and the type arrives with the
+component rather than being pasted into twenty files.
+
+**The hierarchy is three sizes, and they are the hierarchy.** A page's own title, a titled block
+inside a page, and a header sitting directly above a table. Nothing else, and no per-page overrides —
+the settings screen briefly had one and it was removed rather than kept.
+
+**The size above a table is the interesting one.** How many rows each table shows is calculated from
+the height of everything around it, using a fixed allowance for that surrounding chrome. Making the
+heading taller eats into the rows: on a typical laptop it would have turned seventeen rows into
+sixteen. So above a table the title is set larger but its line spacing is held exactly where it was —
+the type gets its proper scale, the box does not move, and nothing had to be re-measured. That
+coupling has been written down since the theme migration and this is the first change to respect it
+rather than trip over it.
+
+**A few headings could not use the component**, because their title is an expression already wrapped
+in its own layout. Those take the type classes from the same component instead of restating them, the
+same arrangement the button already uses for links. The point is that there is still one definition.
+
+**Descriptions moved to the slightly darker grey.** The lighter one measured 4.07 against the admin
+background before it was warmed — a documented accessibility failure — and 4.51 after. The darker grey
+is 5.43 and is what the guidelines already specified.
+
+**Reported honestly: three self-inflicted breakages, all caught by the verification step.** A comment
+placed where the language allows only one element; a description containing a piece of logic that got
+quoted as if it were plain text; and two files left importing one name while using another. All three
+were found by the type check and fixed before anything else ran. The first was the same mistake in the
+same shape as one earlier in the day.
+
+## August 20, 2026 — The dashboard actually changed this time, and both surfaces now share one typeface
+
+**Correction first: the previous entry claimed the dashboard "already followed" the new design, and
+that was the wrong call.** The new card components had been built and wired into nothing, and the only
+change to the cards actually on screen was a border going from 1.12 to 1.41 against its background —
+real, measurable, and invisible. The owner looked at the dashboard, saw the same page, and was right.
+It is migrated now.
+
+**The four headline counts and the five quick actions are new components.** The number moved from
+above its label to beside it, matching the counts above every index table, so a count looks the same
+wherever it appears. The counts sit on the near-black panel; the actions stay light. With the page
+heading showing the background through between them, the dashboard now reads as three bands — the
+coloured welcome slab, the dark counts, the light actions — which is the alternation the public website
+gets its rhythm from.
+
+**Every quick action used to end with a button reading "Get Started".** Five identical labels, naming
+neither where you were going nor what would happen. They are gone; an arrow says the same thing without
+pretending to be a control.
+
+**Both old cards carried their own hand-drawn icon set** — two copies of the same six symbols at two
+different sizes. They now use the icon library the rest of the application already depends on. Two
+different actions had also been sharing one glyph; "Add User" has its own now.
+
+**No trend arrows on those counts, deliberately.** There is no comparison data behind them, and a
+plausible-looking "+12%" would be a number the page invented. The capability is built and unused until
+the interface can answer the question honestly.
+
+**Both surfaces now share one typeface, not just one body font.** The public website's headline serif
+was loaded only for that surface, on the reasoning that the admin area should not pay for a font it
+never renders. The owner asked for the two to match, so it moved up to the shared layout and the admin
+area now sets its headings in it: the dashboard heading, its two section headings, the count figures,
+and the sign-in heading. The public website's own copy was removed rather than left duplicated — its
+settings were identical, so nothing there renders differently.
+
+**One rule comes with it: only the regular weight is available.** That is what the website itself
+loads. Asking a browser to bold it produces a fake bold, which on a fine serif looks smeared rather
+than strong, so every heading that took the serif had its bold removed and gained a little size
+instead. Anything under 18px keeps the sans face — a serif on a 13px label in a dense table is worse
+than no serif at all.
+
+**Reported honestly: I broke the public layout for a minute.** A comment was placed where the language
+allows only one element, and the type check rejected the file. Caught by the verification step, fixed
+before anything else ran — the same slip as earlier in the day, in the same shape.
+
+**Now dead, not deleted:** the two old dashboard card components have no remaining callers. Deleting
+code is a separate decision from restyling it, so they were left in place to be removed deliberately.
+
+## August 20, 2026 — The header's two controls now match, and the dashboard cards got their edges back
+
+**Log out and the initials disc in the top-right corner are both in the pale purple now.** They sit
+side by side and were previously two different treatments — the disc a solid green, the button a
+tinted green that flipped to solid on hover. They now share the same fill, the same near-black text and
+the same near-black outline, so they read as one pair of controls rather than two unrelated things.
+Hovering either one shrinks it very slightly, which is what every other button in the app now does.
+
+**The outline on them is not decoration.** The pale purple sits at 1.23 against the frame behind it —
+almost no edge of its own — so without an outline a control in that colour goes missing. The near-black
+outline sits at 13.6 against the same frame.
+
+**When you are on your own settings pages the disc inverts** — near-black circle, pale purple
+initials — instead of reaching for a third colour. It is the same pairing read the other way round,
+and equally legible either way.
+
+**On the dashboard the audit found almost nothing to do, which is the point.** Those screens were
+built on named colours rather than fixed ones, so when the brand became the website's green and the
+accent became its amber, every stat card and quick-action tile came along without being edited. The
+welcome banner was already a coloured slab in the brand — the same device the website uses for its
+feature sections — so the dashboard already had the alternation between a coloured band and lighter
+cards that gives the website its rhythm.
+
+**One real defect did turn up: three kinds of card had no visible edge until you hovered them.** The
+stat cards, the quick-action tiles and the partner-overview tiles each drew a resting border in a colour
+that measures 1.12 against the frame they sit on — invisible — while their hover border was clearly
+visible. The effect was that the border looked like a hover effect rather than the card having an edge
+at all. The guidelines have specified the correct border for this background since 7 August, and the
+main index surface already used it; these three had simply never been changed. Now fixed.
+
+**Deliberately not done: making the dashboard cards black like the ones above the tables.** The black
+panel works on the website because it is one section among lighter ones. The dashboard already
+alternates — a coloured banner, then light cards — and turning the cards black too would flatten that
+into a wall of black. The black treatment suits the compact strip above a table, not a page of cards.
+
+**Also noticed, not changed:** there is a second, unused header component in the codebase with its own
+copy of the initials disc and search box. Nothing renders it. It is worth deleting, but deleting code
+is not something to slip into a styling change.
+
+## August 20, 2026 — The headline counts now read as a label on the left and its number on the right
+
+**Each tile in the stat row above an index table was a number with its label underneath; it is now a
+label and its one-line description on the left, with the number on the right of the same row.** Four
+screens use this row — Invitations, Enquiries, API Docs and Worker Jobs.
+
+**The number is aligned to the label's baseline rather than to the top of the tile.** The number is
+twice the size of the label, so aligning their tops would have left them looking like two separate
+things placed near each other. Aligning the baselines is what makes them read as one line. It also
+keeps the numbers level with each other across the row even when one tile's description wraps onto a
+second line, because the alignment is taken from the label's line and not from the block as a whole.
+
+**Two older layout devices came out with the change, and both had a real job.** The number used to sit
+in a fixed-height box so that tiles showing a short piece of text instead of a figure did not leave
+their labels sitting higher than their neighbours'. The description used to be pushed to the floor of
+the tile so that descriptions lined up across the row. Neither is needed now: putting the number
+beside the label handles the first, and the second still holds because every label is a single line,
+so every description starts at the same height anyway.
+
+**One number is now shared between two places on purpose.** The tile's minimum height and the height
+of the placeholder shown while the counts are loading are deliberately the same value. These tiles sit
+directly above a table that is also loading, and a row that changes height once the data arrives
+shoves the table down after the reader has already looked at it. The two heights were previously
+chosen independently, so they could drift; they are now documented as a pair.
+
+## August 20, 2026 — The headline counts above each table are now the website's black cards
+
+**The stat row that sits above an index table wears the website's black-card treatment.** It is on
+four screens — Invitations, Enquiries, API Docs and Worker Jobs — and it is the one place in the admin
+area where that treatment genuinely belongs: a row of headline counts is a few large figures, which is
+exactly what the website uses its black panels for. The figure is the website's amber, the label is
+white, and the supporting line is a softened white.
+
+**Light and dark are deliberately not the same, and the component had already written down why.** A
+near-black tile is superb against the light frame — around 14 to 1, whichever light surface it sits on —
+and effectively invisible on the dark card, at 1.2 to 1. The black panel is striking *because* it
+contrasts with a light page; on a page that is already dark the equivalent move is to lift the tile,
+not to darken it. So dark mode keeps the faint lift it already had, and only the text and marks change.
+
+**Every status dot needed a version for a dark background, and one of them had been broken all
+along.** The small coloured dot beside each label was tuned for a pale tile. On black, three of the
+four fell below the threshold where a mark can be distinguished at all. Fixing them turned up a live
+defect: **the "success" dot has been invisible in dark mode on every screen that has one** — 1.41
+against the dark card, where 3 is the minimum. Its colour is defined as the brand darkened, so on a
+dark background it has always been dark-on-dark. It now uses the brand's own light-mode counterpart,
+which fixes both the new black tile and the pre-existing dark-mode case together. The red needed
+lightening too, so there is now a lighter red reserved for dark backgrounds.
+
+**Nothing here contradicts the rule against colouring the figure.** That rule exists because putting a
+status colour on the number itself measured 1.84 and 1.47 — unreadable — and it forbids encoding
+*status* in the figure. The amber is applied to every tile identically, so it carries no status; it is
+the display treatment the website uses for a large number on a black panel.
+
+**Reported honestly: I broke the file first.** The comment explaining the muted text was placed inside
+a conditional where the language does not allow one, and the type check refused the file outright.
+Caught by the verification step and fixed before anything else ran.
+
+## August 20, 2026 — The admin area now wears the website's colours throughout, not just its green
+
+**The whole visual system from the public website is now in the signed-in area.** The green went in
+earlier today; this finishes the job — the background, the button colour, the accent for icons, and
+the status colour that had no home. Seven planned steps, all of them done, and no configuration file
+that needed sign-off was touched.
+
+**The background is warm now, and that was the change with the biggest effect for the least code.**
+The signed-in frame sat on a faintly cool blue-green; it now sits on a warm off-cream, the same
+family as the website. **This turned out to be an accessibility fix as well as a cosmetic one.** The
+muted grey used for secondary text measured 4.07 against that background where the standard requires
+4.5 — a failure the guidelines file had recorded and lived with. On the new background the same grey
+measures 4.51, so it passes for the first time, and the label grey improves too.
+
+**The first attempt at it did almost nothing, which is worth recording.** The background is a mix of
+the brand colour over a base, and the obvious move — warming the base — is very nearly invisible,
+because the brand tint dominates. What makes a background read warm is letting *more of the base
+through*: the mix went from a tenth to a thirtieth. Anyone repeating this should change the proportion,
+not the base.
+
+**Primary buttons are the website's pale lilac instead of solid green, carrying near-black text.**
+This is the change the director asked for, and it is the website's own pairing — that surface has
+always used the green for structure and the lilac for the thing you click. Near-black on lilac
+measures 11:1, comfortably legible; white on it measures 1.32 and is refused outright.
+
+**The border on those buttons is not decoration.** A lilac fill measures 1.11 against the new
+background — it has essentially no edge of its own, and a control whose boundary cannot be seen is a
+control that has gone missing. Near-black on the background measures 12.3, so the border is what makes
+the button a shape. Every button variant now carries a border, transparent where it is not wanted, so
+all four render the same size — previously the outlined variant was two pixels bigger than the primary
+one beside it, for no reason anyone chose.
+
+**The tan accent became the website's amber**, in the role that surface actually uses it for: icons,
+small labels, large numerals and bullet marks. Two components consume it, four lines. Amber can never
+be text on a light background — it measures 1.91 — and both call sites already avoided that correctly,
+so the two derived shades were measured against the tinted fills they really sit on rather than
+against the raw colour.
+
+**A status colour that was missing.** Anything pending or awaiting review had to borrow the warning
+colour, so a normal in-progress state looked like a problem. There is now a lilac status chip for
+exactly that, which is the website's own use of the colour for its middle verification tier — the one
+place lilac means a state rather than an action.
+
+**Buttons shrink very slightly when hovered, and nothing else does.** That is the website's entire
+motion vocabulary. It is deliberately not applied to table rows, cards or sidebar items: a row that
+shrinks under the cursor in a list of forty reads as a glitch. Anyone who has asked their system for
+reduced motion gets none of it.
+
+**Eleven shadows came out, and the audit that found them was wrong twice.** The design separates
+surfaces with borders, never with shadows, reserving those for things that genuinely float — menus,
+dialogs, notifications. A first pass counted five offenders; there were eleven, because it had not
+looked in the settings screens at all. Of those, the most useful find was two save buttons that each
+restated the standard button inline instead of using it — so they would have stayed green while every
+other primary button turned lilac. Both now use the shared definition.
+
+**One invisible button was fixed on the way.** The vendor table's button component referenced a
+styling class that **does not exist anywhere in the project** — the stylesheet it was supposed to come
+from is not in the tree. Its default form was therefore near-white text on nothing at all. It never
+showed, because the only screens using that table ask for two other forms of the button, so this was
+latent rather than live. It now uses the real colours.
+
+## August 20, 2026 — The admin area now ships in the website's own colour, and the branding picker says which one that is
+
+**The theme the application starts in is now the same colour as the public website.** The signed-in
+area shipped in the inherited theme's teal; the marketing site was built later in a deep pine. The
+two were unrelated colours for no reason other than the order they were built in. The picker on
+Settings → Branding gains that pine as a new option named Pine, it is now what a fresh installation
+uses, and it carries a **Primary** badge so an administrator can tell the house colour from the ten
+alternatives at a glance.
+
+**The colour is the website's exact code, not an approximation** — `#034f46`, read out of the
+marketing site's own stylesheet. Everything else the interface needs is calculated from it by the
+same engine every other theme uses: the hover and pressed shades, the dark-mode variant, the card
+washes, the borders and the success chips. Nothing was hand-picked, so the new theme behaves like
+the existing ones rather than being a special case.
+
+**It is also more legible than what it replaces.** White button text on the new colour measures
+9.50:1 where the accessibility floor is 4.5:1; the teal it replaces measured 6.46:1. The dark-mode
+variant measures 6.62:1 against the dark card. Both figures are asserted by the test suite rather
+than recorded in a comment, and the new theme passes the same eleven checks every other one does.
+
+**The old teal is still there and still selectable.** This was a change of default, not a removal —
+its values remain exactly the inherited theme's, so anyone who prefers the original keeps it.
+
+**Two places had quietly hardcoded the old colour, and both would have gone stale today.** The
+stylesheet's fallback — what renders if the settings service cannot be reached — still held teal, so
+a failed request would have repainted the app in a theme nobody had chosen. And the custom-colour
+picker seeded its input with the literal old hex, meaning it would have opened on the *previous*
+default forever. Both now follow the real default instead of restating it.
+
+**The badge is driven by what the server reports as the default, not by a copy of it.** The settings
+service has always published which theme applies when none is stored; the screen simply ignored it
+until now. Reading it means the badge follows the default automatically if it ever moves again,
+rather than becoming a second thing to remember to edit.
+
+## August 20, 2026 — A design spec for the signed-in application, and a plan to let every user pick their own theme
+
+**The back office now has a written design specification of its own, which it never had.** The
+public marketing surface got one on 18 August; the signed-in application had `UI_PATTERNS.md` for
+*how* it is built but nothing stating *what colour everything is* and why. The new
+`documentation/design/BACKOFFICE_DESIGN.md` fills that gap in the same ten-section format the public
+surface uses, and it specifies adopting the marketing site's palette so the two surfaces read as one
+product. **Nothing has been implemented — this is the specification, written before the code
+deliberately.**
+
+**The brief was "use the website's colours in the admin area", and the project's own validator
+rejected three of the four outright.** White text on the marketing site's primary button colour
+measures 1.32:1, where the accessibility floor is 4.5:1; its amber and coral score 1.91:1 and
+2.80:1. Only the deep pine passes, and it passes at 9.50:1 — better than the green in use today.
+
+**Reading the marketing stylesheet more carefully is what resolved it.** That surface already uses
+two colours in two different roles: pine for structure and links, and lilac purely as a button fill
+carrying near-black text rather than white. Pairing lilac with the same near-black in the admin area
+measures 13.15:1 — comfortably accessible. So the specification adopts both roles as the marketing
+site actually uses them, rather than forcing one colour to do both jobs.
+
+**That reading is also what keeps the change small.** The admin area refers to its brand colour in
+583 places across 54 files, and 30 of those files put white text directly on it. Because the
+structural colour stays dark, every one of those places keeps working untouched, and the recolour
+happens in two shared files instead of across the whole application. A version of this task that
+made the pale colour the main brand would have required editing all 583.
+
+**Rewritten later the same day, because the first version was the wrong kind of document.** It
+listed which colours exist and what each measures, which is a palette, not a design. What makes the
+marketing site recognisable is *where each colour goes* — and that was missing. So the public surface
+was audited as built rather than as documented: every colour token counted at its call sites, and
+each one traced to the job it actually does.
+
+**That audit found the rule the whole look rests on.** The marketing site never picks an emphasis
+colour by hand. It picks a background, and the background decides the rest — on a light background the
+emphasis is the deep green and the hairlines are near-black; on a dark one the emphasis is the amber
+and the hairlines are translucent cream. Body text, muted text and the button colour all flip with it,
+as a set. The back office already has this rule for light and dark mode and had never connected the
+two. The specification now states it as five inseparable pairs and maps light mode onto the light
+background and dark mode onto the dark one.
+
+**It also corrected two things the audit disproved.** The cream background was thought to need a
+change to a protected configuration file; it does not — the token that was going to be edited has been
+unreferenced since 7 August, and the background actually in use is calculated in the theme engine, so
+nothing in the plan touches a protected file any more. And the amber cannot be the dark-mode brand
+colour as first implied, because that one has to follow whichever theme is selected — an amber
+highlight under a red theme would clash. Amber is the fixed accent instead, which is a four-line
+change in two components.
+
+**Three of the remaining steps are each independently visible and none is risky**: the pale-purple
+button colour, dropping the five stray shadows shadcn puts on static controls, and swapping the
+accent. The audit found seventeen of the twenty-two shadows in the admin area are on things that
+genuinely float — menus, modals, toasts — and only five contradict the design's own rule.
+
+**The one part that is genuinely new design work is dark mode.** The marketing site is light-only by
+decision and offers no dark palette to copy, so the specification derives one and records the
+measured figure for every pairing.
+
+**Separately, a plan for per-user themes: `documentation/planning/PER_USER_THEMING_PLAN.md`.** Today
+the theme is installation-wide — one row, one identity, changed by a super-admin. The plan adds a
+personal override stored against each user's account, so a choice follows them to any machine, while
+leaving the administrator's control of the default exactly as it is. Two findings shaped it. First,
+the theme can ride along on a request the application already makes on every page load, so the
+"don't hit the database each time" requirement needs no new request at all. Second, browser-side
+caching is not an optimisation here but a requirement: the server cannot know who is asking before
+the page renders, so without a cached value every load would visibly flash the wrong colours. The
+plan also records that the cache must be cleared at sign-out, or the next person to sign in on that
+browser briefly sees the previous person's colours.
+
+## August 20, 2026 — The public site was advertising services it was no longer showing
+
+**Two ways of taking a listing off the public site left its category still counting it.** The
+category counts on the home page and the services index come from a stored number, and two paths
+never recomputed it — so a category could read "12 services" above a list of eleven, indefinitely.
+Both are ordinary things a partner does.
+
+  - **Moving a published listing to a different category.** Changing the category sends the listing
+    back for review, which takes it off the public site. The recount that followed looked at the
+    listing's category — but by then that was the *new* one. The category it had just left was never
+    revisited and went on advertising it for ever.
+  - **Re-submitting a listing that was already live.** A legal thing to do, and reachable from the
+    button that does it. The rule about recomputing had been written into the edit path and simply
+    never written into this one.
+
+**Both are fixed, and both are pinned by tests that fail against the old code.** That last part is
+the point of writing them: a regression test that passes either way documents an intention instead
+of protecting a fix. The suite was run against the reverted code to confirm each one actually
+catches its bug, then against the fix.
+
+**The first fix did not work at first, and the reason is worth more than the fix.** Recomputing the
+old category returned the wrong number — because this project's database sessions do not
+automatically save pending changes before running a query. The listing had been moved in memory but
+not yet written, so the counting query saw the row exactly as it had been and stored *that*. A
+single explicit save between the two lines fixed it.
+
+**That also explains why nobody noticed the original bug.** The old code recomputed only the
+destination category, and the stale read there said "this listing is not in me yet" — which was the
+correct answer, arrived at by luck. The mistake was invisible precisely because it produced a
+believable number. A stored count recomputed from a query is the shape most likely to hide this:
+when it goes wrong you get a plausible figure rather than an error.
+
+**The rule it broke was already written down**, in the backend conventions: flushes are explicit,
+do not rely on lazy ordering. So the fix is not a new rule — it is the existing one, now with the
+incident recorded beside it as a worked example, because an abstract rule got violated for two days
+in code that looked right.
+
+**The counter design itself is sound and stays.** It is recomputed rather than incremented, so it
+heals: any path that does recompute lands on the truth regardless of what was stored before. That is
+what makes two narrow fixes sufficient rather than needing a repair job — a historical drift
+corrects itself the next time anything touches that category. There is a test for that too.
+
+**Verified: 876 backend tests passing, ruff clean.**
+
+## August 20, 2026 — Half of the trust measurement was missing a column; it now has one, and staff cannot skew it
+
+**We could tell how fast a partner replied to an enquiry, but not how fast they looked at one.** The
+plan calls those two timestamps "the two timestamps the entire trust system depends on" and both feed
+how partners are ranked. Only the reply half existed. The other was not merely unpopulated — there
+was no column for it.
+
+**It is recorded when the partner opens the enquiry, because that is the only honest moment.** Not
+when it arrived, and not when a list rendered its subject line — a partner has seen an enquiry when
+they have actually looked at it. It is written once and never moved: re-stamping on every open would
+turn "how long did they take to look" into "when did they last look", which is a different question
+from the one ranking asks.
+
+**Staff opening an enquiry does not count, and that rule is the whole point.** Staff can read every
+enquiry on the platform for oversight. Without the check, one person working through the enquiries
+list would stamp view times across every partner at once, and the measure would quietly stop being
+about partner responsiveness and start being about how quickly we read our own mail. Staff belong to
+no organisation, so the rule excludes them by construction rather than by naming them — and a member
+of the *wrong* partner is excluded by the same comparison. Both are tested.
+
+**This was deliberately split out of the larger problem so it could ship today.** The rest of that
+problem — a status for spam, so junk enquiries stop counting against a partner's response rate —
+needs two new status values, and a status the front end cannot label is a half-finished change while
+those screens are owned by someone else. The measure needs a *timestamp*; the badge is presentation.
+Separating them meant the useful half landed and the coordinated half stayed written down.
+
+  - **A mistake worth recording: the field briefly appeared on the buyer's public status page.** A
+    bulk edit matched two schemas rather than one, which would have told an anonymous buyer exactly
+    when the partner opened their enquiry — and broken that page outright, since the field is
+    required and the public route does not supply it. The application still imported cleanly, so
+    nothing caught it; it was found by checking which classes the edit had actually landed in, then
+    confirmed by calling the public route and looking at the fields it returns.
+  - **The migration also introduced database drift, and the drift check caught it.** The column
+    carried a description that the model did not, so the next person running the schema comparison
+    would have been offered a spurious change. Both now match, and the comparison is empty again —
+    which is the state a previous piece of work fought to reach and is worth not giving back.
+  - The migration reverses cleanly: applied, rolled back, and re-applied against the live database.
+    Its scope is one column on purpose — the two status values cannot be removed once added, so they
+    want their own migration whose rollback refuses honestly instead of half-reversing.
+
+**One thing is broken and it is not this work.** The front end's type check currently fails in a
+brand-new charts directory that appeared today, where a loading placeholder is passed a styling
+option it does not accept. That is someone else's work in progress, in a file this change never
+touched — noted rather than fixed, because how that component should accept styling is their
+decision, and it is the only error standing.
+
+**Verified: 871 backend tests passing, ruff clean, lint 0 problems, the committed API document
+matches the routes, and the schema comparison is empty.**
+
+## August 20, 2026 — Partners are being marked down for spam they were right to ignore
+
+**The one number this product ranks partners on is quietly wrong.** Enquiries arrive through a
+public form that anyone can fill in — rate-limited and honeypot-protected, but public. Some of what
+arrives will be junk; that is what a public form means. There is nowhere to put junk: the status
+list has no "spam". So a junk enquiry sits for ever as one the partner never answered, and the
+response-rate calculation counts it as exactly that. The only alternatives a partner has are
+"closed" or "lost", which are real commercial outcomes and would misreport the pipeline instead.
+
+**Response rate feeds partner ranking**, so this is not a cosmetic count — it decides who appears
+higher in the directory. A partner who ignores three pieces of spam looks worse than one who
+answered three real enquiries, and nothing on any screen would explain why.
+
+**It is not on screen yet, which is the only reason this is not urgent.** The function that computes
+those numbers has no callers at all — it was written, and never wired to anything. So the corrupted
+figure exists in code and not in front of anyone. It becomes visible the moment a partner dashboard
+or the planned tier-and-usage page consumes it, and at that point it is a fairness problem people
+will notice before we do.
+
+**Two more pieces of the same design are missing**, and the plan describes all three as built:
+
+  - **There is no "viewed" state**, so the half of the trust measure that asks how quickly a partner
+    *looks* at an enquiry has no data source at all. The plan calls the two timestamps involved "the
+    two timestamps the entire trust system depends on"; one of them is not a column.
+  - **There is no transition table**, unlike listings, which have one. An enquiry can be moved from
+    "responded" back to "new" — a statement about history that is simply false. The trust figure
+    itself is protected, because the response timestamp is written once and never overwritten, so
+    this is an integrity problem rather than a measurement one.
+
+**Deliberately not fixed on the spot, and the reason matters.** The fix needs two new status values,
+which means a database migration — small, and the migration guide anticipates this exact case. What
+stopped it is the other half: a status the frontend cannot render is a half-shipped change. The
+frontend narrows the status type to today's five values on purpose, and the labels and colours for
+them live in the enquiries screen, which another agent was editing at that moment along with the
+message thread beside it. Shipping the backend alone would have produced an unlabelled grey badge
+for a state nobody could reach. The same applies to forbidding the nonsense transition: it changes
+what the existing status dropdown may do, and that dropdown is in a file owned elsewhere right now.
+
+So it is written up instead — as a numbered debt item with the migration specified step by step,
+including the two traps worth knowing before starting: PostgreSQL cannot remove an enum value once
+added, so the downgrade has to refuse rather than half-reverse; and the "viewed" stamp must fire
+only for the recipient partner, never for staff, or the measure starts recording staff browsing
+instead of partner responsiveness.
+
+**Three claims in the plan were corrected to match the code** — the enquiry status column, the
+timestamp pair, and the phase-6 measure that is computable but wrong until this is fixed.
+
+**Verified: 869 backend tests passing, ruff clean, typecheck 0, lint 0.** No code changed in this
+entry.
+
+## August 20, 2026 — The moderation queue now says which listings cannot be approved, before anyone opens them
+
+**A reviewer could read a listing, decide it was good, click Approve and only then be told it was
+impossible.** Publishing is refused when the partner is suspended, unlisted, or has used up their
+plan's listing allowance — all correct refusals, and all arriving after the expensive half of the
+decision had already been made. Each row in the queue now carries the reasons it cannot be
+published, so that is visible before anything is opened. An empty list means approving will work.
+
+**The strings on the row are the same strings the refusal would raise**, deliberately, so the screen
+and the error cannot drift into disagreeing about why something is blocked. Each names the
+organisation, and an allowance refusal names the tier and both numbers — the reviewer is not the
+person who chose the plan, so "not allowed" would tell them nothing they could act on.
+
+**It costs two extra database queries for the whole queue, not two per row.** The organisations are
+fetched once and the published-listing counts come back grouped in a single query, so a queue of
+thirty listings across five partners does not become sixty round trips. Both of the functions
+involved take an already-counted number for exactly this purpose, and three tests cover that seam —
+because the failure it invites is subtle: pass the wrong partner's count and one partner's usage gets
+measured against another's allowance, which no single-partner test would ever notice.
+
+  - **The queue gets its own response shape rather than two more fields on the shared listing
+    model.** Only this screen needs them, and every listing read in the application shares that
+    model — so putting them there would make an entitlement lookup the price of reading any listing.
+  - **The new shape was pinned against the backend contract immediately**, rather than added to a
+    backlog. The whole argument of this morning's work is that an unasserted schema drifts, and a
+    brand-new one is the cheapest possible moment to pin it. That assertion incidentally proved the
+    existing listing type matches the API too, since it compares inherited fields as well.
+
+**The front-end wiring was deliberately left alone.** The moderation screen and its data hooks are
+being edited by someone else right now, so this stops at the typed contract: the fields, documented,
+with the types the screen will need. Editing those files would have been a collision, not progress.
+
+**Also settled: why the other half of a tier is still not enforced.** `featured_slots` grants
+"featured placement", and there is nothing in the schema to place — the columns it would need do not
+exist, the ranking rule is unwritten, and the whole mechanic hangs off the revenue-model decision
+that is still open. So it is now recorded as **blocked on a decision** rather than sitting on a list
+looking like an afternoon's work. Building it would have meant inventing a commercial mechanic
+nobody has agreed to.
+
+**Verified: 869 backend tests passing, ruff clean, typecheck 0, lint 0, and the committed API
+document matches the routes.**
+
+## August 20, 2026 — Partner tiers stop being decorative: the listing allowance is now actually enforced
+
+**A partner's plan said how many services they could publish, and nothing ever checked it.** The
+tiers exist, an administrator can edit what each one grants, the number is shown on partner rows and
+the seeder fills it in — and every partner could publish as many listings as they liked regardless.
+The plan says so in three separate places and calls a tier "currently a label". Publishing now
+refuses once a partner is at their allowance, naming the tier and both numbers so the reviewer can
+see whose limit it is and what to do about it.
+
+**This is the same failure the moderation queue was carefully designed to avoid.** There is
+deliberately no bulk-approve button, on the grounds that the value of a curated directory is that
+somebody looked at each entry — a queue meant to be read must not become a queue that is cleared.
+A tier that grants nothing is that failure in the commercial half of the product: a plan somebody
+could be charged for that has no effect on what they can do.
+
+**Three readings had to be decided, and each of them could have caused real damage.**
+
+  - **A partner with no tier is unlimited, not blocked.** Every partner in the database currently
+    has no tier assigned, so reading "no plan" as "no allowance" would have refused every
+    publication in the system the moment this shipped — an outage dressed as a feature. A tier is
+    something sold to a partner; its absence means nobody sold them a limit.
+  - **Moving a partner to a smaller plan never unpublishes anything.** What is already live stays
+    live, and only new publications are refused until they are back under the allowance.
+    Retroactively hiding listings somebody paid for, because a plan changed, would be far worse
+    than letting an over-limit partner sit tight.
+  - **A partner on their last slot can still correct a typo.** Editing a live listing sends it back
+    for review, so a naive count would treat the re-approval as a *new* publication and refuse it —
+    leaving a partner's final listing permanently uneditable by their own listing. It works out
+    without a special case, because editing moves the listing out of "published" and it stops
+    counting against itself while in review.
+
+**A second rule from the same specification was also unenforced**: a listing could be published for
+a suspended or unlisted organisation. That one is not a leak — the public pages already refuse to
+show anything belonging to a hidden company — but it produced a record that lied, marked live with a
+publication date, invisible for reasons nothing on screen explained. Both rules are checked
+together, and all reasons are reported at once rather than one per attempt: being told to fix one
+problem and only then hearing about the second is two round trips for one decision.
+
+**Eleven tests, and they earned their place immediately** — the first run failed on a wrong
+assumption of mine about how a listing reaches its organisation, before any of the business rules
+were even exercised.
+
+**What is still not enforced, and is now recorded as such rather than implied:** `featured_slots`,
+the other half of what a tier grants. The plan's three "nothing checks these" warnings have been
+corrected to name only that one, so the next person reads an accurate claim instead of a stale one.
+
+**Verified: 866 backend tests passing, ruff clean, typecheck 0, lint 0 problems.**
+
+## August 20, 2026 — Twenty-seven more response types can no longer drift away from the API without the build saying so
+
+**Seven modules' worth of types crossed the wire with nothing checking they still matched the
+backend.** The frontend describes each API response in its own words, and a small file asserts at
+compile time that those descriptions still line up with what the backend actually publishes — key
+for key, in both directions. It covered eighteen types. Seven modules were outside it entirely:
+error tracking, data access, API credentials, providers, feature flags, the search registry,
+webhooks and the platform consumers. Those are now covered too, taking the count to forty-five.
+
+**All twenty-seven passed first time, which is the good outcome and also why nobody had noticed.**
+Nothing was broken. But nothing was stopping it breaking either, and the file has carried the
+sentence "a schema with no assertion is a schema that can drift" since the day it was written —
+these were the ones with no assertion.
+
+**The task as planned would have made things worse, and this is the fourth time today that has
+happened.** It asked for the hand-written descriptions to be *replaced* by the auto-generated ones.
+The generated ones come from the backend's validation layer and are deliberately vaguer: where the
+frontend says a field is either "view" or "manage", the generated version says only "some text".
+Three screens branch on exactly that field, and the compiler currently catches a missing branch.
+Replacing would have swapped a checked choice for an unchecked string and quietly removed that
+protection. So the precise descriptions stay, and drift is made impossible instead — which is the
+bargain this mechanism was built on, applied to the files it had never reached.
+
+  - **The plan also had two stale premises**: the debt item it cited as open was closed on 6 August,
+    and the file it described as "the hand-copied layer to retire" is the very thing that closed it.
+  - **A prerequisite had to be fixed first.** The document these assertions compare against was
+    four routes out of date until earlier today, so without regenerating it they would have been
+    checking against a two-day-old API and passing.
+
+**The new guard was tested by deliberately breaking it, twice.** A guard that passes no matter what
+is worse than none, because it stops anyone checking — the same argument the file makes about types
+that agree only by convention. Renaming a field the frontend expects made the build fail naming that
+field; removing one the backend sends made it fail naming that one. **The second case is caught by
+nothing else at all** — no screen errors, no test fails — and it is precisely how a feature ships
+half-wired: the backend starts sending something and the frontend cannot see it, forever.
+
+**This closes the frontend data-layer phase completely** — all seven of its tasks, three of which
+turned out to be already done and one of which had to be refused and redesigned.
+
+**Verified: typecheck 0, lint 0 problems, 855 backend tests, ruff clean.**
+
+## August 20, 2026 — The two halves were checked against each other in a real browser, and the contract between them was stale
+
+**Everything built today had only ever been checked by tools that never start the application.** Type
+checking, linting and 855 backend tests all pass without a browser ever loading a page, and three
+entries below say so explicitly. This closes that gap: every screen was opened in a real browser,
+signed in, against the live backend — **59 checks, no failures, no warnings**.
+
+**All 21 signed-in screens render with real data through the new data layer**, along with the four
+redirect aliases and six detail and edit screens loaded on real record ids. The harness reports
+console errors and failed network requests as well as what rendered, so a page that silently threw
+during hydration and left an empty shell would have been caught — that is the failure fetching HTML
+cannot see, and it is the one a data-layer rewrite is most likely to cause.
+
+**The committed API contract was four routes out of date, and the build would have failed on it.**
+The backend publishes a document describing every endpoint; the frontend's types are generated from
+it, and a check in CI compares the committed copy against the live routes. It was missing all three
+partner self-service endpoints and one public one — added on 18 August, when the document was never
+regenerated. So the frontend has been typed against an API four routes older than the one it talks
+to, for two days, while every local check passed. Both the document and the generated types have
+been regenerated; the CI check now agrees.
+
+  - **This is the failure mode that check exists for**, and it is worth stating plainly: stale
+    generated types are worse than no generated types, because they look authoritative. Nothing
+    locally tells you — the routes work, the types compile, and the mismatch only shows up as an
+    endpoint the frontend cannot see.
+
+**The public surface was not covered by the browser pass at all, and now is.** Those ten pages are
+rendered on the server and fetch through the internal container address, which is a completely
+different path from the signed-in screens — it only works if the frontend container can reach the
+backend container, and nothing was checking it. Getting that address wrong fails **silently**: the
+fetch is refused, the error boundary catches it, and the page still answers 200 with nothing on it.
+The text-length floor in the harness is what turns that into a failure.
+
+  - **The harness had also been failing on a stale expectation of its own.** It asserted that the
+    site root redirects to the sign-in screen, which was true when written and stopped being true on
+    18 August when the public home page was built. It had been reporting a failure ever since —
+    which is how a checker nobody trusts ends up ignored wholesale, so it is fixed rather than
+    explained.
+  - One assertion was written against a page's browser-tab title rather than its visible text, and
+    corrected once the run reported it. Worth noting only because the two look identical in a diff.
+
+**Three runs failed before this one, and none of them was the application's fault.** The dev server
+had been left compiling for hours and reached 8.8 GB of memory at 644% CPU, so page loads exceeded
+the harness's 30-second limit at a different point every run — 26 screens, then 45, then 2. The
+give-away was that the same pages answered correctly and instantly when requested directly.
+Restarting the dev server brought it to 980 MB and the run went green. **A flaky harness result
+means "check the machine before the code"**, and a failure that moves each run is not a bug in what
+is being tested.
+
+**A temporary administrator account was created for the sign-in and deleted afterwards** — the user
+count is back to 19. The seeded roster holds real colleagues' addresses, and this repository is
+public, so it was left unread rather than borrowed from.
+
+**Verified: 59 browser checks green, 855 backend tests, ruff clean, typecheck 0, lint 0, and the
+committed API document matches the routes.**
+
+## August 20, 2026 — The biggest remaining task on the core plan turned out to be one that should not be done
+
+**A task budgeted as a 258-file mechanical sweep was checked before starting, and it should be
+deleted rather than scheduled.** The plan asked for every function that takes an "actor" to be
+retyped onto the general caller type, so the same code could serve a person, a machine holding a
+token, and an anonymous visitor. It was marked as the one piece of that phase safe to hand to a
+cheaper model, because it looked like find-and-replace.
+
+**The counter-argument was already in the codebase, written the same day the task was.** The
+scoping module explains that retyping those signatures would make most of them *less* accurate,
+not more: a function that updates a user genuinely requires a person, and saying it accepts an
+anonymous visitor would be a worse description of it, not a more general one. The design it
+adopted instead puts the generality at the one boundary that actually meets machines and the
+public — the scoping layer — and leaves the rest of the stack honestly typed as needing a human.
+Two documents disagreed and nobody had noticed, because one of them was a plan and plans are read
+as intentions rather than claims.
+
+**It was also not mechanical, and that is the part that would have caused damage.** Of the 165
+places the code reads something off an actor, **55 would simply not have compiled**: the general
+type deliberately exposes only an identifier, a label and two permission checks, while the call
+sites also read the full name, the email, the organisation, whether the account is an
+administrator, and more. Anyone doing this work would have hit that on the first file and been
+forced into an unadvertised design decision — either inflate the general type into a copy of the
+user record, or rewrite 55 call sites to reach through it. A worker handed "retype these files"
+would have picked one of those silently, in whichever direction made the file in front of them go
+green.
+
+  - **What survives of the original intent is much smaller**, and is now written down as such: new
+    code that can be reached by a token or by the public should take the general type from the
+    start. That is a habit, not a migration.
+
+**Two neighbouring items closed out at the same time.** Server-side fetching for public data was
+already built and carefully documented — including a trap where the wrong base URL produces an
+empty page that looks exactly like an empty database. And the last dormant helper from the scoping
+work was reclassified: switching it on would *remove* rows that people can currently see in a
+list, which makes it a question about what we intend rather than a task to complete. It now asks
+that question — which lists are access grants meant to widen? — instead of sitting on the list as
+though the answer were obvious.
+
+**The pattern across today is worth naming, because it recurred three times.** A planned change to
+how staff email domains are configured would have locked every staff member out. A planned
+signature sweep would have forced an undesigned decision across 55 call sites. In both cases the
+plan was written before the code that answers it, and in both cases the code was right. The
+remaining lesson is procedural: a planning document that contradicts the code is not a task, it is
+a discrepancy, and the cheapest moment to find out which one is stale is before starting work
+rather than during review.
+
+**Verified: 855 backend tests passing, ruff clean, typecheck 0, lint 0 problems.** No code changed
+in this entry — it is three plan items reclassified against the tree, with the evidence recorded
+next to each.
+
+## August 20, 2026 — A test written to prove the tenant wall holds found the half of it that was never built
+
+**Reading another organisation's record over the API is correctly refused. Editing one is not
+scoped at all.** A test suite was written for the gap the debt register has named for weeks — a
+caller who is genuinely signed in, but belongs to the wrong organisation. The existing suite only
+ever proved that a *stranger* is turned away, which is a different and much easier thing. On its
+first run, two of the three new tests passed and the third did not: the write went through and
+renamed the other organisation's record.
+
+**It is not exploitable today, and saying otherwise would be alarmist.** The four permissions that
+reach those write routes are held only by the administrator-shaped roles, and no account holding
+any of them belongs to an organisation at all — which was checked against the database rather than
+assumed. For those accounts, "edit any partner" is the whole point of the permission. So nothing is
+open right now.
+
+**What is wrong is that the only thing keeping it closed is a configuration nobody was watching.**
+The read path asks the scoping rules whether this actor may see this row. The write path never asks.
+Three of the four write guards *look* as though they check the organisation — and they do, but for
+the opposite purpose: they stop an organisation approving or un-suspending **itself**. None of them
+stops one organisation acting on **another**. Grant one of those permissions to any partner-facing
+role — which is exactly the kind of change made yesterday, when partner permissions were split away
+from staff ones — and the two halves of the application immediately disagree about the same record.
+
+**The rule was not changed, deliberately.** Narrowing who may edit what is an authorisation
+decision with a real downside: staff belong to no organisation, so a tenancy check needs an explicit
+exception for them, and getting that exception wrong locks staff out of partner administration
+entirely. The same judgement was applied to a similar finding on 13 August — flag it, recommend,
+and let the owner decide. What landed instead makes the assumption impossible to break silently:
+
+  - **A test now enforces the configuration fact.** If any of those four permissions is ever granted
+    to a named role, the suite fails and the failure message explains why, rather than the grant
+    sailing through review as a one-line addition. It reads the role definitions rather than the
+    database, so it runs in CI on a fresh checkout.
+  - **A third test guards the other two**, because both would pass silently if a permission were
+    renamed — the checks would simply find nothing and report no problem.
+  - **The read side is now proven over HTTP**, not just at the service layer: the wrong
+    organisation's record is a 404 on the detail route and absent from the index, and the caller's
+    own record still returns 200 — without that last assertion, a route broken for everybody would
+    have passed.
+  - **The refused write is checked twice** — the status code and then the row itself, re-read from
+    the database. A handler could refuse and still have committed, and those are two separate
+    claims.
+
+**Also corrected: three neighbouring tasks on the same list were already finished** and one was
+half-finished. The delegation-graph exposure was closed on 17 August; row scoping and its 32 tests
+exist; two of three dormant helper functions now have real callers. The largest item in that phase,
+by contrast, has not been started at all — 264 function signatures still take the old narrow type
+where the plan wants the general one, which matches the plan's own estimate and is worth knowing
+before anyone assumes that phase is nearly done.
+
+**Verified: 855 backend tests passing, ruff clean, typecheck 0, lint 0 problems.**
+
+## August 20, 2026 — A planned change was checked against the code and refused, because it would have locked every staff member out
+
+**A task on the de-branding list would have broken sign-in, and it was only caught by reading the
+code it touched.** The list said the staff email domain setting should ship empty instead of
+carrying our own domain — reasonable on its face, since shipping one company's domain to another
+installation is wrong. Following it would have meant: **Google sign-in refusing every address**,
+which for staff is the only way in; **staff invitations becoming impossible to issue**; and the
+check that stops a staff address quietly registering itself with a password **no longer running at
+all**. One setting, read in three places, each of which changes behaviour when it is blank.
+
+**The concern behind the task was real, so it was answered a different way.** Shipping our domain
+as the built-in default is still wrong for anyone reusing this codebase — the fix is to make that
+loud rather than to make the application broken. The production check already complained when the
+setting was untouched; it now also complains when the setting is *empty*, and says which three
+things stop working. It stays a warning rather than a refusal, because an installation with no
+staff at all is a legitimate thing to run — the point is that "we meant this" and "we forgot" used
+to look identical, and now they don't.
+
+  - **Two error messages were finishing mid-sentence, and this is what surfaced them.** Both places
+    that refuse a non-staff address built their message by listing the allowed domains — so with no
+    domains configured, users were told "Google sign-in is limited to ." and "A staff invitation
+    requires an address at ." Each now has a second wording for that case which names the actual
+    cause. Nobody had reported it because our own installation always has a domain set; it would
+    have appeared on the first deployment that didn't.
+  - **The refusal is recorded next to the setting, not just in the plan.** Anyone who reads the
+    task and reaches for the change will find the counter-argument in the code, with the three
+    consequences named, instead of re-deriving it or shipping it.
+  - **Two neighbouring tasks on the same list turned out to be already done**, and one was a
+    privacy check worth confirming rather than assuming: the seeding script that loads a real team
+    roster reads it from a path that is gitignored, and the example file committed alongside uses
+    `@example.com` throughout. No real address is in this public repository.
+
+**Verified: 849 backend tests passing, ruff clean, typecheck 0, lint 0 problems.** Three new tests
+cover the empty-value warning, the fact that the two warnings for this setting are mutually
+exclusive, and the condition both corrected messages depend on. The two message paths themselves
+are not covered by a test — reaching them needs a full sign-in or invitation flow, and that is
+honest to note rather than imply.
+
+## August 20, 2026 — The index shell now takes the query itself, and it turned out we were hiding the server's error messages
+
+**Every index page was repeating the same six lines to describe its data, so the shell takes the
+query instead.** `rows`, `loading`, `error`, `onRetry`, `total` and `pages` were spelled out at
+fourteen call sites; each now hands over the query result and a fallback message, and the shell
+works the six out itself. Six chances per screen to write "loading" where "fetching" was meant, or
+to default a count to something other than zero, became one place that does it correctly. This
+finishes PM-41 § 4.4.
+
+**Doing it surfaced a real fault that the conversion earlier today had introduced.** Every one of
+those fourteen screens was throwing away the error message the server had sent and showing a fixed
+sentence instead — so a refusal that explained *why* ("you do not have access to this
+organisation") reached the user as "Could not load users." The transport has always turned failures
+into a sentence fit to show someone, and its own documentation says to render it; the call sites
+just weren't. The shell now shows the server's message and keeps the fixed sentence for when there
+isn't one, such as a request that never reached the server. The partner tiers screen had been doing
+this correctly by hand all along, which is how it was spotted.
+
+**Two screens keep the older, longhand form, and that is deliberate.** Roles pages a complete list
+inside the browser and Partner Tiers reads an unpaged one; neither has a server-side page count, so
+routing them through a paged-query shape would have meant inventing a `total` and a `pages` that
+mean nothing. The two forms are mutually exclusive in the type system rather than by convention —
+passing a mixture of the two now fails to compile instead of quietly preferring one.
+
+**The two superseded hooks are gone.** The old list-fetching hook had no users left after this
+morning; the per-row write helper had none either. Its file also held the *bulk* write helper, which
+is still used and still earns its place — that moved into a file of its own rather than living in
+one named after a deleted function.
+
+  - **The reasoning was relocated before anything was deleted, not lost with it.** Both hooks
+    carried explanations that a dozen comments elsewhere pointed at by name. The two rules worth
+    keeping — don't fetch until the filters have been restored from the URL, and never blank a
+    table because a refresh failed — are now written down beside the data layer that enforces
+    them. Every comment that had said "for the reason that hook documents" now states the reason.
+  - That mattered more than the deletion did: a comment deferring to a file that no longer exists
+    is worse than no comment, because it reads as though the answer is one click away.
+
+**Verified: typecheck 0, lint 0 problems, 838 backend tests passing, ruff clean.** Same caveat as
+the entry below — these are static checks. The behaviour this is *for*, a server-sent error
+appearing on screen instead of a generic one, has not been seen in a browser.
+
+## August 20, 2026 — Every admin table now shares one cache, and eleven of them were quietly showing stale rows
+
+**The last eleven admin screens moved onto the shared data layer, finishing PM-41 § 4.5.**
+Activity, API Consumers, Credentials, Data Access, Errors, Feature Flags, Invitations, Providers,
+Search Registry, Users and Webhooks were each fetching on their own, holding their own copy of the
+result, and re-synchronising by hand after every write. They now read through one cache that knows
+which screens hold which records, so a write refreshes whatever is affected without anybody
+remembering to ask. Two endpoint definitions became thirteen.
+
+**The reason this mattered more than tidiness: patching a row by hand is wrong whenever the field
+you changed is also a filter.** Deactivating a user while the table was filtered to "Active" left
+that user sitting in the list — still shown as inactive, in a view that says Active, with no error
+anywhere. The same defect existed on six other screens: Errors' status, two `enabled` toggles,
+API Consumers' access switch, and Providers'. Membership of a filtered list is the server's
+judgement, and the old pattern had no way to ask for it. Now the write invalidates the list and the
+row leaves the view because the database says it should.
+
+**A second class of bug: values the API had already sent were being copied into local state from
+inside the fetch.** Eleven of these came out. `can_manage` — whether the current user may edit
+anything on the screen — was one, on four screens; it is computed by the API from the same
+permission the write routes are guarded on, precisely so the button and the guard cannot drift
+apart, and copying it into a second variable was the one way to make them.
+
+**A third, and the one that had been silently eating error messages: the shared per-row write
+helper caught every failure itself and then reported success anyway.** So a failed "switch this
+system off" showed an error toast *and closed the dialog* — when the whole contract of that dialog
+is that it renders the failure in place and stays open. Two screens passed it a carefully worded
+fallback message that could never appear. Letting the failure through is what makes those words
+mean something.
+
+**Fetch-on-mount is gone from all eleven, which closes § 4.6.** The dropdown and picker fetches —
+roles, abilities, webhook events, targeting options, activity filters, providers, consumers,
+organisations — are now shared, so opening the users table and then the invite form no longer
+fetches the same unchanging role list twice. Two of them had a hand-written guard against the
+component unmounting mid-request; that guard is unnecessary now and went with them. The
+react-hooks lint count stayed at 0.
+
+  - **One effect was deliberately kept, rewritten.** The credential form preloads the values you
+    are about to edit. Copying those into state would mean a background refresh overwriting
+    whatever you had typed, so the form now derives what it shows from the server's copy plus your
+    unsaved edits, with your edits winning. It also happens to be the shape the compiler's lint
+    was asking for.
+  - **`InvitationForm` was converted too**, which fixed something nobody had reported: the
+    full-page invite route at `/dashboard/invitations/new` refreshed nothing when it saved,
+    because the refresh had been wired into the *modal's* caller. Only the modal ever worked.
+  - **Two shared hooks now have no users at all** — the old list-fetching hook, and the per-row
+    write helper (its bulk-write file-mate is still in use and untouched). They are marked
+    superseded in place rather than deleted, because several converted screens cite the rules
+    written on them, and both are safe to delete on the owner's word.
+  - **The counts in the plan were wrong, and the way they were measured is why.** They came from
+    grepping for a hook's *name*, which matches prose in comments as well as real imports. One
+    such grep also matched a differently-named hook that every screen imports, and so reported
+    all seventeen modules as already converted when five were. The plan now says to measure
+    imports, and records the corrected figures.
+
+**Two planning documents were contradicting themselves and have been corrected.** The directory
+punchlist's summary still read "Phase 3 is 3 of 8, Phase 4 is 1 of 6" and "Next: the organisation
+pages" above a checklist in which every single box is ticked — written mid-phase and never updated
+when the rest landed. The extraction plan's Phase 4 still called itself the largest open item.
+Both now say what is actually true, and the punchlist carries the note that ticking the last box in
+a phase includes updating the summary at the top.
+
+**Verified: typecheck 0 errors, lint 0 problems, 838 backend tests passing, ruff clean.** The
+backend was not touched by this work; it was re-run to confirm that. Nothing in this entry has been
+exercised in a browser — the checks above are static, and the round-trip behaviour these changes
+are *for* (a write refreshing another screen's counts) is the part a person still has to click.
+
+## August 20, 2026 — "Network error" at sign-in was the address bar, not the password
+
+**Login failed from `http://127.0.0.1:3001` with a message that named the wrong cause.** The form
+reported "Network error — check your connection and try again", which reads as a server that is
+down. The server was up and healthy the whole time. `CORS_ORIGINS` listed only the `localhost`
+spelling of the dev ports, so the `OPTIONS /api/v1/auth/login` preflight from the loopback **IP**
+was answered 400 with no `Access-Control-Allow-Origin`, and the browser refused to send the POST.
+`localhost` and `127.0.0.1` reach the same machine but are different origins to the same-origin
+policy — a distinction the error message gave no hint of.
+
+**The tell that this was never a password problem: `failed_login_attempts` stayed at 0.** A wrong
+password increments it. A request that dies at the preflight never reaches the password check at
+all, so an account that has genuinely forgotten its password and an account behind a CORS wall look
+identical from the sign-in form. Checking that counter first separates them in one query, and
+`verify_password` against the stored hash settles it without guessing.
+
+**The dev default now lists both spellings of both dev ports.** `127.0.0.1:3000` and
+`127.0.0.1:3001` were added to the `CORS_ORIGINS` default in `core/config.py`, so the address bar
+can no longer cause this. It matters because VS Code's port forwarding hands you the IP, not the
+hostname, which makes the broken spelling the one a developer is most likely to be given. This is
+a development default only — production must set `CORS_ORIGINS` to real hostnames, and
+`audit_environment()` already flags any loopback origin left in the allowlist, `127.0.0.1`
+included. Verified: the IP preflight now returns 200 with the matching allow-origin header,
+`localhost` still works, and an unknown origin is still rejected with 400.
+
+**Also corrected: `seed_rbac` cannot reset a forgotten password.** `README.md` and
+`ONBOARDING.md` both present `python -m app.db.seed_rbac` as the way to get a root credential, but
+the script returns early when any user already exists — on this database it prints "19 user(s)
+already exist — root account not created" and changes nothing. It creates a root account on an
+empty database; it does not reset one. Recovering a lost password takes a direct `hash_password`
+update.
+
+## August 18, 2026 — Eleven finished pages nobody could reach, and the sidebar that never mentioned them
+
+**The partner back office shipped complete and invisible.** Listings, enquiries, moderation, service
+categories, organisation profile, branding and team — eleven working routes — were added to the
+sidebar in exactly zero places. Every one of them worked only if you already knew the URL and typed
+it. The owner found this, which is the wrong way to find it out.
+
+**Adding the seven missing links surfaced a permission problem underneath them.** Three of the pages
+("Your Organisation", "Logo & Banner", "Your Team") are a partner editing their own record. They had
+been gated on the permission to *view partners* — which internal staff also hold. Staff following
+those links reached a page that could only tell them their account belongs to no organisation. A new
+permission, "manage your own organisation", now gates them, and it is granted to the Partner role
+only. The five `/partners/me` API routes moved onto it too, closing the same looseness on the server
+rather than only hiding it in the menu.
+
+**That still left the Admin role seeing links it could not use, and a permission cannot express
+why.** Admin holds 65 permissions including the new one, and belongs to no organisation — so it
+passed the check and landed on the same dead end. Menu items may now additionally require that the
+account actually belong to an organisation. This is a fact about the account, not about its
+permissions, which is why no permission was going to fix it. The result, verified role by role:
+
+| Role | Sees |
+|------|------|
+| Partner (in an organisation) | Listings, Enquiries, Your Organisation, Logo & Banner, Your Team |
+| Staff | Listings, Enquiries, Partners, Partner Tiers — no organisation pages |
+| Admin | The staff set plus Moderation and Service Categories — no organisation pages |
+| Sales | Nothing; the section is hidden, because Sales holds none of these permissions |
+
+Moderation and Service Categories are absent from the Partner row deliberately: a partner approving
+their own listing would make the queue decorative.
+
+**Four of the new menu items pointed at icons that do not exist, and the sidebar said nothing.** The
+icon is chosen by name in the backend and looked up in a frontend table; an unknown name quietly
+renders a grey dot. Two names had been written from memory, so two items shipped as dots with no
+error in the type checker, the linter or any test — nothing connected the names to the table. Proper
+icons for listings, enquiries and moderation now exist (moderation had borrowed the *recycle bin*,
+which says "delete these" about a queue whose ordinary outcome is approval), and an unknown name now
+warns in development instead of failing silently. A test cross-checks the two lists, with one honest
+limitation recorded in its docstring: the backend test container cannot see the frontend directory,
+so it runs on a full checkout and skips in the standard verification gate.
+
+**One rough edge is left deliberately.** A partner clicking "Partners" gets a staff-shaped list
+containing exactly one row: themselves. It is harmless — row scoping is what limits it, and that is
+covered by tests — but it sits oddly next to "Your Organisation". Hiding it would need a third gating
+concept for something purely cosmetic, so it stays until the owner decides it is worth one.
+
 ## August 18, 2026 — Two agent contracts became one, and the contradiction between them is gone
 
 **This repository was telling agents two different things about password security, and the file it

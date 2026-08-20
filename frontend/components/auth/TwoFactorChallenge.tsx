@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { headingClasses } from "@/components/common/PageHeading";
 import Button from "@/components/common/Button";
 import Input from "@/components/common/Input";
 import { authApi } from "@/lib/api/authApi";
@@ -84,7 +85,7 @@ export default function TwoFactorChallenge({
   return (
     <form onSubmit={submit} noValidate className="flex flex-col gap-5">
       <div>
-        <h2 className="text-base font-bold text-gray-900 dark:text-gray-100">
+        <h2 className={`${headingClasses("section")} text-gray-900 dark:text-gray-100`}>
           Two-factor authentication
         </h2>
         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">

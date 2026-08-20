@@ -120,9 +120,124 @@ def test_every_shade_is_a_six_digit_hex(key):
         int(shade[1:], 16)  # raises if not hex
 
 
-def test_default_preset_exists_and_is_the_viho_teal():
+@pytest.mark.parametrize("key", PRESET_KEYS)
+def test_sequential_ramp_light_end_clears_the_card(key):
+    """Every theme's palest chart step must still be visible on a white card.
+
+    This exists because a fixed set of mix levels, tuned on pine, put **seven of
+    eleven** presets' palest step at 1.91–1.96:1 against a 2:1 floor. Pine's brand is
+    9.50:1 on white and the rest sit near 6.4:1, so a level that works for one is
+    wrong for the others — and nothing catches it unless every preset is checked.
+    """
+    from app.core.theme import LIGHT_SURFACE, sequential_ramp
+
+    ramp = sequential_ramp(THEME_PRESETS[key].brand)
+    lightest = contrast_ratio(ramp[0], LIGHT_SURFACE)
+    assert lightest >= 2.0, f"{key}: palest step {ramp[0]} is {lightest:.2f}:1 on white"
+
+
+@pytest.mark.parametrize("key", PRESET_KEYS)
+def test_sequential_ramp_steps_stay_apart(key):
+    """Adjacent steps need a visible lightness gap or the ramp reads as one block."""
+    from app.core.theme import _relative_luminance, sequential_ramp
+
+    ramp = sequential_ramp(THEME_PRESETS[key].brand)
+    lums = [_relative_luminance(step) for step in ramp]
+    assert lums == sorted(lums, reverse=True), f"{key}: ramp is not monotone"
+    assert len(set(ramp)) == len(ramp), f"{key}: ramp has duplicate steps"
+
+
+@pytest.mark.parametrize("key", PRESET_KEYS)
+def test_accent_is_not_a_near_neighbour_of_its_own_brand(key):
+    """An accent exists to punctuate the brand, so it must not nearly be the brand.
+
+    The rule that produced this: a warm brand gets the teal accent rather than the
+    house amber, because amber beside crimson is two warm mid-tones doing the same
+    job. Monochrome brands get zinc, so a theme whose whole point is neutrality does
+    not sprout a yellow accent.
+    """
+    from app.core.theme import accent_family
+
+    preset = THEME_PRESETS[key]
+    accent, _dark, _light = accent_family(preset.brand)
+    assert contrast_ratio(accent, preset.brand) >= 1.6, (
+        f"{key}: accent {accent} is too close to brand {preset.brand}"
+    )
+
+
+@pytest.mark.parametrize("key", PRESET_KEYS)
+def test_only_pine_declares_a_ground(key):
+    """Every other theme derives its chrome from its own hue.
+
+    A declared ground is an identity override and pine has the only one — the
+    marketing site is cream and matching it is that preset's whole purpose. When the
+    cream was applied to *all* of them, every theme came out warm: a blue-violet
+    brand on a cream ground, and the monochrome presets tinted yellow.
+    """
+    preset = THEME_PRESETS[key]
+    if key == "pine":
+        assert preset.ground is not None
+    else:
+        assert preset.ground is None, f"{key} declares a ground; it should derive one"
+
+
+@pytest.mark.parametrize("key", PRESET_KEYS)
+def test_dark_sequential_ramp_is_anchored_for_the_dark_card(key):
+    """The dark ramp must be visible at BOTH ends on `night.card`.
+
+    Reusing the light ramp in dark mode is the bug this guards. A light ramp runs
+    pale-to-brand, and the brand measures **1.88:1 on night.card** for pine — so the
+    high-magnitude end of every heatmap disappears exactly where the value is
+    highest. The dark ramp anchors on `brand_on_dark`, the shade already checked
+    against that surface.
+    """
+    from app.core.theme import NIGHT_CARD, sequential_ramp_dark
+
+    ramp = sequential_ramp_dark(THEME_PRESETS[key].brand_on_dark)
+    palest = contrast_ratio(ramp[0], NIGHT_CARD)
+    boldest = contrast_ratio(ramp[-1], NIGHT_CARD)
+    assert palest >= 2.0, f"{key}: palest dark step {ramp[0]} is {palest:.2f}:1 on the card"
+    assert boldest >= 4.5, f"{key}: boldest dark step {ramp[-1]} is only {boldest:.2f}:1"
+    assert boldest > palest, f"{key}: dark ramp does not increase in contrast"
+
+
+@pytest.mark.parametrize("key", PRESET_KEYS)
+def test_dark_ramp_top_is_never_a_pure_neutral(key):
+    """The top step keeps a trace of the surface, so the ramp stays one hue.
+
+    `shadcn-black`'s anchor is `#fafafa` — a pure neutral, whose hue is undefined and
+    measures 0 degrees while the rest of its ramp sits near 220. That read as a 178
+    degree hue spread and failed the single-hue check on a ramp that is monotone and
+    never exceeds 0.107 saturation. `DARK_TOP` pulls 3% of the card into the anchor so
+    the ramp is single-hue by construction rather than by exception.
+    """
+    from app.core.theme import sequential_ramp_dark
+
+    top = sequential_ramp_dark(THEME_PRESETS[key].brand_on_dark)[-1]
+    assert top != THEME_PRESETS[key].brand_on_dark or top != "#fafafa"
+    red, green, blue = int(top[1:3], 16), int(top[3:5], 16), int(top[5:7], 16)
+    assert not (red == green == blue), f"{key}: dark ramp top {top} is a pure grey"
+
+
+def test_default_preset_is_the_public_surface_pine():
+    """The default ships in the marketing site's own colour.
+
+    Changed 2026-08-20: this asserted `#24695c`, Viho's teal, which was the default
+    from adoption until the owner asked for the two surfaces to match. The hex is
+    `--public-deep` in `app/(public)/public.css`; asserting it here is what stops the
+    back office drifting off the marketing site by a later edit to either one.
+    """
     assert DEFAULT_PRESET in THEME_PRESETS
-    assert THEME_PRESETS[DEFAULT_PRESET].brand == "#24695c"
+    assert THEME_PRESETS[DEFAULT_PRESET].brand == "#034f46"
+
+
+def test_the_viho_teal_is_still_selectable():
+    """Demoting teal from default must not remove it.
+
+    Its values are Viho's own, byte for byte, and anyone who prefers the original
+    look keeps it — the demotion was a change of default, not a deletion.
+    """
+    assert THEME_PRESETS["teal"].brand == "#24695c"
 
 
 # --- CSS variable emission --------------------------------------------------
@@ -146,9 +261,16 @@ def test_channels_are_space_separated_not_hex():
 #: token missing here means some call site falls back to the compiled default —
 #: green — while its siblings change, which is exactly the bug this pins.
 EXPECTED_VARIABLES = {
+    # The dark chart ramp, mapped in by `:root.dark` — see the note in globals.css.
+    "--chart-seq-dark-1", "--chart-seq-dark-2",
+    "--chart-seq-dark-3", "--chart-seq-dark-4",
     "--brand", "--brand-dark", "--brand-darker", "--brand-light", "--brand-on-dark",
     "--surface-wash", "--surface-tile", "--surface-border", "--night-border",
     "--tone-success",
+    # Added 2026-08-20 — the accent and the sequential chart ramp now travel with
+    # the theme. See `test_accent_travels_with_the_theme` for why that reversed.
+    "--accent", "--accent-dark", "--accent-light",
+    "--chart-seq-1", "--chart-seq-2", "--chart-seq-3", "--chart-seq-4",
 }
 
 
@@ -161,8 +283,42 @@ def test_css_variables_cover_every_brand_token(key):
         assert len(parts) == 3 and all(0 <= int(p) <= 255 for p in parts)
 
 
-def test_accent_is_deliberately_not_themed():
-    assert not any("accent" in name for name in css_variables("indigo"))
+def test_accent_travels_with_the_theme():
+    """**Reversed 2026-08-20.** This asserted the opposite — that `accent` was
+    deliberately absent from the emitted variables.
+
+    That was right while the accent was Viho's fixed tan: a *companion* colour at 22
+    call sites, chosen to sit beside any brand rather than to follow one. It stopped
+    being right when the accent became a choice made **from the brand's own
+    temperature**. Leaving it fixed meant the two monochrome presets — whose entire
+    purpose is neutrality — carried a yellow accent, and a crimson brand carried an
+    amber one, two warm mid-tones doing the same job.
+
+    So the accent is themed now, and this test pins the direction rather than
+    deleting the old assertion silently.
+    """
+    for key in ("indigo", "crimson", "shadcn-black"):
+        variables = css_variables(key)
+        assert "--accent" in variables
+
+    # The three families are genuinely distinct, not one value relabelled.
+    cool = css_variables("indigo")["--accent"]
+    warm = css_variables("crimson")["--accent"]
+    mono = css_variables("shadcn-black")["--accent"]
+    assert len({cool, warm, mono}) == 3
+
+
+def test_a_custom_brand_colour_still_gets_a_full_pack():
+    """A custom hex has no preset behind it, so every derived value must self-tune.
+
+    This is the argument against hand-picking a ground and an accent per preset:
+    `brand_color` accepts any colour, and there would be nothing to hand-pick for.
+    """
+    variables = css_variables(None, "#7c3aed")
+    assert set(variables) == EXPECTED_VARIABLES
+    # A violet brand must not land on pine's cream ground.
+    red, green, blue = (int(part) for part in variables["--surface-wash"].split())
+    assert blue > red, "a cool brand's chrome should not be warm"
 
 
 # --- The colour engine (custom brand colours, 2026-08-13) --------------------

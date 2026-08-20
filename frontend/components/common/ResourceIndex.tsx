@@ -29,7 +29,78 @@ import type { FilterValues, ResourceQuery } from "@/lib/hooks/useResourceQuery";
  * fetches, and passes the result down.
  */
 
-export interface ResourceIndexProps<T extends { id: RowId }, F extends FilterValues> {
+/**
+ * The shape an RTK Query list hook returns, as much of it as this shell needs.
+ *
+ * Structural, not imported from `@reduxjs/toolkit`: it has to accept both
+ * `isFetching` (what a paged query exposes, and what should drive the spinner —
+ * it is true on a filter change while `isLoading` is not) and `isLoading` alone.
+ */
+export interface ListQueryResult<T> {
+  data?: { items: T[]; total: number; pages: number };
+  isFetching?: boolean;
+  isLoading?: boolean;
+  error?: unknown;
+  refetch: () => void;
+}
+
+/**
+ * The data half of the props, as an **exclusive** union: either hand over the
+ * query result, or the six primitives it desugars to. Never both — `?: never` on
+ * each arm is what makes passing a mixture a type error rather than a silent
+ * precedence question.
+ */
+type ResourceIndexDataProps<T> =
+  | {
+      /**
+       * The paged query this index renders, straight from the hook:
+       * `result={useListUsersQuery(...)}`.
+       *
+       * Fourteen call sites were spelling out the same six lines —
+       * `rows={page?.items ?? []}`, `loading={isFetching}`,
+       * `total={page?.total ?? 0}` and so on — which is six chances each to read
+       * `isLoading` where `isFetching` was meant, or to default a count to
+       * something other than 0. Derived in one place now.
+       */
+      result: ListQueryResult<T>;
+      /**
+       * Shown when the query fails **and the server sent nothing better**.
+       *
+       * The transport already turns every failure into a sentence fit to show a
+       * user (see `axiosBaseQuery`), and the old call sites threw that away for a
+       * static string — so a 403 explaining *why* arrived as "Could not load
+       * users." The server's message wins now; this is the fallback for the case
+       * where there isn't one, such as a request that never landed.
+       */
+      errorMessage: string;
+
+      rows?: never;
+      total?: never;
+      pages?: never;
+      loading?: never;
+      error?: never;
+      onRetry?: never;
+    }
+  | {
+      result?: never;
+      errorMessage?: never;
+
+      /**
+       * The primitives. Still the contract — `result` is the adapter for the
+       * standard source, not a second way of describing data — and the arm the
+       * two indexes whose rows are *not* a paged server query use: `RolesModule`
+       * pages a full list in the browser, and `PartnerTiersModule` reads an
+       * unpaged array.
+       */
+      rows: T[];
+      total: number;
+      pages: number;
+      loading?: boolean;
+      error?: string | null;
+      onRetry?: () => void;
+    };
+
+interface ResourceIndexBaseProps<T extends { id: RowId }, F extends FilterValues> {
   /** Card heading — the resource's plural name. */
   title: string;
   /**
@@ -67,15 +138,7 @@ export interface ResourceIndexProps<T extends { id: RowId }, F extends FilterVal
   filterExtras?: ReactNode;
 
   columns: Column<T>[];
-  rows: T[];
   rowKey: (row: T) => string;
-
-  loading?: boolean;
-  error?: string | null;
-  onRetry?: () => void;
-
-  total: number;
-  pages: number;
 
   /** Enables the selection column. Omit for a read-only table. */
   selectable?: boolean;
@@ -106,32 +169,73 @@ export interface ResourceIndexProps<T extends { id: RowId }, F extends FilterVal
   children?: ReactNode;
 }
 
-export default function ResourceIndex<T extends { id: RowId }, F extends FilterValues>({
-  title,
-  description,
-  icon,
-  actions,
-  query,
-  filters,
-  filterExtras,
-  columns,
-  rows,
-  rowKey,
-  loading,
-  error,
-  onRetry,
-  total,
-  pages,
-  selectable,
-  bulkActions,
-  emptyTitle,
-  emptyHint,
-  rowNoun,
-  table = "default",
-  stats,
-  statsLoading,
-  children,
-}: ResourceIndexProps<T, F>) {
+export type ResourceIndexProps<
+  T extends { id: RowId },
+  F extends FilterValues,
+> = ResourceIndexBaseProps<T, F> & ResourceIndexDataProps<T>;
+
+/**
+ * Prefer the message the server sent. `axiosBaseQuery` normalises every failure
+ * to `{ status, data }` where `data` is already human-readable, so the fallback
+ * is for the case where there is nothing to show — most often a request that
+ * never reached the server at all.
+ */
+function listErrorText(error: unknown, fallback: string): string {
+  const data = (error as { data?: unknown } | null | undefined)?.data;
+  return typeof data === "string" && data.length > 0 ? data : fallback;
+}
+
+export default function ResourceIndex<T extends { id: RowId }, F extends FilterValues>(
+  props: ResourceIndexProps<T, F>
+) {
+  const {
+    title,
+    description,
+    icon,
+    actions,
+    query,
+    filters,
+    filterExtras,
+    columns,
+    rowKey,
+    selectable,
+    bulkActions,
+    emptyTitle,
+    emptyHint,
+    rowNoun,
+    table = "default",
+    stats,
+    statsLoading,
+    children,
+  } = props;
+
+  /*
+    One place where a query result becomes the six values the table needs.
+    `isFetching ?? isLoading` and not the other way round: `isFetching` is true
+    while a filter change is in flight and `isLoading` is not, so reading
+    `isLoading` here would leave the old rows on screen with no spinner during
+    exactly the interaction this shell exists for.
+  */
+  const list = props.result
+    ? {
+        rows: props.result.data?.items ?? [],
+        total: props.result.data?.total ?? 0,
+        pages: props.result.data?.pages ?? 0,
+        loading: props.result.isFetching ?? props.result.isLoading ?? false,
+        error: props.result.error
+          ? listErrorText(props.result.error, props.errorMessage)
+          : null,
+        onRetry: props.result.refetch,
+      }
+    : {
+        rows: props.rows,
+        total: props.total,
+        pages: props.pages,
+        loading: props.loading,
+        error: props.error,
+        onRetry: props.onRetry,
+      };
+
   const Table = table === "vendor" ? VendorDataTable : DataTable;
 
   return (
@@ -162,15 +266,15 @@ export default function ResourceIndex<T extends { id: RowId }, F extends FilterV
               </FilterBar>
             }
             columns={columns}
-            rows={rows}
+            rows={list.rows}
             rowKey={rowKey}
-            loading={loading}
-            error={error}
-            onRetry={onRetry}
+            loading={list.loading}
+            error={list.error}
+            onRetry={list.onRetry}
             page={query.page}
             perPage={query.perPage}
-            total={total}
-            pages={pages}
+            total={list.total}
+            pages={list.pages}
             onPageChange={query.setPage}
             onPerPageChange={query.setPerPage}
             sortBy={query.sortBy}

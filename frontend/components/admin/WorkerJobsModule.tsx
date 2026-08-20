@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+import PageHeading from "@/components/common/PageHeading";
 import Badge, { type BadgeTone } from "@/components/common/Badge";
 import Button from "@/components/common/Button";
 import { Card, CardContent } from "@/components/common/Card";
@@ -121,13 +122,11 @@ export default function WorkerJobsModule() {
   return (
     <div className="flex flex-col gap-4">
       <header className="flex items-start gap-3">
-        <span className="mt-0.5 text-brand dark:text-brand-on-dark">{navIcon("worker")}</span>
-        <div>
-          <h1 className="text-lg font-semibold text-ink dark:text-gray-100">Background Jobs</h1>
-          <p className="text-xs text-ink-label dark:text-night-muted">
-            What runs on a timer, when it last ran, and whether it worked
-          </p>
-        </div>
+        <PageHeading
+          icon={navIcon("worker")}
+          title="Background Jobs"
+          description="What runs on a timer, when it last ran, and whether it worked"
+        />
       </header>
 
       {error && (

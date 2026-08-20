@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import Badge from "@/components/common/Badge";
 import Button from "@/components/common/Button";
@@ -21,8 +21,6 @@ import {
 } from "@/components/common/columns";
 import { navIcon } from "@/components/dashboard/navIcons";
 import {
-  credentialApi,
-  providerApi,
   PASSWORD_CONFIRMATION_DETAIL,
   type ApiCredential,
   type ApiProvider,
@@ -32,9 +30,16 @@ import {
 } from "@/lib/api/credentialApi";
 import { extractApiError } from "@/lib/utils/apiError";
 import useModalState from "@/lib/hooks/useModalState";
-import useResourceList from "@/lib/hooks/useResourceList";
 import useResourceQuery from "@/lib/hooks/useResourceQuery";
-import useRowAction from "@/lib/hooks/useRowAction";
+import {
+  useCreateCredentialMutation,
+  useCredentialFormValuesQuery,
+  useDeleteCredentialMutation,
+  useListCredentialsQuery,
+  useListProvidersQuery,
+  useRevealCredentialFieldMutation,
+  useUpdateCredentialMutation,
+} from "@/lib/api/endpoints/apiCredentialsEndpoints";
 
 const STATE_OPTIONS = [
   { value: "true", label: "Active" },
@@ -68,52 +73,80 @@ export default function CredentialsModule() {
     defaultPerPage: 30,
   });
 
-  const [canManage, setCanManage] = useState(false);
-  const [canReveal, setCanReveal] = useState(false);
-  const [environments, setEnvironments] = useState<string[]>([]);
-  const [providers, setProviders] = useState<ApiProvider[]>([]);
+  // PM-41 § 4.5.
+  const listQuery = useListCredentialsQuery(
+    {
+      search: q.applied.search || undefined,
+      provider_id: q.applied.provider_id ? Number(q.applied.provider_id) : undefined,
+      environment: q.applied.environment || undefined,
+      is_active: q.applied.is_active === "" ? undefined : q.applied.is_active === "true",
+      sort_by: q.sortBy,
+      sort_order: q.sortOrder,
+      page: q.page,
+      per_page: q.perPage,
+    },
+    { skip: !q.ready },
+  );
+  const page = listQuery.data;
 
-  const list = useResourceList<ApiCredential>({
-    ready: q.ready,
-    deps: [q.applied, q.sortBy, q.sortOrder, q.page, q.perPage],
-    errorMessage: "Could not load credentials.",
-    fetch: () =>
-      credentialApi
-        .list({
-          search: q.applied.search || undefined,
-          provider_id: q.applied.provider_id ? Number(q.applied.provider_id) : undefined,
-          environment: q.applied.environment || undefined,
-          is_active:
-            q.applied.is_active === "" ? undefined : q.applied.is_active === "true",
-          sort_by: q.sortBy,
-          sort_order: q.sortOrder,
-          page: q.page,
-          per_page: q.perPage,
-        })
-        .then((res) => {
-          setCanManage(res.data.can_manage);
-          setCanReveal(res.data.can_reveal);
-          setEnvironments(res.data.environments);
-          return res.data;
-        }),
-  });
+  /*
+    All three ride on the list envelope, read off the response rather than copied
+    into state from inside the fetch callback.
+
+    `can_reveal` is whether to OFFER the reveal control — not whether reveal will
+    succeed. The endpoint additionally requires a recent password confirmation,
+    which the client cannot know about until it tries.
+  */
+  const canManage = page?.can_manage ?? false;
+  const canReveal = page?.can_reveal ?? false;
+  const environments = page?.environments ?? [];
 
   const modal = useModalState<ModalMode, ApiCredential>();
 
-  // Providers drive both the filter and the create form's field generation.
-  // Fetched once; a failure must leave the table readable rather than block it.
-  useEffect(() => {
-    providerApi
-      .list({ is_active: true, per_page: 100 })
-      .then((res) => setProviders(res.data.items))
-      .catch(() => setProviders([]));
-  }, []);
+  // Providers drive both the filter and the create form's field generation. Now
+  // a shared cache entry — `ProvidersModule` reads the same query — rather than
+  // a fetch on every mount. A failure leaves the picker empty rather than
+  // blocking the table, exactly as before (PM-41 § 4.6).
+  const { data: providerPage } = useListProvidersQuery({ is_active: true, per_page: 100 });
+  const providers: ApiProvider[] = providerPage?.items ?? [];
 
-  const { busy, run } = useRowAction<ApiCredential>({
-    onSuccess: list.patchRow,
-    show,
-    errorFallback: "Could not update the credential.",
-  });
+  const [updateCredential] = useUpdateCredentialMutation();
+  const [deleteCredential] = useDeleteCredentialMutation();
+
+  /*
+    An id, not a boolean. It disables the one row being written rather than the
+    whole table: a boolean would either freeze every row while one writes, or
+    freeze none and let the same row be clicked twice — and a second click on a
+    toggle sends it straight back, which reads as the action having silently
+    failed.
+  */
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const toggleActive = async (row: ApiCredential) => {
+    setBusy(String(row.id));
+    try {
+      await updateCredential({
+        id: row.id,
+        data: {
+          provider_id: row.provider.id,
+          environment: row.environment,
+          name: row.name,
+          is_active: !row.is_active,
+          notes: row.notes,
+          // Empty: every encrypted field is left untouched by the blank rule,
+          // and no secret is round-tripped to flip a boolean.
+          field_values: {},
+        },
+      }).unwrap();
+      show(
+        `${row.provider.name} (${row.environment}) is now ${row.is_active ? "inactive" : "active"}.`
+      );
+    } catch (err) {
+      show(extractApiError(err, "Could not update the credential."), "error");
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const columns = useMemo<Column<ApiCredential>[]>(
     () => [
@@ -128,22 +161,7 @@ export default function CredentialsModule() {
           hint: row.is_active
             ? "Stops this credential resolving"
             : "Lets this credential resolve again",
-          onSelect: () =>
-            run(
-              String(row.id),
-              () =>
-                credentialApi.update(row.id, {
-                  provider_id: row.provider.id,
-                  environment: row.environment,
-                  name: row.name,
-                  is_active: !row.is_active,
-                  notes: row.notes,
-                  // Empty: every encrypted field is left untouched by the blank
-                  // rule, and no secret is round-tripped to flip a boolean.
-                  field_values: {},
-                }),
-              `${row.provider.name} (${row.environment}) is now ${row.is_active ? "inactive" : "active"}.`
-            ),
+          onSelect: () => void toggleActive(row),
         },
         {
           label: "Delete",
@@ -262,13 +280,9 @@ export default function CredentialsModule() {
         },
       ]}
       columns={columns}
-      rows={list.rows}
+      result={listQuery}
       rowKey={(r) => String(r.id)}
-      loading={list.loading}
-      error={list.error}
-      onRetry={list.refetch}
-      total={list.total}
-      pages={list.pages}
+      errorMessage="Could not load credentials."
       selectable={false}
       table="vendor"
       rowNoun="credential"
@@ -291,8 +305,8 @@ export default function CredentialsModule() {
             const wasEdit = modal.is("edit");
             modal.close();
             if (action === "saved") {
+              // The form's own mutations invalidate the collection.
               show(`Credentials ${wasEdit ? "updated" : "saved"}.`);
-              list.refetch();
             }
           }}
         />
@@ -312,12 +326,11 @@ export default function CredentialsModule() {
           noun="credential"
           name={`${modal.target.provider.name} (${modal.target.environment})`}
           subtitle={modal.target.name ?? modal.target.provider.slug}
-          onConfirm={() => credentialApi.remove(modal.target!.id)}
+          onConfirm={() => deleteCredential(modal.target!.id).unwrap()}
           onDeleted={() => {
             const label = modal.target!.provider.name;
             modal.close();
             show(`Credentials for ${label} deleted.`);
-            list.refetch();
           }}
           onClose={modal.close}
         >
@@ -351,12 +364,19 @@ function CredentialDetail({
 }) {
   const [revealed, setRevealed] = useState<Record<string, string>>({});
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  // A **mutation**, deliberately: a mutation has no cache entry, so the
+  // plaintext lives only in `revealed` above and dies with this component. As a
+  // query it would sit in the Redux store, and the devtools, for the session.
+  const [revealField] = useRevealCredentialFieldMutation();
 
   const reveal = async (value: MaskedFieldValue) => {
     setBusyKey(value.field_key);
     try {
-      const res = await credentialApi.reveal(credential.id, value.field_key);
-      setRevealed((current) => ({ ...current, [value.field_key]: res.data.value ?? "" }));
+      const result = await revealField({
+        id: credential.id,
+        fieldKey: value.field_key,
+      }).unwrap();
+      setRevealed((current) => ({ ...current, [value.field_key]: result.value ?? "" }));
       onNotice(`“${value.field_label}” revealed. This has been recorded.`, "info");
     } catch (err) {
       const message = extractApiError(err, "Could not reveal the value.");
@@ -475,9 +495,10 @@ export function CredentialForm({
   const [name, setName] = useState(credential?.name ?? "");
   const [isActive, setIsActive] = useState(credential?.is_active ?? true);
   const [notes, setNotes] = useState(credential?.notes ?? "");
-  const [fieldValues, setFieldValues] = useState<Record<string, string>>({});
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [createCredential] = useCreateCredentialMutation();
+  const [updateCredentialRecord] = useUpdateCredentialMutation();
 
   const provider = useMemo(
     () => providers.find((p) => String(p.id) === providerId) ?? null,
@@ -489,26 +510,41 @@ export function CredentialForm({
     [provider]
   );
 
-  // On edit, preload from the API — which returns **empty strings for encrypted
-  // fields**. That is deliberate: the form never holds a secret, so it cannot
-  // leak one, and a blank encrypted field on save means "leave it alone".
-  useEffect(() => {
-    // No reset on the create path: this component unmounts when the dialog
-    // closes, so `fieldValues` is already `{}` on the next open. Clearing it
-    // here would be a `setState` in an effect body for no effect.
-    if (!credential) return;
+  /*
+    On edit, preload from the API — which returns **empty strings for encrypted
+    fields**. That is deliberate: the form never holds a secret, so it cannot
+    leak one, and a blank encrypted field on save means "leave it alone".
 
-    credentialApi
-      .formValues(credential.id)
-      .then((res) => setFieldValues(res.data))
-      // A failed preload leaves the form blank rather than half-filled. Blank is
-      // safe here: every encrypted field is blank anyway, and a blank encrypted
-      // field on save means "leave the stored value alone".
-      .catch(() => setFieldValues({}));
-  }, [credential]);
+    ## Derived, not copied into state
+
+    The obvious conversion — a `useEffect` copying the query's data into
+    `fieldValues` — is what the old `.then(setFieldValues)` became, and the React
+    Compiler lint rejects it: `setState` directly inside an effect. It is also
+    wrong on its own terms, because a refetch would overwrite whatever the user
+    had typed since.
+
+    So the server's copy stays owned by the query and `edits` holds only what the
+    user has actually changed, with edits winning on merge. No effect, no second
+    copy of the server's answer, and no keystroke can be lost to a refetch.
+
+    A failed preload leaves the form blank rather than half-filled — blank is
+    safe, because every encrypted field is blank anyway and a blank encrypted
+    field on save means "leave the stored value alone". Nothing resets on the
+    create path: this component unmounts when the dialog closes, so `edits` is
+    already empty on the next open.
+  */
+  const { data: preloadedValues } = useCredentialFormValuesQuery(credential?.id ?? 0, {
+    skip: !credential,
+  });
+
+  const [edits, setEdits] = useState<Record<string, string>>({});
+  const fieldValues = useMemo(
+    () => ({ ...(preloadedValues ?? {}), ...edits }),
+    [preloadedValues, edits]
+  );
 
   const setField = (key: string, value: string) =>
-    setFieldValues((current) => ({ ...current, [key]: value }));
+    setEdits((current) => ({ ...current, [key]: value }));
 
   const submit = async () => {
     setSaving(true);
@@ -522,8 +558,8 @@ export function CredentialForm({
       field_values: fieldValues,
     };
     try {
-      if (credential) await credentialApi.update(credential.id, payload);
-      else await credentialApi.create(payload);
+      if (credential) await updateCredentialRecord({ id: credential.id, data: payload }).unwrap();
+      else await createCredential(payload).unwrap();
       onDone?.("saved");
     } catch (err) {
       setError(extractApiError(err, "Could not save the credentials."));
@@ -553,7 +589,9 @@ export function CredentialForm({
           disabled={isEdit}
           onChange={(e) => {
             setProviderId(e.target.value);
-            setFieldValues({});
+            // A different provider declares different fields, so anything typed
+            // against the old one no longer has a home.
+            setEdits({});
           }}
         />
         <Select

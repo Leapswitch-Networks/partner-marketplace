@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { headingClasses } from "@/components/common/PageHeading";
+import { buttonClasses } from "@/components/common/Button";
 import useAppSelector from "@/lib/hooks/useAppSelector";
 import useAppDispatch from "@/lib/hooks/useAppDispatch";
 import { updateUserProfile } from "@/lib/store/authSlice";
@@ -19,7 +21,7 @@ function seedFrom(user: CurrentUser | null) {
 }
 
 const FIELD_CLASS =
-  "block w-full rounded-[5px] border-2 border-surface-border bg-white px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 shadow-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-500 dark:border-night-border dark:bg-night-card dark:text-gray-100 dark:placeholder-gray-500 dark:disabled:bg-gray-800/50";
+  "block w-full rounded-[5px] border-2 border-surface-border bg-white px-3.5 py-2.5 text-sm text-gray-900 placeholder-gray-400 outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-500 dark:border-night-border dark:bg-night-card dark:text-gray-100 dark:placeholder-gray-500 dark:disabled:bg-gray-800/50";
 
 const LABEL_CLASS =
   "mb-1.5 block text-xs font-semibold text-gray-700 dark:text-gray-300";
@@ -97,7 +99,7 @@ export default function EditProfileForm() {
   return (
     <div className="overflow-hidden rounded-none bg-white ring-1 ring-surface-border dark:bg-night-card dark:ring-night-border">
       <div className="border-b border-surface-border px-6 py-4 dark:border-night-border">
-        <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">
+        <h3 className={`${headingClasses("section")} text-gray-900 dark:text-gray-100`}>
           Edit Profile
         </h3>
         <p className="mt-0.5 text-sm text-ink-label dark:text-night-muted">
@@ -183,7 +185,7 @@ export default function EditProfileForm() {
 
         <div className="flex items-center gap-3 border-t border-surface-border bg-gray-50 px-6 py-4 dark:border-night-border dark:bg-night-card/40">
           <button type="submit" disabled={saving}
-            className="inline-flex items-center gap-2 rounded-[5px] bg-brand px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-dark focus:outline-none focus:ring-2 focus:ring-brand/40 disabled:cursor-not-allowed disabled:opacity-50">
+            className={buttonClasses("primary")}>
             {saving ? "Saving…" : "Save"}
           </button>
           {success && (

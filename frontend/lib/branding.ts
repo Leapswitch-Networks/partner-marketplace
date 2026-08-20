@@ -133,23 +133,41 @@ export type ThemePreset = {
   contrast_on_dark_on_card: number;
 };
 
+/** The catalog as the picker needs it: the list, plus which key is the default. */
+export type ThemeCatalog = {
+  presets: ThemePreset[];
+  /**
+   * The key that applies when nothing is stored. Empty string when the catalog
+   * could not be read — the picker then marks nothing rather than guessing, since a
+   * wrong "Primary" badge is worse than none.
+   */
+  defaultKey: string;
+};
+
 /**
- * The theme catalog, server-side. **Never throws** — returns `[]` on any failure.
+ * The theme catalog, server-side. **Never throws** — returns an empty catalog on
+ * any failure.
  *
  * An empty list renders a settings page with no colour picker, which is a degraded
  * page rather than a broken one. Fetched here rather than in the form so the picker
  * needs no `useEffect`, which is what keeps this feature off PM-30's ledger.
+ *
+ * `defaultKey` is carried through rather than dropped (as it was until 2026-08-20)
+ * so the picker can mark the house theme — which is the reason the endpoint has
+ * emitted `default_key` since it was written. **Do not hardcode the key in the
+ * component**: it would then have to be edited in two places whenever the default
+ * moves, and the two would disagree exactly when it matters.
  */
-export async function getThemePresets(): Promise<ThemePreset[]> {
+export async function getThemePresets(): Promise<ThemeCatalog> {
   try {
     const res = await fetch(`${SERVER_API_URL}/settings/branding/themes`, {
       next: { revalidate: REVALIDATE_SECONDS, tags: ["branding"] },
     });
-    if (!res.ok) return [];
-    const data = (await res.json()) as { presets?: ThemePreset[] };
-    return data.presets ?? [];
+    if (!res.ok) return { presets: [], defaultKey: "" };
+    const data = (await res.json()) as { presets?: ThemePreset[]; default_key?: string };
+    return { presets: data.presets ?? [], defaultKey: data.default_key ?? "" };
   } catch {
-    return [];
+    return { presets: [], defaultKey: "" };
   }
 }
 

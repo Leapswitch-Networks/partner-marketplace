@@ -3,6 +3,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
+import PageHeading from "@/components/common/PageHeading";
 import Badge, { type BadgeTone } from "@/components/common/Badge";
 import { formatDateTime } from "@/lib/utils/format";
 
@@ -98,7 +99,7 @@ export function ShowPageHeader({
             </p>
           )}
 
-          <h1 className="mt-0.5 truncate text-lg font-bold text-ink dark:text-white">{title}</h1>
+          <PageHeading className="mt-0.5" title={<span className="truncate">{title}</span>} />
 
           {description && (
             <p className="mt-0.5 text-[11px] text-ink-label dark:text-night-muted">{description}</p>

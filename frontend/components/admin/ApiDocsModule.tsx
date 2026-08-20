@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import PageHeading from "@/components/common/PageHeading";
 import Badge from "@/components/common/Badge";
 import { Card, CardContent } from "@/components/common/Card";
 import StatTiles from "@/components/common/StatTiles";
@@ -85,7 +86,7 @@ export default function ApiDocsModule() {
       <header className="flex items-start gap-3">
         <span className="mt-0.5 text-brand dark:text-brand-on-dark">{navIcon("apiDocs")}</span>
         <div>
-          <h1 className="text-lg font-semibold text-ink dark:text-gray-100">API Documentation</h1>
+          <PageHeading title="API Documentation" />
           <p className="text-xs text-ink-label dark:text-night-muted">
             Every route this application serves, and the permission that gates it
           </p>

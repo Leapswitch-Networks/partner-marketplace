@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import Badge from "@/components/common/Badge";
 import Button from "@/components/common/Button";
@@ -22,7 +22,6 @@ import {
 } from "@/components/common/columns";
 import { navIcon } from "@/components/dashboard/navIcons";
 import {
-  platformApi,
   type Ability,
   type ApiConsumer,
   type IssuedToken,
@@ -31,9 +30,18 @@ import { extractApiError } from "@/lib/utils/apiError";
 import { formatDateTime } from "@/lib/utils/format";
 import useModalState from "@/lib/hooks/useModalState";
 import usePermissions from "@/lib/hooks/usePermissions";
-import useResourceList from "@/lib/hooks/useResourceList";
 import useResourceQuery from "@/lib/hooks/useResourceQuery";
-import useRowAction from "@/lib/hooks/useRowAction";
+import {
+  useApiAbilitiesQuery,
+  useCreateApiConsumerMutation,
+  useDeleteApiConsumerMutation,
+  useGetApiConsumerQuery,
+  useIssueApiTokenMutation,
+  useListApiConsumersQuery,
+  useRevokeApiTokenMutation,
+  useSetApiConsumerActiveMutation,
+  useUpdateApiConsumerMutation,
+} from "@/lib/api/endpoints/apiConsumersEndpoints";
 
 /**
  * The Platform API index — which systems may call us, and with what.
@@ -86,7 +94,6 @@ export default function ApiConsumersModule() {
   const { toasts, show, dismiss } = useToast();
   const modal = useModalState<ModalMode, ApiConsumer>();
 
-  const [abilities, setAbilities] = useState<Ability[]>([]);
   const [issued, setIssued] = useState<IssuedToken | null>(null);
 
   const q = useResourceQuery({
@@ -99,41 +106,61 @@ export default function ApiConsumersModule() {
     defaultPerPage: 30,
   });
 
-  const list = useResourceList<ApiConsumer>({
-    ready: q.ready,
-    deps: [q.applied, q.sortBy, q.sortOrder, q.page, q.perPage],
-    errorMessage: "Could not load the registered systems.",
-    fetch: () =>
-      platformApi
-        .list({
-          search: q.applied.search || undefined,
-          // Tri-state: "" is "no filter" and must not collapse to false.
-          active: q.applied.active === "" ? undefined : q.applied.active === "true",
-          has_tokens:
-            q.applied.has_tokens === "" ? undefined : q.applied.has_tokens === "true",
-          sort_by: q.sortBy,
-          sort_order: q.sortOrder,
-          page: q.page,
-          per_page: q.perPage,
-        })
-        .then((res) => res.data),
-  });
+  // PM-41 § 4.5. `active` and `has_tokens` are both filters here *and* things the
+  // writes on this screen change — issuing a token flips `has_live_token` from a
+  // modal two levels down — so `patchRow` could leave a row in a view it no
+  // longer belongs to. Invalidation re-runs the filtered query.
+  const listQuery = useListApiConsumersQuery(
+    {
+      search: q.applied.search || undefined,
+      // Tri-state: "" is "no filter" and must not collapse to false.
+      active: q.applied.active === "" ? undefined : q.applied.active === "true",
+      has_tokens: q.applied.has_tokens === "" ? undefined : q.applied.has_tokens === "true",
+      sort_by: q.sortBy,
+      sort_order: q.sortOrder,
+      page: q.page,
+      per_page: q.perPage,
+    },
+    { skip: !q.ready },
+  );
 
   // Read from the API, never typed into this file: the same catalogue is what
   // write-time validation checks against, so a list kept here would eventually
-  // offer an ability the server rejects.
-  useEffect(() => {
-    platformApi
-      .abilities()
-      .then((res) => setAbilities(res.data))
-      .catch(() => setAbilities([]));
-  }, []);
+  // offer an ability the server rejects. `?? []` keeps the old behaviour of a
+  // failure leaving the picker empty rather than blocking the page.
+  const { data: abilities = [] } = useApiAbilitiesQuery();
 
-  const { busy, run } = useRowAction<ApiConsumer>({
-    onSuccess: list.patchRow,
-    show,
-    errorFallback: "Could not change that system.",
-  });
+  const [setActive] = useSetApiConsumerActiveMutation();
+  const [deleteConsumer] = useDeleteApiConsumerMutation();
+
+  /*
+    An id, not a boolean. It disables the one row being written rather than the
+    whole table: a boolean would either freeze every row while one writes, or
+    freeze none and let the same row be clicked twice — and a second click on a
+    toggle sends it straight back, which reads as the action having silently
+    failed.
+  */
+  const [busy, setBusy] = useState<string | null>(null);
+
+  /*
+    Deliberately does not catch. `ConfirmDialog` awaits `onConfirm`, renders a
+    rejection in place and **stays open** — and `onConfirmed` fires only on
+    success, which is where the toast now lives.
+
+    This is a behaviour fix worth naming: the old code ran this through
+    `useRowAction`, which caught the error itself and resolved anyway. So a failed
+    switch-off showed a toast *and closed the dialog*, and the `errorFallback`
+    passed to `ConfirmDialog` below was unreachable code. Letting the rejection
+    through is what makes that prop mean something.
+  */
+  const toggleActive = async (target: ApiConsumer) => {
+    setBusy(target.id);
+    try {
+      await setActive({ id: target.id, active: !target.active }).unwrap();
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const columns = useMemo<Column<ApiConsumer>[]>(
     () => [
@@ -235,13 +262,9 @@ export default function ApiConsumersModule() {
         },
       ]}
       columns={columns}
-      rows={list.rows}
+      result={listQuery}
       rowKey={(row) => row.id}
-      loading={list.loading}
-      error={list.error}
-      onRetry={list.refetch}
-      total={list.total}
-      pages={list.pages}
+      errorMessage="Could not load the registered systems."
       table="vendor"
       rowNoun="system"
       emptyTitle="No systems registered"
@@ -263,7 +286,6 @@ export default function ApiConsumersModule() {
           onSaved={(message) => {
             modal.close();
             show(message, "success");
-            list.refetch();
           }}
         />
       )}
@@ -275,15 +297,16 @@ export default function ApiConsumersModule() {
           confirmLabel={modal.target.active ? "Switch off" : "Switch on"}
           tone={modal.target.active ? "danger" : "primary"}
           errorFallback="Could not change the access."
-          onConfirm={() =>
-            run(modal.target!.id, () =>
-              platformApi.setActive(modal.target!.id, !modal.target!.active),
+          onConfirm={() => toggleActive(modal.target!)}
+          onConfirmed={() => {
+            show(
               modal.target!.active
                 ? "Access switched off. Its tokens stop working immediately."
-                : "Access switched on."
-            )
-          }
-          onConfirmed={modal.close}
+                : "Access switched on.",
+              "success"
+            );
+            modal.close();
+          }}
           onClose={modal.close}
         >
           <p>
@@ -305,11 +328,10 @@ export default function ApiConsumersModule() {
           noun="system"
           name={modal.target.slug}
           subtitle={modal.target.name}
-          onConfirm={() => platformApi.remove(modal.target!.id)}
+          onConfirm={() => deleteConsumer(modal.target!.id).unwrap()}
           onDeleted={() => {
             modal.close();
             show("System removed, along with its tokens.", "success");
-            list.refetch();
           }}
           onClose={modal.close}
         >
@@ -321,12 +343,7 @@ export default function ApiConsumersModule() {
       )}
 
       {modal.is("detail") && modal.target && (
-        <ConsumerDetail
-          consumer={modal.target}
-          onClose={modal.close}
-          onChanged={list.refetch}
-          show={show}
-        />
+        <ConsumerDetail consumer={modal.target} onClose={modal.close} show={show} />
       )}
 
       {modal.is("issue") && modal.target && (
@@ -336,8 +353,9 @@ export default function ApiConsumersModule() {
           onClose={modal.close}
           onIssued={(result) => {
             setIssued(result);
+            // `has_live_token` is an index column, and the mutation invalidates
+            // the collection for it — no refetch by hand.
             modal.open("reveal", modal.target!);
-            list.refetch();
           }}
         />
       )}
@@ -377,6 +395,8 @@ function ConsumerForm({
   const [ownerEmail, setOwnerEmail] = useState(consumer?.owner_email ?? "");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [createConsumer] = useCreateApiConsumerMutation();
+  const [updateConsumer] = useUpdateApiConsumerMutation();
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -391,10 +411,10 @@ function ConsumerForm({
         owner_email: ownerEmail.trim(),
       };
       if (consumer) {
-        await platformApi.update(consumer.id, payload);
+        await updateConsumer({ id: consumer.id, data: payload }).unwrap();
         onSaved(`'${payload.slug}' updated.`);
       } else {
-        await platformApi.create(payload);
+        await createConsumer(payload).unwrap();
         onSaved(`'${payload.slug}' registered. Issue it a token when it is ready to call.`);
       }
     } catch (err) {
@@ -477,25 +497,30 @@ function ConsumerForm({
 function ConsumerDetail({
   consumer,
   onClose,
-  onChanged,
   show,
 }: {
   consumer: ApiConsumer;
   onClose: () => void;
-  onChanged: () => void;
   show: (message: string, tone?: "success" | "error") => void;
 }) {
-  const [tokens, setTokens] = useState(consumer.tokens);
   const [revoking, setRevoking] = useState<string | null>(null);
+
+  /*
+    The row this modal was opened from carries `tokens` already, so it renders
+    immediately from that; the query then supplies the authoritative copy. Revoke
+    invalidates this consumer's id, so the list below refreshes itself — which
+    replaces a hand-written `revokeToken` → `get` → `setTokens` sequence *and* the
+    `onChanged` callback the parent had to pass down to keep its table in step.
+  */
+  const { data: fresh } = useGetApiConsumerQuery(consumer.id);
+  const tokens = fresh?.tokens ?? consumer.tokens;
+  const [revokeToken] = useRevokeApiTokenMutation();
 
   const revoke = async (tokenId: string) => {
     setRevoking(tokenId);
     try {
-      await platformApi.revokeToken(consumer.id, tokenId);
-      const res = await platformApi.get(consumer.id);
-      setTokens(res.data.tokens);
+      await revokeToken({ id: consumer.id, tokenId }).unwrap();
       show("Token revoked. It stops working immediately.", "success");
-      onChanged();
     } catch (err) {
       show(extractApiError(err, "Could not revoke the token."), "error");
     } finally {
@@ -585,6 +610,7 @@ function IssueTokenForm({
   const [expiry, setExpiry] = useState("90");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [issueToken] = useIssueApiTokenMutation();
 
   const toggle = (ability: string) =>
     setGranted((current) =>
@@ -598,12 +624,16 @@ function IssueTokenForm({
     setSaving(true);
     setError(null);
     try {
-      const res = await platformApi.issueToken(consumer.id, {
+      // The plaintext token is handed straight to `onIssued` and never stored:
+      // a mutation result has no cache entry, which is the property that keeps
+      // the only credential this app produces out of Redux and the devtools.
+      const result = await issueToken({
+        id: consumer.id,
         name: name.trim() || "Token",
         abilities: granted,
         expires_in_days: expiry ? Number(expiry) : null,
-      });
-      onIssued(res.data);
+      }).unwrap();
+      onIssued(result);
     } catch (err) {
       setError(extractApiError(err, "Could not issue the token."));
     } finally {

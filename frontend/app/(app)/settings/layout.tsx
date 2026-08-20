@@ -1,3 +1,4 @@
+import PageHeading from "@/components/common/PageHeading";
 import SettingsNav from "@/components/settings/SettingsNav";
 
 /**
@@ -27,7 +28,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
   return (
     <div className="mx-auto w-full max-w-5xl">
       <div className="mb-6">
-        <h1 className="text-xl font-semibold text-ink dark:text-gray-100">Settings</h1>
+        <PageHeading title="Settings" />
         {/* `text-gray-500` measured 4.19:1 on the light wash — under the 4.5:1
             floor by a hair, which is exactly the kind of miss that reasoning
             about a palette produces and measuring catches. */}

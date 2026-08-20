@@ -71,9 +71,18 @@ const FIELDS: {
 export default function BrandingForm({
   initial,
   themes,
+  defaultKey,
 }: {
   initial: Branding;
   themes: ThemePreset[];
+  /**
+   * The preset that applies when nothing is stored — resolved by the backend and
+   * carried through `getThemePresets`, never hardcoded here. The grid marks it
+   * "Primary" so an administrator can tell the house theme from the alternatives.
+   * Empty string when the catalog could not be read; nothing is marked then,
+   * because a badge on the wrong swatch is worse than no badge.
+   */
+  defaultKey: string;
 }) {
   const router = useRouter();
   const { isSuperAdmin } = usePermissions();
@@ -94,7 +103,13 @@ export default function BrandingForm({
   // colour (rather than the preset grid) is the current choice. Contrast and
   // refusal both come from the backend — the preview endpoint runs the same
   // derivation as saving, so what you see is exactly what Save will do.
-  const [customHex, setCustomHex] = useState(initial.brand_color ?? "#24695c");
+  // Seeded from the house theme rather than a literal: this used to read
+  // `?? "#24695c"`, which silently became the *previous* default the moment the
+  // default moved. The final `?? "#034f46"` is reachable only when the catalog
+  // failed to load, in which case there is no grid to disagree with.
+  const houseBrand =
+    themes.find((preset) => preset.key === defaultKey)?.brand ?? themes[0]?.brand ?? "#034f46";
+  const [customHex, setCustomHex] = useState(initial.brand_color ?? houseBrand);
   const [customActive, setCustomActive] = useState(initial.theme_source === "custom");
   const [contrast, setContrast] = useState<{ white_on_brand: number; on_dark_on_card: number } | null>(null);
   const [refusal, setRefusal] = useState<BrandColourRefusal | null>(null);
@@ -294,12 +309,16 @@ export default function BrandingForm({
         <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
           {themes.map((preset) => {
             const active = !customActive && values.theme_preset === preset.key;
+            const isHouse = defaultKey !== "" && preset.key === defaultKey;
             return (
               <button
                 key={preset.key}
                 type="button"
                 aria-pressed={active}
-                title={`White on brand ${preset.contrast_white_on_brand}:1 · dark mode ${preset.contrast_on_dark_on_card}:1`}
+                title={
+                  `White on brand ${preset.contrast_white_on_brand}:1 · dark mode ${preset.contrast_on_dark_on_card}:1` +
+                  (isHouse ? " · the default for this installation" : "")
+                }
                 onClick={() => {
                   setValues((current) => ({ ...current, theme_preset: preset.key }));
                   setCustomActive(false);
@@ -323,7 +342,19 @@ export default function BrandingForm({
                   />
                 </span>
                 <span className="min-w-0">
-                  <span className="block truncate">{preset.label}</span>
+                  {/* The label truncates and the badge does not: `shrink-0` on the
+                      badge plus `truncate` on the label means a long preset name
+                      loses characters rather than hiding which one is the house
+                      theme. Reversing that would make the badge vanish first at
+                      exactly the narrow widths the 2-column grid uses. */}
+                  <span className="flex items-center gap-1">
+                    <span className="truncate">{preset.label}</span>
+                    {isHouse && (
+                      <span className="shrink-0 rounded-[3px] bg-brand px-1 py-px text-[9px] font-semibold uppercase leading-normal tracking-wide text-white dark:bg-brand-on-dark dark:text-night-card">
+                        Primary
+                      </span>
+                    )}
+                  </span>
                   <span className="block text-[10px] tabular-nums text-ink-muted dark:text-night-muted">
                     {preset.contrast_white_on_brand}:1 · {preset.contrast_on_dark_on_card}:1
                   </span>

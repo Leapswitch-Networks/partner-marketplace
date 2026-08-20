@@ -1,5 +1,6 @@
 "use client";
 
+import { headingClasses } from "@/components/common/PageHeading";
 import useAppSelector from "@/lib/hooks/useAppSelector";
 import { formatDate } from "@/lib/utils/format";
 
@@ -52,7 +53,7 @@ export default function ProfileIdCard() {
           </div>
 
           <div className="min-w-0 flex-1">
-            <h2 className="truncate text-lg font-semibold text-gray-900 dark:text-gray-100">
+            <h2 className={`${headingClasses()} truncate text-gray-900 dark:text-gray-100`}>
               {user.full_name}
             </h2>
             <p className="text-sm text-ink-label dark:text-night-muted">

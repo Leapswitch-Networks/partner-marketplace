@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import PageHeading from "@/components/common/PageHeading";
 import { cn } from "@/lib/utils/cn";
 
 /**
@@ -87,24 +88,16 @@ export function CardHeader({
       that turns into if nobody stops it.
     */
     <div className="shrink-0 px-2 py-2 sm:px-2">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="min-w-0">
-          <h2 className="flex items-center gap-2 text-sm font-bold text-ink dark:text-white">
-            {icon}
-            {title}
-          </h2>
-          {/*
-            `ink-label` (#59667a), not `ink-muted` (#6b7280). At 11px this needs
-            4.5:1, and muted measures 4.83 on white but drops to 4.19 on the
-            `surface-wash` card — a fail. Label scores 5.05 on the same surface.
-            If the card ever goes back to white, muted is fine again.
-          */}
-          {description && (
-            <p className="mt-0.5 text-[11px] text-ink-label dark:text-night-muted">{description}</p>
-          )}
-        </div>
-        {actions && <div className="flex shrink-0 items-center gap-2">{actions}</div>}
-      </div>
+      {/*
+        `size="compact"` is load-bearing, not a style preference. This header sits
+        inside the index `Card`, above the table, and `useAutoPerPage()` computes
+        rows as `floor((viewportHeight - 433) / 38)` — that 433 is the chrome
+        around the table. `compact` raises the title from 14px to 18px while
+        holding its line box at 20px, so the display face lands here **without**
+        changing the header's height and costing a table row. See
+        `PageHeading.tsx`; `ink-label` over `ink-muted` is explained there too.
+      */}
+      <PageHeading size="compact" as="h2" title={title} description={description} icon={icon} actions={actions} />
     </div>
   );
 }

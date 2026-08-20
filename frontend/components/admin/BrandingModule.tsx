@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 
+import PageHeading from "@/components/common/PageHeading";
 import Button from "@/components/common/Button";
 import Toast, { useToast } from "@/components/common/Toast";
 import {
@@ -117,11 +118,10 @@ export default function BrandingModule() {
 
   return (
     <div className="mx-auto max-w-3xl p-4 sm:p-6">
-      <h1 className="text-lg font-semibold text-ink dark:text-gray-100">Logo and banner</h1>
-      <p className="mt-1 text-sm text-ink-muted dark:text-night-muted">
-        What appears on your public profile. Both are optional — without a logo, your card shows your
-        initials, which is deliberate rather than a placeholder.
-      </p>
+      <PageHeading
+        title="Logo and banner"
+        description="What appears on your public profile. Both are optional — without a logo, your card shows your initials, which is deliberate rather than a placeholder."
+      />
 
       <div className="mt-8 space-y-8">
         {ASSETS.map((asset) => {

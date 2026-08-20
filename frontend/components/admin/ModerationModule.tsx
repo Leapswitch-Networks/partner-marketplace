@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import PageHeading, { headingClasses } from "@/components/common/PageHeading";
 import Button from "@/components/common/Button";
 import Textarea from "@/components/common/Textarea";
 import Toast, { useToast } from "@/components/common/Toast";
@@ -97,12 +98,14 @@ export default function ModerationModule() {
 
   return (
     <div className="mx-auto max-w-4xl p-4 sm:p-6">
-      <h1 className="text-lg font-semibold text-ink dark:text-gray-100">Moderation queue</h1>
-      <p className="mt-1 text-sm text-ink-muted dark:text-night-muted">
-        {queue.length === 0
-          ? "Nothing waiting. This is the state to keep it in."
-          : `${queue.length} listing${queue.length === 1 ? "" : "s"} waiting, oldest first.`}
-      </p>
+      <PageHeading
+        title="Moderation queue"
+        description={
+          queue.length === 0
+            ? "Nothing waiting. This is the state to keep it in."
+            : `${queue.length} listing${queue.length === 1 ? "" : "s"} waiting, oldest first.`
+        }
+      />
 
       {queue.length === 0 && (
         <div className="mt-6 rounded-[5px] border border-surface-border p-8 text-center dark:border-night-border">
@@ -128,7 +131,7 @@ export default function ModerationModule() {
                 submitted{" "}
                 {listing.submitted_at ? new Date(listing.submitted_at).toLocaleString() : "—"}
               </p>
-              <h2 className="mt-1 text-base font-semibold text-ink dark:text-gray-100">
+              <h2 className={`${headingClasses("section")} mt-1 text-ink dark:text-gray-100`}>
                 {listing.title}
               </h2>
               <p className="mt-1 text-sm text-ink-label dark:text-night-muted">{listing.summary}</p>

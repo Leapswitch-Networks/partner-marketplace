@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Montserrat } from "next/font/google";
+import { EB_Garamond, Montserrat } from "next/font/google";
 import Providers from "@/components/common/Providers";
 import BrandingProvider from "@/components/common/BrandingProvider";
 import TitleSync from "@/components/common/TitleSync";
@@ -12,6 +12,25 @@ import { APP_NAME, APP_TAGLINE } from "@/lib/utils/constants";
 // and reintroduce layout shift. Montserrat is a variable font here, so the whole
 // 100–900 range costs one file.
 const montserrat = Montserrat({ subsets: ["latin"], variable: "--font-montserrat" });
+
+// The DISPLAY face, moved here from `app/(public)/layout.tsx` on 2026-08-20 at the
+// owner's request, so the signed-in application and the marketing site share one
+// type system rather than only one body font.
+//
+// It used to be loaded in the public layout alone, with the note that otherwise
+// "the signed-in app pays for a font it never renders" (FRONTEND_PLAN § 15.8 ②).
+// That objection is now void — the back office renders it, via `.app-display` in
+// `globals.css`. Config is byte-identical to the public layout's so the marketing
+// site is unchanged: same subset, same single weight, same variable name.
+//
+// ⚠️ WEIGHT 400 ONLY, like the reference. Anything wearing `.app-display` must NOT
+// also carry `font-bold`/`font-semibold`, or the browser synthesises a fake bold.
+const ebGaramond = EB_Garamond({
+  subsets: ["latin"],
+  weight: ["400"],
+  variable: "--font-eb-garamond",
+  display: "swap",
+});
 
 // Static, so the 16 routes stay prerendered (DYNAMIC_BRANDING_PLAN § 3.2). `icons` is
 // a CONSTANT string pointing at a handler whose *bytes* vary — that is what makes the
@@ -46,7 +65,7 @@ export default async function RootLayout({
   const themeRule = themeStyleRule(branding);
 
   return (
-    <html lang="en" className={`${montserrat.variable} h-full antialiased`} suppressHydrationWarning>
+    <html lang="en" className={`${montserrat.variable} ${ebGaramond.variable} h-full antialiased`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeScript }} />
         {/* Brand theme, server-resolved. Rendered in <head> so it applies before

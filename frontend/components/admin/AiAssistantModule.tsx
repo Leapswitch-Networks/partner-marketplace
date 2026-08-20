@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 
+import PageHeading from "@/components/common/PageHeading";
 import Badge from "@/components/common/Badge";
 import Button from "@/components/common/Button";
 import { Card, CardContent } from "@/components/common/Card";
@@ -94,7 +95,7 @@ export default function AiAssistantModule() {
       <header className="flex items-start gap-3">
         <span className="mt-0.5 text-brand dark:text-brand-on-dark">{navIcon("ai")}</span>
         <div>
-          <h1 className="text-lg font-semibold text-ink dark:text-gray-100">AI Assistant</h1>
+          <PageHeading title="AI Assistant" />
           <p className="text-xs text-ink-label dark:text-night-muted">
             An internal assistant that answers from this application&apos;s own data
           </p>

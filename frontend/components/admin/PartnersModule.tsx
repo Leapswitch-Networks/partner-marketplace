@@ -43,12 +43,12 @@ import type {
 /**
  * The Partners index — `PARTNER_DIRECTORY_PLAN.md` § 15 row 2. Built against
  * `UsersModule`, the worked example: same shared pieces (`ResourceIndex`,
- * `useResourceQuery`/`useResourceList`/`useModalState`, `columns.tsx`,
+ * `useResourceQuery`/`useModalState`, `columns.tsx`,
  * `DeleteDialog`, `Toast`), same column order (`#`, `Actions`, `Status`, data).
  *
  * ## Where this deviates from Users, and why
  *
- * **No `useRowAction`.** Every write here — status, verification, listing — is a
+ * **No unconfirmed row writes.** Every write here — status, verification, listing — is a
  * state-machine transition with a consequence a plain toggle does not have
  * (sessions revoked, Leapswitch's endorsement, public visibility), so each opens
  * a confirming dialog rather than firing immediately from the row menu the way
@@ -129,12 +129,7 @@ export default function PartnersModule({ initialModal }: { initialModal?: ModalM
   // *filters* on this table — so a patched row can sit in a filtered view it no
   // longer belongs to, which is exactly the stale-row-with-no-error case the
   // old pattern could not fix.
-  const {
-    data: page,
-    isFetching,
-    error,
-    refetch,
-  } = useListPartnersQuery(
+  const listQuery = useListPartnersQuery(
     {
       search: q.applied.search || undefined,
       status: (q.applied.status as PartnerStatus) || undefined,
@@ -151,7 +146,6 @@ export default function PartnersModule({ initialModal }: { initialModal?: ModalM
     // filters before the real one.
     { skip: !q.ready },
   );
-  const rows = page?.items ?? [];
 
   const modal = useModalState<ModalMode, PartnerListItem>(initialModal);
   const [changeStatus] = useChangePartnerStatusMutation();
@@ -318,13 +312,9 @@ export default function PartnersModule({ initialModal }: { initialModal?: ModalM
         },
       ]}
       columns={columns}
-      rows={rows}
+      result={listQuery}
       rowKey={(r) => r.id}
-      loading={isFetching}
-      error={error ? "Could not load partners." : null}
-      onRetry={refetch}
-      total={page?.total ?? 0}
-      pages={page?.pages ?? 0}
+      errorMessage="Could not load partners."
       table="vendor"
       rowNoun="partner"
       emptyTitle="No partners found"

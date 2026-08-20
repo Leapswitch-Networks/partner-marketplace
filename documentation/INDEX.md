@@ -64,6 +64,7 @@ Each file has ONE clear purpose. Load only what the task needs.
 
 | File | Purpose | Status |
 |------|---------|--------|
+| `design/BACKOFFICE_DESIGN.md` | **The signed-in surface's `DESIGN.md`.** Not a palette — a **usage map**: § 2.2's two-ground rule (light ground → pine emphasis, dark ground → amber, taken as a whole row), § 4's component-by-component mapping of where pine, lilac, amber, ink and cream each go, § 5's list of what deliberately does **not** port (radius, border weight, the serif), and § 6's audit finding 17 of 22 shadows legitimate | ✅ **Steps 1–7 of 8 implemented 2026-08-20**; only per-user themes outstanding |
 | `design/LOGO_BRIEF.md` | **Hand-off spec for a logo designer** — the two surfaces, the 32px size floor, upload constraints, every brand hex, the eight swappable presets, and the measured contrast that rules out a single-colour mark | **Ready to hand over** |
 | `design/VIHO_ADOPTION_PLAN.md` | **The decision and the route to it** — what was adopted, the measured cost (242 brand-colour occurrences across 37 files), the 10-phase order, and the three questions still open | **Decided 2026-08-05 · implemented app-wide 2026-08-06** |
 | `design/VIHO_THEME_REFERENCE.md` | Design tokens extracted from the **Viho** theme — colour hex values, contrast audit, type scale, spacing, login-screen anatomy, component anatomy, and the 36-screenshot catalogue | **Adopted in full 2026-08-05** — reference for what Viho looks like |
@@ -97,9 +98,10 @@ it and another register disagree, it says so and names the one that is stale.
 | `planning/MARKETPLACE_DOMAIN_PLAN.md` | Marketplace domain model — partners, tiers, customers, catalog, quotes | **Partly superseded 2026-08-10.** Its `partners` / `partner_tiers` / scoping foundation is adopted; the catalog, quotes and quote machine are **shelved** |
 | `planning/SCAFFOLD_CLEANUP_PLAN.md` | Retiring the inherited test-platform domain | **Tiers 2–3 executed 2026-08-06** — the domain is gone. Tier 1 housekeeping remains |
 | `planning/CORE_HARDENING_PLAN.md` | The platform layer under the features — config safety, transactions, tests/CI, API versioning, the frontend data layer. PM-37 to PM-44 | **Active — PM-37/38/39 closed 2026-08-06** |
-| `planning/CORE_EXTRACTION_PLAN.md` | **Making the core reusable for a second project.** The five places the partner domain leaks into the platform layer, the registration seam that removes them, the tenancy rename that must land *before* PM-5's 258-signature sweep, and the frontend data layer. A phase-by-phase code-level checklist | **New — 2026-08-17.** Phase 0 not started |
+| `planning/CORE_EXTRACTION_PLAN.md` | **Making the core reusable for a second project.** The five places the partner domain leaks into the platform layer, the registration seam that removes them, the tenancy rename that must land *before* PM-5's 258-signature sweep, and the frontend data layer. A phase-by-phase code-level checklist | Active — **Phase 4 (the frontend data layer) closed 2026-08-20**: 4.1/4.2/4.4/4.5/4.6 done, 4.3 waits on PM-42 and 4.7 is open. Phases 0–3 and 5 not started |
 | `planning/BACKEND_CORE_PUNCHLIST.md` | **The platform layer's remaining work** — row-level scoping, RBAC coverage, the deferred Redis items, and what is blocked outside this repo | Active — §§ A/B closed 2026-08-17 |
 | `planning/DYNAMIC_BRANDING_PLAN.md` | Project identity — name, monogram, tagline, theme, logo, favicon — configurable so the core is reusable across projects. **Read § 6 to rebrand a deployment**, § 7 for how theming and uploads work | **All four phases shipped 2026-08-06** |
+| `planning/PER_USER_THEMING_PLAN.md` | **Per-user themes** — one nullable column on `users`, precedence (user → installation → shipped default), why the choice rides on `/auth/me` instead of a new endpoint, and why browser caching is a requirement rather than an optimisation (the server cannot resolve an authenticated theme before first paint) | ⏳ **PLAN — 2026-08-20, not built** |
 | `planning/TECH_DEBT.md` | Known defects and inconsistencies carried in from the scaffold, ranked | Active |
 
 ## Project Tracking
@@ -150,7 +152,7 @@ documentation/
 └── planning.md              ← inherited (stale)
 ```
 
-**58 `.md` files live under `documentation/`** — counted 2026-08-18, after the ADR register
+**60 `.md` files live under `documentation/`** — counted 2026-08-20, after the ADR register
 (`ADR.md` plus `adr/`, 18 files) landed the same day. *(This line said 39 earlier on 2026-08-18, and
 32 before that.)* The root `README.md` carries a one-line-per-file version of the tables above; this
 index stays the detailed one. Keep both in step when adding a doc.

@@ -1,15 +1,19 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import Button from "@/components/common/Button";
 import FormModal from "@/components/common/FormModal";
 import Input from "@/components/common/Input";
 import Select from "@/components/common/Select";
 import { navIcon } from "@/components/dashboard/navIcons";
-import { invitationApi, roleApi } from "@/lib/api/rbacApi";
-import { ACCOUNT_TYPE_LABELS, type AccountType, type Role } from "@/types";
+import {
+  useCreateInvitationMutation,
+  useCreateInvitationsMutation,
+} from "@/lib/api/endpoints/invitationsEndpoints";
+import { useListRolesQuery } from "@/lib/api/endpoints/rolesEndpoints";
+import { ACCOUNT_TYPE_LABELS, type AccountType } from "@/types";
 import { extractApiError } from "@/lib/utils/apiError";
 
 /**
@@ -60,18 +64,25 @@ export default function InvitationForm({
 } = {}) {
   const router = useRouter();
   const [rows, setRows] = useState<Row[]>([blankRow()]);
-  const [roles, setRoles] = useState<Role[]>([]);
   const [note, setNote] = useState("");
   const [saving, setSaving] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
   const [links, setLinks] = useState<{ email: string; url: string }[] | null>(null);
 
-  useEffect(() => {
-    roleApi
-      .list()
-      .then((res) => setRoles(res.data))
-      .catch(() => setRoles([]));
-  }, []);
+  /*
+    PM-41 § 4.5. These two post through the data layer rather than the plain
+    client so the *table* behind this form updates itself. It used to be the
+    caller's job: `InvitationsModule` passed `onDone` and called `refetch()` and
+    `loadStats()` inside it, which meant the full-page route at
+    `/dashboard/invitations/new` — which has no such caller — left a stale list
+    behind whenever the user navigated back to it.
+  */
+  const [createInvitation] = useCreateInvitationMutation();
+  const [createInvitations] = useCreateInvitationsMutation();
+
+  // The same cache entry `UsersModule` reads, so arriving here from the users
+  // table does not refetch an unchanging list (PM-41 § 4.6).
+  const { data: roles = [] } = useListRolesQuery();
 
   const update = (uid: number, patch: Partial<Row>) =>
     setRows((prev) => prev.map((r) => (r.uid === uid ? { ...r, ...patch } : r)));
@@ -102,16 +113,16 @@ export default function InvitationForm({
         account_type: r.account_type,
         note: note.trim() || null,
       }));
-      const res =
+      const created =
         payload.length === 1
-          ? { data: [(await invitationApi.create(payload[0])).data] }
-          : await invitationApi.createMany(payload);
+          ? [await createInvitation(payload[0]).unwrap()]
+          : await createInvitations(payload).unwrap();
 
       // `email_sent` false means the invitee received nothing, so the link is
       // surfaced rather than dropped — that is the difference between "we
       // emailed them" and "copy this and send it yourself". When true the API
       // withholds the link deliberately: it is a live credential.
-      const undelivered = res.data
+      const undelivered = created
         .filter((i) => !i.email_sent && i.accept_url)
         .map((i) => ({ email: i.email, url: i.accept_url as string }));
 

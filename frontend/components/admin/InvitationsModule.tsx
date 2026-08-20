@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import Badge from "@/components/common/Badge";
 import Button from "@/components/common/Button";
@@ -16,11 +16,15 @@ import Modal from "@/components/common/Modal";
 import ResourceIndex from "@/components/common/ResourceIndex";
 import Toast, { useToast } from "@/components/common/Toast";
 import { navIcon } from "@/components/dashboard/navIcons";
-import { invitationApi } from "@/lib/api/rbacApi";
 import useModalState from "@/lib/hooks/useModalState";
 import usePermissions from "@/lib/hooks/usePermissions";
-import useResourceList from "@/lib/hooks/useResourceList";
 import useResourceQuery from "@/lib/hooks/useResourceQuery";
+import {
+  useCancelInvitationMutation,
+  useInvitationStatsQuery,
+  useListInvitationsQuery,
+  useResendInvitationMutation,
+} from "@/lib/api/endpoints/invitationsEndpoints";
 import { ACCOUNT_TYPE_LABELS, type AccountType, type Invitation } from "@/types";
 import { extractApiError } from "@/lib/utils/apiError";
 
@@ -79,7 +83,6 @@ export default function InvitationsModule() {
   const { can } = usePermissions();
   const { toasts, show, dismiss } = useToast();
 
-  const [stats, setStats] = useState<Record<string, number> | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [link, setLink] = useState<{ email: string; url: string } | null>(null);
 
@@ -95,23 +98,32 @@ export default function InvitationsModule() {
     defaultPerPage: 30,
   });
 
-  const list = useResourceList<Invitation>({
-    ready: q.ready,
-    deps: [q.applied, q.sortBy, q.sortOrder, q.page, q.perPage],
-    errorMessage: "Could not load invitations.",
-    fetch: () =>
-      invitationApi
-        .list({
-          search: q.applied.search || undefined,
-          status: (q.applied.status as Invitation["status"]) || undefined,
-          account_type: (q.applied.account_type as AccountType) || undefined,
-          sort_by: q.sortBy,
-          sort_order: q.sortOrder,
-          page: q.page,
-          per_page: q.perPage,
-        })
-        .then((res) => res.data),
-  });
+  // PM-41 § 4.5. The four writes on this screen used to each re-synchronise two
+  // things by hand — `list.refetch()` and `loadStats()` — and a cancel changes
+  // both, so forgetting either showed a stale table or a stale tile with no
+  // error. Both now fall out of `invalidatesTags`.
+  const listQuery = useListInvitationsQuery(
+    {
+      search: q.applied.search || undefined,
+      status: (q.applied.status as Invitation["status"]) || undefined,
+      account_type: (q.applied.account_type as AccountType) || undefined,
+      sort_by: q.sortBy,
+      sort_order: q.sortOrder,
+      page: q.page,
+      per_page: q.perPage,
+    },
+    // The query hook has no `ready` gate of its own, so the URL-restore race is
+    // handled here — same as `PartnersModule`.
+    { skip: !q.ready },
+  );
+
+  // Tagged as the collection, so every mutation below refreshes it. A failure
+  // leaves the tiles off rather than blocking the table, which is what the old
+  // `.catch(() => setStats(null))` did.
+  const { data: stats } = useInvitationStatsQuery();
+
+  const [resendInvitation] = useResendInvitationMutation();
+  const [cancelInvitation] = useCancelInvitationMutation();
 
   /**
    * `create` opens the invite form as a modal, matching Users — owner's call,
@@ -123,30 +135,19 @@ export default function InvitationsModule() {
    */
   const modal = useModalState<"create" | "cancel", Invitation>();
 
-  /** Refetched after every write: a resend or cancel moves a row between cards. */
-  const loadStats = useCallback(() => {
-    invitationApi
-      .stats()
-      .then((res) => setStats(res.data as unknown as Record<string, number>))
-      .catch(() => setStats(null));
-  }, []);
-
-  useEffect(() => {
-    loadStats();
-  }, [loadStats]);
-
   const handleResend = async (invitation: Invitation) => {
     setBusy(invitation.id);
     try {
-      const res = await invitationApi.resend(invitation.id);
+      const result = await resendInvitation(invitation.id).unwrap();
       // `accept_url` comes back only when no email was actually delivered —
       // console backend, or a send failure. Surfacing it is the difference
       // between "we emailed them" and "copy this and send it yourself".
-      if (res.data.accept_url) setLink({ email: invitation.email, url: res.data.accept_url });
+      if (result.accept_url) setLink({ email: invitation.email, url: result.accept_url });
       else show(`Invitation resent to ${invitation.email}.`);
-      await list.refetch();
-      loadStats();
     } catch (err) {
+      // Still `extractApiError`: a resend inside the 60-second cooldown answers
+      // 429 with a message worth reading, so this must not be flattened to a
+      // generic string.
       show(extractApiError(err, "Could not resend."), "error");
     } finally {
       setBusy(null);
@@ -158,11 +159,9 @@ export default function InvitationsModule() {
     if (!target) return;
     setBusy(target.id);
     try {
-      await invitationApi.cancel(target.id);
+      await cancelInvitation(target.id).unwrap();
       show(`Invitation to ${target.email} cancelled.`);
       modal.close();
-      await list.refetch();
-      loadStats();
     } catch (err) {
       show(extractApiError(err, "Could not cancel."), "error");
     } finally {
@@ -297,13 +296,9 @@ export default function InvitationsModule() {
           : undefined
       }
       columns={columns}
-      rows={list.rows}
+      result={listQuery}
       rowKey={(r) => r.id}
-      loading={list.loading}
-      error={list.error}
-      onRetry={list.refetch}
-      total={list.total}
-      pages={list.pages}
+      errorMessage="Could not load invitations."
       table="vendor"
       rowNoun="invitation"
       emptyTitle="No invitations"
@@ -320,11 +315,9 @@ export default function InvitationsModule() {
           asModal
           onDone={(action) => {
             modal.close();
-            if (action === "saved") {
-              show("Invitations sent.");
-              list.refetch();
-              loadStats();
-            }
+            // No refetch here any more: the form's create mutations invalidate
+            // the collection, which refreshes both this table and the tiles.
+            if (action === "saved") show("Invitations sent.");
           }}
         />
       )}

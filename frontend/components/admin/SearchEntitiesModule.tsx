@@ -21,16 +21,20 @@ import {
 } from "@/components/common/columns";
 import { navIcon } from "@/components/dashboard/navIcons";
 import {
-  searchEntityApi,
   type EntityHealth,
   type SearchableEntity,
   type SearchableEntityPayload,
 } from "@/lib/api/searchApi";
+import {
+  useCreateSearchEntityMutation,
+  useDeleteSearchEntityMutation,
+  useListSearchEntitiesQuery,
+  useToggleSearchEntityMutation,
+  useUpdateSearchEntityMutation,
+} from "@/lib/api/endpoints/searchEntitiesEndpoints";
 import { extractApiError } from "@/lib/utils/apiError";
 import useModalState from "@/lib/hooks/useModalState";
-import useResourceList from "@/lib/hooks/useResourceList";
 import useResourceQuery from "@/lib/hooks/useResourceQuery";
-import useRowAction from "@/lib/hooks/useRowAction";
 
 const STATE_OPTIONS = [
   { value: "true", label: "Included" },
@@ -77,43 +81,62 @@ export default function SearchEntitiesModule() {
     defaultPerPage: 30,
   });
 
-  const [canManage, setCanManage] = useState(false);
-  const [groups, setGroups] = useState<string[]>([]);
-  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  // PM-41 § 4.5. `enabled` and `group` are filters here *and* things the writes
+  // change, so a patched row could contradict the filter above it.
+  const listQuery = useListSearchEntitiesQuery(
+    {
+      search: q.applied.search || undefined,
+      group: q.applied.group || undefined,
+      enabled: q.applied.enabled === "" ? undefined : q.applied.enabled === "true",
+      sort_by: q.sortBy,
+      sort_order: q.sortOrder,
+      page: q.page,
+      per_page: q.perPage,
+    },
+    { skip: !q.ready },
+  );
+  const page = listQuery.data;
 
-  const list = useResourceList<SearchableEntity>({
-    ready: q.ready,
-    deps: [q.applied, q.sortBy, q.sortOrder, q.page, q.perPage],
-    errorMessage: "Could not load the search registry.",
-    fetch: () =>
-      searchEntityApi
-        .list({
-          search: q.applied.search || undefined,
-          group: q.applied.group || undefined,
-          enabled: q.applied.enabled === "" ? undefined : q.applied.enabled === "true",
-          sort_by: q.sortBy,
-          sort_order: q.sortOrder,
-          page: q.page,
-          per_page: q.perPage,
-        })
-        .then((res) => {
-          setCanManage(res.data.can_manage);
-          setGroups(res.data.groups);
-          // The allowlist rides on the list response rather than a second
-          // request: it is small, it changes only with a deploy, and the form
-          // must not be able to offer a model the API would refuse.
-          setAvailableModels(res.data.available_models);
-          return res.data;
-        }),
-  });
+  /*
+    All three used to be copied into `useState` from inside the fetch callback.
+    They ride on the list envelope, so they are read off the response instead —
+    no second copy, and no write during the commit phase.
+
+    `available_models` rides on the list rather than taking its own request
+    deliberately: it is small, it changes only with a deploy, and the form must
+    not be able to offer a model the API would refuse.
+  */
+  const canManage = page?.can_manage ?? false;
+  const groups = page?.groups ?? [];
+  const availableModels = page?.available_models ?? [];
 
   const modal = useModalState<ModalMode, SearchableEntity>();
 
-  const { busy, run } = useRowAction<SearchableEntity>({
-    onSuccess: list.patchRow,
-    show,
-    errorFallback: "Could not update the entity.",
-  });
+  const [toggleEntity] = useToggleSearchEntityMutation();
+  const [deleteEntity] = useDeleteSearchEntityMutation();
+
+  /*
+    An id, not a boolean. It disables the one row being written rather than the
+    whole table: a boolean would either freeze every row while one writes, or
+    freeze none and let the same row be clicked twice — and a second click on a
+    toggle sends it straight back, which reads as the action having silently
+    failed.
+  */
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const runToggle = async (target: SearchableEntity) => {
+    setBusy(String(target.id));
+    try {
+      await toggleEntity(target.id).unwrap();
+      show(
+        `“${target.label}” ${target.enabled ? "excluded from" : "included in"} search.`
+      );
+    } finally {
+      // Not caught: `ConfirmDialog` renders the rejection in place and stays
+      // open, which is what its `errorFallback` below is for.
+      setBusy(null);
+    }
+  };
 
   const columns = useMemo<Column<SearchableEntity>[]>(
     () => [
@@ -243,13 +266,9 @@ export default function SearchEntitiesModule() {
         },
       ]}
       columns={columns}
-      rows={list.rows}
+      result={listQuery}
       rowKey={(r) => String(r.id)}
-      loading={list.loading}
-      error={list.error}
-      onRetry={list.refetch}
-      total={list.total}
-      pages={list.pages}
+      errorMessage="Could not load the search registry."
       // No bulk endpoint, so no selection — a checkbox column wired to nothing
       // is the failure the module contract exists to stop.
       selectable={false}
@@ -273,8 +292,8 @@ export default function SearchEntitiesModule() {
             const wasEdit = modal.is("edit");
             modal.close();
             if (action === "saved") {
+              // The form's own mutations invalidate the collection.
               show(`“${saved!.label}” ${wasEdit ? "updated" : "added"}.`);
-              list.refetch();
             }
           }}
         />
@@ -290,15 +309,10 @@ export default function SearchEntitiesModule() {
           busyLabel="Saving…"
           tone={modal.target.enabled ? "danger" : "primary"}
           errorFallback="Could not update the entity."
-          // Through `run`, so `busy` actually gates this row's controls. Calling
-          // the API here directly would leave those guards permanently false.
-          onConfirm={() =>
-            run(
-              String(modal.target!.id),
-              () => searchEntityApi.toggle(modal.target!.id),
-              `“${modal.target!.label}” ${modal.target!.enabled ? "excluded from" : "included in"} search.`
-            )
-          }
+          // Through `runToggle`, so `busy` actually gates this row's controls.
+          // Calling the mutation here directly would leave those guards
+          // permanently false.
+          onConfirm={() => runToggle(modal.target!)}
           onConfirmed={modal.close}
           onClose={modal.close}
         >
@@ -327,12 +341,11 @@ export default function SearchEntitiesModule() {
           noun="searchable entity"
           name={modal.target.label}
           subtitle={modal.target.model_class}
-          onConfirm={() => searchEntityApi.remove(modal.target!.id)}
+          onConfirm={() => deleteEntity(modal.target!.id).unwrap()}
           onDeleted={() => {
             const label = modal.target!.label;
             modal.close();
             show(`“${label}” removed from search.`);
-            list.refetch();
           }}
           onClose={modal.close}
         >
@@ -379,6 +392,8 @@ export function SearchEntityForm({
   const [sortOrder, setSortOrder] = useState(String(entity?.sort_order ?? 0));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [createEntity] = useCreateSearchEntityMutation();
+  const [updateEntity] = useUpdateSearchEntityMutation();
 
   const parsedFields = useMemo(
     () =>
@@ -407,10 +422,10 @@ export function SearchEntityForm({
       sort_order: Number(sortOrder) || 0,
     };
     try {
-      const res = entity
-        ? await searchEntityApi.update(entity.id, payload)
-        : await searchEntityApi.create(payload);
-      onDone?.("saved", res.data);
+      const saved = entity
+        ? await updateEntity({ id: entity.id, data: payload }).unwrap()
+        : await createEntity(payload).unwrap();
+      onDone?.("saved", saved);
     } catch (err) {
       setError(extractApiError(err, "Could not save the entity."));
     } finally {

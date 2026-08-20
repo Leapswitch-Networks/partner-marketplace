@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import PageHeading from "@/components/common/PageHeading";
 import Button from "@/components/common/Button";
 import Input from "@/components/common/Input";
 import Toast, { useToast } from "@/components/common/Toast";
@@ -80,11 +81,10 @@ export default function TeamModule() {
 
   return (
     <div className="mx-auto max-w-4xl p-4 sm:p-6">
-      <h1 className="text-lg font-semibold text-ink dark:text-gray-100">Your team</h1>
-      <p className="mt-1 text-sm text-ink-muted dark:text-night-muted">
-        Everyone at {organisation || "your organisation"} who can sign in here. Enquiries are visible
-        to all of them.
-      </p>
+      <PageHeading
+        title="Your team"
+        description={`Everyone at ${organisation || "your organisation"} who can sign in here. Enquiries are visible to all of them.`}
+      />
 
       {canInvite && (
         <div className="mt-6 rounded-[5px] border border-surface-border p-5 dark:border-night-border">

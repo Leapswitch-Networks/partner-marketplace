@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 export default function AppearanceSettingsPage() {
   return (
     <div className="rounded-none bg-white p-6 ring-1 ring-surface-border dark:bg-night-card dark:ring-night-border">
-      <h3 className="text-base font-semibold text-gray-900 dark:text-gray-100">
+      <h3 className="app-display text-[19px] text-gray-900 dark:text-gray-100">
         Appearance settings
       </h3>
       <p className="mt-0.5 text-sm text-gray-500 dark:text-gray-400">

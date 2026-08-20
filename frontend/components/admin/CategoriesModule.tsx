@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import PageHeading, { headingClasses } from "@/components/common/PageHeading";
 import Button from "@/components/common/Button";
 import Input from "@/components/common/Input";
 import Textarea from "@/components/common/Textarea";
@@ -121,7 +122,7 @@ export default function CategoriesModule() {
 
   return (
     <div className="mx-auto max-w-4xl p-4 sm:p-6">
-      <h1 className="text-lg font-semibold text-ink dark:text-gray-100">Service categories</h1>
+      <PageHeading title="Service categories" />
       <p className="mt-1 text-sm text-ink-muted dark:text-night-muted">
         The vocabulary partners pick from and buyers filter by. Only ours to change — a category with
         no listings does not get a public page.
@@ -180,7 +181,7 @@ export default function CategoriesModule() {
           >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0">
-                <h2 className="text-base font-semibold text-ink dark:text-gray-100">
+                <h2 className={`${headingClasses("section")} text-ink dark:text-gray-100`}>
                   {parent.name}
                   {!parent.is_active && (
                     <span className="ml-2 text-xs font-normal text-ink-muted dark:text-night-muted">

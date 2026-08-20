@@ -113,7 +113,7 @@ export default function PartnerOverview() {
           <Link
             key={tile.label}
             href={tile.href}
-            className="rounded-[5px] border border-surface-border p-4 no-underline transition-colors hover:border-brand dark:border-night-border"
+            className="rounded-[5px] border border-brand/20 p-4 no-underline transition-colors hover:border-brand dark:border-night-border"
           >
             <p className="text-xs uppercase tracking-wide text-ink-muted dark:text-night-muted">
               {tile.label}

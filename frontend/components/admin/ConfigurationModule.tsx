@@ -53,7 +53,7 @@ export default function ConfigurationModule() {
   const [error, setError] = useState<string | null>(null);
 
   /*
-    Not `useResourceList`. That hook owns paging and a `Page[T]` envelope, and
+    Not a paged list query. Those own paging and a `Page[T]` envelope, and
     this endpoint returns the whole registry unpaged with two extra fields the
     filters need. Wrapping it would mean making `total` and `pages` optional on a
     hook four modules depend on, to serve the one caller that has neither.

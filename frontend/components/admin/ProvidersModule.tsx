@@ -20,16 +20,19 @@ import {
 } from "@/components/common/columns";
 import { navIcon } from "@/components/dashboard/navIcons";
 import {
-  providerApi,
   type ApiProvider,
   type CredentialFieldSchema,
   type ProviderPayload,
 } from "@/lib/api/credentialApi";
 import { extractApiError } from "@/lib/utils/apiError";
 import useModalState from "@/lib/hooks/useModalState";
-import useResourceList from "@/lib/hooks/useResourceList";
 import useResourceQuery from "@/lib/hooks/useResourceQuery";
-import useRowAction from "@/lib/hooks/useRowAction";
+import {
+  useCreateProviderMutation,
+  useDeleteProviderMutation,
+  useListProvidersQuery,
+  useUpdateProviderMutation,
+} from "@/lib/api/endpoints/apiCredentialsEndpoints";
 
 const STATE_OPTIONS = [
   { value: "true", label: "Active" },
@@ -64,39 +67,69 @@ export default function ProvidersModule() {
     defaultPerPage: 30,
   });
 
-  const [canManage, setCanManage] = useState(false);
-  const [categories, setCategories] = useState<string[]>([]);
+  // PM-41 § 4.5. `is_active` and `category` are filters here as well as things
+  // the writes change, so a patched row could sit in a view it left.
+  const listQuery = useListProvidersQuery(
+    {
+      search: q.applied.search || undefined,
+      category: q.applied.category || undefined,
+      is_active: q.applied.is_active === "" ? undefined : q.applied.is_active === "true",
+      sort_by: q.sortBy,
+      sort_order: q.sortOrder,
+      page: q.page,
+      per_page: q.perPage,
+    },
+    { skip: !q.ready },
+  );
+  const page = listQuery.data;
 
-  const list = useResourceList<ApiProvider>({
-    ready: q.ready,
-    deps: [q.applied, q.sortBy, q.sortOrder, q.page, q.perPage],
-    errorMessage: "Could not load providers.",
-    fetch: () =>
-      providerApi
-        .list({
-          search: q.applied.search || undefined,
-          category: q.applied.category || undefined,
-          is_active:
-            q.applied.is_active === "" ? undefined : q.applied.is_active === "true",
-          sort_by: q.sortBy,
-          sort_order: q.sortOrder,
-          page: q.page,
-          per_page: q.perPage,
-        })
-        .then((res) => {
-          setCanManage(res.data.can_manage);
-          setCategories(res.data.categories);
-          return res.data;
-        }),
-  });
+  // Both ride on the list envelope — read off the response rather than copied
+  // into state from inside the fetch callback. `can_manage` comes from the same
+  // permission constant the write routes are guarded on.
+  const canManage = page?.can_manage ?? false;
+  const categories = page?.categories ?? [];
 
   const modal = useModalState<ModalMode, ApiProvider>();
 
-  const { busy, run } = useRowAction<ApiProvider>({
-    onSuccess: list.patchRow,
-    show,
-    errorFallback: "Could not update the provider.",
-  });
+  const [updateProvider] = useUpdateProviderMutation();
+  const [deleteProvider] = useDeleteProviderMutation();
+
+  /*
+    An id, not a boolean. It disables the one row being written rather than the
+    whole table: a boolean would either freeze every row while one writes, or
+    freeze none and let the same row be clicked twice — and a second click on a
+    toggle sends it straight back, which reads as the action having silently
+    failed.
+  */
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const toggleActive = async (row: ApiProvider) => {
+    setBusy(String(row.id));
+    try {
+      await updateProvider({
+        id: row.id,
+        data: {
+          name: row.name,
+          slug: row.slug,
+          description: row.description,
+          icon: row.icon,
+          documentation_url: row.documentation_url,
+          setup_steps: row.setup_steps,
+          category: row.category,
+          is_active: !row.is_active,
+          display_order: row.display_order,
+          // `schemas` omitted — the API leaves the declarations alone when it is
+          // absent, so toggling a provider cannot disturb the field rows its
+          // stored values hang off.
+        },
+      }).unwrap();
+      show(`${row.name} is now ${row.is_active ? "inactive" : "active"}.`);
+    } catch (err) {
+      show(extractApiError(err, "Could not update the provider."), "error");
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const columns = useMemo<Column<ApiProvider>[]>(
     () => [
@@ -107,26 +140,7 @@ export default function ProvidersModule() {
           label: row.is_active ? "Deactivate" : "Activate",
           visible: canManage,
           disabled: busy === String(row.id),
-          onSelect: () =>
-            run(
-              String(row.id),
-              () =>
-                providerApi.update(row.id, {
-                  name: row.name,
-                  slug: row.slug,
-                  description: row.description,
-                  icon: row.icon,
-                  documentation_url: row.documentation_url,
-                  setup_steps: row.setup_steps,
-                  category: row.category,
-                  is_active: !row.is_active,
-                  display_order: row.display_order,
-                  // `schemas` omitted — the API leaves the declarations alone
-                  // when it is absent, so toggling a provider cannot disturb the
-                  // field rows its stored values hang off.
-                }),
-              `${row.name} is now ${row.is_active ? "inactive" : "active"}.`
-            ),
+          onSelect: () => void toggleActive(row),
         },
         {
           label: "Delete",
@@ -235,13 +249,9 @@ export default function ProvidersModule() {
         },
       ]}
       columns={columns}
-      rows={list.rows}
+      result={listQuery}
       rowKey={(r) => String(r.id)}
-      loading={list.loading}
-      error={list.error}
-      onRetry={list.refetch}
-      total={list.total}
-      pages={list.pages}
+      errorMessage="Could not load providers."
       selectable={false}
       table="vendor"
       rowNoun="provider"
@@ -262,8 +272,8 @@ export default function ProvidersModule() {
             const wasEdit = modal.is("edit");
             modal.close();
             if (action === "saved") {
+              // The form's own mutations invalidate the collection.
               show(`“${saved!.name}” ${wasEdit ? "updated" : "added"}.`);
-              list.refetch();
             }
           }}
         />
@@ -274,12 +284,11 @@ export default function ProvidersModule() {
           noun="provider"
           name={modal.target.name}
           subtitle={modal.target.slug}
-          onConfirm={() => providerApi.remove(modal.target!.id)}
+          onConfirm={() => deleteProvider(modal.target!.id).unwrap()}
           onDeleted={() => {
             const name = modal.target!.name;
             modal.close();
             show(`“${name}” and its stored credentials deleted.`);
-            list.refetch();
           }}
           onClose={modal.close}
         >
@@ -324,6 +333,8 @@ export function ProviderForm({
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [createProvider] = useCreateProviderMutation();
+  const [updateProviderRecord] = useUpdateProviderMutation();
 
   const submit = async () => {
     setSaving(true);
@@ -352,10 +363,10 @@ export function ProviderForm({
       })),
     };
     try {
-      const res = provider
-        ? await providerApi.update(provider.id, payload)
-        : await providerApi.create(payload);
-      onDone?.("saved", res.data);
+      const saved = provider
+        ? await updateProviderRecord({ id: provider.id, data: payload }).unwrap()
+        : await createProvider(payload).unwrap();
+      onDone?.("saved", saved);
     } catch (err) {
       setError(extractApiError(err, "Could not save the provider."));
     } finally {

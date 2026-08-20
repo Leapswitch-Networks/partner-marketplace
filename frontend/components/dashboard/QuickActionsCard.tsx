@@ -81,7 +81,7 @@ export default function QuickActionsCard({
   return (
     <button
       onClick={action}
-      className="group relative flex h-full w-full flex-col overflow-hidden rounded-none border border-surface-border bg-white p-6 text-left transition-colors hover:border-brand/40 focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 ring-offset-surface-wash dark:ring-offset-night-card dark:border-night-border dark:bg-night-card"
+      className="group relative flex h-full w-full flex-col overflow-hidden rounded-none border border-brand/20 bg-white p-6 text-left transition-colors hover:border-brand/40 focus:outline-none focus:ring-2 focus:ring-brand focus:ring-offset-2 ring-offset-surface-wash dark:ring-offset-night-card dark:border-night-border dark:bg-night-card"
     >
       <div className="relative z-10 flex flex-1 flex-col">
         <div className="flex items-start justify-between gap-3">

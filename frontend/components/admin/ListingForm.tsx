@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { headingClasses } from "@/components/common/PageHeading";
 import Button from "@/components/common/Button";
 import Input from "@/components/common/Input";
 import Textarea from "@/components/common/Textarea";
@@ -157,7 +158,7 @@ export default function ListingForm({ listingId }: { listingId?: string }) {
 
   return (
     <div className="mx-auto max-w-4xl p-4 sm:p-6">
-      <h1 className="text-lg font-semibold text-ink dark:text-gray-100">
+      <h1 className={`${headingClasses()} text-ink dark:text-gray-100`}>
         {editing ? "Edit listing" : "New listing"}
       </h1>
 

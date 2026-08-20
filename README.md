@@ -23,15 +23,19 @@ which single file to read for the area you're working on rather than making you 
 | Work on the backend | [`documentation/system-design/FASTAPI_STANDARDS.md`](documentation/system-design/FASTAPI_STANDARDS.md) |
 | Work on the frontend | [`documentation/system-design/NEXTJS_STANDARDS.md`](documentation/system-design/NEXTJS_STANDARDS.md) |
 | Change the database schema | [`documentation/system-design/DATABASE_MIGRATIONS.md`](documentation/system-design/DATABASE_MIGRATIONS.md) |
+| Know why something is built this way | [`documentation/ADR.md`](documentation/ADR.md) |
 | Know what's broken | [`documentation/planning/TECH_DEBT.md`](documentation/planning/TECH_DEBT.md) |
 | See what changed recently | [`documentation/DAILY_CHANGES.md`](documentation/DAILY_CHANGES.md) |
 
-If you are an AI coding agent, read [`CLAUDE.md`](CLAUDE.md) and
-[`documentation/AGENTS.md`](documentation/AGENTS.md) first.
+If you are an AI coding agent, read [`CLAUDE.md`](CLAUDE.md) and [`AGENTS.md`](AGENTS.md) — the
+root one. **They are the whole contract.** `documentation/AGENTS.md` was a second copy until
+2026-08-18 and is now just a pointer ([ADR-0016](documentation/adr/0016-one-agent-contract.md)).
 
 ### Every documentation file, and what it's for
 
-The full inventory — **31 Markdown files** under `documentation/`, plus three at the project root.
+The full inventory — **60 Markdown files** under `documentation/`, plus three at the project root.
+*(This line said 31, then 58, and each was stale in turn; recounted 2026-08-20, after the back-office
+design spec and the per-user theming plan.)*
 `INDEX.md` carries the same map with more detail per file and is the one to keep authoritative;
 this table exists so you can see the whole shape without opening anything.
 
@@ -41,15 +45,17 @@ this table exists so you can see the whole shape without opening anything.
 |------|---------|
 | [`README.md`](README.md) | This file — what the project is, how to start it, where the docs are |
 | [`CLAUDE.md`](CLAUDE.md) | Entry point for AI coding agents; chains straight to root `AGENTS.md` |
-| [`AGENTS.md`](AGENTS.md) | Framework warning — this Next.js differs from training data, read `node_modules/next/dist/docs/` first |
+| [`AGENTS.md`](AGENTS.md) | **The agent contract** — startup banner, non-negotiable rules, model tiering, verification gate, layer boundaries, working rhythm. The only one; merged 2026-08-18. Opens with the Next.js warning: this is 14.2.35, verify against the installed tree |
 
 **`documentation/` — tracking and process**
 
 | File | Purpose |
 |------|---------|
 | [`INDEX.md`](documentation/INDEX.md) | **The doc map.** Which single file to read per area, plus which docs not to trust |
+| [`ADR.md`](documentation/ADR.md) | **The architecture decision register.** What is settled, what was rejected, and where each decision is enforced in code |
+| [`adr/`](documentation/adr/) | One file per decision — 16 records plus the template |
 | [`ONBOARDING.md`](documentation/ONBOARDING.md) | Local setup on a fresh machine — both paths (all-Docker, apps-on-host), ports, gotchas, day-to-day commands |
-| [`AGENTS.md`](documentation/AGENTS.md) | AI agent workflow — startup banner, git and commit rules, protected files, public-repo handling |
+| [`AGENTS.md`](documentation/AGENTS.md) | **Pointer only** — the contract moved to the root `AGENTS.md` on 2026-08-18. Do not put rules back here |
 | [`DAILY_CHANGES.md`](documentation/DAILY_CHANGES.md) | One entry per task, newest first, in plain business English. Updated with every change |
 | [`VERSION_SUMMARY.md`](documentation/VERSION_SUMMARY.md) | Feature releases across versions |
 

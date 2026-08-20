@@ -8,9 +8,15 @@
  * `rgb(var(--brand) / <alpha-value>)`, so `bg-brand`, `text-brand-on-dark` and all
  * 12 opacity variants in use resolve from here.
  *
- * Values are Viho's teal, byte for byte — this file is where they moved to on
- * 2026-08-06, they were not changed. Keeping them in CSS rather than only injecting
- * them from the API is deliberate and load-bearing:
+ * Values are the `pine` preset from `core/theme.py`, which is `--public-deep` from
+ * the marketing site's own stylesheet. Changed 2026-08-20 with `DEFAULT_PRESET`;
+ * they were Viho's teal from 2026-08-06 until then. **These two must move together**
+ * — this block is what renders when the API is unreachable, so leaving it on the
+ * old colour means a branding-fetch failure silently repaints the app in a theme
+ * nobody selected.
+ *
+ * Keeping them in CSS rather than only injecting them from the API is deliberate and
+ * load-bearing:
  *
  *   - the app is fully styled with **no JavaScript and no API call**, so a failed
  *     branding fetch degrades to the default theme instead of an unstyled page
@@ -22,26 +28,136 @@
  * silently render opaque.
  */
 :root {
-  --brand: 36 105 92; /* #24695c — Viho --theme-deafult (sic) */
-  --brand-dark: 23 67 59; /* #17433b — its own hover shade */
-  --brand-darker: 16 48 42; /* #10302a — pressed */
-  --brand-light: 35 101 89; /* #236559 */
-  --brand-on-dark: 94 200 180; /* #5ec8b4 — ~8.8:1 on night.card, AA pass */
-  --accent: 186 137 93; /* #ba895d — Viho --theme-secondary */
-  --accent-dark: 160 112 68; /* #a07044 */
-  --accent-light: 209 176 147; /* #d1b093 */
+  --brand: 3 79 70; /* #034f46 — public.css --public-deep. White text 9.50:1 */
+  --brand-dark: 2 51 45; /* #02332d — hover */
+  --brand-darker: 1 36 32; /* #012420 — pressed */
+  --brand-light: 8 83 74; /* #08534a */
+  --brand-on-dark: 7 177 157; /* #07b19d — 6.62:1 on night.card, AA pass */
+  /* The accent — **pine's**, and the fallback when the API is unreachable.
+   *
+   * ⚠️ As of 2026-08-20 the accent is THEMED: `core/theme.py::accent_family` picks
+   * amber, teal or zinc from the brand's own temperature, and the injected `<style>`
+   * overrides these three. A cool brand gets amber, a warm brand gets teal (so the
+   * accent is not a second warm mid-tone beside its own brand), and a low-saturation
+   * brand gets zinc (so a monochrome preset stays monochrome). Change the rule
+   * there, not here; here is only what renders with no backend.
+   *
+   * Amber `#ffa946` is `--public-amber` from the marketing site, where its audited
+   * job is icons, eyebrow labels, display numerals and bullet marks. It replaced
+   * Viho's tan `#ba895d`; only `StatCard` and `QuickActionsCard` consume these.
+   *
+   * ⚠️ `--accent` MAY NEVER BE TEXT ON A LIGHT GROUND — amber on white is 1.91:1.
+   * The call sites already avoid it correctly: `bg-accent/20 text-accent-dark` on
+   * light, `dark:bg-accent/25 dark:text-accent-light` on dark. The two derived
+   * shades below exist for exactly those two composites and are measured against
+   * them, not against the raw accent. */
+  --accent: 255 169 70; /* #ffa946 — fills and icons only */
+  --accent-dark: 128 84 35; /* #805423 — 5.76:1 on the bg-accent/20 fill, 6.54:1 on white */
+  --accent-light: 255 195 126; /* #ffc37e — 6.70:1 on the dark fill, 11.36:1 on night.card */
 
-  /* The derived tint family, un-frozen 2026-08-13. These defaults are
-   * byte-for-byte the hexes that used to sit in tailwind.config.ts, so the
-   * default teal renders identically; a chosen theme overrides all of them
-   * from `core/theme.py`, which computes the same relationships (wash = brand
-   * at 10% over white, night-border = brand at 20% over the dark card, success
-   * = brand darkened 27%) for whatever brand is active. */
-  --surface-wash: 234 240 239; /* was surface.wash #eaf0ef */
-  --surface-tile: 239 243 242; /* was surface.tile #eff3f2 */
-  --surface-border: 230 237 239; /* was surface.border / tone.light #e6edef */
-  --night-border: 20 40 49; /* was night.border #142831 */
-  --tone-success: 27 76 67; /* was tone.success #1b4c43 */
+  /* The derived tint family, un-frozen 2026-08-13. Until 2026-08-20 these were
+   * byte-for-byte the teal hexes that used to sit in tailwind.config.ts; they are
+   * now `core/theme.py`'s derivation of the pine brand above, which is what that
+   * module emits for the default preset — so this block and the injected one
+   * agree. A chosen theme overrides all of them, computed from the same
+   * relationships (wash = brand at 10% over white, night-border = brand at 20%
+   * over the dark card, success = brand darkened 27%) for whatever brand is
+   * active. Recompute these if the brand above ever changes; do not hand-pick. */
+  /* The CHROME GROUND — sidebar, drawer, top nav, page canvas, sign-in page.
+   * Changed 2026-08-20 from `brand at 10% over white` to `brand at 3% over the
+   * warm base #fffdf0`, so the signed-in area sits on a warm ground like the
+   * marketing site instead of a cool one. Measured: warmth (red minus blue) goes
+   * from **-6 to +12**, and it is an accessibility improvement rather than a
+   * trade — `text-ink-muted` on the chrome was **4.07:1, a documented AA
+   * failure**, and is now **4.51:1**. `text-ink-label` rises 4.91 → 5.43.
+   *
+   * ⚠️ Changing the base alone is nearly a no-op — the brand tint dominates, and
+   * 10% pine over cream is #e4ece1 against #e6edec over white. The percentage is
+   * what makes it read warm. Both numbers live in `core/theme.py::css_variables`;
+   * change them together with this line or a themed installation diverges. */
+  --surface-wash: 247 248 235; /* #f7f8eb — brand at 3% over #fffdf0 */
+  --surface-tile: 235 241 240; /* brand at 8% over white */
+  --surface-border: 227 236 235; /* brand at 11% over white */
+  --night-border: 14 34 45; /* brand at 20% over the dark card */
+  --tone-success: 2 58 51; /* brand darkened 27% */
+  /* Danger, lifted for a DARK ground. Added 2026-08-20 for the ink stat tiles.
+   * `tone-danger` #d22d3d measures 2.90:1 on the ink tile — under the 3:1 that a
+   * non-text mark needs — and 3.56:1 on night.card. This is that red with 20%
+   * cream mixed in: 3.85:1 on ink, 4.72:1 on night.card. There is no
+   * `tone.danger-on-dark` Tailwind key because `tailwind.config.ts` is a Protected
+   * file; call sites reference this variable directly, which still resolves
+   * through a token rather than a hex. */
+  --tone-danger-on-dark: 219 87 96; /* #db5760 */
+
+  /* ── Chart tokens ────────────────────────────────────────────────────────
+   * Added 2026-08-20. **Every value below was produced by the palette
+   * validator, not chosen.** Categorical slots are a FIXED ORDER assigned in
+   * sequence and never cycled — the order is the colourblind-safety mechanism.
+   *
+   * Validated light (on the white card) AND dark (on night.card): lightness
+   * band, chroma floor, adjacent CVD separation under protanopia and
+   * deuteranopia, the normal-vision floor, and contrast >= 3:1. Worst adjacent
+   * pair 13.3 (target >= 8); normal-vision floor 19.4 (gate >= 15).
+   *
+   * 🔴 The slots are IDENTICAL in both modes because that is what the validator
+   * passed — not because dark mode was flipped. Re-run it before changing one.
+   * 🔴 There is deliberately NO RED here. Status-critical is red, and the rule
+   * is that a status colour must never be able to impersonate a series.
+   * 🔴 A 6th series is never a new hue. It folds into "Other", facets into small
+   * multiples, or the chart form changes.
+   * ⚠️ These are adjacent-pairlist safe. A scatter/bubble/map compares ALL pairs
+   * and caps lower — re-validate with `--pairs all` before building one. */
+  --chart-1: 55 160 140; /* #37a08c teal    */
+  --chart-2: 214 115 0; /*  #d67300 amber   */
+  --chart-3: 55 132 190; /* #3784be azure   */
+  --chart-4: 177 117 67; /* #b17543 bronze  */
+  --chart-5: 162 80 164; /* #a250a4 plum    */
+
+  /* Sequential — ONE hue, light to dark, for magnitude. **Pine's, and the
+   * no-backend fallback**: as of 2026-08-20 this ramp is derived per theme by
+   * `core/theme.py::sequential_ramp`, because a sequential scale is one hue and the
+   * only honest hue is the theme's own — a pine-green heatmap under a crimson theme
+   * reads as a foreign object.
+   *
+   * ⚠️ Its palest step is found by CONTRAST SEARCH, not a fixed mix level. Fixed
+   * levels tuned on pine (9.50:1 on white) put **seven of eleven** presets' palest
+   * step at 1.91–1.96:1 against a 2:1 floor, because every other brand sits near
+   * 6.4:1. All eleven are asserted in `test_theme_presets.py`.
+   *
+   * Four steps: five failed the adjacent-lightness gate. Monotone L, gaps >= 0.06,
+   * light end 2.21:1 on white for pine. */
+  --chart-seq-1: 149 181 177; /* #95b5b1 */
+  --chart-seq-2: 109 153 148; /* #6d9994 */
+  --chart-seq-3: 53 114 107; /*  #35726b */
+  --chart-seq-4: 3 79 70; /*    #034f46 = the brand */
+
+  /* The surface a chart sits on. Gaps between touching marks and rings around
+   * dots are painted in THIS, never in a stroke — a stroke adds ink that is not
+   * data. Kept as a token so a chart on a non-white card can override it. */
+  --chart-surface: 255 255 255;
+  --chart-grid: 227 236 235; /* surface-border — recessive, 1px, never dashed */
+
+  /* Diverging — polarity, for above/below a baseline or Δ to target.
+   * TWO HUES THAT READ OPPOSITE + a NEUTRAL GREY MIDPOINT. Teal (cool) against
+   * amber (warm): poles at ΔE 13.3 under protanopia, 22.6 normal. Two cool hues
+   * would fail the form — the reader must see opposition, not just difference.
+   * 🔴 Never a hue at the midpoint: the middle must read as "nothing".
+   * Each arm validated as an ordinal ramp: monotone L, gaps >= 0.06, light end
+   * 2.48:1 and 2.60:1 on white. */
+  --chart-div-cool-1: 95 179 163; /*  #5fb3a3 */
+  --chart-div-cool-2: 55 160 140; /*  #37a08c */
+  --chart-div-cool-3: 43 125 109; /*  #2b7d6d */
+  --chart-div-cool-4: 32 93 81; /*    #205d51 */
+  --chart-div-mid: 217 218 222; /*    #d9dade — neutral, reads as zero */
+  --chart-div-warm-1: 222 143 51; /*  #de8f33 */
+  --chart-div-warm-2: 214 115 0; /*   #d67300 */
+  --chart-div-warm-3: 167 90 0; /*    #a75a00 */
+  --chart-div-warm-4: 124 67 0; /*    #7c4300 */
+
+  /* De-emphasis, for the EMPHASIS form: one series in colour, the rest in this.
+   * Visible but recessive — 2.47:1 on white. The most underused chart form and
+   * often the honest answer to "make this clearer". */
+  --chart-muted: 160 165 174; /* #a0a5ae */
 }
 
 /* ── shadcn semantic scale, mapped onto Viho ──────────────────────────────────
@@ -72,8 +188,29 @@
   --muted-foreground: 89 102 122; /* ink.label, NOT ink.muted: 5.05:1 vs 4.19:1 on the green card */
   --popover: 255 255 255;
   --popover-foreground: 36 41 52;
-  --primary: var(--brand);
-  --primary-foreground: 255 255 255;
+  /* ⚠️ THE ACTION COLOUR IS NOT THE BRAND. Changed 2026-08-20.
+   *
+   * `--brand` is pine and carries STRUCTURE — chrome, links, focus, borders.
+   * `--primary` is the marketing site's lilac `#f0d7ff` and carries ACTION, which
+   * is the split that surface already runs (`public.css`: pine is "premium slabs +
+   * every link hover", lilac is "PRIMARY BUTTON FILL"). Keeping them separate is
+   * also what let the brand port at all: white text sits on pine at 9.50:1, and
+   * lilac would have failed every one of the 30 files that hardcode `text-white`
+   * beside `bg-brand`.
+   *
+   * 🔴 `--primary-foreground` IS INK, NEVER WHITE. White on lilac is **1.32:1** —
+   * `validate_brand_colour` refuses this colour as a brand for exactly that
+   * reason. Ink on lilac is **11.01:1**.
+   *
+   * 🔴 A lilac fill measures **1.11:1 against the chrome ground**, so it has
+   * almost no edge of its own. Every lilac control MUST carry a border — see
+   * `common/Button.tsx`. That is a legibility requirement (WCAG 1.4.11 wants 3:1
+   * for a component boundary), not a stylistic flourish.
+   *
+   * Deliberately the same in light and dark: it is one absolute colour pair, and
+   * lilac on `night.card` measures 13.50:1, so it needs no dark variant. */
+  --primary: 240 215 255; /* #f0d7ff — the marketing site's action colour */
+  --primary-foreground: 36 41 52; /* ink #242934 — 11.01:1 on lilac */
   --secondary: var(--surface-tile);
   --secondary-foreground: 36 41 52;
   --destructive: 210 45 61; /* tone.danger */
@@ -84,18 +221,53 @@
 }
 
 .dark {
+  /* The dark sequential ramp moved to `:root.dark` below — see the note there.
+   * The categorical slots are NOT redefined: they passed the dark checks unchanged. */
+  --chart-surface: 17 23 39; /* night.card */
+  --chart-grid: 14 34 45; /* night-border */
+  /* Only the neutral midpoint and the de-emphasis grey re-step for dark; the two
+   * arms passed unchanged, like the categorical slots. */
+  --chart-div-mid: 32 41 56; /* night.body — still "nothing" on a dark card */
+  --chart-muted: 93 103 114; /* #5d6772 — 3.10:1 on night.card */
+
   --background: 17 23 39; /* night.card */
   --foreground: 255 255 255;
   --muted: var(--night-border);
   --muted-foreground: 152 166 173; /* night.muted */
   --popover: 17 23 39;
   --popover-foreground: 255 255 255;
-  --primary-foreground: 255 255 255;
+  /* NOT white — `--primary` is lilac in both modes and white on it is 1.32:1.
+   * This line used to be `255 255 255`, which was correct only while `--primary`
+   * was the brand. */
+  --primary-foreground: 36 41 52; /* ink — 11.01:1 on lilac */
   --secondary: var(--night-border);
   --secondary-foreground: 255 255 255;
   --border: var(--night-border);
   --input: var(--night-border);
   --ring: var(--brand-on-dark);
+}
+
+/* ── The dark sequential chart ramp ────────────────────────────────────────────
+ *
+ * 🔴 `:root.dark`, NOT `.dark`, and the specificity is the whole point.
+ *
+ * The themed variables arrive as an injected `<style>` containing `:root{…}`, and
+ * that `<style>` sits AFTER this stylesheet in the document. `:root` and `.dark`
+ * have equal specificity (0,1,0), so a plain `.dark` rule loses on source order —
+ * which meant dark mode silently rendered the LIGHT ramp. That is not a subtle
+ * regression: a light ramp runs pale→brand, and the brand measures **1.88:1 on
+ * night.card**, so the high-magnitude end of every heatmap and every bar became
+ * invisible exactly where the value was highest.
+ *
+ * `:root.dark` is (0,2,0) and outranks the injected block. **Do not weaken it to
+ * `.dark`.**
+ *
+ * The fallbacks are pine's, for the case where no backend answered. */
+:root.dark {
+  --chart-seq-1: var(--chart-seq-dark-1, 13 85 86); /*  #0d5556 */
+  --chart-seq-2: var(--chart-seq-dark-2, 11 122 115); /* #0b7a73 */
+  --chart-seq-3: var(--chart-seq-dark-3, 9 143 131); /*  #098f83 */
+  --chart-seq-4: var(--chart-seq-dark-4, 7 177 157); /*  #07b19d */
 }
 
 /* ── Background texture ──────────────────────────────────────────────────── */
@@ -110,6 +282,25 @@
 /* ─────────────────────────────────────────────────────────────────────────── */
 
 @layer utilities {
+  /* The display face for the signed-in app — the twin of `.pub-display` in
+   * `app/(public)/public.css`, reading the same variable so the two surfaces are
+   * literally the same type.
+   *
+   * ⚠️ Only weight 400 is loaded, matching the reference. **Never pair this with
+   * `font-bold` or `font-semibold`** — the browser would synthesise a fake bold,
+   * which on a high-contrast serif looks smeared rather than strong. Size and
+   * tracking carry the emphasis instead.
+   *
+   * Where it belongs: **18px and up.** The marketing site reserves it for 24px+
+   * (`text-2xl` and larger, never below `text-lg` — measured across 50 uses); the
+   * back office runs at a smaller scale throughout, so the floor moves down with
+   * it. A serif at a 13px card title in a dense table is worse than no serif.
+   */
+  .app-display {
+    font-family: var(--font-eb-garamond), Georgia, "Times New Roman", serif;
+    font-weight: 400;
+  }
+
   .texture-bg {
     background-image: radial-gradient(
       circle,

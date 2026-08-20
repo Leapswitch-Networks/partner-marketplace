@@ -3,6 +3,7 @@
 import { useEffect, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
+import { headingClasses } from "@/components/common/PageHeading";
 import { cn } from "@/lib/utils/cn";
 
 /**
@@ -139,7 +140,7 @@ export default function FormModal({
               </span>
             )}
             <div className="min-w-0">
-              <h2 className="truncate text-lg font-semibold text-ink dark:text-white">{title}</h2>
+              <h2 className={`${headingClasses()} truncate text-ink dark:text-white`}>{title}</h2>
               {subtitle && (
                 <p className="truncate text-sm text-ink-label dark:text-night-muted">{subtitle}</p>
               )}

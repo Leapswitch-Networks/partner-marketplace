@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { type BadgeTone } from "@/components/common/Badge";
 import ResourceIndex from "@/components/common/ResourceIndex";
 import { badgeColumn, dateColumn, numberColumn } from "@/components/common/columns";
@@ -9,10 +9,12 @@ import { type Column } from "@/components/common/DataTable";
 import Modal from "@/components/common/Modal";
 import { navIcon } from "@/components/dashboard/navIcons";
 import useModalState from "@/lib/hooks/useModalState";
-import useResourceList from "@/lib/hooks/useResourceList";
 import useResourceQuery from "@/lib/hooks/useResourceQuery";
 import {
-  activityApi,
+  useActivityFilterOptionsQuery,
+  useListActivityQuery,
+} from "@/lib/api/endpoints/activityEndpoints";
+import {
   type ActivityEntry,
   type ActivityFilterOptions,
 } from "@/lib/api/rbacApi";
@@ -85,7 +87,19 @@ const NO_OPTIONS: ActivityFilterOptions = {
 };
 
 export default function ActivityModule() {
-  const [options, setOptions] = useState<ActivityFilterOptions>(NO_OPTIONS);
+  /*
+    Loaded once and then held: these change only when a new *kind* of action
+    first occurs, so refetching them alongside every filter change would be
+    waste. One request rather than four, and every list is read from the data —
+    a module or subject type nothing has ever written does not appear as an
+    option that finds nothing.
+
+    `NO_OPTIONS` is still the fallback, which keeps the old rule that a failed
+    dropdown is not worth an error banner: the text search and the date range
+    work without it (PM-41 § 4.6 — this replaced a fetch-into-state guarded by a
+    `live` flag against the unmount race, which the query owns now).
+  */
+  const { data: options = NO_OPTIONS } = useActivityFilterOptionsQuery();
 
   /** One mode. Same hook as the others so all four modules read the same way. */
   const modal = useModalState<"detail", ActivityEntry>();
@@ -131,49 +145,24 @@ export default function ActivityModule() {
     the service documents — rows written in one transaction share a timestamp, so
     only `id` is a total order — still holds under every sort.
   */
-  const list = useResourceList<ActivityEntry>({
-    ready: q.ready,
-    deps: [q.applied, q.page, q.perPage, q.sortBy, q.sortOrder],
-    errorMessage: "Could not load the activity log.",
-    fetch: () =>
-      activityApi
-        .list({
-          page: q.page,
-          per_page: q.perPage,
-          sort_by: q.sortBy,
-          sort_order: q.sortOrder,
-          ...(q.applied.search ? { search: q.applied.search } : {}),
-          ...(q.applied.log_name ? { log_name: q.applied.log_name } : {}),
-          ...(q.applied.event ? { event: q.applied.event } : {}),
-          ...(q.applied.subject_type ? { subject_type: q.applied.subject_type } : {}),
-          ...(q.applied.causer_id ? { causer_id: q.applied.causer_id } : {}),
-          ...(q.applied.source ? { source: q.applied.source } : {}),
-          ...(q.applied.date_from ? { date_from: q.applied.date_from } : {}),
-          ...(q.applied.date_to ? { date_to: q.applied.date_to } : {}),
-          ...(q.applied.hide_system === "1" ? { hide_system: true } : {}),
-        })
-        .then((res) => res.data),
-  });
-
-  // Loaded once: these change only when a new kind of action first occurs, so
-  // refetching them alongside every filter change would be waste. One request
-  // rather than four, and every list is read from the data — a module or subject
-  // type nothing has ever written does not appear as an option that finds nothing.
-  useEffect(() => {
-    let live = true;
-    void (async () => {
-      try {
-        const res = await activityApi.filterOptions();
-        if (live) setOptions(res.data);
-      } catch {
-        // A failed dropdown is not worth an error banner — the text search and
-        // the date range still work without it.
-      }
-    })();
-    return () => {
-      live = false;
-    };
-  }, []);
+  const listQuery = useListActivityQuery(
+    {
+      page: q.page,
+      per_page: q.perPage,
+      sort_by: q.sortBy,
+      sort_order: q.sortOrder,
+      ...(q.applied.search ? { search: q.applied.search } : {}),
+      ...(q.applied.log_name ? { log_name: q.applied.log_name } : {}),
+      ...(q.applied.event ? { event: q.applied.event } : {}),
+      ...(q.applied.subject_type ? { subject_type: q.applied.subject_type } : {}),
+      ...(q.applied.causer_id ? { causer_id: q.applied.causer_id } : {}),
+      ...(q.applied.source ? { source: q.applied.source } : {}),
+      ...(q.applied.date_from ? { date_from: q.applied.date_from } : {}),
+      ...(q.applied.date_to ? { date_to: q.applied.date_to } : {}),
+      ...(q.applied.hide_system === "1" ? { hide_system: true } : {}),
+    },
+    { skip: !q.ready },
+  );
 
   // Page reset happens in the setters above, not in an effect reacting to them.
   // An effect would be a genuine synchronous setState-in-effect — the rule is
@@ -385,13 +374,9 @@ export default function ActivityModule() {
         { type: "check", key: "hide_system", label: "Hide automation" },
       ]}
       columns={columns}
-      rows={list.rows}
+      result={listQuery}
       rowKey={(r) => String(r.id)}
-      loading={list.loading}
-      error={list.error}
-      onRetry={list.refetch}
-      total={list.total}
-      pages={list.pages}
+      errorMessage="Could not load the activity log."
       table="vendor"
       rowNoun="entry"
       // No `filtersActive` branch here: `ResourceIndex` passes it down and the

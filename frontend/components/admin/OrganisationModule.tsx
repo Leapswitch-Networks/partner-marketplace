@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import PageHeading from "@/components/common/PageHeading";
 import Button from "@/components/common/Button";
 import Input from "@/components/common/Input";
 import Textarea from "@/components/common/Textarea";
@@ -131,10 +132,10 @@ export default function OrganisationModule() {
 
   return (
     <div className="mx-auto max-w-4xl p-4 sm:p-6">
-      <h1 className="text-lg font-semibold text-ink dark:text-gray-100">Your organisation</h1>
-      <p className="mt-1 text-sm text-ink-muted dark:text-night-muted">
-        This is what buyers see on your public profile.
-      </p>
+      <PageHeading
+        title="Your organisation"
+        description="This is what buyers see on your public profile."
+      />
 
       {/* Read-only, and shown rather than hidden — see the docstring. */}
       <dl className="mt-4 flex flex-wrap gap-6 rounded-[5px] bg-surface-wash p-4 text-sm dark:bg-night-body">
@@ -189,7 +190,7 @@ export default function OrganisationModule() {
 
       <hr className="my-8 border-surface-border dark:border-night-border" />
 
-      <h2 className="text-base font-semibold text-ink dark:text-gray-100">Expertise</h2>
+      <PageHeading size="section" title="Expertise" />
       <p className="mt-1 text-sm text-ink-muted dark:text-night-muted">
         Pick what you do. This is exactly what buyers filter the directory by, so anything you leave
         unticked is a search you will not appear in.

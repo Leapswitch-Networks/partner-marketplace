@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import Badge from "@/components/common/Badge";
 import Button from "@/components/common/Button";
@@ -19,9 +19,8 @@ import {
   stackedCell,
 } from "@/components/common/columns";
 import { navIcon } from "@/components/dashboard/navIcons";
-import { platformApi, type ApiConsumer } from "@/lib/api/platformApi";
+import { type ApiConsumer } from "@/lib/api/platformApi";
 import {
-  webhookApi,
   type WebhookCreated,
   type WebhookDelivery,
   type WebhookEndpoint,
@@ -31,8 +30,18 @@ import { extractApiError } from "@/lib/utils/apiError";
 import { formatDateTime } from "@/lib/utils/format";
 import useModalState from "@/lib/hooks/useModalState";
 import usePermissions from "@/lib/hooks/usePermissions";
-import useResourceList from "@/lib/hooks/useResourceList";
 import useResourceQuery from "@/lib/hooks/useResourceQuery";
+import { useListApiConsumersQuery } from "@/lib/api/endpoints/apiConsumersEndpoints";
+import {
+  useCreateWebhookMutation,
+  useDeleteWebhookMutation,
+  useListWebhooksQuery,
+  useRedeliverWebhookMutation,
+  useTestWebhookMutation,
+  useUpdateWebhookMutation,
+  useWebhookDeliveriesQuery,
+  useWebhookEventsQuery,
+} from "@/lib/api/endpoints/webhooksEndpoints";
 
 /**
  * Outbound webhooks — where events go, and what happened when they went.
@@ -70,8 +79,6 @@ export default function WebhooksModule() {
   const { toasts, show, dismiss } = useToast();
   const modal = useModalState<ModalMode, WebhookEndpoint>();
 
-  const [events, setEvents] = useState<WebhookEvent[]>([]);
-  const [consumers, setConsumers] = useState<ApiConsumer[]>([]);
   const [issued, setIssued] = useState<WebhookCreated | null>(null);
 
   const q = useResourceQuery({
@@ -84,43 +91,49 @@ export default function WebhooksModule() {
     defaultPerPage: 30,
   });
 
-  const list = useResourceList<WebhookEndpoint>({
-    ready: q.ready,
-    deps: [q.applied, q.sortBy, q.sortOrder, q.page, q.perPage],
-    errorMessage: "Could not load the webhooks.",
-    fetch: () =>
-      webhookApi
-        .list({
-          search: q.applied.search || undefined,
-          is_active:
-            q.applied.is_active === "" ? undefined : q.applied.is_active === "true",
-          sort_by: q.sortBy,
-          sort_order: q.sortOrder,
-          page: q.page,
-          per_page: q.perPage,
-        })
-        .then((res) => res.data),
-  });
+  // PM-41 § 4.5.
+  const listQuery = useListWebhooksQuery(
+    {
+      search: q.applied.search || undefined,
+      is_active: q.applied.is_active === "" ? undefined : q.applied.is_active === "true",
+      sort_by: q.sortBy,
+      sort_order: q.sortOrder,
+      page: q.page,
+      per_page: q.perPage,
+    },
+    { skip: !q.ready },
+  );
 
-  useEffect(() => {
-    webhookApi.events().then((res) => setEvents(res.data)).catch(() => setEvents([]));
-    platformApi
-      .list({ per_page: 100 })
-      .then((res) => setConsumers(res.data.items))
-      .catch(() => setConsumers([]));
-  }, []);
+  /*
+    Both of these replace fetch-on-mount `useEffect`s (PM-41 § 4.6). The event
+    catalogue is a server-side constant, so its cache entry means the second and
+    every later visit to this screen costs nothing; the consumer list is shared
+    with `ApiConsumersModule`, so opening that screen and coming back now reuses
+    what is already held.
+
+    `?? []` preserves the old `.catch(() => setX([]))` behaviour exactly: a
+    failure here leaves the picker empty rather than blocking the table, because
+    neither list is what the page is for.
+  */
+  const { data: events = [] } = useWebhookEventsQuery();
+  const { data: consumerPage } = useListApiConsumersQuery({ per_page: 100 });
+  const consumers: ApiConsumer[] = consumerPage?.items ?? [];
+
+  const [testWebhook] = useTestWebhookMutation();
+  const [deleteWebhook] = useDeleteWebhookMutation();
 
   const sendTest = async (row: WebhookEndpoint) => {
     try {
-      const res = await webhookApi.test(row.id);
-      const ok = res.data.status === "delivered";
+      // No `refetch()` after this: the mutation invalidates the row, the
+      // collection and the delivery history, all three of which a test changes.
+      const delivery = await testWebhook(row.id).unwrap();
+      const ok = delivery.status === "delivered";
       show(
         ok
-          ? `Delivered — the receiver answered ${res.data.response_status}.`
-          : `Not delivered: ${res.data.response_status ?? "no response"}. Open Deliveries for the detail.`,
+          ? `Delivered — the receiver answered ${delivery.response_status}.`
+          : `Not delivered: ${delivery.response_status ?? "no response"}. Open Deliveries for the detail.`,
         ok ? "success" : "error"
       );
-      list.refetch();
     } catch (err) {
       show(extractApiError(err, "Could not send the test."), "error");
     }
@@ -212,13 +225,9 @@ export default function WebhooksModule() {
         },
       ]}
       columns={columns}
-      rows={list.rows}
+      result={listQuery}
       rowKey={(row) => row.id}
-      loading={list.loading}
-      error={list.error}
-      onRetry={list.refetch}
-      total={list.total}
-      pages={list.pages}
+      errorMessage="Could not load the webhooks."
       table="vendor"
       rowNoun="webhook"
       emptyTitle="No webhooks yet"
@@ -242,7 +251,7 @@ export default function WebhooksModule() {
           onSaved={(message, created) => {
             modal.close();
             show(message, "success");
-            list.refetch();
+            // The form's own mutations invalidate the collection.
             if (created) {
               setIssued(created);
               modal.open("secret");
@@ -256,11 +265,10 @@ export default function WebhooksModule() {
           noun="webhook"
           name={modal.target.name}
           subtitle={modal.target.url}
-          onConfirm={() => webhookApi.remove(modal.target!.id)}
+          onConfirm={() => deleteWebhook(modal.target!.id).unwrap()}
           onDeleted={() => {
             modal.close();
             show("Webhook removed.", "success");
-            list.refetch();
           }}
           onClose={modal.close}
         >
@@ -309,6 +317,8 @@ function WebhookForm({
   const [active, setActive] = useState(endpoint?.is_active ?? true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [createWebhook] = useCreateWebhookMutation();
+  const [updateWebhook] = useUpdateWebhookMutation();
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -316,22 +326,25 @@ function WebhookForm({
     setError(null);
     try {
       if (endpoint) {
-        await webhookApi.update(endpoint.id, {
-          name: name.trim(),
-          url: url.trim(),
-          events: selected,
-          is_active: active,
-        });
+        await updateWebhook({
+          id: endpoint.id,
+          data: {
+            name: name.trim(),
+            url: url.trim(),
+            events: selected,
+            is_active: active,
+          },
+        }).unwrap();
         onSaved(`'${name.trim()}' updated.`);
       } else {
-        const res = await webhookApi.create({
+        const created = await createWebhook({
           api_consumer_id: consumerId,
           name: name.trim(),
           url: url.trim(),
           events: selected,
           is_active: active,
-        });
-        onSaved("Webhook added.", res.data);
+        }).unwrap();
+        onSaved("Webhook added.", created);
       }
     } catch (err) {
       // The 422 here is often the destination guard — "that URL resolves to a
@@ -478,37 +491,31 @@ function DeliveryLog({
   onClose: () => void;
   show: (message: string, tone?: "success" | "error") => void;
 }) {
-  const [deliveries, setDeliveries] = useState<WebhookDelivery[]>([]);
-  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
 
-  useEffect(() => {
-    let live = true;
-    void (async () => {
-      try {
-        const res = await webhookApi.deliveries(endpoint.id);
-        if (live) setDeliveries(res.data);
-      } finally {
-        if (live) setLoading(false);
-      }
-    })();
-    return () => {
-      live = false;
-    };
-  }, [endpoint.id]);
+  /*
+    Was a fetch-into-state with a `live` flag guarding against the unmount race
+    (PM-41 § 4.6). The query needs neither: RTK Query owns the subscription and
+    drops the result if nothing is listening, which is the whole class of bug that
+    flag existed to hold off.
+  */
+  const { data: deliveries = [], isLoading: loading } = useWebhookDeliveriesQuery(endpoint.id);
+  const [redeliverWebhook] = useRedeliverWebhookMutation();
 
   const redeliver = async (delivery: WebhookDelivery) => {
     setBusy(delivery.id);
     try {
-      const res = await webhookApi.redeliver(delivery.id);
-      setDeliveries((current) =>
-        current.map((d) => (d.id === delivery.id ? res.data : d))
-      );
+      // The endpoint id travels with the delivery id so the mutation can name
+      // the history it changed — no local splice into `deliveries` any more.
+      const updated = await redeliverWebhook({
+        deliveryId: delivery.id,
+        endpointId: endpoint.id,
+      }).unwrap();
       show(
-        res.data.status === "delivered"
+        updated.status === "delivered"
           ? "Redelivered successfully."
-          : `Still failing: ${res.data.response_status ?? "no response"}.`,
-        res.data.status === "delivered" ? "success" : "error"
+          : `Still failing: ${updated.response_status ?? "no response"}.`,
+        updated.status === "delivered" ? "success" : "error"
       );
     } catch (err) {
       show(extractApiError(err, "Could not redeliver."), "error");

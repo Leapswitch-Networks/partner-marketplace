@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import Badge from "@/components/common/Badge";
 import Button from "@/components/common/Button";
@@ -21,18 +21,22 @@ import {
 } from "@/components/common/columns";
 import { navIcon } from "@/components/dashboard/navIcons";
 import {
-  featureFlagApi,
   type FeatureFlag,
-  type FeatureFlagOptions,
   type FeatureFlagPayload,
   type RoleOption,
   type UserOption,
 } from "@/lib/api/featureFlagApi";
 import { extractApiError } from "@/lib/utils/apiError";
 import useModalState from "@/lib/hooks/useModalState";
-import useResourceList from "@/lib/hooks/useResourceList";
 import useResourceQuery from "@/lib/hooks/useResourceQuery";
-import useRowAction from "@/lib/hooks/useRowAction";
+import {
+  useCreateFeatureFlagMutation,
+  useDeleteFeatureFlagMutation,
+  useFeatureFlagOptionsQuery,
+  useListFeatureFlagsQuery,
+  useToggleFeatureFlagMutation,
+  useUpdateFeatureFlagMutation,
+} from "@/lib/api/endpoints/featureFlagsEndpoints";
 
 const STATE_OPTIONS = [
   { value: "true", label: "Enabled" },
@@ -79,49 +83,61 @@ export default function FeatureFlagsModule() {
     defaultPerPage: 30,
   });
 
-  const list = useResourceList<FeatureFlag>({
-    ready: q.ready,
-    deps: [q.applied, q.sortBy, q.sortOrder, q.page, q.perPage],
-    errorMessage: "Could not load feature flags.",
-    fetch: () =>
-      featureFlagApi
-        .list({
-          search: q.applied.search || undefined,
-          // Tri-state: "" means no filter, so it must not collapse to false.
-          enabled: q.applied.enabled === "" ? undefined : q.applied.enabled === "true",
-          sort_by: q.sortBy,
-          sort_order: q.sortOrder,
-          page: q.page,
-          per_page: q.perPage,
-        })
-        .then((res) => {
-          setCanManage(res.data.can_manage);
-          return res.data;
-        }),
-  });
+  // PM-41 § 4.5. `enabled` is a filter here as well as the thing the toggle
+  // changes, so a patched row could sit in a view it no longer belongs to.
+  const listQuery = useListFeatureFlagsQuery(
+    {
+      search: q.applied.search || undefined,
+      // Tri-state: "" means no filter, so it must not collapse to false.
+      enabled: q.applied.enabled === "" ? undefined : q.applied.enabled === "true",
+      sort_by: q.sortBy,
+      sort_order: q.sortOrder,
+      page: q.page,
+      per_page: q.perPage,
+    },
+    { skip: !q.ready },
+  );
+  const page = listQuery.data;
 
   const modal = useModalState<ModalMode, FeatureFlag>();
 
-  const [canManage, setCanManage] = useState(false);
-  const [options, setOptions] = useState<FeatureFlagOptions>({ roles: [], users: [] });
+  // From the same permission constant the write routes are guarded on, riding
+  // on the list envelope — read off the response rather than copied into state
+  // from inside the fetch callback.
+  const canManage = page?.can_manage ?? false;
 
-  // Targeting pickers, fetched once. Not a `useResourceList` — unpaged,
-  // unfiltered, and a failure must leave the table readable rather than
-  // blocking it.
-  useEffect(() => {
-    featureFlagApi
-      .options()
-      .then((res) => setOptions(res.data))
-      .catch(() => setOptions({ roles: [], users: [] }));
-  }, []);
+  // Targeting pickers: one shared cache entry rather than a fetch on every
+  // mount. The `?? []` fallbacks keep the old rule that a failure here leaves
+  // the table readable rather than blocking it (PM-41 § 4.6).
+  const { data: flagOptions } = useFeatureFlagOptionsQuery();
+  const options = {
+    roles: flagOptions?.roles ?? [],
+    users: flagOptions?.users ?? [],
+  };
 
-  // Per-row write: marks the row busy, patches it from the record the write
-  // returned, and reports through the toast.
-  const { busy, run } = useRowAction<FeatureFlag>({
-    onSuccess: list.patchRow,
-    show,
-    errorFallback: "Could not change the flag.",
-  });
+  const [toggleFlag] = useToggleFeatureFlagMutation();
+  const [deleteFlag] = useDeleteFeatureFlagMutation();
+
+  /*
+    An id, not a boolean. It disables the one row being written rather than the
+    whole table: a boolean would either freeze every row while one writes, or
+    freeze none and let the same row be clicked twice — and a second click on a
+    toggle sends it straight back, which reads as the action having silently
+    failed.
+  */
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const runToggle = async (target: FeatureFlag) => {
+    setBusy(String(target.id));
+    try {
+      await toggleFlag(target.id).unwrap();
+      show(`“${target.name}” ${target.enabled ? "disabled" : "enabled"}.`);
+    } finally {
+      // Deliberately not caught: `ConfirmDialog` renders the rejection in place
+      // and stays open, which is what its `errorFallback` is for.
+      setBusy(null);
+    }
+  };
 
   // --- columns: #, Actions, Status, then data ------------------------------
   const columns = useMemo<Column<FeatureFlag>[]>(
@@ -253,13 +269,9 @@ export default function FeatureFlagsModule() {
         },
       ]}
       columns={columns}
-      rows={list.rows}
+      result={listQuery}
       rowKey={(r) => String(r.id)}
-      loading={list.loading}
-      error={list.error}
-      onRetry={list.refetch}
-      total={list.total}
-      pages={list.pages}
+      errorMessage="Could not load feature flags."
       // No selection: there is no bulk endpoint, and a checkbox column wired to
       // nothing is the failure the module contract was written to stop.
       selectable={false}
@@ -284,8 +296,8 @@ export default function FeatureFlagsModule() {
             const wasEdit = modal.is("edit");
             modal.close();
             if (action === "saved") {
+              // The form's own mutations invalidate the collection.
               show(`Feature flag “${saved!.name}” ${wasEdit ? "updated" : "created"}.`);
-              list.refetch();
             }
           }}
         />
@@ -305,22 +317,13 @@ export default function FeatureFlagsModule() {
           tone={modal.target.enabled ? "danger" : "primary"}
           errorFallback="Could not change the flag."
           /*
-            Delegated to `useRowAction.run` rather than calling the API here.
-            `run` is what sets `busy`, and `busy` is what disables this row's
-            badge and its Enable/Disable menu item — calling the API directly
-            would leave both guards permanently false, which is a control wired
-            to nothing rather than a missing feature.
-
-            `run` reports its own failure through the toast, so `onConfirmed`
-            only has to close.
+            Delegated to `runToggle` rather than calling the mutation here.
+            `runToggle` is what sets `busy`, and `busy` is what disables this
+            row's badge and its Enable/Disable menu item — calling the mutation
+            directly would leave both guards permanently false, which is a
+            control wired to nothing rather than a missing feature.
           */
-          onConfirm={() =>
-            run(
-              String(modal.target!.id),
-              () => featureFlagApi.toggle(modal.target!.id),
-              `“${modal.target!.name}” ${modal.target!.enabled ? "disabled" : "enabled"}.`
-            )
-          }
+          onConfirm={() => runToggle(modal.target!)}
           onConfirmed={modal.close}
           onClose={modal.close}
         >
@@ -353,12 +356,11 @@ export default function FeatureFlagsModule() {
           noun="feature flag"
           name={modal.target.name}
           subtitle={modal.target.key}
-          onConfirm={() => featureFlagApi.remove(modal.target!.id)}
+          onConfirm={() => deleteFlag(modal.target!.id).unwrap()}
           onDeleted={() => {
             const name = modal.target!.name;
             modal.close();
             show(`Feature flag “${name}” deleted.`);
-            list.refetch();
           }}
           onClose={modal.close}
         >
@@ -413,6 +415,8 @@ export function FeatureFlagForm({
   const [userSearch, setUserSearch] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [createFlag] = useCreateFeatureFlagMutation();
+  const [updateFlag] = useUpdateFeatureFlagMutation();
 
   const targetsEveryone = targetRoles.size === 0 && targetUsers.size === 0;
 
@@ -443,10 +447,10 @@ export function FeatureFlagForm({
       target_user_ids: Array.from(targetUsers),
     };
     try {
-      const res = flag
-        ? await featureFlagApi.update(flag.id, payload)
-        : await featureFlagApi.create(payload);
-      onDone?.("saved", res.data);
+      const saved = flag
+        ? await updateFlag({ id: flag.id, data: payload }).unwrap()
+        : await createFlag(payload).unwrap();
+      onDone?.("saved", saved);
     } catch (err) {
       setError(extractApiError(err, "Could not save the feature flag."));
     } finally {

@@ -71,12 +71,7 @@ export default function EnquiriesModule() {
   // status, so the inbox and the unanswered filter are both stale the moment the
   // thread is answered. The mutation's tags refresh this list without the thread
   // page having to know it exists.
-  const {
-    data: page,
-    isFetching,
-    error,
-    refetch,
-  } = useListEnquiriesQuery(
+  const listQuery = useListEnquiriesQuery(
     {
       page: q.page,
       per_page: q.perPage,
@@ -86,6 +81,7 @@ export default function EnquiriesModule() {
     },
     { skip: !q.ready },
   );
+  const page = listQuery.data;
   const rows = page?.items ?? [];
 
   const columns = useMemo<Column<Enquiry>[]>(() => {
@@ -142,7 +138,7 @@ export default function EnquiriesModule() {
         // The number that should be near zero — § 16.2.
         { label: "Not yet answered", value: unanswered, tone: unanswered > 0 ? "danger" : "success" },
       ]}
-      statsLoading={isFetching}
+      statsLoading={listQuery.isFetching}
       query={q}
       filters={[
         {
@@ -164,13 +160,9 @@ export default function EnquiriesModule() {
         },
       ]}
       columns={columns}
-      rows={rows}
+      result={listQuery}
       rowKey={(row) => row.id}
-      loading={isFetching}
-      error={error ? "Could not load enquiries." : null}
-      onRetry={refetch}
-      total={page?.total ?? 0}
-      pages={page?.pages ?? 0}
+      errorMessage="Could not load enquiries."
       rowNoun="enquiry"
       table="vendor"
       emptyTitle="No enquiries yet"
