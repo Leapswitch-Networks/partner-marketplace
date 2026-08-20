@@ -9,7 +9,8 @@ import { axiosBaseQuery } from "@/lib/api/baseQuery";
  *
  * Measured 2026-08-17: 49 frontend files used `useEffect`, and 17 of 20 admin
  * modules fetched on mount. Redux carried authentication and nothing else.
- * `useResourceList` had already collapsed the *boilerplate* — five `useState`s
+ * The hook this replaced (`useResourceList`, deleted 2026-08-20 once the last
+ * module moved off it) had already collapsed the *boilerplate* — five `useState`s
  * and a try/catch per module — but it could not fix what the pattern costs:
  *
  * * **No cache.** Navigating Users → Roles → Users refetches Users. The data was
@@ -34,6 +35,23 @@ import { axiosBaseQuery } from "@/lib/api/baseQuery";
  * ever tips, the swap is contained: components use generated hooks, and the
  * transport is already isolated in `baseQuery.ts`.
  *
+ * ## The two rules the deleted hook encoded, and where they live now
+ *
+ * Worth writing down here, because both are easy to lose and neither is obvious
+ * from RTK Query's own documentation:
+ *
+ * **1. Do not fetch before the filters are restored.** `useResourceQuery` reads
+ * the initial filters out of the query string on mount, so a fetch that fires
+ * first goes out with defaults and is immediately repeated with the real ones —
+ * a wasted round trip and a visible flash of the wrong rows on a deep link.
+ * Every list query therefore passes `{ skip: !q.ready }`.
+ *
+ * **2. A failed refresh must not blank the table.** Showing an empty state on
+ * error reads as "you have no users". RTK Query keeps the previous `data` while
+ * `isFetching` and on failure, so this now falls out of the library rather than
+ * being a rule someone has to remember — which is why `isFetching` and not
+ * `isLoading` is what drives the spinner.
+ *
  * ## Tags are the contract
  *
  * A query declares what it `provides`; a mutation declares what it
@@ -51,6 +69,11 @@ export const api = createApi({
   //: this API with `injectEndpoints`, so they do not each create their own —
   //: two `createApi` calls would mean two caches and two stores' worth of state.
   tagTypes: [
+    // Append-only: the client never writes an activity row, so nothing
+    // invalidates this today. It is declared anyway because the log *is* a
+    // cacheable resource, and a tag that exists is what lets a future writer
+    // refresh it without reaching for `api.util.invalidateTags` from a component.
+    "Activity",
     "ApiConsumer",
     "Credential",
     "DataAccessGrant",

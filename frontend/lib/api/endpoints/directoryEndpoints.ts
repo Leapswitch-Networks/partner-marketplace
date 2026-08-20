@@ -15,7 +15,7 @@ import type { Paginated } from "@/types";
  * ## Why this exists, and why it is only two modules' worth
  *
  * `CORE_EXTRACTION_PLAN.md` phase 4 records PM-41 as the largest open item: 17
- * admin modules fetch on mount through `useResourceList`, which collapsed the
+ * admin modules fetch on mount through a shared hook, which collapsed the
  * boilerplate but could not give them a cache, invalidation or deduplication.
  * The layer was chosen and built (`lib/store/api.ts`, `baseQuery.ts`) and then
  * only the partner modules ever used it.

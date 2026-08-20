@@ -4,59 +4,15 @@ import { useCallback, useState } from "react";
 
 import { extractApiError } from "@/lib/utils/apiError";
 
-/**
- * Runs a per-row write: marks that row busy, applies the returned record, and
- * reports the outcome through the toast.
- *
- * The shape every module had already written by hand — `setBusy(id)`, a
- * try/catch that patches the row on success and shows `extractApiError` on
- * failure, and a `finally` that clears busy.
- *
- * ## Why `busy` is an id and not a boolean
- *
- * It disables the one row being written, not the whole table. A boolean would
- * either freeze every row while one status toggles, or freeze none and let the
- * same row be clicked twice — and the second click on a toggle sends it straight
- * back, which reads as the action having silently failed.
- *
- * ## Usage
- *
- *     const { busy, run } = useRowAction<ManagedUser>({ onSuccess: list.patchRow, show });
- *
- *     run(user.id, () => adminApi.approveUser(user.id), `${user.full_name} approved.`);
- *
- * and in a row action: `disabled: busy === row.id`.
- */
-export function useRowAction<T>({
-  onSuccess,
-  show,
-  errorFallback = "Action failed.",
-}: {
-  /** Given the record the write returned. Normally `list.patchRow`. */
-  onSuccess: (next: T) => void;
-  show: (message: string, tone?: "success" | "error" | "info", details?: string[]) => void;
-  errorFallback?: string;
-}) {
-  const [busy, setBusy] = useState<string | null>(null);
+/*
+  Split out of `useRowAction.ts` on 2026-08-20. That file held two hooks; PM-41
+  § 4.5 retired the per-row one — `invalidatesTags` took over its job of applying
+  the record a write returned — and this one survived on its own merits, so it
+  moved rather than sitting in a file named after a deleted function.
 
-  const run = useCallback(
-    async (id: string, action: () => Promise<{ data: T }>, successMessage: string) => {
-      setBusy(id);
-      try {
-        const res = await action();
-        onSuccess(res.data);
-        show(successMessage);
-      } catch (err) {
-        show(extractApiError(err, errorFallback), "error");
-      } finally {
-        setBusy(null);
-      }
-    },
-    [onSuccess, show, errorFallback]
-  );
-
-  return { busy, run, setBusy };
-}
+  Why it survived the conversion: its value was never the fetching. It is the
+  rule below about partial success, which no cache layer has an opinion about.
+*/
 
 /** What every bulk endpoint answers with. Mirrors the API's bulk response. */
 export interface BulkResult {
@@ -120,4 +76,4 @@ export function useBulkAction({
   return { busy, run };
 }
 
-export default useRowAction;
+export default useBulkAction;

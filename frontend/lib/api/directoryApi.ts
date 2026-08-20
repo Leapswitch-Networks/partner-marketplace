@@ -92,6 +92,15 @@ export interface Enquiry {
   timeline?: string | null;
   status: EnquiryStatus;
   source: "PROFILE" | "LISTING";
+  /**
+   * When the recipient partner first opened it — null until they do.
+   *
+   * Never set by a staff read: staff hold `enquiry-view` for oversight, and
+   * stamping on their reads would make this measure staff browsing rather than
+   * partner responsiveness. Paired with `first_responded_at`, these are the two
+   * timestamps the trust measures and § 9's ranking are computed from.
+   */
+  first_viewed_at: string | null;
   first_responded_at: string | null;
   created_at: string;
   messages?: EnquiryMessage[];
@@ -180,8 +189,47 @@ export const deleteListing = async (id: string): Promise<void> => {
 
 // --- Moderation (staff only) -------------------------------------------------
 
-export const reviewQueue = async (): Promise<Listing[]> =>
-  (await axiosInstance.get<Listing[]>("/moderation/queue")).data;
+/**
+ * A partner's usage against what their tier allows.
+ *
+ * `max_listings` and `remaining` are both null when the allowance is unlimited,
+ * which is why `unlimited` is sent explicitly rather than left to be inferred.
+ * `remaining` is never negative: a partner moved to a smaller tier can be over
+ * their allowance, and "-2 remaining" is not something to render.
+ */
+export interface Entitlement {
+  /** Null when the partner is on no tier at all — which means unlimited. */
+  tier: string | null;
+  published: number;
+  max_listings: number | null;
+  unlimited: boolean;
+  remaining: number | null;
+  at_limit: boolean;
+}
+
+/**
+ * A moderation queue row — a listing plus whether approving it would work.
+ *
+ * `blockers` is empty when the listing can be published. When it is not, the
+ * strings are ready to render: they name the organisation and, for an allowance
+ * refusal, the tier and both numbers. They are the **same** strings the API
+ * would raise on a refused approval, so the screen and the error cannot
+ * disagree about why.
+ *
+ * The reviewer needs this *before* opening a listing. Publishing is refused for
+ * a suspended or unlisted organisation, or one at its tier allowance
+ * (`PARTNER_DIRECTORY_PLAN.md` § 19.9) — and meeting that only after reading the
+ * listing and clicking Approve spends the expensive half of the decision to
+ * discover the cheap half was impossible.
+ */
+export interface ModerationQueueEntry extends Listing {
+  partner_name: string;
+  blockers: string[];
+  entitlement: Entitlement;
+}
+
+export const reviewQueue = async (): Promise<ModerationQueueEntry[]> =>
+  (await axiosInstance.get<ModerationQueueEntry[]>("/moderation/queue")).data;
 
 export const approveListing = async (id: string): Promise<Listing> =>
   (await axiosInstance.post<Listing>(`/moderation/listings/${id}/approve`)).data;
