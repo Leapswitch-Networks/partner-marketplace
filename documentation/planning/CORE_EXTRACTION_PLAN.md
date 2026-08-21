@@ -337,6 +337,13 @@ The only place in this codebase where a mistake is a data breach rather than a b
 
 ### Phase 4 — PM-41: the frontend data layer
 
+> **✅ Phase 4 is complete as of 2026-08-21.** Every fetch-on-mount screen now reads through the
+> cache — 23 components across nine batches, each verified with the browser pass before the next
+> started. One documented exception (`AcceptInvitationClient`, an invitation token must not become a
+> cache key). The full account, including three false positives my own detector produced and a wrong
+> justification I committed and retracted, is in `TECH_DEBT.md` under PM-41.
+
+
 > **Status 2026-08-20: Phase 4 is closed.** 4.1–4.7 are all done. Every list module is on the layer,
 > and `useResourceList` and `useRowAction` have been **deleted** — the live half of the latter,
 > `useBulkAction`, moved to its own file. What remains is **4.3** (type the endpoints against the

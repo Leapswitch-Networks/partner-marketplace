@@ -93,7 +93,7 @@ an ordering that only reads correctly together.
 | PM-38 | 🟠 | No transaction boundary: 49 commits, a session that never rolls back | ✅ closed 2026-08-06 |
 | PM-39 | 🟠 | Nothing mechanical verifies anything — no tests, no CI | ⏳ floor laid 2026-08-06 |
 | PM-40 | 🟠 | ~~56 routes are unversioned~~ — `API_PREFIX = "/api/v1"` | ✅ closed 2026-08-06 |
-| PM-41 | 🟠 | The frontend has no data layer and does no server-side fetching | ⏳ partial — RTK Query wired, only the partner modules consume it |
+| PM-41 | ✅ | ~~The frontend has no data layer~~ — **the fetch-on-mount sweep finished 2026-08-21**: every screen reads through the cache, one documented exception | Frontend |
 | PM-42 | 🟡 | ~~The API contract is hand-copied into TypeScript~~ — generated + drift-asserted | ✅ closed 2026-08-06 |
 | PM-43 | 🟡 | ~~Two purge functions exist and nothing runs them~~ — `worker.py` + `db/maintenance.py` | ✅ closed 2026-08-06 |
 | PM-44 | 🟡 | Three pieces of state live in process memory | Open — deferred to the production topology |
@@ -2145,3 +2145,77 @@ environments disagreeing about what the software needs, and the environment that
 matters is the one you did not configure by hand. Worth re-reading § 4 of
 `AGENTS.md` with that in mind: it lists the commands, and it cannot tell you that
 the database they run against is not the one CI has.
+
+---
+
+## PM-41 — the frontend fetch-on-mount sweep ✅ COMPLETE 2026-08-21
+
+The data layer was built on 2026-08-18 and then only the partner modules used it.
+This is the record of finishing it, because "RTK Query is wired" and "the
+application reads through it" were nine days apart and the register said the first
+while meaning the second.
+
+### What moved
+
+**Every component that fetched on mount.** Measured at the start of the sweep as 26
+files; the true figure was 23 — three were false positives my own detector produced
+and they are worth naming, because the same measurement will be run again:
+
+* `SettingRowEditor` matched on the *word* `useEffect` inside a comment explaining
+  why it does not use one. It is presentational and takes its `save` as a prop.
+* `WelcomeBanner`, `ConfirmDialog` and `DeleteDialog` matched a client name inside a
+  docstring — `ConfirmDialog`'s is a usage example.
+
+**Grep for a call, not for an import or a word.** An import can be type-only and a
+mention can be prose.
+
+### Where the value actually was
+
+Not the boilerplate — the deleted `useResourceList` had already collapsed that. It
+was in the four things a component cannot do for itself:
+
+| | Found in |
+|---|---|
+| A write refreshing screens the writer does not know about | `CloneRoleModal` depended on its opener reloading; `RoleMatrix` reloaded only itself while the roles table showed a per-role permission count; a recycle-bin restore refreshed the bin and not the list the record returned to |
+| One request where there were several | `/partners/me` was fetched by three screens mounted together; the role picker by three; assistant availability by two |
+| Deduplication across screens | Opening a row from a table it was just listed in |
+| Not defending against races by hand | `GlobalSearch` kept a sequence counter to discard out-of-order responses; keying the query on the term makes that structural. Six components carried their own `live`/`cancelled`/`alive` unmount guards |
+
+### The pattern that came up in five separate files
+
+Loading a record and copying it into local state inside an effect —
+`react-hooks/set-state-in-effect`. The rule is right for a reason none of these
+components could hit before: **the cache now refetches after any write**, including
+one made by somebody else, so a copy is silently overwritten mid-typing. Derived
+instead, with "untouched follows the server, touched holds its own":
+`ListingForm`, `RoleForm`, `OrganisationModule`, `PartnerForm` (via RHF `reset`),
+`GlobalSearch`.
+
+### The one deliberate exception
+
+`AcceptInvitationClient` previews an invitation by token. A cache key is the query
+argument, so caching it holds a single-use credential in the store after the
+invitation is consumed — and the page is a dead end with no second reader. Reason
+recorded at the call site.
+
+### A wrong justification I committed and had to retract
+
+`ab0a882` kept `uploadBrandAsset` direct, claiming a `File` in a mutation argument
+would trip the store's `serializableCheck`, and instructed the next reader not to
+change it. **False.** RTK's default `ignoredActionPaths` is
+`["meta.arg", "meta.baseQueryMeta"]` — exactly where RTK Query puts mutation
+arguments. `usersEndpoints.sendUserEmail` had been built on that all along.
+Corrected in `ffe391f`.
+
+Two lessons, and the second is the one that cost the time: **check the installed
+package before writing a confident mechanism in a comment** — one grep would have
+settled it — and **look for a precedent in the repository before concluding
+something cannot be done here.**
+
+### What this did not fix
+
+Cache *keys* are right and invalidation is right; nothing here re-examined whether
+each screen asks for the right data. `TeamModule` still asks for `per_page: 100`
+and renders all of it with no paging, so an organisation with more than a hundred
+members silently sees a hundred — noted at the call site and unfixed, because it
+needs the screen to paginate rather than a different fetch.
