@@ -6,6 +6,45 @@
 > Update this file as part of the same change as the code. A task that isn't here is invisible to the
 > next person.
 
+## August 21, 2026 — The automated checks were failing for reasons that had nothing to do with the code
+
+**The only automated check this project has had been red for days, which means it had stopped being
+able to tell anyone that something real was broken.** Found immediately after pushing the morning's
+work: the two commits before mine had failed too. Nothing was wrong with the product. The checks were
+being run against a database that had been created and then left completely empty.
+
+**Five tests were failing because they needed reference data that nobody had loaded.** Not because
+they were wrong — one needed the list of integration providers to exist before it could check that the
+credential loader never prints a secret; one needed at least one account to exist before it could
+prove a password column comes back hidden; one needed the Admin role to exist. On a developer's
+machine all three pass, because a developer's database was set up properly months ago. That gap
+between "works on my machine" and "works where it is checked" is the entire failure.
+
+**A further eighty-six tests were being skipped rather than run.** The local run executes 1003 checks;
+the automated one was executing 912 and quietly stepping over the rest. So roughly one test in twelve
+existed only on the machine of whoever wrote it. The checks now load the three sets of reference data
+the setup guide already calls required, and the count went to 995 with none failing.
+
+**The production build had never been able to run there at all.** Two of the public pages work out
+which addresses exist by asking the live system at build time — the company profile pages and the
+service category pages. There is no running system during an automated check, so the build died every
+time. That check exists specifically because the build was once broken for an unknown length of time
+with nobody noticing, so it failing permanently is a particularly unhelpful state.
+
+**It now builds without a running system, and refuses to do so quietly.** The important detail is what
+was *not* changed: when a page cannot reach the system while somebody is actually looking at it, it
+still fails visibly, because a page that silently shows nothing is how a broken deployment looks
+healthy. What changed is only the build-time question of which addresses exist. And it is opt-in: a
+build without that switch still fails, loudly and with the reason, because these pages are configured
+so that an address which was not listed at build time returns a hard "not found" — a build that listed
+nothing would produce a directory that compiles perfectly and serves nothing at all. The switch is set
+only where the result is thrown away.
+
+**Verified the way the failure demanded, not the convenient way.** The usual local checks cannot see
+any of this, because they run against a database that already has everything. So a throwaway database
+was created from nothing, migrated, loaded with exactly what the automated checks now load, and the
+full suite run against it. Then the throwaway was deleted.
+
 ## August 21, 2026 — A partner can only be edited by the people it belongs to, and the dashboard finally counts properly
 
 **Editing another company's record is now refused by the code, not by a configuration.** The

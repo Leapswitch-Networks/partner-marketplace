@@ -9,6 +9,7 @@ import PublicButton from "@/components/public/PublicButton";
 import SectionSlab from "@/components/public/SectionSlab";
 import VerificationBadge from "@/components/public/VerificationBadge";
 import { fetchAllPartnerSlugs, fetchPartner } from "@/lib/api/public";
+import { staticParamsOrEmpty } from "@/lib/public/buildParams";
 import { VERIFICATION_LEVELS } from "@/lib/public/siteContent";
 
 /**
@@ -45,8 +46,15 @@ import { VERIFICATION_LEVELS } from "@/lib/public/siteContent";
 export const dynamicParams = false;
 
 export async function generateStaticParams() {
-  const slugs = await fetchAllPartnerSlugs();
-  return slugs.map((slug) => ({ slug }));
+  // Wrapped because this runs at BUILD time against the live API, so `npm run
+  // build` needs a reachable backend. Without the wrapper CI's build job failed
+  // on `TypeError: fetch failed` and had been red long enough to stop being read.
+  // The wrapper does not soften the failure — it rethrows with the reason unless
+  // BUILD_WITHOUT_API=1 is set. See `lib/public/buildParams.ts`.
+  return staticParamsOrEmpty("/partners/[slug]", async () => {
+    const slugs = await fetchAllPartnerSlugs();
+    return slugs.map((slug) => ({ slug }));
+  });
 }
 
 export async function generateMetadata({

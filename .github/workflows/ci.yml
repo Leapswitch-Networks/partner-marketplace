@@ -88,6 +88,35 @@ jobs:
           APP_ENV: development
         run: alembic upgrade head
 
+      # Added 2026-08-21. **CI migrated and then seeded nothing**, so every test
+      # needing reference data either skipped or failed: the run was 912 passed /
+      # 91 skipped where a seeded install is 1003 passed / 5 skipped. Five of those
+      # skips were outright failures — three in `test_seed_credentials` (the
+      # credential seeder exits when no providers exist), one AI-redaction test
+      # that needs at least one user row, and one invitation test that needs the
+      # Admin role to exist. So the suite had been red on main for days for purely
+      # environmental reasons, which is the state in which nobody reads it.
+      #
+      # These are the three seeds `README.md` § Seeding calls required or strongly
+      # recommended, in its order. All are idempotent. `seed_api_providers` carries
+      # **labels and placeholders only** — no secrets — which is what makes it safe
+      # in a public repository's CI.
+      #
+      # ROOT_PASSWORD is supplied because `seed_rbac` otherwise generates one and
+      # prints it; the value below is deliberately an obvious non-credential on a
+      # database that exists for ninety seconds. Same reasoning as SECRET_KEY above.
+      - name: Seed reference data
+        env:
+          DATABASE_URL: postgresql+psycopg2://ci:ci@localhost:5432/ci
+          SECRET_KEY: ci-only-key-with-enough-distinct-characters-8vRqM3
+          APP_ENV: development
+          ROOT_PASSWORD: ci-only-throwaway-not-a-real-credential-Qh4Xm2
+          ROOT_EMAIL: ci-root@example.com
+        run: |
+          python -m app.db.seed_rbac
+          python -m app.db.seed_partner_tiers
+          python -m app.db.seed_api_providers
+
       - name: Test
         env:
           DATABASE_URL: postgresql+psycopg2://ci:ci@localhost:5432/ci
@@ -178,3 +207,20 @@ jobs:
         run: npm run build
         env:
           NEXT_PUBLIC_API_URL: http://localhost:8002
+          # `/partners/[slug]` and `/services/[category]` enumerate their pages in
+          # `generateStaticParams`, which runs at build time against the live API —
+          # so a build needs a reachable backend, and this job has none. That is why
+          # this step failed with `TypeError: fetch failed` while every other check
+          # passed.
+          #
+          # The flag makes those two routes enumerate nothing and say so loudly on
+          # stderr; without it the failure is rethrown with the reason, which is the
+          # right outcome for a build anyone intends to deploy. See
+          # `lib/public/buildParams.ts`.
+          #
+          # ⚠️ The artefact this produces is NOT deployable — every partner and
+          # category page in it is a 404. Its only job is proving the project
+          # compiles, which is what PM-24 was about. Standing a backend up in this
+          # job would let it check more; that is a bigger change than turning the
+          # check back on.
+          BUILD_WITHOUT_API: "1"

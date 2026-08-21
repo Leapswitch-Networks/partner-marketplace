@@ -8,6 +8,7 @@ import PartnerCard from "@/components/public/PartnerCard";
 import PublicButton from "@/components/public/PublicButton";
 import SectionSlab from "@/components/public/SectionSlab";
 import { fetchCategories, fetchPartners } from "@/lib/api/public";
+import { staticParamsOrEmpty } from "@/lib/public/buildParams";
 
 /**
  * `/services/[category]` — the page § 20.4 calls "the page that ranks".
@@ -32,11 +33,15 @@ import { fetchCategories, fetchPartners } from "@/lib/api/public";
 export const dynamicParams = false;
 
 export async function generateStaticParams() {
-  const categories = await fetchCategories();
-  return categories.flatMap((c) => [
-    { category: c.slug },
-    ...c.children.map((child) => ({ category: child.slug })),
-  ]);
+  // Build-time, against the live API — see `lib/public/buildParams.ts` and the
+  // note on the same call in `/partners/[slug]`.
+  return staticParamsOrEmpty("/services/[category]", async () => {
+    const categories = await fetchCategories();
+    return categories.flatMap((c) => [
+      { category: c.slug },
+      ...c.children.map((child) => ({ category: child.slug })),
+    ]);
+  });
 }
 
 export async function generateMetadata({

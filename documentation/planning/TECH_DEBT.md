@@ -102,6 +102,7 @@ an ordering that only reads correctly together.
 | [PM-47](#pm-47--the-enquiry-state-machine-is-half-built-and-the-trust-metric-pays-for-it) | 🟠 | No `SPAM` state, so junk enquiries count against a partner's response rate for ever | ✅ **RESOLVED 2026-08-21** — enum, transition table, spam excluded from the metric, and the UI half |
 | [PM-48](#pm-48--the-moderation-queue-returned-a-500-for-every-non-empty-queue) | 🔴 | `GET /moderation/queue` 500'd whenever anything was waiting — required non-column fields were assigned *after* validation | ✅ **found and RESOLVED 2026-08-21**; the empty-queue early return hid it, and the browser pass agreed |
 | [PM-49](#pm-49--the-partner-dashboard-was-unreachable-for-everybody) | 🔴 | `organisation_id` was declared on the identity response with a default and never put in the payload, so it was `null` for everyone — and the partner dashboard keys off it alone | ✅ **found and RESOLVED 2026-08-21** by reading a screenshot, not a log |
+| [PM-50](#pm-50--ci-had-been-red-for-environmental-reasons-so-nobody-read-it) | 🟠 | CI migrated and seeded nothing, so 5 tests failed environmentally and 86 more skipped; the frontend build needed an API it had no way to reach | ✅ **RESOLVED 2026-08-21** — 912 passed/91 skipped/5 failed becomes 995 passed/13 skipped/0 failed |
 
 > **This table was wrong for eleven days and that is worth a line.** PM-40, PM-42 and PM-43 were
 > closed in `CORE_HARDENING_PLAN.md` on 2026-08-06 and still read "Open" here on 2026-08-17, found by
@@ -2049,3 +2050,82 @@ evidence. Look at the picture.
   re-killing the dashboard.
 
 Verified over HTTP: both `/auth/login` and `/auth/me` now return the id.
+
+---
+
+## PM-50 — CI had been red for environmental reasons, so nobody read it ✅ RESOLVED
+
+**Found 2026-08-21** immediately after pushing, by looking at why the previous two
+commits on `main` were also red. Severity 🟠: nothing was broken in the product,
+but the only automated check on the repository had been failing for days, which
+means it had stopped being able to report that anything *else* was broken.
+
+### Two independent causes
+
+**1. CI migrated the database and seeded nothing.**
+
+```yaml
+- name: Migrate the test database
+  run: alembic upgrade head
+- name: Test
+  run: pytest              # ← against an empty schema
+```
+
+Five tests failed for want of reference data, not for want of correctness:
+
+| Test | Wanted |
+|---|---|
+| `test_seed_credentials` ×3 | provider rows — the credential seeder `SystemExit`s without them |
+| `test_ai_safety` redaction | at least one `users` row to prove a column comes back redacted |
+| `test_route_enforcement` invitation-outranking `[Admin]` | the `Admin` role to exist |
+
+And **86 more skipped** rather than ran: the local gate reported 1003 passed / 5
+skipped where CI reported 912 passed / 91 skipped. So roughly 8% of the suite was
+not being executed anywhere except a developer's machine, which is the half of
+PM-11 that a CI file alone does not discharge.
+
+Fixed by seeding what `README.md` § Seeding calls required: `seed_rbac`,
+`seed_partner_tiers`, `seed_api_providers`. All idempotent; the provider seed
+carries labels and placeholders only, no secrets, which is what makes it safe in a
+public repository.
+
+**2. The frontend build needed an API it had no way to reach.**
+
+`/partners/[slug]` and `/services/[category]` enumerate their pages in
+`generateStaticParams`, which runs at build time against the live API. CI has no
+backend, so `next build` died on `TypeError: fetch failed` — the check PM-24
+existed to restore had therefore been failing since the directory pages were added.
+
+Fixed with `lib/public/buildParams.ts`, and the design of that fix is the part
+worth reading:
+
+* It wraps **only** `generateStaticParams`, never a data fetcher.
+  `lib/api/public.ts` promises that a page fails visibly when the backend is down,
+  and `DIRECTORY_BUILD_PUNCHLIST` 6.2 tests it. Page *rendering* still throws.
+* Without `BUILD_WITHOUT_API=1` it **rethrows**, with the route name and the cause
+  attached. That matters because these routes set `dynamicParams = false`: a build
+  that enumerates nothing serves a hard 404 for every partner page. A silent `[]`
+  would turn a missing backend into a directory that builds cleanly and serves
+  nothing, which is strictly worse than a failed build.
+* CI sets the flag and discards the artefact. **A build produced with it is not
+  deployable** and says so on stderr.
+
+### Verified against a fresh database, not the dev one
+
+The local gate could not see any of this — a seeded dev database makes all five
+tests pass. So the CI path was reproduced: a throwaway role and database, migrate,
+the three seeds, then `pytest`. **995 passed, 13 skipped, 0 failed.** The
+remaining skips are honest ones that name what they want (`test_data_access` needs
+a RootUser plus two other active accounts, which `seed_users` provides and which is
+gitignored because it holds real addresses).
+
+The probe role and database were dropped afterwards; only `postgres` and the dev
+database remain.
+
+### The generalisable point
+
+A green local gate and a red CI is not "CI being fussy" — it is the two
+environments disagreeing about what the software needs, and the environment that
+matters is the one you did not configure by hand. Worth re-reading § 4 of
+`AGENTS.md` with that in mind: it lists the commands, and it cannot tell you that
+the database they run against is not the one CI has.
