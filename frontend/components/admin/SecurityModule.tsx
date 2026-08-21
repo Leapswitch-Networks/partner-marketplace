@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import Badge from "@/components/common/Badge";
 import { Card, CardContent, CardHeader } from "@/components/common/Card";
@@ -9,7 +9,11 @@ import Skeleton from "@/components/common/Skeleton";
 import Toast, { useToast } from "@/components/common/Toast";
 import SettingRowEditor from "@/components/admin/SettingRowEditor";
 import { navIcon } from "@/components/dashboard/navIcons";
-import securityApi, { type SecurityAuditRow } from "@/lib/api/securityApi";
+import type { SecurityAuditRow } from "@/lib/api/securityApi";
+import {
+  useSecurityOverviewQuery,
+  useUpdateSecuritySettingMutation,
+} from "@/lib/api/endpoints/settingsEndpoints";
 import type { Setting } from "@/lib/api/configurationApi";
 import { extractApiError } from "@/lib/utils/apiError";
 import { formatDateTime } from "@/lib/utils/format";
@@ -44,43 +48,29 @@ const ACTIVITY_TAB = "Recent activity";
 export default function SecurityModule() {
   const { toasts, show, dismiss } = useToast();
 
-  const [items, setItems] = useState<Setting[]>([]);
-  const [audit, setAudit] = useState<SecurityAuditRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [tab, setTab] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await securityApi.overview();
-      setItems(res.data.items);
-      setAudit(res.data.audit);
-    } catch (err) {
-      setError(extractApiError(err, "Could not load security settings."));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // Converted 2026-08-21.
+  //
+  // The old version patched the saved row into a local array and deliberately did
+  // NOT refetch, on the grounds that the audit panel is a point-in-time read and a
+  // refetch would fight the row editor's optimistic update. Both halves of that
+  // have changed: `SettingRowEditor` follows `setting.value` when it moves, so a
+  // refetch is what it expects rather than something it fights — and refreshing
+  // the audit is the *better* answer, because the change just made is a
+  // security-relevant event and belongs in the list of them.
+  //
+  // The controls and the audit arrive in one request because the page is useless
+  // with either half missing, which is unchanged.
+  const { data, isFetching, error: fetchError, refetch: load } = useSecurityOverviewQuery();
+  const items = useMemo(() => data?.items ?? [], [data]);
+  const audit = data?.audit ?? [];
+  const error = fetchError
+    ? extractApiError(fetchError, "Could not load security settings.")
+    : null;
+  const loading = isFetching && items.length === 0;
 
-  useEffect(() => {
-    // Handed to a callback rather than called in the body. `load` sets state,
-    // and calling it directly here runs those updates inside the effect's own
-    // synchronous phase — a second render pass for values React could have had
-    // in the first, which is what `react-hooks/set-state-in-effect` is for. One
-    // microtask's remove makes them ordinary updates, and nothing else changes:
-    // the fetch still starts on mount and the retry path still calls `load`.
-    void Promise.resolve().then(load);
-  }, [load]);
-
-  const patch = useCallback((next: Setting) => {
-    setItems((prev) => prev.map((r) => (r.id === next.id ? next : r)));
-    // The audit panel is a snapshot taken with the controls, so a change made on
-    // this screen is not in it. Refetching the whole overview after every toggle
-    // would fight the row editor's own optimistic update; instead the panel is
-    // honest about being a point-in-time read — see its footnote.
-  }, []);
+  const [updateSecuritySetting] = useUpdateSecuritySettingMutation();
 
   /** Groups in the server's order — `group → label` is already sorted. */
   const groups = useMemo(() => {
@@ -156,8 +146,7 @@ export default function SecurityModule() {
                       <SettingRowEditor
                         key={setting.id}
                         setting={setting}
-                        save={async (id, value) => (await securityApi.update(id, value)).data}
-                        onSaved={patch}
+                        save={(id, value) => updateSecuritySetting({ id, value }).unwrap()}
                         onError={(message) => show(message, "error")}
                       />
                     ))}

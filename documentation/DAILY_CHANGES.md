@@ -6,6 +6,59 @@
 > Update this file as part of the same change as the code. A task that isn't here is invisible to the
 > next person.
 
+## August 21, 2026 — Settings and Security read the same rows, and now stay in step
+
+**Two screens edit the same table through different addresses.** Configuration serves the whole
+settings registry; Security serves the security rows plus the audit trail that belongs with them. They
+are separate addresses because the security screen needs the audit and the other does not — but they
+read the *same records*. Until now a change made on one left the other showing the old value, with
+nothing on screen to say which of the two was lying. They now share one cache, so either screen
+refreshes when the other writes.
+
+**A saved value is now the value the server stored, not the value that was typed.** Both screens used to
+splice the response into their own copy of the row. The difference matters more here than in most
+places: the API validates each setting against its own declared type and can adjust what it was given,
+so displaying the typed value assumes the server agreed with it.
+
+**The security audit now includes the change you just made.** It previously did not, deliberately — the
+panel was treated as a point-in-time snapshot to avoid a refresh interfering with the editor. Both
+halves of that reasoning have since stopped applying, and a change to a security control is itself a
+security-relevant event, so it belongs in the list of them.
+
+**One screen turned out to need no work at all.** The row editor shared by both was on the list of
+things to convert because of an import — but it takes its save function as an argument and fetches
+nothing. Checked rather than assumed; the only change it needed was that telling the parent about a
+saved row is now optional, because a parent reading through the shared cache has nothing to do with it.
+
+## August 21, 2026 — The partner's own screens share one copy of their record, and two of them were never being checked
+
+**Your Organisation, Logo & Banner, and Your Team all read the same record and each used to fetch it
+separately.** Three requests for one thing on every visit. There is one copy now, so moving between
+those three screens costs nothing, and editing the organisation on one of them updates the others —
+including the case that used to be silently wrong: a member of staff editing the same company through
+the admin screens left these three showing the old details until each was reloaded.
+
+**The profile form no longer loses what you have typed.** It used to copy the loaded record into the
+form. Now that the record refreshes itself after any change to it — including a change made by somebody
+else — a copy would be quietly overwritten mid-sentence. The fields follow the server until you touch
+them, and hold your version after that.
+
+**One upload deliberately did not move, and the reason is written next to it.** Sending an image file
+through the shared data layer would trip a development-time safety check that this project keeps on
+purpose, and switching that check off for one upload is a bad trade. So the logo and banner upload
+still goes direct and refreshes the record afterwards. It is the only place in the application that
+does this, and the comment explains why — otherwise the next person to read it would reasonably tidy it
+into line with everything else and reintroduce the warning.
+
+**Two of these screens had never been opened by the automated pass.** Only the branding one was in its
+list. That is the third time this week the same gap has turned up: a screen nobody checks cannot fail,
+so a green result says nothing about it.
+
+**One thing found and left alone, deliberately.** The team screen asks for at most a hundred people and
+shows all of them with no paging, so a company with more than a hundred staff would silently see a
+hundred. Fixing it properly means adding paging to that screen, which is a change to what it does
+rather than to how it fetches. Recorded rather than quietly carried across.
+
 ## August 21, 2026 — The Operations screens joined the shared cache, and a health check is deliberately never cached
 
 **Four more screens converted**: system health, API documentation, background jobs and the recycle bin.
