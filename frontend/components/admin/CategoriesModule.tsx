@@ -1,19 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import PageHeading, { headingClasses } from "@/components/common/PageHeading";
 import Button from "@/components/common/Button";
 import Input from "@/components/common/Input";
 import Textarea from "@/components/common/Textarea";
 import Toast, { useToast } from "@/components/common/Toast";
+import type { Category } from "@/lib/api/directoryApi";
 import {
-  createCategory,
-  deleteCategory,
-  listCategories,
-  updateCategory,
-  type Category,
-} from "@/lib/api/directoryApi";
+  useCreateCategoryMutation,
+  useDeleteCategoryMutation,
+  useListCategoriesQuery,
+  useUpdateCategoryMutation,
+} from "@/lib/api/endpoints/directoryEndpoints";
 import { extractApiError } from "@/lib/utils/apiError";
 import { usePermissions } from "@/lib/hooks/usePermissions";
 
@@ -45,57 +45,61 @@ import { usePermissions } from "@/lib/hooks/usePermissions";
  * A category's number is what decides whether it earns a public page. Showing it
  * here is how a staff member can tell why something is not appearing without
  * reading the plan.
+ *
+ * ## One cache, shared with every picker — converted 2026-08-21
+ *
+ * This screen and the listing form and the moderation queue all need the category
+ * list, and each used to fetch its own copy on mount. They now read one cache
+ * entry, and the mutations here invalidate it — so editing a category updates the
+ * pickers on every other screen with nothing here knowing they exist.
+ *
+ * `includeInactive: true` is a distinct cache key from the public picker's call,
+ * which is what makes that sharing safe: a hidden category must appear here and
+ * must not appear in a partner's dropdown.
  */
 export default function CategoriesModule() {
   const { toasts, show, dismiss } = useToast();
   const { can } = usePermissions();
   const canManage = can("category-manage");
 
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-
   const [name, setName] = useState("");
   const [parentId, setParentId] = useState<number | "">("");
   const [description, setDescription] = useState("");
 
-  const load = () =>
-    listCategories(true)
-      .then(setCategories)
-      .catch((e) => show(extractApiError(e, "Could not load categories."), "error"))
-      .finally(() => setLoading(false));
+  const {
+    data: categories = [],
+    isFetching,
+    isError,
+  } = useListCategoriesQuery({ includeInactive: true });
 
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // No `load()` after any of these three. Each invalidates `Category`/LIST, which
+  // the query above provides — the table and every picker in the app refresh
+  // themselves, and there is no call site left to forget.
+  const [create, { isLoading: creating }] = useCreateCategoryMutation();
+  const [update] = useUpdateCategoryMutation();
+  const [remove] = useDeleteCategoryMutation();
 
   const onCreate = async () => {
     if (name.trim().length < 2) return;
-    setSaving(true);
     try {
-      await createCategory({
+      await create({
         name: name.trim(),
         parent_id: parentId === "" ? null : Number(parentId),
         description: description.trim() || null,
-      });
+      }).unwrap();
       setName("");
       setDescription("");
       setParentId("");
       show("Category created.");
-      await load();
     } catch (e) {
       show(extractApiError(e, "Could not create the category."), "error");
-    } finally {
-      setSaving(false);
     }
   };
 
   const onToggleActive = async (category: Category) => {
     try {
-      await updateCategory(category.id, { is_active: !category.is_active });
+      await update({ id: category.id, data: { is_active: !category.is_active } }).unwrap();
       show(category.is_active ? `${category.name} hidden.` : `${category.name} is live.`);
-      await load();
     } catch (e) {
       show(extractApiError(e, "Could not change the category."), "error");
     }
@@ -103,9 +107,8 @@ export default function CategoriesModule() {
 
   const onDelete = async (category: Category) => {
     try {
-      await deleteCategory(category.id);
+      await remove(category.id).unwrap();
       show(`${category.name} deleted.`);
-      await load();
     } catch (e) {
       // The API's refusal is a sentence explaining what still points at it —
       // showing it verbatim is more useful than anything this page could invent.
@@ -116,7 +119,16 @@ export default function CategoriesModule() {
   const parents = categories.filter((c) => c.parent_id === null);
   const childrenOf = (id: number) => categories.filter((c) => c.parent_id === id);
 
-  if (loading) {
+  // `isFetching && empty`, so a refetch after a write never blanks the table —
+  // the rows stay on screen while the new copy arrives.
+  if (isError && categories.length === 0) {
+    return (
+      <p className="p-6 text-sm text-tone-danger">
+        Could not load categories. Reload the page to try again.
+      </p>
+    );
+  }
+  if (isFetching && categories.length === 0) {
     return <p className="p-6 text-sm text-ink-muted dark:text-night-muted">Loading…</p>;
   }
 
@@ -166,7 +178,7 @@ export default function CategoriesModule() {
             />
           </div>
           <div className="mt-4">
-            <Button onClick={onCreate} loading={saving} disabled={name.trim().length < 2}>
+            <Button onClick={onCreate} loading={creating} disabled={name.trim().length < 2}>
               Add category
             </Button>
           </div>

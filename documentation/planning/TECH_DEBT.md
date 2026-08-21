@@ -64,8 +64,8 @@ since 2026-07-31 — only the documentation was wrong, and wrong in a way that b
 | [PM-19](#pm-19--no-error-boundaries-or-route-suspense--resolved) | ✅ | ~~No error boundaries or route suspense~~ | Frontend |
 | [PM-20](#pm-20--brand-colour-hardcoded-in-components--re-scoped) | ✅ | ~~Brand colour hardcoded in 242 places across 37 files~~ — all migrated to tokens 2026-08-05 | UI |
 | [PM-21](#pm-21--stale-product-naming-throughout--mostly-resolved) | ✅ | ~~Stale product naming throughout~~ (2 items deferred) | Housekeeping |
-| [PM-22](#pm-22--unused-tailwind-v4-dependency) | ⚪ | Unused Tailwind v4 dependency | Frontend |
-| [PM-23](#pm-23--two-dead-virtualenvs-in-the-tree) | ⚪ | Two dead virtualenvs in the tree | Housekeeping |
+| [PM-22](#pm-22--unused-tailwind-v4-dependency) | ✅ | ~~Unused Tailwind v4 dependency~~ — **removed 2026-08-21** | Frontend |
+| [PM-23](#pm-23--two-dead-virtualenvs-in-the-tree) | ✅ | ~~Two dead virtualenvs~~ — **already gone; item was stale**, verified 2026-08-21 | Housekeeping |
 | [PM-24](#pm-24--production-build-failed-on-a-type-error--resolved) | ✅ | ~~Production build failed on a type error~~ | Build |
 | [PM-25](#pm-25--npm-ci-fails-react-19-against-next-14s-peer-range--resolved) | ✅ | ~~`npm ci` fails — React 19 against Next 14's peer range~~ | Build |
 | [PM-26](#pm-26--no-http-rate-limiting-successor-to-pm-8--resolved) | ✅ | ~~No HTTP rate limiting~~ | Auth |
@@ -98,8 +98,10 @@ an ordering that only reads correctly together.
 | PM-43 | 🟡 | ~~Two purge functions exist and nothing runs them~~ — `worker.py` + `db/maintenance.py` | ✅ closed 2026-08-06 |
 | PM-44 | 🟡 | Three pieces of state live in process memory | Open — deferred to the production topology |
 | PM-45 | 🟡 | Model/database drift — `--autogenerate` proposed 80 unrelated operations | ✅ **closed 2026-08-18** — drift is 0; a generated migration is now empty |
-| [PM-46](#pm-46--the-partner-write-surface-is-not-tenancy-scoped) | 🟠 | The id-taking partner writes apply no tenancy narrowing — safe only while `partner-update` stays admin-only | ⏳ **found 2026-08-20** — not exploitable today; invariant now enforced by a test |
-| [PM-47](#pm-47--the-enquiry-state-machine-is-half-built-and-the-trust-metric-pays-for-it) | 🟠 | No `SPAM` state, so junk enquiries count against a partner's response rate for ever | ⏳ **`first_viewed_at` landed 2026-08-20**; the two enum values remain, and need the UI half |
+| [PM-46](#pm-46--the-partner-write-surface-is-not-tenancy-scoped) | ✅ | ~~The id-taking partner writes apply no tenancy narrowing~~ — **RESOLVED 2026-08-21**, all five now call `assert_within_tenant` | Security |
+| [PM-47](#pm-47--the-enquiry-state-machine-is-half-built-and-the-trust-metric-pays-for-it) | 🟠 | No `SPAM` state, so junk enquiries count against a partner's response rate for ever | ✅ **RESOLVED 2026-08-21** — enum, transition table, spam excluded from the metric, and the UI half |
+| [PM-48](#pm-48--the-moderation-queue-returned-a-500-for-every-non-empty-queue) | 🔴 | `GET /moderation/queue` 500'd whenever anything was waiting — required non-column fields were assigned *after* validation | ✅ **found and RESOLVED 2026-08-21**; the empty-queue early return hid it, and the browser pass agreed |
+| [PM-49](#pm-49--the-partner-dashboard-was-unreachable-for-everybody) | 🔴 | `organisation_id` was declared on the identity response with a default and never put in the payload, so it was `null` for everyone — and the partner dashboard keys off it alone | ✅ **found and RESOLVED 2026-08-21** by reading a screenshot, not a log |
 
 > **This table was wrong for eleven days and that is worth a line.** PM-40, PM-42 and PM-43 were
 > closed in `CORE_HARDENING_PLAN.md` on 2026-08-06 and still read "Open" here on 2026-08-17, found by
@@ -806,6 +808,12 @@ string edits:
 plugin form and `tailwindcss ^3.4.19` is installed. The build is consistent; the package is dead
 weight. Safe to remove — **not** safe to activate without a full v3→v4 migration.
 
+**✅ Resolved 2026-08-21.** Removed from `package.json` and the lockfile recomputed with
+`npm install --package-lock-only` — 659 lines out, and `grep` finds no remaining reference. Verified
+the stylesheet still builds by fetching it from the running dev server: `/sign-in` 200, and the
+emitted `_next/static/css` asset 200 at 129 KB. The v3→v4 warning above still stands for anyone
+tempted to re-add it.
+
 ---
 
 ### PM-23 — Two dead virtualenvs in the tree
@@ -813,6 +821,12 @@ weight. Safe to remove — **not** safe to activate without a full v3→v4 migra
 Root `.venv/` is a Windows/`uv` venv (unusable on Linux); `backend/.venv/` is a Linux venv whose
 interpreter no longer matches its packages. Both gitignored, both ~93 MB. `../ONBOARDING.md` § 2 tells
 newcomers to delete them.
+
+**✅ Closed 2026-08-21 — nothing to do; the item was stale.** Neither directory exists: `ls` finds no
+`.venv` at the root and none under `backend/`, and `git check-ignore` reports nothing for either path.
+They were removed at some point without this register being updated, which is the failure mode the
+note at the top of this file already warns about — *"a register that overstates what is broken gets
+re-litigated by the next reader"*. Checked before writing rather than assumed.
 
 ---
 
@@ -1624,7 +1638,7 @@ declared, rather than renaming a working index to match a generated default.
 next real change produces a diff short enough to read, which is how four
 constraint drops nearly rode into a migration named after something else.
 
-## PM-46 — the partner write surface is not tenancy-scoped
+## PM-46 — the partner write surface is not tenancy-scoped ✅ RESOLVED
 
 **Found 2026-08-20**, by writing the HTTP-level wrong-tenant suite that
 `CORE_EXTRACTION_PLAN.md` § 3.7 asked for. Severity 🟠 for the shape of the
@@ -1679,6 +1693,44 @@ then close on the owner's word). What landed instead:
   side as a **403 by permission**, documenting that the refusal comes from the
   permission gate rather than from scoping.
 
+### ✅ Closed 2026-08-21
+
+The owner asked for the outstanding code-level items to be finished, so the
+narrowing was implemented. **It changes no behaviour in the shipped
+configuration** — which is what made it safe to do without a further decision:
+`assert_within_tenant` returns immediately for `has_admin_access` or a NULL
+`organisation_id`, and that is every account holding these permissions today. It
+removes the dependency on that staying true; it removes no ability.
+
+**One helper, five call sites.** `partner_service._writable_or_404` replaces the
+bare `get_or_404` in `update_partner`, `change_status`, `set_verification`,
+`set_listed` and `delete_partner`. `get_partner_for` was deliberately left alone —
+it already calls `assert_can_read`, which is stronger.
+
+**Not a new rule.** `scoping.assert_within_tenant` already existed and was already
+used by `user_service.update_user` for precisely this, so this is the established
+way rather than a second expression of it. It raises **404**, matching the read
+path, for the reason `get_partner_for`'s docstring gives: a 403 confirms the row
+exists, and in a directory that discloses a competitor.
+
+**`can_edit` is still permission-only, deliberately.** The predicate feeds the
+per-row flags, and those are only ever computed for rows the actor could already
+read — so narrowing it would duplicate the guard rather than add one. The
+asymmetry the original finding described is gone because the *write path* closed,
+not because the predicate changed.
+
+**Tests:** `TestTheWritePathNarrowsToTheTenantOnItsOwn` in
+`tests/test_visibility_paths.py` — three tests going straight to the service, past
+the router, which is the only way to see the inner layer. It asserts 404 for a
+cross-tenant edit, 404 for the other four writes, and **403 for the actor's own
+organisation** — that last one matters, because a narrowing that refuses
+everything is trivially "secure" and useless. Note the actor in those tests is not
+given `partner-update`: it no longer needs it, which is the whole improvement.
+
+`test_partner_write_permissions.py` stays. The invariant it enforces is now
+belt-and-braces rather than the only protection, and it still catches the
+configuration mistake earlier and more cheaply than a service test would.
+
 ### The decision the owner still owns
 
 **Should `can_edit` and its three siblings narrow to the actor's tenant?**
@@ -1696,7 +1748,7 @@ then close on the owner's word). What landed instead:
   the moment any partner-facing role is proposed for one of these permissions,
   and treat the test failing as the trigger for that conversation.
 
-## PM-47 — the enquiry state machine is half-built, and the trust metric pays for it
+## PM-47 — the enquiry state machine is half-built, and the trust metric pays for it ✅ RESOLVED
 
 **Found 2026-08-20**, while looking for what would make the Enquiries module more
 useful. Severity 🟠: it silently corrupts the only trust measure the product has,
@@ -1806,3 +1858,194 @@ Then:
    `EnquiriesModule.tsx`. **This is the half to coordinate**, not to race — and
    note the tone map may be an exhaustive `Record`, in which case widening the
    union breaks that file's build until the entries are added.
+
+### ✅ Closed 2026-08-21 — the enum half, and what it turned up
+
+All six steps shipped. Migration `f8c2e91a44d7` on head `c1f7a03b5e42` (not
+`d4a71b93c8e2` as this section predicted — the per-user theme migration landed in
+between), `ALTER TYPE ... ADD VALUE IF NOT EXISTS` for both values, and a
+`downgrade()` that raises with the reason. **Verified against the live type:**
+`['NEW','RESPONDED','CLOSED','WON','LOST','VIEWED','SPAM']`.
+
+`_TRANSITIONS` mirrors `listing_service`, and the rule it encodes is worth
+stating because it is narrower than "some moves are illegal": **never contradict
+a recorded timestamp.** That is what made `RESPONDED → NEW` wrong — the enquiry
+carries a write-once `first_responded_at` proving a reply was sent, so a status
+saying otherwise puts the row in disagreement with the column § 16.1 computes
+from. `WON`/`LOST`/`CLOSED` are mutually reachable *because* none of them
+contradicts a timestamp: correcting a mis-click is not rewriting history.
+
+`partner_metrics` now excludes `SPAM` from the numerator **and** the denominator,
+and reports it as its own count. Excluding it from only `unanswered` would have
+been worse than leaving it in — the answered *share* would still be computed
+against an inflated denominator, so attracting spam would still cost a partner
+their rating, just less visibly.
+
+**Three things this section did not anticipate, all found in the code:**
+
+1. **`reply()` promoted only from `NEW`.** Adding `VIEWED` would therefore have
+   *introduced* the exact defect the transition table exists to prevent: a partner
+   who opened an enquiry before answering would sit at `VIEWED` for ever with
+   `first_responded_at` set. Now promotes from either open state, with a test that
+   fails if the check narrows again.
+2. **`SPAM` would have leaked to the anonymous buyer.** `api/public.py` passed
+   `enquiry.status` straight into `PublicEnquiryStatus`, so the sender's
+   capability URL would have reported `SPAM` — handing a spammer the feedback loop
+   they need to iterate past the filter, and telling a *misclassified* real buyer
+   something worse than silence. `enquiry_service.public_status` masks it as `NEW`.
+   **And it masks `VIEWED` for the same reason `first_viewed_at` was kept off that
+   schema**: passing the status through would have leaked the view timing in
+   coarser form, and the field would have been withheld for nothing. Confirmed
+   over HTTP against a real SPAM-marked row: 200, `status: NEW`, neither `SPAM`
+   nor `first_viewed_at` present in the body.
+3. **Marking spam had to be reversible.** `SPAM` is one click from every state, so
+   it *will* be applied to a real enquiry by accident. An irreversible
+   classification would destroy a genuine lead permanently — a worse defect than
+   the one this item was raised for. `SPAM → NEW` is the only edge out, because
+   nothing records what it was before.
+
+**Also fixed while here:** the status dropdown no longer holds its own copy of the
+lifecycle. `EnquiryDetailResponse.allowed_transitions` sends the legal moves, so
+the page cannot offer one the API refuses with a 409 — which an operator reads as
+a broken page rather than an illegal move. The 409's message (which names what
+*is* allowed) is now surfaced in the toast instead of a generic failure.
+
+**Tests:** 23 in `tests/test_enquiry_lifecycle.py` (no database — the table and the
+public mask are pure functions of a status string, so they run in CI on the code
+alone) and 7 in `TestTheStateMachineAndTheTrustMetric`. The defect test was
+**proven to fail against the pre-fix code** — reverted the two counting queries,
+ran it, got `assert 1 == 0` on `unanswered`, restored.
+
+**Still open, deliberately:** `partner_metrics` has zero call sites, so the number
+this fixes is not yet on screen anywhere. `/dashboard/entitlements` or a partner
+dashboard is what makes it visible.
+
+---
+
+## PM-48 — the moderation queue returned a 500 for every non-empty queue ✅ RESOLVED
+
+**Found and fixed 2026-08-21.** Severity 🔴 for what it did — the most important
+staff screen in the directory was unusable the whole time it had anything to do —
+and recorded as resolved because the fix shipped in the same change.
+
+### What happened
+
+```python
+item = ModerationQueueItem.model_validate(listing)   # ← fails here
+item.partner_name = ...                              # ← never reached
+item.entitlement = ...
+```
+
+`partner_name` and `entitlement` are required on `ModerationQueueItem` and neither
+is a column on `ServiceListing`, so `model_validate` raised two `missing` errors
+before the assignments that would have supplied them ever ran. Introduced
+2026-08-20 with the entitlement/blockers work.
+
+### Why nobody noticed for a day
+
+Four separate things agreed the screen was fine:
+
+1. **The empty-queue early return.** `if not listings: return []` runs first, so a
+   queue with nothing in it answered `200 []`. The only queue anyone had loaded was
+   an empty one.
+2. **The page renders an empty state that looks deliberate** — "An empty queue is
+   the healthy state" — so a broken fetch and a genuinely clear queue look
+   identical.
+3. **The test suite covered the service, not the route.** `pending_queue` was
+   asserted; `api/moderation.review_queue`, which builds the response, never was.
+   997 tests passed with the endpoint 500ing.
+4. **The browser pass agreed.** `/dashboard/moderation` PASSED — the text probe
+   matched the error/empty state. It had also never been in the check's page list at
+   all until the same day, which is its own finding (see below).
+
+### The fix
+
+Assign onto the ORM row **before** validating, which is the shape
+`partner_service.decorate` already uses for its per-row flags — one pattern rather
+than two. Verified over HTTP: **200, 7 rows, 2 carrying blockers**, against 500
+before.
+
+### What was added so it cannot recur
+
+* **`TestTheModerationQueueRouteAssemblesItsResponse`** — three route-level tests,
+  two rows each so a single-row special case cannot pass. **Proven to fail against
+  the pre-fix code**: `ValidationError: entitlement Field required`.
+* **Four screens added to `scripts/browser-check.mjs`** — categories, listings,
+  moderation and enquiries had never been visited. The directory staff UI was added
+  to that list for partners and tiers only on 2026-08-13 and the rest was missed,
+  and the omission was invisible because a route that is never visited cannot fail.
+  The pass count went 59 → 63.
+
+### The generalisable rule
+
+**A response model with required fields that are not columns needs a route-level
+test.** The service can be entirely correct and the endpoint still 500 — and if the
+route has an early return for the empty case, the failure will look like "nothing
+to show" rather than like an error. Written into
+`system-design/FASTAPI_STANDARDS.md` § 5.
+
+---
+
+## PM-49 — the partner dashboard was unreachable for everybody ✅ RESOLVED
+
+**Found and fixed 2026-08-21.** Severity 🔴: a whole screen — the one § 20.6.1
+calls the partner's landing content — had never rendered for a single account.
+
+### The defect
+
+`CurrentUserResponse.organisation_id` was added on 2026-08-17 with a default:
+
+```python
+organisation_id: str | None = None       # ← the default is the bug
+```
+
+`rbac_service.current_user_payload`, which builds the dict every one of the six
+construction sites passes in, was never given the key. So the field validated
+happily and serialised as `null` for every account on every request.
+
+`DashboardHome` decides whether an account is a partner from that one value:
+
+```ts
+const organisationId = useAppSelector((s) => s.auth.user?.organisation_id);
+const isPartner = Boolean(organisationId);      // ← always false
+```
+
+So `PartnerOverview` was mounted for nobody. Every entitlement figure, unanswered
+count and "waiting on you" banner behind it was dead code.
+
+### Why it survived four days
+
+**The wrong answer was also the common answer.** Most accounts genuinely have no
+organisation, so `null` is what the majority *should* see — there was no account
+for which the bug produced an obviously silly value. Nothing logged, nothing
+500'd, and the field was present in the response so a schema diff looked correct.
+
+**And no test could see it**, because the two halves were tested separately: the
+column was covered by the tenancy suite, the component by typecheck. Nothing
+asserted that the identity *payload* carried the field.
+
+### How it was actually found
+
+Not from a log or a failing test. The browser pass reported `/dashboard` as
+passing — it always had — so **the screenshot was read**. The partner block simply
+was not on the page. `curl`ing `/auth/me` then showed `organisation_id: null`
+against a database row that had it set.
+
+Worth recording as a method: for a change whose whole purpose is that something
+appears on screen, "the page returned 200 and contains the expected word" is not
+evidence. Look at the picture.
+
+### The fix
+
+* `current_user_payload` now includes `organisation_id`.
+* **The schema field is required** — no default. A default on a field the payload
+  builder owns converts a missing key into a wrong answer; without one it is a 500
+  on the first request. All six construction sites go through the same payload
+  function, so making it required is safe.
+* `TestTheIdentityPayloadCarriesOrganisationMembership` — three tests: a partner
+  member reports their organisation, an internal account reports `None` (the two
+  were indistinguishable before), and `model_fields["organisation_id"].is_required()`
+  is asserted directly so restoring the default fails loudly rather than quietly
+  re-killing the dashboard.
+
+Verified over HTTP: both `/auth/login` and `/auth/me` now return the id.

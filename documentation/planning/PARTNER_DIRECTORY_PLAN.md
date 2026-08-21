@@ -1479,7 +1479,7 @@ Each is measurable from data the schema already carries. No new tables.
 | 4 | **Moderation queue age** — oldest item in `PENDING_REVIEW` | Bounded. An unbounded queue *is* the failure in § 13 | `service_listings` |
 | 5 | **Category coverage** — categories meeting the § 8 indexing threshold | Rising. Falling means the taxonomy is wrong, not that partners are lazy | `service_categories.listing_count` |
 | 6 | **Enquiries per listed partner per month** | **The one number.** Non-zero and rising | `enquiries` |
-| 6 | **Response rate**, and **median time to first response** | Already the trust signal in § 9 | `enquiries.first_responded_at` — ⚠️ computable, but **wrong until PM-47**: with no `SPAM` status, junk enquiries count as unanswered for ever and drag the rate down |
+| 6 | **Response rate**, and **median time to first response** | Already the trust signal in § 9 | `enquiries.first_responded_at` — ✅ **correct since 2026-08-21** (PM-47 closed). `SPAM` leaves both the numerator and the denominator, and is reported separately. Still has **zero call sites**, so the number is not on screen yet |
 | 6 | **Unanswered enquiry rate** | Near zero. Every one is a buyer who will not come back | `enquiries` where `first_responded_at IS NULL` |
 | 7 | **Enquiry → self-reported win rate** | Any signal at all; it is self-reported and directional only | `enquiries.status = WON` |
 | 8 | **Reviews tied to a real enquiry** | Most of them. Untied reviews read as astroturf (§ 6.5) | `reviews.enquiry_id` |
@@ -1769,7 +1769,7 @@ Category × geography is the atomic search unit (§ 2), so this must be joinable
 | `budget_range` | `String(60)` | YES | — | Optional qualifiers — they raise lead quality sharply |
 | `timeline` | `String(60)` | YES | — | |
 | `source` | `enquiry_source` | NO | `LISTING` | Indexed. `LISTING\|PROFILE\|CATEGORY_BROADCAST`. **See § 6.4 — these are two different products** |
-| `status` | `enquiry_status` | NO | `NEW` | Indexed. Specified as `NEW\|VIEWED\|RESPONDED\|WON\|LOST\|CLOSED\|SPAM`; ⚠️ **built as `NEW\|RESPONDED\|CLOSED\|WON\|LOST` only** — `VIEWED` and `SPAM` are missing, checked 2026-08-20. See TECH_DEBT PM-47 |
+| `status` | `enquiry_status` | NO | `NEW` | Indexed. ✅ **All seven values built 2026-08-21** by `f8c2e91a44d7` (PM-47 closed). `VIEWED` and `SPAM` are appended at the end of the type, not in lifecycle order — `ALTER TYPE` cannot insert into the middle, and nothing sorts on it. The lifecycle is `enquiry_service._TRANSITIONS`, which is the only place that decides what may follow what |
 | `first_viewed_at` | `DateTime(tz)` | YES | — | **The two timestamps the whole trust system depends on** |
 | `first_viewed_at` | `DateTime(tz)` | YES | — | **Added 2026-08-20** (`d4a71b93c8e2`). Stamped write-once when the *recipient partner* opens the enquiry — never on a staff read |
 | `first_responded_at` | `DateTime(tz)` | YES | — | Feeds response rate and time → ranking (§ 9), and § 16's measures |
@@ -1875,7 +1875,7 @@ Every one needs an explicit drop in its migration's `downgrade` — see § 17.1.
 | `listing_pricing_model` | `FIXED` `HOURLY` `MONTHLY` `FROM` `ON_REQUEST` | `service_listings` | 🟡 |
 | `listing_media_kind` | `image` `document` | `listing_media` | 🟡 |
 | `enquiry_source` | `LISTING` `PROFILE` `CATEGORY_BROADCAST` | `enquiries` | 🟡 |
-| `enquiry_status` | `NEW` `VIEWED` `RESPONDED` `WON` `LOST` `CLOSED` `SPAM` | `enquiries` | 🟡 |
+| `enquiry_status` | `NEW` `VIEWED` `RESPONDED` `WON` `LOST` `CLOSED` `SPAM` | `enquiries` | ✅ |
 | `enquiry_sender_kind` | `buyer` `partner` `staff` | `enquiry_messages` | 🟡 |
 | `review_status` | `PENDING` `PUBLISHED` `REJECTED` | `reviews` | 🟡 |
 
@@ -2461,7 +2461,13 @@ state. Copy the `_STATUS_TRANSITIONS` pattern from `partner_service.py`.
 - An edit to a `PUBLISHED` listing sends it back to `PENDING_REVIEW`. Moderation means nothing if a
   partner can publish and then rewrite.
 
-**Enquiries:** `NEW → VIEWED → RESPONDED → WON | LOST | CLOSED | SPAM`. `SPAM` is reachable from any
+**Enquiries:** ✅ **Built 2026-08-21** — `enquiry_service._TRANSITIONS`, PM-47 closed. Two additions the
+spec did not have: `SPAM → NEW` (a false positive must be recoverable, or a mis-click destroys a real
+lead) and `WON`/`LOST`/`CLOSED` reachable from each other (correcting a mis-click contradicts no
+timestamp). `SPAM` and `VIEWED` are both **masked on the public capability URL** — see
+`enquiry_service.public_status`.
+
+`NEW → VIEWED → RESPONDED → WON | LOST | CLOSED | SPAM`. `SPAM` is reachable from any
 state. `first_viewed_at` and `first_responded_at` are **write-once** — never overwrite them, they are
 what § 16's measures are computed from.
 

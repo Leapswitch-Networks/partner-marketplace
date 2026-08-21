@@ -279,8 +279,12 @@ The only place in this codebase where a mistake is a data breach rather than a b
       What is genuinely left of the original intent is much smaller and is not this item: any
       *new* function that can be reached by a token or by the public should take the union from
       the start.
-- [ ] **3.4** Replace the two hand-rolled filters marked `# PM-5` — `partner_service.py:197`
-      (`get_partner_for`) and `:222` (`list_partners`) — with `assert_can_read` / `apply_scope`.
+- [x] **3.4** Replace the two hand-rolled filters marked `# PM-5` — `get_partner_for` and
+      `list_partners` — with `assert_can_read` / `apply_scope`. **Already done; this checkbox was
+      stale, verified 2026-08-21.** Both call sites use the scoping helpers and both carry a
+      `# PM-5 closed 2026-08-17` comment saying so (`partner_service.py:275` and `:301` — the line
+      numbers in the original wording had drifted, which is why it read as outstanding). No
+      hand-rolled `organisation_id ==` comparison remains in that file.
 - [~] **3.5** Wire the three dead helpers in `data_access_service.py`. **2 of 3 done** (verified
       2026-08-20): `manageable_user_ids` is called from `data_access_service:154` and
       `can_manage_data_of` from `user_service:216`. **`narrow_to_creators` still has zero
@@ -293,6 +297,13 @@ The only place in this codebase where a mistake is a data breach rather than a b
       Search and nothing else — so this is a question about intent, not a defect: **which
       indexes are grants supposed to widen?** Until that is answered, wiring it into a list
       chosen by whoever happened to be editing would be a guess with a visible blast radius.
+
+      **Re-examined 2026-08-21 and deliberately left dormant.** Still zero production call sites.
+      Wiring it was considered as part of a sweep to close outstanding code-level items and
+      rejected for the reason already written above: it *removes* rows people can see today, and
+      which indexes grants are meant to widen is a product question. The one thing that changed is
+      that this is now stated twice rather than once, so the next sweep does not have to
+      re-derive it. **Do not wire this without the owner naming the indexes.**
 - [x] **3.6** Flag to the owner: `list_grants` showed the whole delegation graph to any
       `data-access-view` holder, and Staff holds it. **Done — flagged 2026-08-13, closed
       2026-08-17** on the stated recommendation; it is now scoped on `has_admin_access`, and the

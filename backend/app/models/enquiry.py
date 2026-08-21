@@ -23,8 +23,14 @@ EnquirySourceEnum = Enum("PROFILE", "LISTING", name="enquiry_source")
 #: Deliberately short. § 16.2 measures response rate and time to first response;
 #: WON is self-reported and directional only, and everything past it is a CRM
 #: this product has decided not to be (§ 14.5).
+#: Listed in the order PostgreSQL holds them, which is creation order and not
+#: lifecycle order — `VIEWED` and `SPAM` were appended by `f8c2e91a44d7` (PM-47)
+#: and `ALTER TYPE ... ADD VALUE` cannot insert into the middle. Nothing sorts on
+#: this type, so the discrepancy is cosmetic; the lifecycle lives in
+#: `enquiry_service._TRANSITIONS`, which is the only place that decides what may
+#: follow what.
 EnquiryStatusEnum = Enum(
-    "NEW", "RESPONDED", "CLOSED", "WON", "LOST", name="enquiry_status"
+    "NEW", "RESPONDED", "CLOSED", "WON", "LOST", "VIEWED", "SPAM", name="enquiry_status"
 )
 
 

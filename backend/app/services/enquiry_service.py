@@ -45,6 +45,65 @@ scoping.register_scope(
 )
 
 
+# ── The lifecycle — TECH_DEBT PM-47 ──────────────────────────────────────────
+#
+# Modelled on `listing_service._TRANSITIONS` deliberately: one table, one guard,
+# and the same 409 vocabulary, so there is not a second way of expressing a state
+# machine in this codebase.
+#
+# The rule the table encodes is **never contradict a recorded timestamp**. That is
+# what made the old `set_status` wrong: it accepted any of the five statuses in any
+# order, so `RESPONDED -> NEW` was reachable on an enquiry whose
+# `first_responded_at` proved a reply had been sent. The status and the timestamp
+# then disagreed, and § 16.1's measure is built on the timestamp.
+
+#: A commercial conclusion. Mutually reachable **on purpose** — recording `WON` on
+#: an enquiry that was actually `LOST` is a mis-click, and none of these three
+#: contradicts a timestamp, so correcting one is not rewriting history.
+_OUTCOMES = frozenset({"WON", "LOST", "CLOSED"})
+
+#: Still in the inbox. `VIEWED` means opened and not yet answered — the state
+#: `first_viewed_at` (`d4a71b93c8e2`) has measured since 2026-08-20 with nothing
+#: able to display it.
+_OPEN = frozenset({"NEW", "VIEWED"})
+
+_TRANSITIONS: dict[str, frozenset[str]] = {
+    # NEW -> RESPONDED without passing through VIEWED is legitimate: a partner can
+    # reply straight from the list without opening the record, and `reply()` does
+    # exactly that.
+    "NEW": frozenset({"VIEWED", "RESPONDED"}) | _OUTCOMES,
+    "VIEWED": frozenset({"RESPONDED"}) | _OUTCOMES,
+    "RESPONDED": _OUTCOMES,
+    "WON": _OUTCOMES - {"WON"},
+    "LOST": _OUTCOMES - {"LOST"},
+    "CLOSED": _OUTCOMES - {"CLOSED"},
+    # Recovering a false positive. `SPAM` is one click away from every state, so it
+    # *will* be applied to a real enquiry by accident, and a classification that
+    # cannot be undone would destroy a genuine lead permanently. It returns to
+    # `NEW` and not to whatever it was before, because nothing records what it was.
+    "SPAM": frozenset({"NEW"}),
+}
+
+#: Reachable from anywhere, per `PARTNER_DIRECTORY_PLAN.md` § 19.9. Kept out of the
+#: table rather than added to all seven rows: as a row it reads like six ordinary
+#: edges, and the next person to add a status would have to remember to include it.
+_ALWAYS_REACHABLE = frozenset({"SPAM"})
+
+#: Everything the enum permits. Derived from the table so the two cannot drift —
+#: adding a row is the only thing needed to make a status settable.
+_ALL_STATUSES = frozenset(_TRANSITIONS)
+
+
+def allowed_transitions(current: str) -> frozenset[str]:
+    """What `current` may become. The dropdown should offer exactly this.
+
+    Exposed rather than kept private because the alternative is the frontend
+    holding its own copy of the table — and a copy that drifts offers the operator
+    a status the API will refuse with a 409, which reads as a bug in the page.
+    """
+    return _TRANSITIONS.get(current, frozenset()) | (_ALWAYS_REACHABLE - {current})
+
+
 def base_query() -> Select:
     return select(Enquiry).options(selectinload(Enquiry.messages))
 
@@ -168,7 +227,12 @@ def reply(db: Session, enquiry: Enquiry, *, author_user_id: str, body: str) -> E
     # Stamped once — see the module docstring.
     if enquiry.first_responded_at is None:
         enquiry.first_responded_at = datetime.now(timezone.utc)
-    if enquiry.status == "NEW":
+    # `_OPEN` and not `== "NEW"`. Before PM-47 there was only one open state; now
+    # a partner who opens the enquiry first sits at VIEWED, and checking for NEW
+    # alone would leave their reply recorded as unanswered in the inbox while
+    # `first_responded_at` said otherwise — the exact status/timestamp
+    # disagreement `_TRANSITIONS` exists to prevent.
+    if enquiry.status in _OPEN:
         enquiry.status = "RESPONDED"
 
     db.flush()
@@ -228,19 +292,72 @@ def mark_viewed(db: Session, enquiry: Enquiry, actor: User) -> bool:
         return False
 
     enquiry.first_viewed_at = datetime.now(timezone.utc)
+    # PM-47: the timestamp landed first, on its own, because it needed no enum
+    # change. Now that `VIEWED` exists the status follows it — but only from NEW.
+    # A later state is further along the lifecycle and must not be walked back:
+    # `_TRANSITIONS` has no edge from RESPONDED to VIEWED precisely because the
+    # reply already happened.
+    if enquiry.status == "NEW":
+        enquiry.status = "VIEWED"
     db.flush()
     return True
 
 
 def set_status(db: Session, enquiry: Enquiry, new_status: str) -> Enquiry:
-    allowed = {"NEW", "RESPONDED", "CLOSED", "WON", "LOST"}
-    if new_status not in allowed:
+    """Move one enquiry along the lifecycle, refusing moves that lie.
+
+    Two different refusals, and the distinction is the caller's:
+
+    * **422** — the status does not exist. A client bug or a stale build.
+    * **409** — the status exists but not from here. A legitimate request that
+      the current state does not allow, which is what `_TRANSITIONS` decides.
+
+    Re-sending the status the enquiry already holds is a **no-op, not an error**.
+    The table has no self-edges — a status cannot "become itself" — but a client
+    that re-submits a form unchanged is not doing anything wrong, and answering it
+    with a 409 would turn a harmless duplicate into a visible failure.
+    """
+    if new_status not in _ALL_STATUSES:
         raise HTTPException(
             http_status.HTTP_422_UNPROCESSABLE_ENTITY, f"Unknown status {new_status!r}"
+        )
+    if new_status == enquiry.status:
+        return enquiry
+
+    allowed = allowed_transitions(enquiry.status)
+    if new_status not in allowed:
+        raise HTTPException(
+            http_status.HTTP_409_CONFLICT,
+            f"A {enquiry.status} enquiry cannot become {new_status}. "
+            f"Allowed from here: {', '.join(sorted(allowed)) or 'nothing'}.",
         )
     enquiry.status = new_status
     db.flush()
     return enquiry
+
+
+def public_status(enquiry: Enquiry) -> str:
+    """The status an **anonymous** buyer may see at their capability URL.
+
+    Two of the seven are withheld, and for different reasons:
+
+    **`SPAM` is withheld from everyone.** Telling the sender their message was
+    classified as junk hands a spammer the feedback loop they need to iterate
+    past the filter, and tells a *misclassified* real buyer something worse than
+    silence. It reports as `NEW`, which is what their page already conveys —
+    nobody has replied.
+
+    **`VIEWED` is withheld because the timestamp behind it is.** `first_viewed_at`
+    was deliberately kept off `PublicEnquiryStatus` when it was added: it was
+    briefly exposed there by mistake, which would have told a buyer exactly when
+    the partner opened their enquiry. Passing the *status* through would leak the
+    same fact in a coarser form, and the field would have been withheld for
+    nothing.
+
+    Everything else passes through unchanged, so this narrows the public surface
+    and never widens it.
+    """
+    return "NEW" if enquiry.status in {"VIEWED", "SPAM"} else enquiry.status
 
 
 def partner_metrics(db: Session, partner_id: str) -> dict[str, int]:
@@ -249,13 +366,53 @@ def partner_metrics(db: Session, partner_id: str) -> dict[str, int]:
     Returned as counts rather than a rate: a rate over three enquiries is noise
     presented as a measurement, and the caller can divide when the denominator is
     worth dividing by.
+
+    ## Spam is excluded from both halves — this is the PM-47 defect
+
+    Enquiries arrive through a public form that anonymous visitors can submit, so
+    some of them are junk. Junk is never replied to, so it stays
+    `first_responded_at IS NULL` for ever, and counting it made a partner's
+    responsiveness a measure of how much spam they attracted. § 9 ranks partners
+    on that number.
+
+    So `SPAM` leaves the **numerator and the denominator**. Taking it out of only
+    the unanswered count would be worse than leaving it in: the answered share
+    would then be computed against a denominator inflated by messages nobody was
+    ever meant to answer, so attracting spam would still cost a partner their
+    rating — just less obviously.
+
+    It is reported separately rather than silently dropped. A partner seeing
+    `total` fall with no explanation would reasonably think enquiries had gone
+    missing, and the count is the only evidence the classification is being used
+    proportionately — a partner marking most of their inbox as spam is a
+    conversation to have, and an invisible number cannot start it.
     """
+    real = Enquiry.status != "SPAM"
+
     total = db.execute(
-        select(func.count()).select_from(Enquiry).where(Enquiry.partner_id == partner_id)
+        select(func.count())
+        .select_from(Enquiry)
+        .where(and_(Enquiry.partner_id == partner_id, real))
     ).scalar_one()
     unanswered = db.execute(
         select(func.count())
         .select_from(Enquiry)
-        .where(and_(Enquiry.partner_id == partner_id, Enquiry.first_responded_at.is_(None)))
+        .where(
+            and_(
+                Enquiry.partner_id == partner_id,
+                real,
+                Enquiry.first_responded_at.is_(None),
+            )
+        )
     ).scalar_one()
-    return {"total": total, "unanswered": unanswered, "answered": total - unanswered}
+    spam = db.execute(
+        select(func.count())
+        .select_from(Enquiry)
+        .where(and_(Enquiry.partner_id == partner_id, Enquiry.status == "SPAM"))
+    ).scalar_one()
+    return {
+        "total": total,
+        "unanswered": unanswered,
+        "answered": total - unanswered,
+        "spam": spam,
+    }

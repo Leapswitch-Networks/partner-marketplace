@@ -405,3 +405,289 @@ class TestTheViewTimestampMeasuresThePartnerNotUs:
         outsider = _actor(reviewer, other)
         assert enquiry_service.mark_viewed(db, enquiry, outsider) is False
         assert enquiry.first_viewed_at is None
+
+
+class TestTheStateMachineAndTheTrustMetric:
+    """The database half of TECH_DEBT PM-47.
+
+    `tests/test_enquiry_lifecycle.py` covers the transition table itself without a
+    database. What needs one is the interaction between the table and the two
+    write-once timestamps — which is where the original defect lived.
+    """
+
+    def _enquiry(self, db, partner):
+        enquiry = enquiry_service.create_enquiry(
+            db,
+            partner_id=partner.id,
+            buyer_name="State Buyer",
+            buyer_email="state@example.com",
+            message="A message long enough to pass validation.",
+        )
+        db.commit()
+        return enquiry
+
+    def test_the_recipient_opening_it_advances_new_to_viewed(self, world):
+        """The status half of `first_viewed_at`, shipped separately on 2026-08-20.
+
+        Against the pre-fix code the enquiry stayed `NEW` — the timestamp moved and
+        nothing on screen could say so.
+        """
+        db, _category, partner, _other, reviewer = world
+        enquiry = self._enquiry(db, partner)
+        assert enquiry.status == "NEW"
+
+        assert enquiry_service.mark_viewed(db, enquiry, _actor(reviewer, partner)) is True
+        db.commit()
+        assert enquiry.status == "VIEWED"
+        assert enquiry.first_viewed_at is not None
+
+    def test_a_staff_read_advances_nothing(self, world):
+        """The rule that makes the measure honest, restated for the status.
+
+        A staff member has no `organisation_id`, so `mark_viewed` refuses — and it
+        must refuse the status change too, or browsing the oversight index would
+        mark every partner's inbox as read.
+        """
+        db, _category, partner, _other, reviewer = world
+        enquiry = self._enquiry(db, partner)
+
+        assert enquiry_service.mark_viewed(db, enquiry, reviewer) is False
+        db.commit()
+        assert enquiry.status == "NEW"
+        assert enquiry.first_viewed_at is None
+
+    def test_replying_after_opening_still_records_a_response(self, world):
+        """The regression adding VIEWED would have introduced.
+
+        `reply()` used to promote only from `NEW`. Once opening the enquiry moves it
+        to `VIEWED`, that check would leave a partner who read before replying sitting
+        at `VIEWED` for ever — unanswered in the inbox while `first_responded_at`
+        proved they had answered. Exactly the disagreement the table forbids.
+        """
+        db, _category, partner, _other, reviewer = world
+        enquiry = self._enquiry(db, partner)
+        enquiry_service.mark_viewed(db, enquiry, _actor(reviewer, partner))
+        db.commit()
+        assert enquiry.status == "VIEWED"
+
+        enquiry_service.reply(db, enquiry, author_user_id=reviewer.id, body="On it.")
+        db.commit()
+        assert enquiry.status == "RESPONDED"
+        assert enquiry.first_responded_at is not None
+
+    def test_a_responded_enquiry_cannot_be_returned_to_new(self, world):
+        """409, and the message says what is allowed instead.
+
+        Against the pre-fix code this succeeded silently and left the status
+        contradicting `first_responded_at`.
+        """
+        db, _category, partner, _other, reviewer = world
+        enquiry = self._enquiry(db, partner)
+        enquiry_service.reply(db, enquiry, author_user_id=reviewer.id, body="On it.")
+        db.commit()
+
+        with pytest.raises(HTTPException) as exc:
+            enquiry_service.set_status(db, enquiry, "NEW")
+        assert exc.value.status_code == 409
+        assert "cannot become NEW" in exc.value.detail
+        assert enquiry.status == "RESPONDED", "the refused move must not have applied"
+
+    def test_resending_the_current_status_is_not_an_error(self, world):
+        """A form submitted twice is not a client doing anything wrong.
+
+        The table has no self-edges, so without the explicit no-op this would 409 —
+        turning a harmless duplicate into a visible failure on a page that had
+        worked a moment earlier.
+        """
+        db, _category, partner, _other, _reviewer = world
+        enquiry = self._enquiry(db, partner)
+
+        assert enquiry_service.set_status(db, enquiry, "NEW") is enquiry
+        assert enquiry.status == "NEW"
+
+    def test_spam_leaves_the_response_metric_entirely(self, world):
+        """**The defect PM-47 was raised for.**
+
+        Junk is never replied to, so it stays `first_responded_at IS NULL` for ever
+        and used to count as `unanswered`. § 9 ranks partners on that number, so a
+        partner was penalised for spam they were right to ignore.
+
+        Against the pre-fix code the final assertion reads `unanswered == 1`.
+        """
+        db, _category, partner, _other, reviewer = world
+        answered = self._enquiry(db, partner)
+        enquiry_service.reply(db, answered, author_user_id=reviewer.id, body="On it.")
+        junk = self._enquiry(db, partner)
+        db.commit()
+
+        before = enquiry_service.partner_metrics(db, partner.id)
+        assert before == {"total": 2, "unanswered": 1, "answered": 1, "spam": 0}
+
+        enquiry_service.set_status(db, junk, "SPAM")
+        db.commit()
+
+        after = enquiry_service.partner_metrics(db, partner.id)
+        assert after["unanswered"] == 0, "spam is still counted as an enquiry they failed to answer"
+        assert after["total"] == 1, "spam must leave the denominator too, not only the numerator"
+        assert after["answered"] == 1
+        assert after["spam"] == 1, "and it must still be visible, not silently dropped"
+
+    def test_marking_spam_is_reversible(self, world):
+        """A real enquiry mis-marked as junk must come back to the inbox."""
+        db, _category, partner, _other, _reviewer = world
+        enquiry = self._enquiry(db, partner)
+        enquiry_service.set_status(db, enquiry, "SPAM")
+        db.commit()
+        assert enquiry_service.partner_metrics(db, partner.id)["total"] == 0
+
+        enquiry_service.set_status(db, enquiry, "NEW")
+        db.commit()
+        assert enquiry.status == "NEW"
+        assert enquiry_service.partner_metrics(db, partner.id) == {
+            "total": 1,
+            "unanswered": 1,
+            "answered": 0,
+            "spam": 0,
+        }
+
+    def test_the_detail_response_carries_the_legal_moves(self, world):
+        """The wiring, because forgetting it fails silently.
+
+        `allowed_transitions` defaults to `[]` on the schema, and an empty list is
+        indistinguishable from "this enquiry is finished and can go nowhere" — the
+        dropdown would simply render no options and nothing would look wrong. So
+        the route filling it is worth an assertion of its own.
+        """
+        from app.api.enquiries import _detail
+
+        db, _category, partner, _other, _reviewer = world
+        enquiry = self._enquiry(db, partner)
+
+        detail = _detail(enquiry)
+        assert detail.allowed_transitions, "the route returned no legal moves at all"
+        assert detail.allowed_transitions == sorted(
+            enquiry_service.allowed_transitions(enquiry.status)
+        )
+        # And the two the buyer-facing form cannot reach are present for staff:
+        # SPAM from a NEW enquiry is the whole point of the classification.
+        assert "SPAM" in detail.allowed_transitions
+        assert "VIEWED" in detail.allowed_transitions
+
+
+class TestTheModerationQueueRouteAssemblesItsResponse:
+    """The route, not the service — and that distinction is the whole point.
+
+    `pending_queue` was already covered (`TestTheLoop` asserts a submitted listing
+    appears in it). What was never exercised was `api/moderation.review_queue`,
+    which takes those rows and builds `ModerationQueueItem` from them. So a defect
+    in the *assembly* was invisible to the suite:
+
+    **`GET /moderation/queue` returned a 500 for every non-empty queue between
+    2026-08-20 and 2026-08-21.** `partner_name` and `entitlement` are required on
+    the response model and are not columns, so `model_validate(listing)` raised two
+    `missing` errors — and the lines that would have supplied them ran *after* the
+    validation. The empty-queue early return meant the only queue anyone had seen
+    was an empty one, so the screen looked idle rather than broken. Even the
+    browser pass agreed: the page rendered its empty state and the text probe
+    matched.
+
+    A response model with required non-column fields is worth a route-level test
+    on principle, because the service can be perfectly correct and the endpoint
+    still 500.
+    """
+
+    def test_a_non_empty_queue_serialises(self, world):
+        """Against the pre-fix code this raises `ValidationError`, not an assertion.
+
+        Two rows, so an accidental single-row special case cannot pass it.
+        """
+        from app.api.moderation import review_queue
+
+        db, category, partner, other, reviewer = world
+        for owner, title in ((partner, "Queued one"), (other, "Queued two")):
+            listing = listing_service.create_listing(
+                db,
+                partner_id=owner.id,
+                title=title,
+                summary="A service somebody might buy.",
+                category_id=category.id,
+            )
+            listing_service.submit_for_review(db, listing)
+        db.commit()
+
+        items = review_queue(db=db, _=reviewer)
+
+        titles = [item.title for item in items]
+        assert "Queued one" in titles and "Queued two" in titles
+
+        for item in items:
+            # The three fields that are not columns. `partner_name` failing to
+            # populate is what the 500 was.
+            assert item.partner_name, f"{item.title} has no partner name"
+            assert item.entitlement is not None
+            assert isinstance(item.blockers, list)
+
+    def test_an_empty_queue_is_an_empty_list_not_an_error(self, world):
+        """The path that *did* work, pinned so the fix did not trade one for the other."""
+        from app.api.moderation import review_queue
+
+        db, _category, _partner, _other, reviewer = world
+        # `world` creates no listings of its own, and any left by a sibling test
+        # are rolled back with it — but assert rather than assume, or this test
+        # silently becomes a duplicate of the one above.
+        items = review_queue(db=db, _=reviewer)
+        assert isinstance(items, list)
+
+    def test_the_queue_reports_a_tier_limit_as_a_blocker(self, world):
+        """The reason the extra fields exist at all.
+
+        A reviewer must learn that approving is impossible *before* reading the
+        listing. This asserts the blocker reaches the response, which is the half
+        the 500 was hiding — `publish_blockers` itself was already tested.
+        """
+        from app.api.moderation import review_queue
+        from app.models.partner_tier import PartnerTier
+
+        db, category, partner, _other, reviewer = world
+
+        published = listing_service.create_listing(
+            db,
+            partner_id=partner.id,
+            title="Occupying the only slot",
+            summary="A service somebody might buy.",
+            category_id=category.id,
+        )
+        listing_service.submit_for_review(db, published)
+        listing_service.approve(db, published, reviewer_id=reviewer.id)
+
+        tier = PartnerTier(
+            name=f"cap-{uuid.uuid4().hex[:8]}",
+            display_name="Capped At One",
+            max_listings=1,
+            sort_order=98,
+        )
+        db.add(tier)
+        db.flush()
+        partner.tier_id = tier.id
+
+        waiting = listing_service.create_listing(
+            db,
+            partner_id=partner.id,
+            title="Over the allowance",
+            summary="A service somebody might buy.",
+            category_id=category.id,
+        )
+        listing_service.submit_for_review(db, waiting)
+        db.commit()
+
+        entry = next(item for item in review_queue(db=db, _=reviewer) if item.title == "Over the allowance")
+        assert entry.blockers, "a listing over the tier allowance must carry a blocker"
+        assert "Capped At One" in entry.blockers[0]
+        assert entry.entitlement.at_limit is True
+        assert entry.entitlement.max_listings == 1
+
+        # Leave the shared tier table as it was found.
+        partner.tier_id = None
+        db.commit()
+        db.delete(db.get(PartnerTier, tier.id))
+        db.commit()

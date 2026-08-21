@@ -889,15 +889,18 @@ class TestTheTenantWallHoldsOverHTTP:
         reached. Hence 403 here and 404 above: the read is a row this actor may
         not *see*, the write is a capability this actor does not *have*.
 
-        That asymmetry is the finding this suite produced, and it is worth
-        stating rather than smoothing over: `can_edit()` applies **no tenancy
-        narrowing at all** — unlike `can_delete`, `can_change_status` and
-        `can_verify`, which each refuse the actor's own organisation. Today that
-        is safe, because the permission is admin-only by design. It stops being
-        safe the moment `partner-update` is granted to any role whose members sit
-        inside an organisation, and at that point the read path would refuse what
-        the write path allowed. `test_partner_write_permissions.py` fails if that
-        grant is ever added; see TECH_DEBT PM-46.
+        That asymmetry is the finding this suite produced. **Updated 2026-08-21,
+        when PM-46 was closed:** the write *path* now narrows too —
+        `partner_service._writable_or_404` calls `scoping.assert_within_tenant`
+        before any predicate runs, so a cross-tenant write is a 404 even for an
+        actor holding the permission. This test still expects **403**, and that is
+        correct: the permission gate is a router dependency, so it fires before
+        the service is entered. The layer order is 403-then-404, and the two tests
+        below prove the second layer independently.
+
+        `can_edit()` itself is still permission-only, deliberately: the flag is
+        only ever computed for rows the actor could already read, so narrowing it
+        would duplicate the guard rather than add one.
 
         The partner's own editing route is `PATCH /partners/me`, which resolves
         the organisation from the session and takes no id — so there is no
@@ -932,3 +935,150 @@ class TestTheTenantWallHoldsOverHTTP:
         after = db.get(Partner, ids["beta_org"]).name
         db.close()
         assert after == before, "the refused write still changed the row"
+
+
+class TestTheWritePathNarrowsToTheTenantOnItsOwn:
+    """PM-46 closed — the write path no longer depends on the permission grant.
+
+    `TestTheTenantWallHoldsOverHTTP` proves a partner account is refused at the
+    permission gate. That refusal is real but it is the *outer* layer, and it was
+    the **only** layer: the five id-taking writes fetched with a bare
+    `get_or_404` and then asked `actor.has_permission(...)`, so the safety of the
+    whole surface rested on a configuration fact — that no account with an
+    `organisation_id` holds `partner-update` — which nothing in the code enforced.
+
+    These tests go straight to the service, past the router, which is the only way
+    to see the inner layer at all. They would pass vacuously before the fix only
+    because nothing raised; each one asserts the 404 that `assert_within_tenant`
+    now produces.
+    """
+
+    def _alpha_member(self, db, ids):
+        from app.models.user import User as UserModel
+
+        member = db.get(UserModel, ids["user_ids"][0])
+        assert member is not None and member.organisation_id == ids["alpha_org"]
+        assert not member.has_admin_access, (
+            "the fixture member must not be an admin, or the tenant wall is "
+            "bypassed by design and this suite proves nothing"
+        )
+        return member
+
+    def test_editing_another_organisation_is_404_at_the_service(
+        self, two_organisations_with_logins
+    ):
+        """The core of PM-46.
+
+        Note what is *not* set up here: the actor is not given `partner-update`.
+        It does not need it, and that is the whole improvement — the tenancy
+        refusal now happens before the predicate, so the outcome no longer depends
+        on which permissions the actor holds.
+
+        Against the pre-fix code this raised 403 (from `can_edit`) rather than 404
+        — the right refusal for the wrong reason, and one that would have become a
+        200 the moment the permission was granted.
+        """
+        from app.models.partner import Partner
+        from app.schemas.partner import UpdatePartnerRequest
+        from app.services import partner_service
+
+        ids = two_organisations_with_logins
+        db = SessionLocal()
+        try:
+            member = self._alpha_member(db, ids)
+            before = db.get(Partner, ids["beta_org"]).name
+
+            with pytest.raises(HTTPException) as exc:
+                partner_service.update_partner(
+                    db,
+                    ids["beta_org"],
+                    UpdatePartnerRequest(name="Renamed across the wall"),
+                    actor=member,
+                )
+            assert exc.value.status_code == 404, (
+                "a cross-tenant write must be 404, not 403 — a 403 confirms the "
+                "row exists, which in a directory discloses a competitor"
+            )
+
+            db.rollback()
+            assert db.get(Partner, ids["beta_org"]).name == before
+        finally:
+            db.close()
+
+    def test_the_other_four_writes_are_closed_the_same_way(
+        self, two_organisations_with_logins
+    ):
+        """All five, not just the one that was easiest to reach.
+
+        `delete`, `change_status`, `set_verification` and `set_listed` each had
+        their own guard, and three of them refuse the actor's **own**
+        organisation — which is easy to misread as tenancy scoping and is the
+        opposite: it stops self-approval, not reaching sideways. Covering the four
+        together keeps a future edit from fixing one path and leaving the rest.
+        """
+        from app.schemas.partner import ChangePartnerStatusRequest, VerifyPartnerRequest
+        from app.services import partner_service
+
+        ids = two_organisations_with_logins
+        beta = ids["beta_org"]
+        db = SessionLocal()
+        try:
+            member = self._alpha_member(db, ids)
+
+            calls = {
+                "delete_partner": lambda: partner_service.delete_partner(
+                    db, beta, actor=member
+                ),
+                "change_status": lambda: partner_service.change_status(
+                    db, beta, ChangePartnerStatusRequest(status="SUSPENDED"), actor=member
+                ),
+                "set_verification": lambda: partner_service.set_verification(
+                    db, beta, VerifyPartnerRequest(verification_level="VERIFIED"), actor=member
+                ),
+                "set_listed": lambda: partner_service.set_listed(
+                    db, beta, True, actor=member
+                ),
+            }
+            assert len(calls) == 4, "the docstring says four; keep them in step"
+            for name, call in calls.items():
+                with pytest.raises(HTTPException) as exc:
+                    call()
+                assert exc.value.status_code == 404, (
+                    f"{name} refused a cross-tenant write with "
+                    f"{exc.value.status_code}, not 404"
+                )
+                db.rollback()
+        finally:
+            db.close()
+
+    def test_a_member_may_still_reach_their_own_organisation(
+        self, two_organisations_with_logins
+    ):
+        """The guard must not close the door it was not aimed at.
+
+        A narrowing that refuses everything is trivially "secure" and useless.
+        Reaching the actor's *own* organisation must still get past
+        `assert_within_tenant` — and then be refused by the permission predicate,
+        which is the layer that is supposed to stop it.
+        """
+        from app.schemas.partner import UpdatePartnerRequest
+        from app.services import partner_service
+
+        ids = two_organisations_with_logins
+        db = SessionLocal()
+        try:
+            member = self._alpha_member(db, ids)
+
+            with pytest.raises(HTTPException) as exc:
+                partner_service.update_partner(
+                    db,
+                    ids["alpha_org"],
+                    UpdatePartnerRequest(name="Renaming my own organisation"),
+                    actor=member,
+                )
+            assert exc.value.status_code == 403, (
+                "reaching your own organisation must pass the tenant wall and be "
+                f"refused by the permission gate (403), got {exc.value.status_code}"
+            )
+        finally:
+            db.close()

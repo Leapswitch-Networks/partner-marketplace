@@ -1815,6 +1815,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/partners/me/overview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get My Overview
+         * @description The partner's own landing-page figures, in one call.
+         *
+         *     `ORGANISATION_MANAGE` like every other `/me` route, so it is partner-only and
+         *     staff get a 404 from `get_own_organisation` rather than an empty shape they
+         *     would have to interpret.
+         */
+        get: operations["get_my_overview_api_v1_partners_me_overview_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/partners/tiers": {
         parameters: {
             query?: never;
@@ -4412,7 +4436,7 @@ export interface components {
             /** Last Name */
             last_name: string;
             /** Organisation Id */
-            organisation_id?: string | null;
+            organisation_id: string | null;
             /**
              * Password Otp Grace
              * @default false
@@ -4560,6 +4584,11 @@ export interface components {
         };
         /** EnquiryDetailResponse */
         EnquiryDetailResponse: {
+            /**
+             * Allowed Transitions
+             * @default []
+             */
+            allowed_transitions: string[];
             /** Budget Range */
             budget_range: string | null;
             /**
@@ -4595,6 +4624,11 @@ export interface components {
             messages: components["schemas"]["EnquiryMessageResponse"][];
             /** Partner Id */
             partner_id: string;
+            /**
+             * Partner Name
+             * @default
+             */
+            partner_name: string;
             /** Reference */
             reference: string;
             /** Source */
@@ -4630,6 +4664,11 @@ export interface components {
             listing_id: string | null;
             /** Partner Id */
             partner_id: string;
+            /**
+             * Partner Name
+             * @default
+             */
+            partner_name: string;
             /** Reference */
             reference: string;
             /** Source */
@@ -4650,6 +4689,24 @@ export interface components {
             direction: string;
             /** Id */
             id: string;
+        };
+        /**
+         * EnquiryMetrics
+         * @description § 16.2's counts for one partner, straight from `enquiry_service`.
+         *
+         *     `spam` is here so the partner can see it, not so anything divides by it —
+         *     spam is excluded from `total` and `unanswered` both. See TECH_DEBT PM-47: it
+         *     used to be counted as an enquiry they had failed to answer.
+         */
+        EnquiryMetrics: {
+            /** Answered */
+            answered: number;
+            /** Spam */
+            spam: number;
+            /** Total */
+            total: number;
+            /** Unanswered */
+            unanswered: number;
         };
         /**
          * EntitlementResponse
@@ -5257,6 +5314,25 @@ export interface components {
             /** Width */
             width: number | null;
         };
+        /**
+         * ListingStatusCounts
+         * @description One partner's listings by status. Every key always present.
+         *
+         *     Named after the statuses rather than aggregated into "live" and "not live",
+         *     because the two that need action are different actions: a `REJECTED` listing
+         *     needs editing, a `DRAFT` needs submitting, and a partner cannot be told which
+         *     by a single number.
+         */
+        ListingStatusCounts: {
+            /** Draft */
+            draft: number;
+            /** Pending Review */
+            pending_review: number;
+            /** Published */
+            published: number;
+            /** Rejected */
+            rejected: number;
+        };
         /** LoginRequest */
         LoginRequest: {
             /**
@@ -5508,6 +5584,34 @@ export interface components {
             summary: string;
             /** Tag */
             tag: string;
+        };
+        /**
+         * OwnOrganisationOverview
+         * @description Everything the partner's landing page needs, computed on the server.
+         *
+         *     **One shape rather than three list calls.** The page used to fetch a page of
+         *     listings and a page of enquiries and count them in the browser, which was
+         *     wrong three ways: it reported the page length as the total, it recomputed the
+         *     unanswered count with a rule that no longer matches the server's (spam is
+         *     excluded there and was not here), and it asked for 200 rows to render four
+         *     numbers.
+         *
+         *     `entitlement` is the § 20.6.1 field that was specified and never rendered —
+         *     the data has existed since 2026-08-20 and had no consumer outside the
+         *     moderation queue.
+         */
+        OwnOrganisationOverview: {
+            enquiries: components["schemas"]["EnquiryMetrics"];
+            entitlement: components["schemas"]["EntitlementResponse"];
+            /** Is Listed */
+            is_listed: boolean;
+            listings: components["schemas"]["ListingStatusCounts"];
+            /** Organisation Name */
+            organisation_name: string;
+            /** Status */
+            status: string;
+            /** Verification Level */
+            verification_level: string;
         };
         /** Page[ConsumerResponse] */
         Page_ConsumerResponse_: {
@@ -10813,6 +10917,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PartnerDetailResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_my_overview_api_v1_partners_me_overview_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: {
+                access_token?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OwnOrganisationOverview"];
                 };
             };
             /** @description Validation Error */

@@ -354,6 +354,54 @@ account merge — there is one identity endpoint.
 
 `authSlice` is the only slice. `testSlice` was deleted with the inherited domain on 2026-08-06.
 
+### A derived query tags the resources it derives from
+
+Added 2026-08-21 with `GET /partners/me/overview`, which returns counts computed from listings and
+enquiries.
+
+```ts
+getMyOverview: build.query<OwnOrganisationOverview, void>({
+  query: () => "/partners/me/overview",
+  providesTags: [
+    { type: "Listing", id: "LIST" },   // ← not a tag of its own
+    { type: "Enquiry", id: "LIST" },
+    { type: "Partner", id: "LIST" },
+  ],
+}),
+```
+
+**Do not give a derived resource its own tag.** A dedicated `Overview` tag would mean every mutation
+that changes a listing or an enquiry has to remember to invalidate it — and the one that forgets
+produces a dashboard showing figures from before the write, with no error to notice. Tagging what it
+is *derived from* makes the refresh automatic: `approveListing` already invalidates `Listing`/LIST,
+so the counts follow with no code in either place knowing about the other.
+
+The same rule covers the moderation queue, and there it matters more than convenience. A tier's
+listing limit is a property of the **partner**, so publishing one of their listings can be what puts
+another of their rows over the line. Tagging only the row that changed would leave the other rows'
+`blockers` stale, and stale blockers mean a disabled Approve button on a listing that has become
+publishable, or an enabled one on a listing that has not.
+
+### `isFetching`, not `isLoading`, drives a spinner over existing rows
+
+`isLoading` is only true for the *first* fetch of a cache entry. On a refetch — a filter change, or
+the invalidation that follows a write — it is false while `isFetching` is true. So:
+
+* `if (isLoading) return <Spinner/>` leaves the **old** rows on screen during a refetch, which after
+  a delete means the deleted row is still visible.
+* `if (isFetching) return <Spinner/>` blanks the whole table on every filter keystroke.
+
+The pattern that is right in both directions is to gate on `isFetching` **and emptiness**:
+
+```ts
+if (isFetching && rows.length === 0) return <Spinner/>;
+```
+
+First load shows the spinner; a refetch keeps the table up while the new copy arrives. This is one of
+the two rules the deleted `useResourceList` hook encoded, and it is written here because it is not
+recoverable from the RTK Query docs — it is a consequence of this app's list screens keeping their
+filters in the URL.
+
 Branding is **not** in Redux: it is resolved server-side and passed down through
 `BrandingProvider`'s context, which is what keeps it off PM-30's fetch-on-mount ledger.
 

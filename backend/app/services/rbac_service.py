@@ -167,6 +167,15 @@ def current_user_payload(db: Session, user: User) -> dict:
         "personal_email": user.personal_email,
         "company_name": user.company_name,
         "account_type": user.account_type,
+        # ⚠️ **Do not remove.** Absent from this dict until 2026-08-21 while
+        # `CurrentUserResponse` declared it with a `= None` default — so every
+        # account, partner or staff, reported `organisation_id: null` and no
+        # validation error was ever raised. The frontend decides whether somebody
+        # *is* a partner from this one field (`DashboardHome`'s `isPartner`), so
+        # the entire partner dashboard was unreachable for anybody. The field is
+        # required on the schema now, which is what makes a missing key here a
+        # loud failure instead of a silent null.
+        "organisation_id": user.organisation_id,
         "status": user.status,
         "auth_provider": user.auth_provider,
         "timezone_preference": user.timezone_preference,

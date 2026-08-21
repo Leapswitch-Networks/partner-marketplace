@@ -87,6 +87,20 @@ const PAGES = [
   ["/dashboard/partners", "Partner"],
   ["/dashboard/partners/new", "Partner"],
   ["/dashboard/partner-tiers", "Tier"],
+  // --- Added 2026-08-21 -------------------------------------------------
+  // **The rest of the directory had never been opened by this script.** Only
+  // partners and tiers were added with the module on 2026-08-13; the four
+  // screens below were not, and the omission was invisible because the pass
+  // count still read green — a route that is never visited cannot fail.
+  //
+  // Found while converting Categories and Moderation to the cached data layer:
+  // the run reported 59 passed and had not loaded either of the two files that
+  // had just been rewritten. A verification tool that is silent about what it
+  // does not cover is the failure mode worth fixing here, not the conversion.
+  ["/dashboard/categories", "Categor"],
+  ["/dashboard/listings", "Listing"],
+  ["/dashboard/moderation", "Moderation"],
+  ["/dashboard/enquiries", "Enquir"],
 ];
 
 /**

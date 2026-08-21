@@ -409,7 +409,9 @@ def public_enquiry_status(reference: str, db: Session = Depends(get_db)) -> Publ
     return PublicEnquiryStatus(
         reference=enquiry.reference,
         partner_name=partner.name if partner else "",
-        status=enquiry.status,
+        # Not `enquiry.status` — VIEWED and SPAM are withheld from the buyer.
+        # See `enquiry_service.public_status` for why each one is.
+        status=enquiry_service.public_status(enquiry),
         created_at=enquiry.created_at,
         first_responded_at=enquiry.first_responded_at,
         messages=enquiry.messages,

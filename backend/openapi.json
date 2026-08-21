@@ -2726,6 +2726,7 @@
           "personal_email",
           "company_name",
           "account_type",
+          "organisation_id",
           "status",
           "auth_provider",
           "timezone_preference",
@@ -3018,6 +3019,14 @@
       },
       "EnquiryDetailResponse": {
         "properties": {
+          "allowed_transitions": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Transitions",
+            "type": "array"
+          },
           "budget_range": {
             "anyOf": [
               {
@@ -3118,6 +3127,11 @@
           },
           "partner_id": {
             "title": "Partner Id",
+            "type": "string"
+          },
+          "partner_name": {
+            "default": "",
+            "title": "Partner Name",
             "type": "string"
           },
           "reference": {
@@ -3235,6 +3249,11 @@
             "title": "Partner Id",
             "type": "string"
           },
+          "partner_name": {
+            "default": "",
+            "title": "Partner Name",
+            "type": "string"
+          },
           "reference": {
             "title": "Reference",
             "type": "string"
@@ -3292,6 +3311,35 @@
           "created_at"
         ],
         "title": "EnquiryMessageResponse",
+        "type": "object"
+      },
+      "EnquiryMetrics": {
+        "description": "§ 16.2's counts for one partner, straight from `enquiry_service`.\n\n`spam` is here so the partner can see it, not so anything divides by it —\nspam is excluded from `total` and `unanswered` both. See TECH_DEBT PM-47: it\nused to be counted as an enquiry they had failed to answer.",
+        "properties": {
+          "answered": {
+            "title": "Answered",
+            "type": "integer"
+          },
+          "spam": {
+            "title": "Spam",
+            "type": "integer"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "unanswered": {
+            "title": "Unanswered",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "unanswered",
+          "answered",
+          "spam"
+        ],
+        "title": "EnquiryMetrics",
         "type": "object"
       },
       "EntitlementResponse": {
@@ -5009,6 +5057,35 @@
         "title": "ListingMediaResponse",
         "type": "object"
       },
+      "ListingStatusCounts": {
+        "description": "One partner's listings by status. Every key always present.\n\nNamed after the statuses rather than aggregated into \"live\" and \"not live\",\nbecause the two that need action are different actions: a `REJECTED` listing\nneeds editing, a `DRAFT` needs submitting, and a partner cannot be told which\nby a single number.",
+        "properties": {
+          "draft": {
+            "title": "Draft",
+            "type": "integer"
+          },
+          "pending_review": {
+            "title": "Pending Review",
+            "type": "integer"
+          },
+          "published": {
+            "title": "Published",
+            "type": "integer"
+          },
+          "rejected": {
+            "title": "Rejected",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "draft",
+          "pending_review",
+          "published",
+          "rejected"
+        ],
+        "title": "ListingStatusCounts",
+        "type": "object"
+      },
       "LoginRequest": {
         "properties": {
           "email": {
@@ -5562,6 +5639,47 @@
           "is_public"
         ],
         "title": "OperationEntry",
+        "type": "object"
+      },
+      "OwnOrganisationOverview": {
+        "description": "Everything the partner's landing page needs, computed on the server.\n\n**One shape rather than three list calls.** The page used to fetch a page of\nlistings and a page of enquiries and count them in the browser, which was\nwrong three ways: it reported the page length as the total, it recomputed the\nunanswered count with a rule that no longer matches the server's (spam is\nexcluded there and was not here), and it asked for 200 rows to render four\nnumbers.\n\n`entitlement` is the § 20.6.1 field that was specified and never rendered —\nthe data has existed since 2026-08-20 and had no consumer outside the\nmoderation queue.",
+        "properties": {
+          "enquiries": {
+            "$ref": "#/components/schemas/EnquiryMetrics"
+          },
+          "entitlement": {
+            "$ref": "#/components/schemas/EntitlementResponse"
+          },
+          "is_listed": {
+            "title": "Is Listed",
+            "type": "boolean"
+          },
+          "listings": {
+            "$ref": "#/components/schemas/ListingStatusCounts"
+          },
+          "organisation_name": {
+            "title": "Organisation Name",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "verification_level": {
+            "title": "Verification Level",
+            "type": "string"
+          }
+        },
+        "required": [
+          "organisation_name",
+          "status",
+          "is_listed",
+          "verification_level",
+          "entitlement",
+          "listings",
+          "enquiries"
+        ],
+        "title": "OwnOrganisationOverview",
         "type": "object"
       },
       "Page_ConsumerResponse_": {
@@ -17454,6 +17572,56 @@
           }
         },
         "summary": "Set My Expertise",
+        "tags": [
+          "partners"
+        ]
+      }
+    },
+    "/api/v1/partners/me/overview": {
+      "get": {
+        "description": "The partner's own landing-page figures, in one call.\n\n`ORGANISATION_MANAGE` like every other `/me` route, so it is partner-only and\nstaff get a 404 from `get_own_organisation` rather than an empty shape they\nwould have to interpret.",
+        "operationId": "get_my_overview_api_v1_partners_me_overview_get",
+        "parameters": [
+          {
+            "in": "cookie",
+            "name": "access_token",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Access Token"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OwnOrganisationOverview"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get My Overview",
         "tags": [
           "partners"
         ]

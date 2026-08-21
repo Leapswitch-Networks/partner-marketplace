@@ -154,6 +154,37 @@ def update_admin_user(
    values are not populated in the instance until refresh.
 6. **`.strip()` incoming strings** before persisting.
 7. **One public function per use case.** Don't add `mode` flags to fork behaviour.
+8. **A write that takes an id must scope it, not just check a permission.** Added 2026-08-21 with
+   TECH_DEBT PM-46.
+
+   The failure it prevents is an asymmetry, not a missing check: reads of a tenant-owned row went
+   through `scoping.assert_can_read`, while the five writes fetched with a bare `get_or_404` and then
+   asked `actor.has_permission(...)`. Both looked guarded. Neither the permission nor the
+   `actor.organisation_id == row.id` self-approval guards that sat beside it stop an actor reaching
+   *sideways* into another tenant — that guard exists to stop you approving **yourself**, which is the
+   opposite problem and reads almost identically.
+
+   ```python
+   def _writable_or_404(db: Session, partner_id: str, actor: User) -> Partner:
+       partner = get_or_404(db, Partner, partner_id, label="Partner")
+       scoping.assert_within_tenant(partner, Partner, actor)   # ← 404, and staff pass through
+       return partner
+   ```
+
+   One helper per resource, called by every id-taking write, rather than the line repeated five
+   times. `assert_within_tenant` returns immediately for `has_admin_access` or a NULL
+   `organisation_id`, so this costs staff nothing.
+
+   **404, not 403** — matching the read path. A 403 confirms the row exists, and in a directory that
+   discloses a competitor before they are published.
+
+   ⚠️ **It only narrows a real `User`.** `_as_principal` maps anything that is not a `User` or a
+   `Principal` straight through, so a hand-rolled test double with an `organisation_id` attribute is
+   **not** narrowed and a test built on one passes vacuously. Use a real row.
+
+   The per-row `can_*` predicates stay permission-only on purpose: they feed response flags, which are
+   only ever computed for rows the actor could already read, so narrowing them would duplicate the
+   guard rather than add one.
 
 ---
 
@@ -266,6 +297,41 @@ service and raise `HTTPException`.
 ⚠️ **Keep validation consistent across schemas.** The current code isn't: `AdminRegisterRequest`
 requires an uppercase letter and a digit, `RegisterRequest` requires only length 8. Don't add a third
 standard — consolidate into a shared validator when you touch this.
+
+---
+
+### A response model with required non-column fields needs a route-level test
+
+Added 2026-08-21 after TECH_DEBT PM-48, which took the most important staff screen in the directory
+out of service for a day.
+
+```python
+# ❌ The assignments run after validation has already failed.
+item = ModerationQueueItem.model_validate(listing)
+item.partner_name = partner.name          # required on the model, not a column
+item.entitlement = ...                    # ditto
+
+# ✅ Attach to the row first, then validate once — same shape as
+#    `partner_service.decorate`, which does this for its per-row flags.
+listing.partner_name = partner.name
+listing.entitlement = ...
+items.append(ModerationQueueItem.model_validate(listing))
+```
+
+**The testing rule matters more than the ordering rule**, because the ordering mistake is easy to make
+again in a different shape. A service can be entirely correct while the endpoint 500s, and unit tests
+on the service will all pass — PM-48 sat behind 997 green tests.
+
+It is worse when the route has an early return for the empty case:
+
+```python
+if not listings:
+    return []          # ← the only path anyone had exercised
+```
+
+Then the broken path is the *populated* one, and the failure presents as "nothing to show" rather than
+as an error. Any route-level test must therefore use **at least two rows**, so neither an empty-case
+early return nor a single-row special case can pass it.
 
 ---
 

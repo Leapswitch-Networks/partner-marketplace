@@ -8,6 +8,14 @@
 > **Short answer: yes, and about 80% of the difficulty is already paid for.** What remains is one
 > genuine architectural decision, one bulk mechanical move, and one choice about migrations. All
 > three are described below with what was measured rather than assumed.
+>
+> **Second pass, 2026-08-21.** The first pass measured *imports* and found zero core→domain
+> dependencies. That measurement was correct and also incomplete: a Python import is not the only
+> way one module depends on another. Re-measured by **string**, the core reaches the domain in six
+> more places — two of them load-bearing, one of them a security allowlist, and one of them the
+> core's own test suite. Section 2.2 is that audit. It does not change the verdict; it changes the
+> task list from four items to six, and it is the difference between "the move works" and "the move
+> works and project #3's copied core actually starts".
 
 ---
 
@@ -56,9 +64,51 @@ never reaches back. That is the part that is expensive to retrofit, and it is do
 | `domain/partners/` | 3 — already separated | — |
 | **Total** | **~20** | **~110** |
 
+### 2.2 What the import scan did not show — the string audit
+
+`grep` for imports is the wrong instrument for four of these. A hardcoded event name, a path in an
+allowlist, a prompt sentence and a test fixture all couple core to domain without importing
+anything. Measured 2026-08-21 across `app/core/`, `app/api/`, `app/services/`, `app/schemas/`,
+`app/models/`, `app/ai/`, `app/main.py` and `tests/` — 50 files mention a domain word; sorted by
+whether the mention *does* anything:
+
+| Where | Kind | Load-bearing? | Cost to split |
+|---|---|---|---|
+| `api_docs_service.EXPECTED_PUBLIC_PATHS` — 8 domain paths | **security allowlist** | **Yes, and asserted both ways** | Small — needs a `register_public_path` seam |
+| `models/associations.py` — core pivots *and* `partner_expertise` | **one file, two packages** | Yes | Small, but a file *move* cannot do it — it must be **split** |
+| `webhook_service.EVENTS` — `partner.created`, `partner.activated` (2 of 4) | registry | Yes — `_validate_events` rejects unknown names | Small — `register_webhook_event` |
+| `main.py` — 6 of 29 `include_router` calls | aggregator | Yes | Small — `register_router` (§ 3.4) |
+| `tests/` — 3 *core* test files use `Partner` as their tenant fixture | **test collection** | Yes | See § 3.5 |
+| `ai/prompt.py`, `ai/tools.py` descriptions, `ai_service.AGENT_NAME` | prose + one constant | No | Trivial — feed from `settings.APP_NAME` |
+| `auth_service.register_partner()` + one activity-log string | **naming only** | No — zero domain imports; it builds a `User` with `account_type="external"` and `DEFAULT_EXTERNAL_ROLE` | Rename |
+| ~15 files: docstrings in `core/`, `scoping.py`, `user_service.py`, `activity_service.py`, `search_service.py`, `recycle_bin_service.py` | prose | No | **Leave them.** They are the recorded *reasoning* for the seam — `user_service.py` 433 explains why importing `Partner` there would be a genuine cycle. Deleting the explanation is how the seam gets undone later |
+
+**Two of these are the good news, and they are worth naming** because they show the pattern is
+already understood in this codebase rather than being invented by this document:
+
+* **`core/config.py` is already the model answer.** `APP_NAME`, `APP_SHORT_NAME` and `APP_TAGLINE` are
+  *settings with project defaults*, not constants — exactly what a copied core needs. And
+  `ALLOW_PARTNER_SELF_REGISTRATION` was already renamed to `ALLOW_EXTERNAL_SELF_REGISTRATION` in
+  phase 1, with the old name kept as an alias. Nothing to do here.
+* **The AI SQL tool is domain-neutral by construction.** It enumerates readable tables with
+  `inspect(...).get_table_names()` filtered through `is_queryable` — runtime reflection, not a
+  hardcoded list — so it picks up project #3's tables on day one with no edit. Only the *example
+  words* in the prompt name partners.
+
+#### The public-path allowlist is the one that will actually break
+
+`EXPECTED_PUBLIC_PATHS` is not documentation. `tests/test_api_docs.py` asserts it in **both**
+directions: line 65 fails when a route is public but unlisted, and line 91 fails when a listed path
+no longer exists. So a copied core carries 8 domain paths that project #3 does not serve, and the
+suite goes red on `stale` before that project has written a line of its own code.
+
+That bidirectional assertion is a *good* design — it is what stops a public route appearing by
+accident — which is exactly why it should be a registration seam rather than a list someone edits.
+The domain declares its own public surface; core asserts against the union.
+
 ---
 
-## 3. The four blockers, hardest first
+## 3. The six blockers, hardest first
 
 ### 3.1 🔴 Two core tables have a foreign key into a domain table
 
@@ -121,9 +171,14 @@ consumed by projects you do not control.
 
 ### 3.3 🟡 The bulk move itself
 
-~20 files relocate, and every `from app.services.partner_service import …` becomes
+~20 files relocate — **plus one that splits**: `models/associations.py` holds `user_roles` and
+`role_permissions` (core) alongside `partner_expertise` (domain, both FKs domain-side). It is the
+only file in the tree that belongs to both packages, so a bulk `git mv` cannot handle it; the pivot
+table moves to the domain and the two RBAC pivots stay.
+
+Otherwise every `from app.services.partner_service import …` becomes
 `from app.partner_market_place.services.partner_service import …`. Mechanical, wide, and safe:
-`ruff`, `tsc` and 876 tests catch a mistake immediately, and nothing about behaviour changes.
+`ruff`, `tsc` and 943 tests catch a mistake immediately, and nothing about behaviour changes.
 
 Two sub-questions worth deciding once rather than per-file:
 
@@ -137,29 +192,82 @@ Two sub-questions worth deciding once rather than per-file:
   yes — but a future project will want *a* public surface, so the router-mounting pattern should stay
   in core even though this file does not.
 
-### 3.4 🟢 The two aggregators
+### 3.4 🟢 The aggregators and the registry gaps
 
 `models/__init__.py` and `main.py`'s router tuple both name domain modules by necessity — they are
 entry points, which is the one place a composition root is *supposed* to know everything.
 
 `models/__init__.py` is already solved (labelled block). `main.py` could take the same treatment the
 nav and permission catalogs already got: a domain package registers its routers, and `main.py` loops
-over the registry instead of importing 29 names. That is a small, self-contained change and it is the
-last place the word "partners" appears in core code.
+over the registry instead of importing 29 names.
+
+**And the same treatment covers the two § 2.2 findings**, because they are the identical shape — a
+core-side list with domain entries typed into it:
+
+| Gap | Seam to add | Domain entries today |
+|---|---|---|
+| `main.py` router tuple | `register_router` | 6 of 29 |
+| `api_docs_service.EXPECTED_PUBLIC_PATHS` | `register_public_path` | 8 |
+| `webhook_service.EVENTS` | `register_webhook_event` | 2 of 4 |
+
+This is not new machinery — `register_permission_group`, `register_role`, `register_nav_section` and
+`register_scope` already exist and work the same way. Three more of the same, and after them the
+word "partners" appears in core code only inside explanatory prose.
+
+### 3.5 🟡 The core test suite does not currently stand alone
+
+The item the first pass missed entirely, and the one that decides whether project #3 starts green.
+
+**8 of 37 test files touch the domain.** Five are domain tests and simply move with it
+(`test_category_counts`, `test_directory_crud`, `test_directory_lifecycle`,
+`test_listing_entitlement`, `test_partner_write_permissions`). The other three are **core** tests
+that use `Partner` as their tenant fixture, because it is the only tenant model that exists:
+
+| File | How it reaches the domain | Effect on a bare core |
+|---|---|---|
+| `test_visibility_paths.py` | `from app.domain.partners.permissions import …` at **module level**, plus `Partner(...)` rows in fixtures | **Collection error** — the file cannot even be imported |
+| `test_role_hierarchy.py` | `from app.domain.partners.permissions import ROLE_PARTNER` at **module level** | **Collection error** |
+| `test_scoping.py` | `from app.models.partner import Partner` *inside test bodies* (deliberately deferred) | Collects fine; those tests fail at run time |
+
+So `TestTheCoreAssemblesWithNoDomain` proves the RBAC **catalog** is domain-free while the **suite
+that guards it** is not. Both of the module-level cases sit in files that test the tenancy seam,
+which is precisely where a copied core most needs its tests working.
+
+**Options**
+
+| | Approach | Cost | Consequence |
+|---|---|---|---|
+| **A** | A **core test fixture tenant** — a tiny model defined in `tests/` (or a core `organisations` row, free if 3.1/A is done) that the three files use instead of `Partner` | Moderate; three files, and the assertions stay as they are | Core suite becomes copy-and-run. If 3.1/A lands, this is nearly free: the fixture becomes a real core table |
+| **B** | Move the three files into the **domain** suite and accept that the tenancy seam is tested only where a tenant exists | Low | Project #3 copies a core with its tenancy rules untested until it writes its own domain. That is the seam most likely to be misused |
+| **C** | Leave them; document that the core suite needs a domain | Nothing | Honest, but "copy the core and 3 files fail to collect" is a bad first five minutes for project #3 |
+
+**Recommendation: A**, sequenced *after* 3.1 — if core owns `organisations`, the fixture is a real
+core row and the change is small. Doing A first means writing a throwaway stub and then deleting it.
 
 ---
 
 ## 4. Suggested sequence
 
+Ordered so nothing is done twice. Steps 2–4 are independent of each other and could run as parallel
+packages on disjoint file lists (§ 3 of `AGENTS.md`); everything after step 1 is cheaper once it is
+decided.
+
 1. **Decide 3.1.** Everything else is cheaper afterwards and none of it is blocked meanwhile.
 2. **`organisations` table migration** (if A), with the `upgrade → downgrade → upgrade` gate on a
-   seeded database.
-3. **Router registration seam** in `main.py` (3.4) — small, and removes the last core mention of the
-   domain.
-4. **The bulk move** (3.3), layer-first, one package at a time, gate after each.
-5. **Extend `TestTheCoreAssemblesWithNoDomain`** to assert the *schema* stands alone, not just the
-   RBAC catalog. That test is what stops this decaying.
-6. **Write the baseline recipe** (3.2/A) into `README` or a new `documentation/core/` doc: copy,
+   seeded database. Orchestrator work — it touches the tenant boundary.
+3. **The three registration seams** (3.4): `register_router`, `register_public_path`,
+   `register_webhook_event`. Same shape as the four that already exist, and after them core code
+   names the domain only in prose. Bounded and well-specified — a good subagent package.
+4. **Cosmetics** — rename `auth_service.register_partner` → `register_external_account`, and feed the
+   AI prompt's product words from `settings.APP_NAME`. Trivial, and best done before the move so the
+   diff is not tangled with path changes.
+5. **The bulk move** (3.3), layer-first, one package at a time, gate after each — remembering that
+   `models/associations.py` splits rather than moves.
+6. **Re-home the core tenancy tests** (3.5/A) onto a core-owned tenant now that one exists.
+7. **Extend `TestTheCoreAssemblesWithNoDomain`** to assert the *schema* stands alone, not just the
+   RBAC catalog — and add the check that would have caught § 2.2 in the first place: **no core module
+   may contain a domain table name as a string**, allowlisting docstrings. That grep is the test.
+8. **Write the baseline recipe** (3.2/A) into `README` or a new `documentation/core/` doc: copy,
    delete `<project>/`, squash, rename. One page.
 
 ---
@@ -172,6 +280,10 @@ last place the word "partners" appears in core code.
 * **The payoff is unproven until project #3 exists.** § 2's assumption — template repo, not a package
   — was chosen precisely because a two-project payoff does not justify library machinery. That
   reasoning still holds, and it argues for the cheap options (3.2/A) over the thorough ones.
+* **The lesson from the second pass is worth keeping**: "zero core→domain imports" was true and
+  reassuring and hid four real couplings, one of them a security allowlist. A dependency you can
+  only see by importing is the *easy* kind. Step 7's string check exists so this is measured
+  automatically next time rather than depending on somebody thinking to grep.
 * **One thing genuinely does not split**: `db/migrations/env.py` and `alembic.ini` are single-chain
   configuration and are on the Protected list. Any migration restructuring needs explicit approval.
 * **Current state correction for the plan**: § 2.6 says the tenancy seam "governs zero users". As of

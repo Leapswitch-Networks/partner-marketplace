@@ -14,7 +14,25 @@ import {
 } from "@/lib/api/endpoints/directoryEndpoints";
 import { usePermissions } from "@/lib/hooks/usePermissions";
 
-const STATUSES: EnquiryStatus[] = ["NEW", "RESPONDED", "CLOSED", "WON", "LOST"];
+/**
+ * Human labels. The *options offered* come from the server —
+ * `enquiry.allowed_transitions` — because the lifecycle table lives in
+ * `enquiry_service` and a second copy here would drift. When it drifted, this
+ * dropdown would offer a move the API refuses with a 409, and an operator reads
+ * that as the page being broken rather than as the move being illegal.
+ *
+ * Exhaustive by type, so adding a status to `EnquiryStatus` without a label here
+ * fails the build instead of rendering a raw enum value at someone.
+ */
+const STATUS_LABEL: Record<EnquiryStatus, string> = {
+  NEW: "New",
+  VIEWED: "Opened",
+  RESPONDED: "Responded",
+  CLOSED: "Closed",
+  WON: "Won",
+  LOST: "Lost",
+  SPAM: "Spam",
+};
 
 /**
  * One enquiry, as a conversation.
@@ -63,9 +81,18 @@ export default function EnquiryThread({ enquiryId }: { enquiryId: string }) {
   const onStatus = async (status: EnquiryStatus) => {
     try {
       await setStatus({ id: enquiryId, status }).unwrap();
-      show(`Marked ${status.toLowerCase()}.`);
-    } catch {
-      show("Could not change the status.", "error");
+      show(`Marked ${STATUS_LABEL[status].toLowerCase()}.`);
+    } catch (err) {
+      // A 409 is not a fault — it is the lifecycle refusing a move, and it
+      // arrives with a message naming what *is* allowed from here. Showing that
+      // beats a generic failure, which would leave the operator guessing.
+      const detail = (err as { data?: unknown } | null)?.data;
+      show(
+        typeof detail === "string" && detail.length > 0
+          ? detail
+          : "Could not change the status.",
+        "error",
+      );
     }
   };
 
@@ -102,9 +129,9 @@ export default function EnquiryThread({ enquiryId }: { enquiryId: string }) {
             aria-label="Enquiry status"
             className="rounded-[5px] border border-surface-border bg-white px-3 py-2 text-sm text-ink dark:border-night-border dark:bg-night-card dark:text-gray-100"
           >
-            {STATUSES.map((s) => (
+            {[enquiry.status, ...(enquiry.allowed_transitions ?? [])].map((s) => (
               <option key={s} value={s}>
-                {s}
+                {STATUS_LABEL[s]}
               </option>
             ))}
           </select>

@@ -6,6 +6,8 @@ import type {
   EnquiryStatus,
   Listing,
   ListingStatus,
+  ModerationQueueEntry,
+  OwnOrganisationOverview,
 } from "@/lib/api/directoryApi";
 import type { Paginated } from "@/types";
 
@@ -111,6 +113,22 @@ export const directoryEndpoints = api.injectEndpoints({
     }),
 
     // Moderation writes invalidate listings, because that is what they change.
+    // The queue carries `blockers` and `entitlement` per row — whether approving
+    // would actually succeed. Tagged on `Listing`/LIST so approving or rejecting
+    // one row refreshes the rest, which matters here more than elsewhere: a tier
+    // limit is a property of the *partner*, so publishing one of their listings
+    // can be what puts another of their rows over the line.
+    reviewQueue: build.query<ModerationQueueEntry[], void>({
+      query: () => "/moderation/queue",
+      providesTags: (result) =>
+        result
+          ? [
+              ...result.map((l) => ({ type: "Listing" as const, id: l.id })),
+              { type: "Listing" as const, id: "LIST" },
+            ]
+          : [{ type: "Listing" as const, id: "LIST" }],
+    }),
+
     approveListing: build.mutation<Listing, string>({
       query: (id) => ({ url: `/moderation/listings/${id}/approve`, method: "POST" }),
       invalidatesTags: (_r, _e, id) => [
@@ -167,6 +185,22 @@ export const directoryEndpoints = api.injectEndpoints({
       ],
     }),
 
+    // --- The partner's own organisation -------------------------------------
+    //
+    // Tagged with both `Listing` and `Enquiry` LIST, not a tag of its own. It is
+    // a *derived* resource: publishing a listing or answering an enquiry changes
+    // these numbers, and a dedicated tag would mean every one of those mutations
+    // had to remember to invalidate it. Reusing the two it is derived from makes
+    // that automatic — the landing page is correct the moment either changes.
+    getMyOverview: build.query<OwnOrganisationOverview, void>({
+      query: () => "/partners/me/overview",
+      providesTags: [
+        { type: "Listing", id: "LIST" },
+        { type: "Enquiry", id: "LIST" },
+        { type: "Partner", id: "LIST" },
+      ],
+    }),
+
     updateEnquiryStatus: build.mutation<Enquiry, { id: string; status: EnquiryStatus }>({
       query: ({ id, status }) => ({
         url: `/enquiries/${id}/status`,
@@ -203,4 +237,6 @@ export const {
   useGetEnquiryQuery,
   useReplyEnquiryMutation,
   useUpdateEnquiryStatusMutation,
+  useGetMyOverviewQuery,
+  useReviewQueueQuery,
 } = directoryEndpoints;

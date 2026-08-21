@@ -21,18 +21,35 @@ import { usePermissions } from "@/lib/hooks/usePermissions";
 
 const STATUS_OPTIONS: { value: EnquiryStatus; label: string }[] = [
   { value: "NEW", label: "New" },
+  { value: "VIEWED", label: "Opened" },
   { value: "RESPONDED", label: "Responded" },
   { value: "CLOSED", label: "Closed" },
   { value: "WON", label: "Won" },
   { value: "LOST", label: "Lost" },
+  { value: "SPAM", label: "Spam" },
 ];
 
+/**
+ * Badge tone per status. Exhaustive by type, so a new status cannot ship
+ * unlabelled.
+ *
+ * `VIEWED` is a warning like `NEW`, and that is the deliberate part: opening an
+ * enquiry is not progress. § 16.2's measure is the *unanswered* share, and
+ * colouring "I read it" as neutral would let a partner clear the warnings off
+ * their inbox without answering anyone.
+ *
+ * `SPAM` is neutral rather than danger. It is not a failure — it is the correct
+ * handling of junk, and it is excluded from the response-rate metric entirely.
+ * Colouring it red would make doing the right thing look like a problem.
+ */
 const TONE: Record<EnquiryStatus, "success" | "warning" | "danger" | "info"> = {
   NEW: "warning",
+  VIEWED: "warning",
   RESPONDED: "info",
   WON: "success",
   CLOSED: "info",
   LOST: "danger",
+  SPAM: "info",
 };
 
 /**
@@ -121,7 +138,15 @@ export default function EnquiriesModule() {
       dateColumn<Enquiry>({ id: "created_at", header: "Received", value: (row) => row.created_at }),
     ];
     if (seesEveryPartner) {
-      cols.splice(3, 0, { id: "partner_id", header: "Partner", cell: (row) => row.partner_id });
+      // The name, not the id. This column is staff-only oversight, and an
+      // operator comparing companies cannot do it from UUIDs — the same reason
+      // the moderation queue carries `partner_name`. Falls back to the id rather
+      // than an empty cell, so a missing name is still traceable.
+      cols.splice(3, 0, {
+        id: "partner_name",
+        header: "Partner",
+        cell: (row) => row.partner_name || row.partner_id,
+      });
     }
     return cols;
   }, [router, seesEveryPartner]);

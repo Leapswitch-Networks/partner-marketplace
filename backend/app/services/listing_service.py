@@ -42,6 +42,14 @@ _TRANSITIONS: dict[str, frozenset[str]] = {
     "PUBLISHED": frozenset({"PENDING_REVIEW", "DRAFT"}),
 }
 
+#: Every status a listing can hold. Derived from the transition table rather than
+#: retyped, so a new state cannot be added to one and forgotten in the other. The
+#: table's keys are the states that can be *left*; `REJECTED` is both a key and a
+#: target, and the union covers a terminal state if one is ever added.
+_ALL_STATUSES: frozenset[str] = frozenset(_TRANSITIONS) | {
+    target for targets in _TRANSITIONS.values() for target in targets
+}
+
 #: Fields whose change re-opens moderation. Editing a typo in an internal note
 #: should not, but there are no internal notes on a listing — everything on it is
 #: published, so everything on it is material.
@@ -260,6 +268,35 @@ def published_counts(db: Session, partner_ids: list[str]) -> dict[str, int]:
 def published_count(db: Session, partner_id: str) -> int:
     """Live published listings for one partner. The single-row path."""
     return published_counts(db, [partner_id]).get(partner_id, 0)
+
+
+def status_counts(db: Session, partner_id: str) -> dict[str, int]:
+    """One partner's live listings grouped by status, in a single query.
+
+    Written for the partner's own landing page, which used to fetch a page of
+    listings and count them in the browser. That was wrong in a way that looked
+    right: the page asked for `per_page=100` and reported `items.length` as the
+    total, so a partner with 150 listings was told they had 100 — and the number
+    it was reporting was already available as `total` in the page metadata it
+    threw away.
+
+    **Every status is present, including the ones with no rows.** A missing key
+    reads as "no data" at the call site and a zero reads as "none of these",
+    which is the honest answer and the one § 20.4 asks for. `.get(x, 0)` at every
+    call site would work too, until one of them forgot.
+
+    Soft-deleted rows are excluded, matching `published_counts`.
+    """
+    rows = db.execute(
+        select(ServiceListing.status, func.count(ServiceListing.id))
+        .where(
+            ServiceListing.partner_id == partner_id,
+            ServiceListing.deleted_at.is_(None),
+        )
+        .group_by(ServiceListing.status)
+    ).all()
+    counted = {status: count for status, count in rows}
+    return {status: counted.get(status, 0) for status in _ALL_STATUSES}
 
 
 def entitlement(

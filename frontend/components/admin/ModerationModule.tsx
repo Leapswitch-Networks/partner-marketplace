@@ -1,19 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import PageHeading, { headingClasses } from "@/components/common/PageHeading";
 import Button from "@/components/common/Button";
 import Textarea from "@/components/common/Textarea";
 import Toast, { useToast } from "@/components/common/Toast";
+import type { ModerationQueueEntry } from "@/lib/api/directoryApi";
 import {
-  approveListing,
-  listCategories,
-  rejectListing,
-  reviewQueue,
-  type Category,
-  type Listing,
-} from "@/lib/api/directoryApi";
+  useApproveListingMutation,
+  useListCategoriesQuery,
+  useRejectListingMutation,
+  useReviewQueueQuery,
+} from "@/lib/api/endpoints/directoryEndpoints";
 import { extractApiError } from "@/lib/utils/apiError";
 
 /**
@@ -40,60 +39,78 @@ import { extractApiError } from "@/lib/utils/apiError";
  * The API orders the queue by submission time ascending, and this page does not
  * re-sort. § 16.2 measures the age of the oldest item; a newest-first queue is
  * how the oldest item becomes permanently invisible to the person working it.
+ *
+ * ## 4. It says when approving would fail, before the click
+ *
+ * Each row carries `blockers` and `entitlement` — added to the queue on
+ * 2026-08-20 for exactly this and **not rendered until 2026-08-21**. Without them
+ * a reviewer reads a listing, judges it worth publishing, clicks Approve and gets
+ * a 409 because the partner is at their tier's listing limit. Nothing on screen
+ * had said so, and the failure looks like a broken button rather than a business
+ * rule. The Approve button is now disabled with the reason beside it.
+ *
+ * Note what is *not* done: the row is not hidden. A blocked listing still needs
+ * reading, and can still be sent back — rejecting is never blocked, because
+ * telling a partner what to change does not depend on whether they have a slot
+ * free.
  */
 export default function ModerationModule() {
   const { toasts, show, dismiss } = useToast();
-  const [queue, setQueue] = useState<Listing[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState<string | null>(null);
   const [reasons, setReasons] = useState<Record<string, string>>({});
 
-  const load = () =>
-    reviewQueue()
-      .then(setQueue)
-      .catch((e) => show(extractApiError(e, "Could not load the queue."), "error"))
-      .finally(() => setLoading(false));
+  // `isFetching`, not `isLoading`: after approving a row the queue refetches, and
+  // `isLoading` is false for that second fetch — so keying the spinner off it
+  // would leave the just-approved row on screen until the response landed.
+  const { data: queue = [], isFetching, isError } = useReviewQueueQuery();
+  // The category list is a picker, cached across every screen that shows one. An
+  // empty array on failure is deliberate: a missing category name degrades to
+  // "Uncategorised" and must not stop a reviewer working the queue.
+  const { data: categories = [] } = useListCategoriesQuery();
 
-  useEffect(() => {
-    load();
-    listCategories()
-      .then(setCategories)
-      .catch(() => setCategories([]));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // No `refetch` after either write. Both mutations invalidate `Listing`/LIST,
+  // which this query provides — so the queue reloads itself, and the partner's
+  // *other* rows get their blockers recomputed, which is the case a manual
+  // reload of one row would have missed.
+  const [approve, { isLoading: approving }] = useApproveListingMutation();
+  const [reject, { isLoading: rejecting }] = useRejectListingMutation();
+  const [busyId, setBusyId] = useState<string | null>(null);
 
-  const onApprove = async (listing: Listing) => {
-    setBusy(listing.id);
+  const onApprove = async (listing: ModerationQueueEntry) => {
+    setBusyId(listing.id);
     try {
-      await approveListing(listing.id);
+      await approve(listing.id).unwrap();
       show(`“${listing.title}” is live.`);
-      await load();
     } catch (e) {
       show(extractApiError(e, "Could not approve the listing."), "error");
     } finally {
-      setBusy(null);
+      setBusyId(null);
     }
   };
 
-  const onReject = async (listing: Listing) => {
+  const onReject = async (listing: ModerationQueueEntry) => {
     const reason = (reasons[listing.id] ?? "").trim();
     if (!reason) return;
-    setBusy(listing.id);
+    setBusyId(listing.id);
     try {
-      await rejectListing(listing.id, reason);
+      await reject({ id: listing.id, reason }).unwrap();
       show(`“${listing.title}” sent back with your notes.`);
       setReasons((prev) => ({ ...prev, [listing.id]: "" }));
-      await load();
     } catch (e) {
       show(extractApiError(e, "Could not reject the listing."), "error");
     } finally {
-      setBusy(null);
+      setBusyId(null);
     }
   };
 
-  if (loading) {
+  if (isFetching && queue.length === 0) {
     return <p className="p-6 text-sm text-ink-muted dark:text-night-muted">Loading the queue…</p>;
+  }
+  if (isError) {
+    return (
+      <p className="p-6 text-sm text-tone-danger">
+        Could not load the queue. Reload the page to try again.
+      </p>
+    );
   }
 
   return (
@@ -120,6 +137,8 @@ export default function ModerationModule() {
         {queue.map((listing) => {
           const category = categories.find((c) => c.id === listing.category_id);
           const reason = reasons[listing.id] ?? "";
+          const blocked = listing.blockers.length > 0;
+          const busy = busyId === listing.id;
           return (
             <li
               key={listing.id}
@@ -127,8 +146,7 @@ export default function ModerationModule() {
             >
               {/* Rendered as the public will see it — rule 2. */}
               <p className="text-xs uppercase tracking-wide text-ink-muted dark:text-night-muted">
-                {category?.name ?? "Uncategorised"} · partner {listing.partner_id.slice(0, 8)} ·
-                submitted{" "}
+                {category?.name ?? "Uncategorised"} · {listing.partner_name} · submitted{" "}
                 {listing.submitted_at ? new Date(listing.submitted_at).toLocaleString() : "—"}
               </p>
               <h2 className={`${headingClasses("section")} mt-1 text-ink dark:text-gray-100`}>
@@ -158,19 +176,49 @@ export default function ModerationModule() {
                 />
               </div>
 
-              <div className="mt-3 flex flex-wrap gap-2">
-                <Button onClick={() => onApprove(listing)} loading={busy === listing.id}>
+              {/*
+                Rule 4 — why Approve is unavailable, stated where the button is.
+                A disabled control with no explanation is indistinguishable from a
+                broken one.
+              */}
+              {blocked && (
+                <div className="mt-4 rounded-[5px] border border-tone-warning/50 bg-tone-warning/10 p-3 text-sm">
+                  <p className="font-medium text-ink dark:text-gray-100">
+                    Cannot be published yet
+                  </p>
+                  <ul className="mt-1 list-inside list-disc text-ink-label dark:text-night-muted">
+                    {listing.blockers.map((blocker) => (
+                      <li key={blocker}>{blocker}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Button
+                  onClick={() => onApprove(listing)}
+                  loading={busy && approving}
+                  disabled={blocked}
+                >
                   Approve and publish
                 </Button>
                 <Button
                   variant="danger"
                   onClick={() => onReject(listing)}
-                  loading={busy === listing.id}
+                  loading={busy && rejecting}
                   // Rule 3 — the requirement is discoverable before composing nothing.
+                  // Never disabled by `blocked`: sending a listing back does not
+                  // depend on the partner having a slot free.
                   disabled={!reason.trim()}
                 >
                   Send back
                 </Button>
+                {!listing.entitlement.unlimited && listing.entitlement.max_listings !== null && (
+                  <span className="text-xs text-ink-muted dark:text-night-muted">
+                    {listing.entitlement.published} of {listing.entitlement.max_listings} published
+                    {listing.entitlement.tier ? ` · ${listing.entitlement.tier}` : ""}
+                  </span>
+                )}
               </div>
             </li>
           );

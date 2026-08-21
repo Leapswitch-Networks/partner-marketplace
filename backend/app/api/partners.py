@@ -34,6 +34,7 @@ from app.domain.partners.permissions import (
 )
 from app.models.user import User
 from app.schemas.common import Page
+from app.schemas.directory import OwnOrganisationOverview
 from app.schemas.partner import (
     ChangePartnerStatusRequest,
     CreatePartnerRequest,
@@ -76,6 +77,22 @@ def get_my_organisation(
 ) -> PartnerDetailResponse:
     return PartnerDetailResponse.model_validate(
         partner_service.get_own_organisation(db, actor)
+    )
+
+
+@router.get("/me/overview", response_model=OwnOrganisationOverview)
+def get_my_overview(
+    db: Session = Depends(get_db),
+    actor: User = Depends(require_permission(ORGANISATION_MANAGE)),
+) -> OwnOrganisationOverview:
+    """The partner's own landing-page figures, in one call.
+
+    `ORGANISATION_MANAGE` like every other `/me` route, so it is partner-only and
+    staff get a 404 from `get_own_organisation` rather than an empty shape they
+    would have to interpret.
+    """
+    return OwnOrganisationOverview.model_validate(
+        partner_service.own_overview(db, actor)
     )
 
 

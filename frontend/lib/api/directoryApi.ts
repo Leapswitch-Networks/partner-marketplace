@@ -21,7 +21,27 @@ import type { Paginated } from "@/types";
 
 export type ListingStatus = "DRAFT" | "PENDING_REVIEW" | "PUBLISHED" | "REJECTED";
 export type PricingModel = "FIXED" | "FROM" | "ON_REQUEST";
-export type EnquiryStatus = "NEW" | "RESPONDED" | "CLOSED" | "WON" | "LOST";
+/**
+ * The seven states an enquiry can hold — TECH_DEBT PM-47.
+ *
+ * `VIEWED` means opened and not yet answered. `SPAM` is the one that mattered:
+ * junk arrives through a public form and is never replied to, so before it
+ * existed a junk enquiry counted against the partner's response rate for ever —
+ * and § 9 ranks partners on that number.
+ *
+ * Widening this deliberately breaks any exhaustive `Record<EnquiryStatus, …>`
+ * until the new entries are added. That is the point: a status the page cannot
+ * label renders as an unstyled badge, which is how a half-shipped enum reaches a
+ * user.
+ */
+export type EnquiryStatus =
+  | "NEW"
+  | "VIEWED"
+  | "RESPONDED"
+  | "CLOSED"
+  | "WON"
+  | "LOST"
+  | "SPAM";
 
 export interface Category {
   id: number;
@@ -93,6 +113,13 @@ export interface Enquiry {
   status: EnquiryStatus;
   source: "PROFILE" | "LISTING";
   /**
+   * The recipient company's name, denormalised by the list route.
+   *
+   * The staff-only Partner column rendered `partner_id` until 2026-08-21, so
+   * oversight meant reading raw UUIDs. Optional because only the index fills it.
+   */
+  partner_name?: string;
+  /**
    * When the recipient partner first opened it — null until they do.
    *
    * Never set by a staff read: staff hold `enquiry-view` for oversight, and
@@ -104,6 +131,18 @@ export interface Enquiry {
   first_responded_at: string | null;
   created_at: string;
   messages?: EnquiryMessage[];
+  /**
+   * Which statuses this enquiry may move to next, from the server.
+   *
+   * The lifecycle table lives in `enquiry_service`; a second copy here would
+   * drift, and a drifted copy offers a move the API refuses with a 409 — which an
+   * operator reads as the page being broken rather than as the move being
+   * illegal.
+   *
+   * Present on the detail response only, so it is optional. Absent means "offer
+   * nothing", which is the safe default.
+   */
+  allowed_transitions?: EnquiryStatus[];
 }
 
 // --- Categories --------------------------------------------------------------
@@ -197,6 +236,27 @@ export const deleteListing = async (id: string): Promise<void> => {
  * `remaining` is never negative: a partner moved to a smaller tier can be over
  * their allowance, and "-2 remaining" is not something to render.
  */
+/**
+ * The partner landing page's figures, computed on the server.
+ *
+ * Replaces three list calls and four client-side reductions. Every one of those
+ * reductions was wrong in a way that rendered cleanly — the page length was
+ * reported as the total, and `unanswered` was recomputed with a rule that no
+ * longer matches the server's (spam is excluded there since PM-47).
+ *
+ * `GET /partners/me/overview`.
+ */
+export interface OwnOrganisationOverview {
+  organisation_name: string;
+  status: string;
+  is_listed: boolean;
+  verification_level: string;
+  entitlement: Entitlement;
+  listings: { draft: number; pending_review: number; published: number; rejected: number };
+  /** `spam` is shown, never divided by — it is excluded from `total` and `unanswered`. */
+  enquiries: { total: number; unanswered: number; answered: number; spam: number };
+}
+
 export interface Entitlement {
   /** Null when the partner is on no tier at all — which means unlimited. */
   tier: string | null;

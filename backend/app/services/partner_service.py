@@ -65,7 +65,14 @@ from app.schemas.partner import (
     UpdatePartnerRequest,
     UpdatePartnerTierRequest,
 )
-from app.services import activity_service, scoping, session_service, webhook_service
+from app.services import (
+    activity_service,
+    enquiry_service,
+    listing_service,
+    scoping,
+    session_service,
+    webhook_service,
+)
 
 _LIST_SPEC = ListSpec(
     sortable={
@@ -145,6 +152,44 @@ def _unique_slug(db: Session, name: str) -> str:
         candidate = f"{base}-{suffix}"
         suffix += 1
     return candidate
+
+
+def _writable_or_404(db: Session, partner_id: str, actor: User) -> Partner:
+    """Fetch a partner for a **write**, refusing another organisation's row.
+
+    Closes TECH_DEBT PM-46. Reads went through `scoping.assert_can_read` from the
+    day PM-5 was closed; the five id-taking writes fetched with a bare
+    `get_or_404` and then checked a permission, so nothing in the write path ever
+    consulted the tenancy registration that `Partner` carries.
+
+    ## Why this was safe and is still worth fixing
+
+    It was never exploitable in the shipped configuration: `partner-update`,
+    `-delete`, `-approve` and `-verify` reach only the four wildcard admin roles,
+    and no account holding one of those has an `organisation_id`.
+    `tests/test_partner_write_permissions.py` turns that fact into an enforced
+    invariant. But it *was* a fact about configuration rather than about code, and
+    a role edit could have undone it silently — the read path would have refused a
+    row the write path would happily have changed.
+
+    ## 404, not 403
+
+    Same reason as `get_partner_for`: a 403 confirms the row exists, and in a
+    directory that discloses a competitor before they are published.
+    `assert_within_tenant` raises 404 and says nothing, so a wrong-tenant write
+    is indistinguishable from a partner id that was never real.
+
+    ## Staff and admins are unaffected
+
+    `assert_within_tenant` returns immediately for `has_admin_access` or a NULL
+    `organisation_id`, which is every account that holds these permissions today.
+    So this changes no behaviour now — it removes the dependency on that staying
+    true. It is the same helper `user_service.update_user` already uses, rather
+    than a second way of expressing the rule.
+    """
+    partner = get_or_404(db, Partner, partner_id, label="Partner")
+    scoping.assert_within_tenant(partner, Partner, actor)
+    return partner
 
 
 # --- Predicates (one source of truth for both the flags and the writes) ------
@@ -363,7 +408,7 @@ def update_partner(
     schema and have their own endpoints. `slug` is not editable at all: it is the
     public URL, and changing it breaks every inbound link.
     """
-    partner = get_or_404(db, Partner, partner_id, label="Partner")
+    partner = _writable_or_404(db, partner_id, actor)
 
     if not can_edit(actor, partner):
         raise HTTPException(
@@ -407,7 +452,7 @@ def change_status(
     valid rows, and reinstating the partner would silently restore access to
     sessions opened before the suspension. Revoking makes the decision explicit.
     """
-    partner = get_or_404(db, Partner, partner_id, label="Partner")
+    partner = _writable_or_404(db, partner_id, actor)
 
     if not can_change_status(actor, partner):
         raise HTTPException(
@@ -479,7 +524,7 @@ def set_verification(
     proposition (`PARTNER_DIRECTORY_PLAN.md` § 9) — whoever can set it is handing
     out Leapswitch's credibility, and § 9 ranks it above any paid placement.
     """
-    partner = get_or_404(db, Partner, partner_id, label="Partner")
+    partner = _writable_or_404(db, partner_id, actor)
 
     if not can_verify(actor, partner):
         raise HTTPException(
@@ -523,7 +568,7 @@ def set_listed(db: Session, partner_id: str, is_listed: bool, actor: User) -> Pa
     flag to be set on a suspended partner would leave a row that claims to be
     published and is not, which is worse than refusing.
     """
-    partner = get_or_404(db, Partner, partner_id, label="Partner")
+    partner = _writable_or_404(db, partner_id, actor)
 
     if not can_publish(actor, partner):
         raise HTTPException(
@@ -565,7 +610,7 @@ def delete_partner(db: Session, partner_id: str, actor: User) -> None:
     — `organisation_id IS NULL` is exactly what an internal account is — a privilege
     change disguised as a cleanup.
     """
-    partner = get_or_404(db, Partner, partner_id, label="Partner")
+    partner = _writable_or_404(db, partner_id, actor)
 
     if not can_delete(actor, partner):
         raise HTTPException(
@@ -665,6 +710,51 @@ def get_own_organisation(db: Session, actor: User) -> Partner:
     if partner is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Organisation not found")
     return decorate(partner, actor, user_count=_user_count(db, partner))
+
+
+def own_overview(db: Session, actor: User) -> dict[str, object]:
+    """The partner landing page's numbers, computed here rather than in a browser.
+
+    Replaces three list calls and four client-side reductions. The reductions were
+    each wrong in a way that rendered cleanly:
+
+    * `items.length` was reported as the total, so a partner with more listings
+      than the page size was told they had exactly the page size.
+    * `unanswered` was recomputed from `first_responded_at`, which since PM-47 is
+      **not** the server's rule — spam is excluded there. So the partner's own
+      dashboard would have gone on counting junk against them after the fix.
+    * 200 rows were fetched to render four numbers.
+
+    Entitlement is included because § 20.6.1 asks for "listings against
+    entitlement" and it was the one item of that four never rendered — the data
+    has existed since 2026-08-20 with no consumer outside the moderation queue.
+
+    Four queries: the organisation, the listing counts, the enquiry counts, and
+    the published count entitlement needs. No route here loops.
+    """
+    partner = get_own_organisation(db, actor)
+
+    counts = listing_service.status_counts(db, partner.id)
+    # Reuse the count already taken rather than making `entitlement` fetch it
+    # again — it takes `published` for exactly this reason.
+    entitlement = listing_service.entitlement(
+        db, partner, published=counts["PUBLISHED"]
+    )
+
+    return {
+        "organisation_name": partner.name,
+        "status": partner.status,
+        "is_listed": partner.is_listed,
+        "verification_level": partner.verification_level,
+        "entitlement": entitlement,
+        "listings": {
+            "draft": counts["DRAFT"],
+            "pending_review": counts["PENDING_REVIEW"],
+            "published": counts["PUBLISHED"],
+            "rejected": counts["REJECTED"],
+        },
+        "enquiries": enquiry_service.partner_metrics(db, partner.id),
+    }
 
 
 def update_own_organisation(db: Session, partner: Partner, *, actor: User, **fields) -> Partner:

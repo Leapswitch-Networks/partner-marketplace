@@ -6,6 +6,212 @@
 > Update this file as part of the same change as the code. A task that isn't here is invisible to the
 > next person.
 
+## August 21, 2026 — A partner can only be edited by the people it belongs to, and the dashboard finally counts properly
+
+**Editing another company's record is now refused by the code, not by a configuration.** The
+permission that allows staff to edit any partner was only ever given to administrators, and no
+administrator belongs to a partner company — so nobody could reach across. But that was a fact about
+how the roles happened to be set up, not a rule the software enforced, and a single future role change
+would have undone it silently. All five of the operations that take a company's id — edit, delete,
+change status, verify, publish — now refuse a record belonging to someone else, using the same check
+the reading side has used since July.
+
+**It answers "not found" rather than "not allowed", which is deliberate.** Saying "you are not
+allowed" confirms the record exists, and in a directory that tells one company a competitor is on the
+platform before they are publicly listed. The refusal says nothing.
+
+**Nothing about today's behaviour changes.** Every account that holds these permissions is internal
+staff with no company attached, and the new check passes them straight through. This removes a
+dependency, it does not remove an ability.
+
+**The partner dashboard's four headline numbers were being computed in the browser, and were wrong.**
+It fetched a page of listings and a page of enquiries and counted them on screen. Three problems, all
+of which rendered perfectly: the page size was reported as the total, so a company with more listings
+than fit on one page was told they had exactly one page's worth; two hundred records were fetched to
+display four numbers; and the count of unanswered enquiries was recalculated with a rule that no
+longer matched the server's — since this morning's change, spam is excluded there and was not here. So
+the fix that stopped spam counting against a company's response rate would have been undone on their
+own dashboard.
+
+**All four numbers now come from the server, in a single request.** They are also kept current
+automatically: answering an enquiry or publishing a listing refreshes them without the page needing to
+know that happened.
+
+**Listing allowance is on screen for the first time.** How many listings a company may publish against
+how many they have has existed as data since yesterday and was shown nowhere. It appears only when the
+company's tier actually caps something — every company is currently uncapped, and "unlimited listings"
+is a sentence about billing, not information a dashboard should spend space on. When they are at their
+limit it says what they can do about it, because a limit with no way forward reads as a fault in the
+product.
+
+**The moderation queue now says when approving would fail, before the click.** Each waiting listing
+already carried the reasons it could not be published — added yesterday for exactly this — and none of
+them were displayed. A reviewer would read a listing, judge it publishable, press Approve and get a
+refusal because that company had used every slot their tier allows. Nothing on screen had said so, so
+the failure looked like a broken button. The reasons are now shown and the button is disabled. Sending
+a listing back is never blocked: telling a company what to change does not depend on whether they have
+room to publish it.
+
+**Two screens moved onto the shared data layer.** Categories and the moderation queue used to fetch on
+mount, hold their own copy and reload by hand after every change. They now share one cache with every
+other screen that shows the same lists, and changes propagate without either page knowing the others
+exist. That also fixed a smaller thing on both: the table no longer blanks out while a refresh is in
+flight.
+
+**The moderation queue was completely broken, and four things agreed it was fine.** Found while
+verifying the work above: the endpoint behind the staff review screen returned a server error whenever
+anything was actually waiting to be reviewed. It had been that way for a day. Two of the fields each
+row carries are assembled rather than read from the database, and the code that filled them in ran
+*after* the check that required them — so the response never got built.
+
+**What is worth recording is why nobody saw it.** The screen has a deliberately reassuring empty state
+— "an empty queue is the healthy state" — so a failed load and a genuinely clear queue look identical.
+The endpoint returns an empty list without doing any of the work when nothing is waiting, so the only
+version anyone had loaded was the one that works. The test suite covered the underlying query but
+never the endpoint that shapes the response, so a thousand passing tests had nothing to say about it.
+And the automated browser pass reported the page as fine, because the words it looks for are in the
+empty state too.
+
+**The partner dashboard had never rendered for anybody, and the reason was one missing line.** The
+frontend decides whether an account belongs to a partner company from a single value in the identity
+response. That value was declared in the response's shape four days ago with a default of "empty", and
+the code that builds the response was never given it — so every account, staff or partner, reported no
+company. No error was raised, because "no company" is what most accounts should legitimately say. The
+whole partner landing page was unreachable.
+
+**It was found by looking at a screenshot, not a log.** The automated pass had always reported that
+page as fine, and it was — it just did not contain the partner block. That is worth writing down as a
+method: when the entire point of a change is that something appears on screen, "the page loaded and
+contains the expected word" is not evidence. The field is now required rather than defaulted, so a
+missing value is an immediate loud failure instead of a plausible-looking wrong answer.
+
+**The staff enquiry list was showing raw database identifiers where the company name should be.** Found
+in the same screenshot pass. A staff member reviewing enquiries across companies was reading 36-character
+identifiers, which makes the one thing that column exists for — telling companies apart — impossible.
+It now shows the name, fetched for the whole page in one query rather than one per row.
+
+**A grammar bug on the partner dashboard: "1 listing need changes".** Small, and on the most prominent
+sentence a partner sees when something is waiting for them.
+
+**The browser pass had a second, larger gap: it had never opened four of the directory's screens at
+all** — categories, listings, moderation and enquiries. They were missed when the directory screens
+were added to its list a week ago, and the omission was invisible, because a page that is never
+visited cannot fail. Adding them took the pass from 59 checks to 63 and is what surfaced the fault
+above. A verification tool that is silent about what it does not cover is the more serious problem, so
+that was fixed first.
+
+**Two housekeeping items closed, one of which needed nothing.** An unused Tailwind version 4 package
+was removed from the frontend — it had sat in the dependency list while the project builds with
+version 3, and taking it out removed 659 lines from the lockfile; the stylesheet was re-fetched from
+the running server afterwards to confirm nothing broke. The second item, two abandoned Python
+environments, turned out to have been deleted some time ago without the register being updated —
+checked before writing rather than assumed.
+
+**One item was deliberately left alone.** A dormant helper that would restrict lists to records
+created by people you have been granted access to still has no callers. Switching it on would *remove*
+rows that people can see today, and which lists it should apply to is a product decision rather than a
+coding one. That reasoning was already written down; it is now written down in the place a future
+sweep will look, so nobody has to re-derive it.
+
+## August 21, 2026 — Junk enquiries no longer count against a partner's response rate
+
+**A partner's responsiveness score was being dragged down by spam they were right to ignore.**
+Enquiries arrive through a form any anonymous visitor can submit, so some of them are junk. There was
+nowhere to put junk — the only options were "closed" or "lost", which are real commercial outcomes and
+would have misreported the sales pipeline instead. So junk sat in the inbox unanswered for ever, and
+the measure of how promptly a partner replies counted every piece of it as a failure to reply.
+That measure is what the directory ranks partners on.
+
+**Enquiries can now be marked as spam, and spam leaves the measurement entirely.** Not just the
+"unanswered" half — the total as well. Taking it out of only one side would have been worse than
+leaving it alone: the share answered would still have been calculated against a total inflated by
+messages nobody was ever meant to answer, so attracting spam would still have cost a partner their
+rating, only less visibly. The spam count is shown separately rather than quietly dropped, because a
+total that falls with no explanation looks like enquiries going missing, and because a partner marking
+most of their inbox as junk is a conversation somebody should be able to start.
+
+**Marking something as spam can be undone.** It is one click away from every state, so sooner or later
+it will land on a real enquiry by accident. A classification that could not be reversed would destroy
+a genuine sales lead permanently — a worse problem than the one this work set out to fix.
+
+**The sender is never told their message was classified as junk.** Two reasons, and the second is the
+stronger one: a spammer told their message was filtered has exactly the feedback they need to get past
+the filter next time, and someone whose real enquiry was wrongly marked would be told something worse
+than silence. Their page reports what it always did — nobody has replied yet.
+
+**"Opened" is now a state the inbox can show.** The product has recorded when the recipient first
+opens an enquiry since yesterday, but had no way to display it. It is deliberately coloured as
+outstanding work rather than as progress: reading an enquiry is not answering it, and letting a partner
+clear the warnings off their inbox by opening things would defeat the point of the measure.
+
+**Statuses can no longer move backwards into a story that contradicts the record.** An answered
+enquiry could previously be set back to "new" — while the time of the first reply was still stored
+against it, permanently. The inbox then showed work outstanding that the metric counted as done. The
+allowed moves are now written down in one place, and the rule behind them is narrow and worth stating:
+never contradict a timestamp that has already been recorded. Correcting a mistaken "won" to "lost" is
+still allowed, because neither of those contradicts anything.
+
+**The status dropdown now asks the server what moves are legal.** It used to hold its own copy of the
+list, and a copy drifts. When it drifted it would offer a move the server refuses — and a refusal that
+arrives after a click reads as a broken page, not as an illegal move. When the server does refuse, its
+explanation (which names what *is* allowed) is now shown instead of a generic failure.
+
+**Two defects were found in the existing code while doing this, and both would have shipped.** Adding
+"opened" would have quietly broken the recording of replies: the code that marked an enquiry as
+answered only recognised one of the two open states, so a partner who read before replying would have
+stayed on "opened" for ever while the reply time was stored against them. And the sender's own page
+passed the internal status straight through, so "spam" would have been visible to the person who sent
+it. Both were caught by reading the code the change touched rather than only the code being changed.
+
+## August 21, 2026 — Asked whether the platform half of the backend could become a reusable core, and measured the answer
+
+**The question was reuse, not refactoring: could the twenty platform modules live in one folder that
+a future project copies, with everything partner-specific in another?** The answer is yes, and most
+of the cost has already been paid — a decision taken on 17 August made the domain register itself
+into the platform rather than the platform knowing about the domain, and that has held. Nothing was
+implemented; this was research, and it is written up so the decision can be taken on evidence.
+
+**The one genuine decision is a database one.** Two platform tables — accounts and invitations —
+record which organisation someone belongs to by pointing at the partner table. In the code this is
+already clean: the platform only ever knows "an organisation", and the partner-specific word appears
+nowhere. In the database it is not, because the platform's own accounts table cannot be created
+without a partner table existing. That was a deliberate choice, and a sensible one while the plan was
+"copy the repository and rename things". It is the wrong one if the platform half is ever meant to
+stand on its own, and it is the only item on the list that needs an owner's decision rather than
+labour.
+
+**The first measurement was true and incomplete, which is the finding worth keeping.** Counting the
+places the platform code *imports* something partner-specific gave zero, and that was reassuring
+enough to nearly stop there. Counting the places it *names* something partner-specific found six
+more. A hardcoded event name, a path in a list, a sentence in a prompt and a test fixture all create
+the same dependency without importing anything.
+
+**One of those six would have broken the next project on its first day.** The platform keeps a list
+of which web addresses are deliberately public — a safety net, so a route cannot become
+world-readable by accident — and it is checked in both directions: a public route missing from the
+list fails, and a listed route that no longer exists also fails. Eight of the entries are the partner
+directory's. A future project copying the platform inherits eight addresses it does not serve, and
+its test suite fails before it has written any code of its own. The fix is the same pattern the
+platform already uses four times over for permissions, roles, navigation and row visibility: let the
+project declare its own public addresses instead of editing a shared list.
+
+**And the platform's own test suite currently needs the partner directory to run at all.** Three test
+files use a partner as their stand-in for an organisation, because it is the only one that exists —
+two of them fail to load entirely without it. There is already a test proving the platform's
+permission catalogue is free of partner vocabulary; it proves the vocabulary and not the plumbing.
+That gap is worth closing whether or not the folders ever move, because those three files are the
+ones testing who may see whose data.
+
+**Two things were already right, and they are why this looks feasible rather than aspirational.** The
+product's name, short name and tagline are already settings with defaults rather than values written
+into the code, so a new project changes them in one place. And the assistant's database access works
+by asking the live database what tables exist rather than from a list, so it would understand a new
+project's data on day one with no edit at all.
+
+**Worth stating plainly: none of this makes the current product better.** It makes the next one
+cheaper to start. It competes for time with two known defects and several open decisions that affect
+the product that exists today, and that trade-off is the owner's to make.
+
 ## August 20, 2026 — Each person can now choose their own theme, and the dead components are gone
 
 **Anyone signed in can pick their own colour scheme, on Settings → Profile.** It is stored against

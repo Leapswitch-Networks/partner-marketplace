@@ -18,7 +18,6 @@ from app.domain.partners.permissions import LISTING_PUBLISH, MODERATION_REVIEW
 from app.models.partner import Partner
 from app.models.user import User
 from app.schemas.directory import (
-    EntitlementResponse,
     ListingDetailResponse,
     ModerationQueueItem,
     RejectListingRequest,
@@ -69,10 +68,22 @@ def review_queue(
     for listing in listings:
         partner = partners.get(listing.partner_id)
         published = counts.get(listing.partner_id, 0)
-        item = ModerationQueueItem.model_validate(listing)
-        item.partner_name = partner.name if partner is not None else "Unknown organisation"
-        item.blockers = listing_service.publish_blockers(db, listing, published=published)
-        item.entitlement = EntitlementResponse.model_validate(
+
+        # ⚠️ **Assigned onto the row BEFORE validating, not onto the model after.**
+        #
+        # This route returned a **500 for every non-empty queue** between
+        # 2026-08-20 and 2026-08-21. `partner_name` and `entitlement` are required
+        # on `ModerationQueueItem` and are not columns, so
+        # `model_validate(listing)` failed with two `missing` errors — and the
+        # assignments that would have supplied them ran afterwards, which is too
+        # late. The empty-queue early return above meant the only queue anyone had
+        # seen was an empty one, so the page looked merely idle.
+        #
+        # Same shape as `partner_service.decorate`, which attaches its per-row
+        # flags to the ORM instance and then validates. One pattern, not two.
+        listing.partner_name = partner.name if partner is not None else "Unknown organisation"
+        listing.blockers = listing_service.publish_blockers(db, listing, published=published)
+        listing.entitlement = (
             listing_service.entitlement(db, partner, published=published)
             if partner is not None
             # Unreachable while the FK holds; a partnerless listing is not a
@@ -86,7 +97,7 @@ def review_queue(
                 "at_limit": False,
             }
         )
-        items.append(item)
+        items.append(ModerationQueueItem.model_validate(listing))
 
     return items
 

@@ -134,6 +134,59 @@ class EntitlementResponse(BaseModel):
     at_limit: bool
 
 
+class ListingStatusCounts(BaseModel):
+    """One partner's listings by status. Every key always present.
+
+    Named after the statuses rather than aggregated into "live" and "not live",
+    because the two that need action are different actions: a `REJECTED` listing
+    needs editing, a `DRAFT` needs submitting, and a partner cannot be told which
+    by a single number.
+    """
+
+    draft: int
+    pending_review: int
+    published: int
+    rejected: int
+
+
+class EnquiryMetrics(BaseModel):
+    """§ 16.2's counts for one partner, straight from `enquiry_service`.
+
+    `spam` is here so the partner can see it, not so anything divides by it —
+    spam is excluded from `total` and `unanswered` both. See TECH_DEBT PM-47: it
+    used to be counted as an enquiry they had failed to answer.
+    """
+
+    total: int
+    unanswered: int
+    answered: int
+    spam: int
+
+
+class OwnOrganisationOverview(BaseModel):
+    """Everything the partner's landing page needs, computed on the server.
+
+    **One shape rather than three list calls.** The page used to fetch a page of
+    listings and a page of enquiries and count them in the browser, which was
+    wrong three ways: it reported the page length as the total, it recomputed the
+    unanswered count with a rule that no longer matches the server's (spam is
+    excluded there and was not here), and it asked for 200 rows to render four
+    numbers.
+
+    `entitlement` is the § 20.6.1 field that was specified and never rendered —
+    the data has existed since 2026-08-20 and had no consumer outside the
+    moderation queue.
+    """
+
+    organisation_name: str
+    status: str
+    is_listed: bool
+    verification_level: str
+    entitlement: EntitlementResponse
+    listings: ListingStatusCounts
+    enquiries: EnquiryMetrics
+
+
 class ModerationQueueItem(ListingDetailResponse):
     """A queue entry, plus whether approving it would actually work.
 
@@ -213,6 +266,11 @@ class EnquiryListItem(BaseModel):
     company: str | None
     status: str
     source: str
+    #: Denormalised, for the same reason `ModerationQueueItem` carries it: the
+    #: index rendered `partner_id` and a staff reviewer was reading raw UUIDs.
+    #: Defaults to empty rather than being required — the list route fills it, and
+    #: a blank cell is a better failure than a 500 on an inbox.
+    partner_name: str = ""
     #: NULL until the recipient partner opens it. Never set by a staff read.
     first_viewed_at: datetime | None
     first_responded_at: datetime | None
@@ -225,6 +283,17 @@ class EnquiryDetailResponse(EnquiryListItem):
     budget_range: str | None
     timeline: str | None
     messages: list[EnquiryMessageResponse] = []
+    #: Which statuses this enquiry may move to next — TECH_DEBT PM-47.
+    #:
+    #: Sent rather than derived in the browser because the lifecycle table lives
+    #: in `enquiry_service` and a second copy in TypeScript would drift. When it
+    #: drifted, the dropdown would offer a move the API refuses with a 409, and
+    #: an operator cannot tell that apart from the page being broken.
+    #:
+    #: Defaults to empty so a caller that does not set it degrades to "no moves
+    #: offered", which is safe. `api/enquiries.py` fills it on every detail
+    #: response.
+    allowed_transitions: list[str] = []
 
 
 class CreateEnquiryRequest(BaseModel):

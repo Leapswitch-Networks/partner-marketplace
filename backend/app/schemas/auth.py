@@ -205,7 +205,16 @@ class CurrentUserResponse(BaseModel):
     #: Organisation membership. NULL means an internal, first-party account.
     #: Added 2026-08-17 with the write path (CORE_EXTRACTION_PLAN.md phase 2) —
     #: a column the UI cannot read is a column an admin cannot verify they set.
-    organisation_id: str | None = None
+    #:
+    #: ⚠️ **Required, with no default, deliberately** — changed 2026-08-21. It
+    #: carried `= None` for four days while `rbac_service.current_user_payload`
+    #: did not supply it, so every response said `null` and nothing complained.
+    #: `DashboardHome` decides whether an account is a partner from this field
+    #: alone, so the partner dashboard was dead for everyone. A default on a
+    #: field the payload builder must provide converts a missing key into a wrong
+    #: answer; without one it is a 500 on the first request, which is the failure
+    #: you want.
+    organisation_id: str | None
     status: str
     auth_provider: str
     timezone_preference: str

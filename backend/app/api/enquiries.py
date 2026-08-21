@@ -19,6 +19,7 @@ from app.core.dependencies import get_db, require_permission
 from app.core.query import page_meta
 from app.domain.partners.permissions import ENQUIRY_RESPOND, ENQUIRY_VIEW
 from app.models.enquiry import Enquiry
+from app.models.partner import Partner
 from app.models.user import User
 from app.schemas.common import Page
 from app.schemas.directory import (
@@ -31,6 +32,19 @@ from app.schemas.directory import (
 from app.services import enquiry_service, scoping
 
 router = APIRouter(prefix="/enquiries", tags=["enquiries"])
+
+
+def _detail(enquiry: Enquiry) -> EnquiryDetailResponse:
+    """The detail shape, with the lifecycle attached.
+
+    One helper rather than two call sites setting the field, because a route that
+    forgot it would silently return an empty list — and an empty list is
+    indistinguishable from "this enquiry is finished and can go nowhere", so the
+    dropdown would simply have no options and nothing would look wrong.
+    """
+    response = EnquiryDetailResponse.model_validate(enquiry)
+    response.allowed_transitions = sorted(enquiry_service.allowed_transitions(enquiry.status))
+    return response
 
 
 def _visible_or_404(db: Session, enquiry_id: str, actor: User) -> Enquiry:
@@ -66,6 +80,20 @@ def list_enquiries(
         stmt.order_by(Enquiry.created_at.desc()).offset((page - 1) * per_page).limit(per_page)
     ).unique().scalars().all()
 
+    # One query for the whole page, not one per row. Same reasoning as the
+    # moderation queue: an inbox of 25 enquiries across 6 partners costs one extra
+    # query rather than 25. Attached to the row before validation — see
+    # FASTAPI_STANDARDS § 5 and TECH_DEBT PM-48 for why that ordering matters.
+    names = dict(
+        db.execute(
+            select(Partner.id, Partner.name).where(
+                Partner.id.in_({r.partner_id for r in rows})
+            )
+        ).all()
+    ) if rows else {}
+    for row in rows:
+        row.partner_name = names.get(row.partner_id, "Unknown organisation")
+
     return Page[EnquiryListItem](
         items=[EnquiryListItem.model_validate(r) for r in rows],
         **page_meta(page, per_page, total),
@@ -91,7 +119,7 @@ def get_enquiry(
     enquiry = _visible_or_404(db, enquiry_id, actor)
     if enquiry_service.mark_viewed(db, enquiry, actor):
         db.commit()
-    return EnquiryDetailResponse.model_validate(enquiry)
+    return _detail(enquiry)
 
 
 @router.post("/{enquiry_id}/reply", response_model=EnquiryMessageResponse)
@@ -124,4 +152,4 @@ def update_enquiry_status(
     enquiry = _visible_or_404(db, enquiry_id, actor)
     enquiry_service.set_status(db, enquiry, payload.status)
     db.commit()
-    return EnquiryDetailResponse.model_validate(enquiry)
+    return _detail(enquiry)
