@@ -33,7 +33,16 @@ export default function SettingRowEditor({
   setting: Setting;
   /** Writes the value and resolves with the updated record. */
   save: (id: number, value: unknown) => Promise<Setting>;
-  onSaved: (next: Setting) => void;
+  /**
+   * Called with the record the server stored, for a parent that keeps its own
+   * copy of the row.
+   *
+   * **Optional since 2026-08-21.** Both parents used to splice the response back
+   * into a local array; now they read through the shared cache and the mutation
+   * invalidates it, so the refetched row replaces this one and there is nothing
+   * for the parent to do. A parent that still holds its own list can pass this.
+   */
+  onSaved?: (next: Setting) => void;
   onError: (message: string) => void;
 }) {
   const [draft, setDraft] = useState<unknown>(setting.value);
@@ -64,7 +73,8 @@ export default function SettingRowEditor({
   const commit = async (value: unknown = draft) => {
     setSaving(true);
     try {
-      onSaved(await save(setting.id, value));
+      const stored = await save(setting.id, value);
+      onSaved?.(stored);
       setSaved(true);
       // A confirmation that never leaves becomes wallpaper. Two seconds is long
       // enough to be seen and short enough not to accumulate down the page.

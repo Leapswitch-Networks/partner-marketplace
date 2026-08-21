@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 
 import { buttonClasses } from "@/components/common/Button";
@@ -11,7 +11,11 @@ import Skeleton from "@/components/common/Skeleton";
 import Toast, { useToast } from "@/components/common/Toast";
 import SettingRowEditor from "@/components/admin/SettingRowEditor";
 import { navIcon } from "@/components/dashboard/navIcons";
-import configurationApi, { type Setting } from "@/lib/api/configurationApi";
+import type { Setting } from "@/lib/api/configurationApi";
+import {
+  useListSettingsQuery,
+  useUpdateSettingMutation,
+} from "@/lib/api/endpoints/settingsEndpoints";
 import usePermissions from "@/lib/hooks/usePermissions";
 import { extractApiError } from "@/lib/utils/apiError";
 
@@ -46,50 +50,33 @@ export default function ConfigurationModule() {
   const { can } = usePermissions();
   const { toasts, show, dismiss } = useToast();
 
-  const [rows, setRows] = useState<Setting[]>([]);
-  const [modules, setModules] = useState<string[]>([]);
   const [moduleFilter, setModuleFilter] = useState(ALL_MODULES);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   /*
-    Not a paged list query. Those own paging and a `Page[T]` envelope, and
-    this endpoint returns the whole registry unpaged with two extra fields the
-    filters need. Wrapping it would mean making `total` and `pages` optional on a
-    hook four modules depend on, to serve the one caller that has neither.
+    Not a paged list query. Those own paging and a `Page[T]` envelope, and this
+    endpoint returns the whole registry unpaged with two extra fields the filters
+    need. Wrapping it would mean making `total` and `pages` optional on a hook
+    four modules depend on, to serve the one caller that has neither.
 
     The filter is applied **client-side** even though the API accepts `?module=`:
     ten rows are already in memory, so re-fetching to hide six of them is a round
-    trip that buys nothing. The query parameter stays on the API because a
-    future integration reading one module's settings should not have to fetch
-    everyone's.
+    trip that buys nothing. The query parameter stays on the API because a future
+    integration reading one module's settings should not have to fetch everyone's.
+
+    Converted 2026-08-21. Note what disappeared with the effect: a `patch`
+    callback that spliced the saved row back into a local array. The mutation
+    invalidates `Setting`/LIST instead, so the value that lands on screen is the
+    one the **server** stored — which matters here more than most places, because
+    the API validates against each row's declared type and can normalise what it
+    was given.
   */
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await configurationApi.list();
-      setRows(res.data.items);
-      setModules(res.data.modules);
-    } catch (err) {
-      setError(extractApiError(err, "Could not load configuration."));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const { data, isFetching, error: fetchError, refetch } = useListSettingsQuery();
+  const rows = useMemo(() => data?.items ?? [], [data]);
+  const modules = data?.modules ?? [];
+  const error = fetchError ? extractApiError(fetchError, "Could not load configuration.") : null;
+  const loading = isFetching && rows.length === 0;
 
-  useEffect(() => {
-    // Handed to a callback rather than called in the body. `load` sets state,
-    // and calling it here would run those updates inside the effect's own
-    // synchronous phase — one microtask's remove is what makes them ordinary
-    // updates instead of a cascading second pass.
-    void Promise.resolve().then(load);
-  }, [load]);
-
-  /** Replace one row in place after a save — the response is the updated record. */
-  const patch = useCallback((next: Setting) => {
-    setRows((prev) => prev.map((r) => (r.id === next.id ? next : r)));
-  }, []);
+  const [updateSetting] = useUpdateSettingMutation();
 
   /**
    * `module · group`, preserving the server's ordering.
@@ -166,7 +153,7 @@ export default function ConfigurationModule() {
             {!loading && error && (
               <ErrorState
                 error={new Error(error)}
-                reset={load}
+                reset={refetch}
                 title="Could not load configuration"
                 compact
               />
@@ -199,10 +186,7 @@ export default function ConfigurationModule() {
                       <SettingRowEditor
                         key={setting.id}
                         setting={setting}
-                        save={async (id, value) =>
-                          (await configurationApi.update(id, value)).data
-                        }
-                        onSaved={patch}
+                        save={(id, value) => updateSetting({ id, value }).unwrap()}
                         onError={(message) => show(message, "error")}
                       />
                     ))}

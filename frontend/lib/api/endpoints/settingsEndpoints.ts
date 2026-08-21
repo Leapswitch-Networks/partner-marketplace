@@ -1,7 +1,6 @@
 import { api } from "@/lib/store/api";
-import type { SettingListResponse } from "@/lib/api/configurationApi";
+import type { Setting, SettingListResponse } from "@/lib/api/configurationApi";
 import type { SecurityOverview } from "@/lib/api/securityApi";
-import type { Setting } from "@/types";
 
 /**
  * The settings registry, and the security half of it.
