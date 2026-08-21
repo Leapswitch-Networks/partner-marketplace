@@ -1,14 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useState } from "react";
 
 import Badge from "@/components/common/Badge";
 import ErrorState from "@/components/common/ErrorState";
 import Skeleton from "@/components/common/Skeleton";
 import Toast, { useToast } from "@/components/common/Toast";
 import { ShowPageHeader } from "@/components/common/ShowPage";
-import { matrixApi, type MatrixRow, type RoleMatrix as Matrix } from "@/lib/api/rbacApi";
+import type { MatrixRow } from "@/lib/api/rbacApi";
+import {
+  useRoleMatrixQuery,
+  useSetMatrixCellMutation,
+} from "@/lib/api/endpoints/rolesEndpoints";
 import usePermissions from "@/lib/hooks/usePermissions";
 
 /**
@@ -34,33 +38,20 @@ export default function RoleMatrix() {
   const { can } = usePermissions();
   const { toasts, show, dismiss } = useToast();
 
-  const [matrix, setMatrix] = useState<Matrix | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await matrixApi.get();
-      setMatrix(res.data);
-    } catch {
-      setError("Could not load the permission matrix.");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // Converted 2026-08-21. The microtask-deferred `load` this replaces was a
+  // workaround for setting state inside an effect — needed only because the fetch
+  // lived in the component. There is no effect now.
+  const {
+    data: matrix,
+    isLoading: loading,
+    isError,
+    refetch: load,
+  } = useRoleMatrixQuery();
+  const error = isError ? "Could not load the permission matrix." : null;
 
-  useEffect(() => {
-    // Handed to a callback rather than called in the body. `load` sets state,
-    // and calling it directly here runs those updates inside the effect's own
-    // synchronous phase — a second render pass for values React could have had
-    // in the first, which is what `react-hooks/set-state-in-effect` is for. One
-    // microtask's remove makes them ordinary updates, and nothing else changes:
-    // the fetch still starts on mount and the retry path still calls `load`.
-    void Promise.resolve().then(load);
-  }, [load]);
+  const [setCell] = useSetMatrixCellMutation();
 
   const editable = can("role-update") && can("role-permissions");
 
@@ -68,11 +59,15 @@ export default function RoleMatrix() {
     const key = `${row.role_id}:${groupId}`;
     setBusy(key);
     try {
-      await matrixApi.setCell(row.role_id, groupId, granted);
-      // Refetch rather than patching locally: the server applies the privilege
-      // ceiling, so what it actually granted can be narrower than what was asked
+      // No explicit refetch. The mutation invalidates `Role`/LIST, which this
+      // query provides — and that is deliberately broader than the matrix: the
+      // roles table shows a permission count, and every role picker in the app
+      // reads the same tag. The old version reloaded only itself.
+      //
+      // Still not optimistic, for the original reason: the server applies the
+      // privilege ceiling, so what it granted can be narrower than what was asked
       // for, and an optimistic cell would show a number that is not true.
-      await load();
+      await setCell({ role_id: row.role_id, group_id: groupId, granted }).unwrap();
     } catch (err) {
       const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
       show(detail ?? "Could not change that role.", "error");

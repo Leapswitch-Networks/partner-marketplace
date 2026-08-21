@@ -6,6 +6,33 @@
 > Update this file as part of the same change as the code. A task that isn't here is invisible to the
 > next person.
 
+## August 21, 2026 — Roles and permissions now share one cache with every screen that reads them
+
+**All four role screens moved onto the shared data layer**: the roles table, the detail view, the edit
+form and the permission matrix. Seven fetches on arrival became four cached reads, and six effects went
+away entirely.
+
+**Changing a permission in the matrix now updates everything that shows one.** It used to reload only
+itself. But granting a permission group changes what that role can do everywhere — the roles table
+shows a count of permissions per role, and every screen with a role picker reads the same list. All
+three now refresh from one write, and none of them had to be told the others exist.
+
+**Two screens were fetching data they were then told they could not see.** The permission catalogue and
+the list of people holding a role were each fetched inside a check for whether the reader was allowed
+them — the request went out and the result was thrown away when the answer was no. They are now not
+requested at all in that case.
+
+**A subtle bug avoided in the edit form.** Ticked permissions used to be copied out of the record into
+local state when it loaded. That is fine until something refreshes the underlying role — which now
+happens automatically after any role change — at which point everything the operator had ticked since
+would be silently discarded, with no indication anything had been lost. The ticks are derived instead:
+untouched means "follow the server", touched means "this is the operator's working set".
+
+**One thing deliberately not changed.** The role detail screen still finds its role inside the full
+list rather than fetching that one role. It looked odd until the alternative was written out: a
+per-role request would fetch data the shared list already holds, and add a second copy to keep in step
+with it, for a catalogue of six rows that changes rarely.
+
 ## August 21, 2026 — The partner and listing screens now share one cache
 
 **Four more screens moved onto the shared data layer**: the company profile and its edit form, and the

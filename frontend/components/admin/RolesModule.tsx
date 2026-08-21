@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Button from "@/components/common/Button";
 import ResourceIndex from "@/components/common/ResourceIndex";
@@ -18,11 +18,15 @@ import {
 } from "@/components/common/columns";
 import Toast, { useToast } from "@/components/common/Toast";
 import { navIcon } from "@/components/dashboard/navIcons";
-import { permissionApi, roleApi } from "@/lib/api/rbacApi";
+import {
+  useDeleteRoleMutation,
+  useListPermissionGroupsQuery,
+  useListRolesQuery,
+} from "@/lib/api/endpoints/rolesEndpoints";
 import useModalState from "@/lib/hooks/useModalState";
 import usePermissions from "@/lib/hooks/usePermissions";
 import useResourceQuery from "@/lib/hooks/useResourceQuery";
-import type { PermissionGroup, Role } from "@/types";
+import type { Role } from "@/types";
 import { extractApiError } from "@/lib/utils/apiError";
 
 /**
@@ -41,10 +45,29 @@ export default function RolesModule() {
   const { can, isSuperAdmin } = usePermissions();
   const { toasts, show, dismiss } = useToast();
 
-  const [roles, setRoles] = useState<Role[]>([]);
-  const [groups, setGroups] = useState<PermissionGroup[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Converted 2026-08-21. The two fetch effects and their microtask-deferred
+  // `load` workarounds are gone; both were only needed because the fetches lived
+  // in the component.
+  //
+  // The note above still holds: this list is NOT a paged query. It is fetched
+  // whole and filtered in the browser, because a paged query refetches on every
+  // argument change and that would be a round trip per keystroke for six rows.
+  const {
+    data: roles = [],
+    isLoading: loading,
+    error: rolesError,
+    refetch: fetchRoles,
+  } = useListRolesQuery();
+  const error = rolesError ? extractApiError(rolesError, "Could not load roles.") : null;
+
+  // Skipped rather than guarded inside an effect. `skip` is the cache-layer
+  // equivalent of the old `if (!can(...)) return`, and it means no request is
+  // made at all rather than one made and discarded.
+  const { data: groups = [] } = useListPermissionGroupsQuery(undefined, {
+    skip: !can("permission-view"),
+  });
+
+  const [deleteRole] = useDeleteRoleMutation();
   // Same hook as Users, even though filtering is client-side here: it owns the
   // filter/page/selection coordination either way, and the module decides
   // whether `applied` goes to the API or to `Array.filter`.
@@ -73,36 +96,7 @@ export default function RolesModule() {
     Recorded in `MODULE_PARITY_PLAN.md` § 4 as the one module that stays
     open-coded; revisit if roles ever become a list you scroll.
   */
-  const fetchRoles = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await roleApi.list();
-      setRoles(res.data);
-    } catch (err) {
-      setError(extractApiError(err, "Could not load roles."));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
 
-  useEffect(() => {
-    // Handed to a callback rather than called in the body. `load` sets state,
-    // and calling it directly here runs those updates inside the effect's own
-    // synchronous phase — a second render pass for values React could have had
-    // in the first, which is what `react-hooks/set-state-in-effect` is for. One
-    // microtask's remove makes them ordinary updates, and nothing else changes:
-    // the fetch still starts on mount and the retry path still calls `load`.
-    void Promise.resolve().then(fetchRoles);
-  }, [fetchRoles]);
-
-  useEffect(() => {
-    if (!can("permission-view")) return;
-    permissionApi
-      .list()
-      .then((res) => setGroups(res.data))
-      .catch(() => setGroups([]));
-  }, [can]);
 
   const totalPermissions = useMemo(
     () => groups.reduce((sum, g) => sum + g.permissions.length, 0),
@@ -334,7 +328,7 @@ export default function RolesModule() {
           // blocked here too — and the reason is stated below rather than left as
           // a disabled control with no explanation.
           confirmDisabled={modal.target.user_count > 0}
-          onConfirm={() => roleApi.remove(modal.target!.id)}
+          onConfirm={() => deleteRole(modal.target!.id).unwrap()}
           onDeleted={() => {
             const name = modal.target!.display_name;
             modal.close();

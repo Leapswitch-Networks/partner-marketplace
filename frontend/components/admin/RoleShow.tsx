@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
 
 import Badge from "@/components/common/Badge";
 import Button, { buttonClasses } from "@/components/common/Button";
@@ -19,9 +18,12 @@ import {
   ShowPageSidebar,
 } from "@/components/common/ShowPage";
 import PermissionPicker from "@/components/admin/PermissionPicker";
-import { permissionApi, roleApi, type RoleUserItem } from "@/lib/api/rbacApi";
+import {
+  useListPermissionGroupsQuery,
+  useListRolesQuery,
+  useRoleUsersQuery,
+} from "@/lib/api/endpoints/rolesEndpoints";
 import usePermissions from "@/lib/hooks/usePermissions";
-import type { PermissionGroup, Role } from "@/types";
 
 /**
  * Role detail. Renders the same permission grid as the form, `readOnly`.
@@ -44,54 +46,29 @@ export default function RoleShow({
   onEdit?: () => void;
 }) {
   const { can } = usePermissions();
-  const [role, setRole] = useState<Role | null>(null);
-  const [groups, setGroups] = useState<PermissionGroup[]>([]);
-  const [holders, setHolders] = useState<RoleUserItem[] | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Converted 2026-08-21. Three fetch effects removed, including two guarded by
+  // `if (!can(...)) return` — those become `skip`, which is the difference between
+  // making a request and discarding it and never making one.
+  //
+  // The role still comes out of the LIST rather than a per-row query, which is
+  // the shape the old code had and worth keeping: the picker cache already holds
+  // this data, so a dedicated query would mean a second request and a second
+  // entry to keep in step for a catalogue of six rows.
+  const { data: roles, isLoading: loading, isError, refetch } = useListRolesQuery();
+  const role = roles?.find((r) => r.id === roleId) ?? null;
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await roleApi.list();
-      const found = res.data.find((r) => r.id === roleId) ?? null;
-      if (!found) setError("That role no longer exists.");
-      setRole(found);
-    } catch {
-      setError("Could not load this role.");
-    } finally {
-      setLoading(false);
-    }
-  }, [roleId]);
+  const { data: holders = null } = useRoleUsersQuery(roleId, { skip: !can("user-view") });
+  const { data: groups = [] } = useListPermissionGroupsQuery(undefined, {
+    skip: !can("permission-view"),
+  });
 
-  useEffect(() => {
-    // Handed to a callback rather than called in the body. `load` sets state,
-    // and calling it directly here runs those updates inside the effect's own
-    // synchronous phase — a second render pass for values React could have had
-    // in the first, which is what `react-hooks/set-state-in-effect` is for. One
-    // microtask's remove makes them ordinary updates, and nothing else changes:
-    // the fetch still starts on mount and the retry path still calls `load`.
-    void Promise.resolve().then(load);
-  }, [load]);
-
-  useEffect(() => {
-    // Fetched separately from the role: it is a second query server-side too,
-    // and a role with no `user-view` reader should still render its permissions.
-    if (!can("user-view")) return;
-    roleApi
-      .users(roleId)
-      .then((res) => setHolders(res.data))
-      .catch(() => setHolders([]));
-  }, [roleId, can]);
-
-  useEffect(() => {
-    if (!can("permission-view")) return;
-    permissionApi
-      .list()
-      .then((res) => setGroups(res.data))
-      .catch(() => setGroups([]));
-  }, [can]);
+  // The two failures a reader can act on differently: the request failed, or it
+  // succeeded and this role is not in it.
+  const error = isError
+    ? "Could not load this role."
+    : roles && !role
+      ? "That role no longer exists."
+      : null;
 
   if (loading) {
     return (
@@ -106,7 +83,7 @@ export default function RoleShow({
     return (
       <ErrorState
         error={new Error(error ?? "The role could not be found.")}
-        reset={load}
+        reset={refetch}
         title="Could not load this role"
         description="It may have been deleted, or you may not have permission to view it."
         compact

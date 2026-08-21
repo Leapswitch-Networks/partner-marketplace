@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
@@ -14,8 +14,16 @@ import ResourceForm, { FormGrid, FormSection } from "@/components/common/Resourc
 import Skeleton from "@/components/common/Skeleton";
 import PermissionPicker from "@/components/admin/PermissionPicker";
 import { navIcon } from "@/components/dashboard/navIcons";
-import { permissionApi, roleApi, type NavSectionOption } from "@/lib/api/rbacApi";
-import type { PermissionGroup, Role } from "@/types";
+import type { NavSectionOption } from "@/lib/api/rbacApi";
+import {
+  useCreateRoleMutation,
+  useListPermissionGroupsQuery,
+  useListRolesQuery,
+  useRoleNavPreferencesQuery,
+  useSetRoleNavPreferencesMutation,
+  useUpdateRoleMutation,
+} from "@/lib/api/endpoints/rolesEndpoints";
+import type { PermissionGroup } from "@/types";
 import { extractApiError } from "@/lib/utils/apiError";
 
 /**
@@ -61,13 +69,36 @@ export default function RoleForm({
 }) {
   const router = useRouter();
 
-  const [record, setRecord] = useState<Role | null>(null);
-  const [groups, setGroups] = useState<PermissionGroup[]>([]);
-  const [checked, setChecked] = useState<Set<number>>(new Set());
+  // Converted 2026-08-21. Both fetch effects gone; the `reset` effect stays,
+  // because re-baselining the form is what makes `isDirty` mean "changed since
+  // arrival" rather than "has a value".
+  const { data: groups = [] } = useListPermissionGroupsQuery();
+  const { data: roles, isLoading: rolesLoading, error: rolesError } = useListRolesQuery();
+  const record = roleId ? (roles?.find((r) => r.id === roleId) ?? null) : null;
+
+  const { data: navPreferences } = useRoleNavPreferencesQuery(roleId ?? 0, { skip: !roleId });
+
+  const [createRole] = useCreateRoleMutation();
+  const [updateRole] = useUpdateRoleMutation();
+  const [setNavPreferences] = useSetRoleNavPreferencesMutation();
+
+  /**
+   * Ticked permissions, derived rather than copied out of the record.
+   *
+   * The obvious version — load the role, then `setChecked(...)` in an effect —
+   * trips `react-hooks/set-state-in-effect`, and the rule is right: the cache can
+   * refetch this role after any role mutation, and that would silently discard
+   * whatever the operator had ticked since. `null` means "not touched yet, follow
+   * the server"; anything else is this operator's working set.
+   */
+  const [checkedEdits, setCheckedEdits] = useState<Set<number> | null>(null);
   //: Per-role sidebar preferences. Edit-mode only — the endpoint is keyed on a
   //  role id, which a role being created does not have yet.
-  const [navSections, setNavSections] = useState<NavSectionOption[] | null>(null);
-  const [loading, setLoading] = useState(Boolean(roleId));
+  // Local, because this screen edits them before saving. Seeded from the query
+  // below rather than fetched here.
+  const [navEdits, setNavEdits] = useState<NavSectionOption[] | null>(null);
+  const navSections = navEdits ?? navPreferences?.sections ?? null;
+  const loading = Boolean(roleId) && rolesLoading;
   const [serverError, setServerError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
@@ -78,55 +109,37 @@ export default function RoleForm({
   const { reset, register, formState } = form;
 
   useEffect(() => {
-    permissionApi
-      .list()
-      .then((res) => setGroups(res.data))
-      .catch(() => setGroups([]));
-  }, []);
-
-  useEffect(() => {
-    if (!roleId) return;
-    let cancelled = false;
-    roleApi
-      .list()
-      .then((res) => {
-        if (cancelled) return;
-        const role = res.data.find((r) => r.id === roleId) ?? null;
-        setRecord(role);
-        if (role) {
-          reset({
-            name: role.name,
-            display_name: role.display_name,
-            description: role.description ?? "",
-          });
-          setChecked(new Set(role.permissions.map((p) => p.id)));
-        }
-      })
-      .then(() => roleApi.navPreferences(roleId))
-      .then((res) => !cancelled && setNavSections(res.data.sections))
-      .catch((err) => !cancelled && setServerError(extractApiError(err, "Could not load this role.")))
-      .finally(() => !cancelled && setLoading(false));
-    return () => {
-      cancelled = true;
-    };
-  }, [roleId, reset]);
-
-  const toggle = (id: number) =>
-    setChecked((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
+    if (!record) return;
+    reset({
+      name: record.name,
+      display_name: record.display_name,
+      description: record.description ?? "",
     });
+  }, [record, reset]);
 
-  const toggleGroup = (group: PermissionGroup) =>
-    setChecked((prev) => {
-      const ids = group.permissions.map((p) => p.id);
-      const allOn = ids.every((id) => prev.has(id));
-      const next = new Set(prev);
-      ids.forEach((id) => (allOn ? next.delete(id) : next.add(id)));
-      return next;
-    });
+  const checked = useMemo(
+    () => checkedEdits ?? new Set(record?.permissions.map((p) => p.id) ?? []),
+    [checkedEdits, record]
+  );
+
+  const loadFailure = rolesError
+    ? extractApiError(rolesError, "Could not load this role.")
+    : null;
+
+  const toggle = (id: number) => {
+    const next = new Set(checked);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setCheckedEdits(next);
+  };
+
+  const toggleGroup = (group: PermissionGroup) => {
+    const ids = group.permissions.map((p) => p.id);
+    const allOn = ids.every((id) => checked.has(id));
+    const next = new Set(checked);
+    ids.forEach((id) => (allOn ? next.delete(id) : next.add(id)));
+    setCheckedEdits(next);
+  };
 
   /**
    * A system role's name is fixed — renaming `Admin` would break the guards that
@@ -139,30 +152,33 @@ export default function RoleForm({
     const permission_ids = Array.from(checked);
     try {
       if (record) {
-        await roleApi.update(record.id, {
-          display_name: values.display_name.trim() || values.name.trim(),
-          description: values.description.trim() || null,
-          permission_ids,
-        });
+        await updateRole({
+          id: record.id,
+          data: {
+            display_name: values.display_name.trim() || values.name.trim(),
+            description: values.description.trim() || null,
+            permission_ids,
+          },
+        }).unwrap();
       } else {
-        await roleApi.create({
+        await createRole({
           name: values.name.trim(),
           display_name: values.display_name.trim() || values.name.trim(),
           description: values.description.trim() || null,
           permission_ids,
-        });
+        }).unwrap();
       }
       // Sidebar preferences are a second endpoint, so a second request. Sent
       // after the role save rather than before: if the role update is rejected
       // there is nothing to attach preferences to, and a preferences-only write
       // would leave the two out of step.
       if (record && navSections) {
-        await roleApi.setNavPreferences(
-          record.id,
-          Object.fromEntries(
+        await setNavPreferences({
+          id: record.id,
+          preferences: Object.fromEntries(
             navSections.map((section) => [section.key, { collapsible: section.collapsible }])
-          )
-        );
+          ),
+        }).unwrap();
       }
       // Set before navigating so the dirty guard does not prompt on the way out.
       setSaved(true);
@@ -245,7 +261,7 @@ export default function RoleForm({
                   type="checkbox"
                   checked={section.collapsible}
                   onChange={(e) =>
-                    setNavSections((prev) =>
+                    setNavEdits((prev) =>
                       (prev ?? []).map((s2) =>
                         s2.key === section.key ? { ...s2, collapsible: e.target.checked } : s2
                       )
@@ -313,12 +329,12 @@ export default function RoleForm({
         {/* Submit lives in the footer, outside this element, so it is wired by
             `form=` rather than by nesting. */}
         <form id={FORM_ID} onSubmit={form.handleSubmit(onSubmit)} noValidate>
-          {serverError && (
+          {(serverError ?? loadFailure) && (
             <div
               role="alert"
               className="mb-4 rounded-[5px] border border-tone-danger/40 bg-tone-danger/10 px-3 py-2 text-xs text-tone-danger"
             >
-              {serverError}
+              {serverError ?? loadFailure}
             </div>
           )}
           <div className="flex flex-col gap-5">{fields}</div>
@@ -333,7 +349,7 @@ export default function RoleForm({
       record={record}
       resourceName="Role"
       backHref="/dashboard/roles"
-      serverError={serverError}
+      serverError={serverError ?? loadFailure}
       onSubmit={onSubmit}
       skipDirtyGuard={saved}
     >
