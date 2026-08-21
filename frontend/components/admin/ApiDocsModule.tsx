@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import PageHeading from "@/components/common/PageHeading";
 import Badge from "@/components/common/Badge";
@@ -8,7 +8,8 @@ import { Card, CardContent } from "@/components/common/Card";
 import StatTiles from "@/components/common/StatTiles";
 import Input from "@/components/common/Input";
 import { navIcon } from "@/components/dashboard/navIcons";
-import { apiDocsApi, type ApiOperation, type CatalogueSummary } from "@/lib/api/apiDocsApi";
+import type { ApiOperation } from "@/lib/api/apiDocsApi";
+import { useApiCatalogueQuery } from "@/lib/api/endpoints/opsEndpoints";
 import { extractApiError } from "@/lib/utils/apiError";
 
 /**
@@ -35,31 +36,22 @@ const METHOD_TONE = {
 } as const;
 
 export default function ApiDocsModule() {
-  const [operations, setOperations] = useState<ApiOperation[]>([]);
-  const [summary, setSummary] = useState<CatalogueSummary | null>(null);
   const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    let live = true;
-    void (async () => {
-      try {
-        const res = await apiDocsApi.catalogue();
-        if (live) {
-          setOperations(res.data.operations);
-          setSummary(res.data.summary);
-        }
-      } catch (err) {
-        if (live) setError(extractApiError(err, "Could not load the API catalogue."));
-      } finally {
-        if (live) setLoading(false);
-      }
-    })();
-    return () => {
-      live = false;
-    };
-  }, []);
+  // Converted 2026-08-21. Unlike the health snapshot beside it, this caches
+  // normally: the catalogue is generated from the application's own route table,
+  // so it cannot change until the process is replaced. The `live` flag that
+  // guarded the old async effect against a late resolve after unmount is gone
+  // too — that is what the cache layer does.
+  const { data, isLoading: loading, error: fetchError } = useApiCatalogueQuery();
+  // Memoised, not `data?.operations ?? []` inline: a fresh array literal every
+  // render changes the identity the filtering `useMemo` below depends on, so it
+  // would recompute on every render and the memo would buy nothing.
+  const operations = useMemo(() => data?.operations ?? [], [data]);
+  const summary = data?.summary ?? null;
+  const error = fetchError
+    ? extractApiError(fetchError, "Could not load the API catalogue.")
+    : null;
 
   const grouped = useMemo(() => {
     const term = search.trim().toLowerCase();

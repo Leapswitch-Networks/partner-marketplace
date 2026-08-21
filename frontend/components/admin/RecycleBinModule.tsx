@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import Badge from "@/components/common/Badge";
 import Button from "@/components/common/Button";
@@ -11,7 +11,12 @@ import FilterCombobox from "@/components/common/FilterCombobox";
 import Skeleton from "@/components/common/Skeleton";
 import Toast, { useToast } from "@/components/common/Toast";
 import { navIcon } from "@/components/dashboard/navIcons";
-import recycleBinApi, { type BinnedItem } from "@/lib/api/recycleBinApi";
+import type { BinnedItem } from "@/lib/api/recycleBinApi";
+import {
+  usePurgeBinnedItemMutation,
+  useRecycleBinQuery,
+  useRestoreBinnedItemMutation,
+} from "@/lib/api/endpoints/opsEndpoints";
 import useModalState from "@/lib/hooks/useModalState";
 import { extractApiError } from "@/lib/utils/apiError";
 import { formatDateTime } from "@/lib/utils/format";
@@ -39,40 +44,26 @@ const ALL_TYPES = "";
 export default function RecycleBinModule() {
   const { toasts, show, dismiss } = useToast();
 
-  const [items, setItems] = useState<BinnedItem[]>([]);
-  const [counts, setCounts] = useState<Record<string, number>>({});
-  const [types, setTypes] = useState<{ value: string; label: string }[]>([]);
   const [typeFilter, setTypeFilter] = useState(ALL_TYPES);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
 
   const modal = useModalState<"purge", BinnedItem>();
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await recycleBinApi.list();
-      setItems(res.data.items);
-      setCounts(res.data.counts);
-      setTypes(res.data.types);
-    } catch (err) {
-      setError(extractApiError(err, "Could not load the recycle bin."));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // Converted 2026-08-21. The whole bin is fetched unfiltered and narrowed in the
+  // browser, which is unchanged — see the note on `visible` below — so this is one
+  // cache entry rather than one per filter value.
+  const { data, isFetching, error: fetchError, refetch: load } = useRecycleBinQuery();
+  const items = useMemo(() => data?.items ?? [], [data]);
+  const counts = data?.counts ?? {};
+  const types = data?.types ?? [];
+  const error = fetchError ? extractApiError(fetchError, "Could not load the recycle bin.") : null;
 
-  useEffect(() => {
-    // Handed to a callback rather than called in the body. `load` sets state,
-    // and calling it directly here runs those updates inside the effect's own
-    // synchronous phase — a second render pass for values React could have had
-    // in the first, which is what `react-hooks/set-state-in-effect` is for. One
-    // microtask's remove makes them ordinary updates, and nothing else changes:
-    // the fetch still starts on mount and the retry path still calls `load`.
-    void Promise.resolve().then(load);
-  }, [load]);
+  const [restoreItem] = useRestoreBinnedItemMutation();
+  const [purgeItem] = usePurgeBinnedItemMutation();
+
+  // `isFetching && empty`, so the bin does not blank out while it reloads after a
+  // restore — the rows stay up until the new copy lands.
+  const loading = isFetching && items.length === 0;
 
   // Filtered in the browser: the whole bin is already here, and re-fetching to
   // hide rows would be a round trip that buys nothing. The API takes `?type=`
@@ -87,9 +78,12 @@ export default function RecycleBinModule() {
   const restore = async (item: BinnedItem) => {
     setBusy(`${item.type}:${item.id}`);
     try {
-      const res = await recycleBinApi.restore(item.type, item.id);
-      show(res.data.message);
-      await load();
+      // The mutation invalidates the bin AND every collection a soft delete can
+      // reach, so the restored record reappears in the users/partners/listings
+      // table it came from without this screen knowing which one that was. The
+      // old version reloaded only the bin.
+      const res = await restoreItem({ type: item.type, id: item.id }).unwrap();
+      show(res.message);
     } catch (err) {
       show(extractApiError(err, "Could not restore that record."), "error");
     } finally {
@@ -214,7 +208,7 @@ export default function RecycleBinModule() {
           confirmLabel="Delete forever"
           busyLabel="Deleting…"
           errorFallback="Could not delete that record."
-          onConfirm={() => recycleBinApi.purge(modal.target!.type, modal.target!.id)}
+          onConfirm={() => purgeItem({ type: modal.target!.type, id: modal.target!.id }).unwrap()}
           onConfirmed={() => {
             const label = modal.target!.label;
             modal.close();

@@ -6,6 +6,57 @@
 > Update this file as part of the same change as the code. A task that isn't here is invisible to the
 > next person.
 
+## August 21, 2026 — The four Operations screens joined the shared cache, and two of them deliberately do not cache
+
+**System health, API documentation, background jobs and the recycle bin all moved across.** Four more
+screens that used to fetch their own copy of everything on arrival, and between them six hand-written
+guards against a request finishing after the reader had already navigated away. That guard is the kind
+of thing that works until the one place somebody forgets it; the shared layer does it for every screen
+at once.
+
+**Two of them switch caching off, and that is the interesting part.** The health screen describes the
+process that answered the request. A cached health check is a claim about the past presented as the
+present, and being current is the entire point of the page — so leaving it discards the answer, and
+coming back a minute later asks again. The API documentation is the opposite: it is generated from the
+application's own list of addresses, so it cannot change until the application is replaced, and it
+caches normally. Same folder, opposite decisions, both written down next to the code.
+
+**Restoring something from the recycle bin now puts it back on screen everywhere.** Previously the bin
+reloaded itself and nothing else, so a restored account was missing from the people table until that
+page was reloaded by hand — no error, just a record that had apparently not come back. A restore now
+refreshes every list a deleted record can return to.
+
+**The job history is now cached per filter.** Switching between "all jobs" and one job, or toggling
+"failures only", re-reads a combination already seen instead of asking again every time.
+
+## August 21, 2026 — The Operations screens joined the shared cache, and a health check is deliberately never cached
+
+**Four more screens converted**: system health, API documentation, background jobs and the recycle bin.
+Six fetches on arrival, five effects and four hand-written guards against a request finishing after the
+reader had already navigated away — all gone. That last kind is worth naming: every one of those
+screens had written its own version of the same guard, and a guard that has to be remembered in each
+component is one that eventually is not.
+
+**A health check is now explicitly never remembered.** Everything else on this data layer is cached and
+reused, which is the whole point of it. System health is the exception, on purpose: it describes the
+running process that answered the question, so a remembered answer is a claim about the past presented
+as the present — and being current is the entire reason the screen exists. Two visits a minute apart
+now ask twice.
+
+**The API documentation is the exception to that exception.** It is generated from the application's own
+list of addresses, so it cannot change until the application is replaced. It caches normally.
+
+**Restoring something from the recycle bin now puts it back on screen where it came from.** Previously
+the bin refreshed itself and nothing else, so a restored account was missing from the users table until
+that page was reloaded by hand — which looks exactly like the restore having failed. Restoring now
+refreshes every list a deleted record can return to, without the recycle bin needing to know which one
+that is.
+
+**And the bin no longer blanks while it reloads.** The rows stay up until the new copy arrives.
+
+**Purging is untouched.** It remains the only irreversible delete in the product, it still asks first,
+it still names the record, and it still says plainly that it cannot be undone.
+
 ## August 21, 2026 — The user detail and edit screens joined the shared cache
 
 **Two more screens converted.** Opening a person's record from the users table no longer re-fetches

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 
 import PageHeading from "@/components/common/PageHeading";
 import Badge, { type BadgeTone } from "@/components/common/Badge";
@@ -8,13 +8,11 @@ import Button from "@/components/common/Button";
 import { Card, CardContent } from "@/components/common/Card";
 import StatTiles from "@/components/common/StatTiles";
 import { navIcon } from "@/components/dashboard/navIcons";
+import type { JobHealth } from "@/lib/api/workerApi";
 import {
-  workerApi,
-  type JobHealth,
-  type JobRun,
-  type JobStatus,
-  type WorkerSummary,
-} from "@/lib/api/workerApi";
+  useWorkerJobsQuery,
+  useWorkerRunsQuery,
+} from "@/lib/api/endpoints/opsEndpoints";
 import { extractApiError } from "@/lib/utils/apiError";
 import { formatDateTime } from "@/lib/utils/format";
 
@@ -60,64 +58,36 @@ function humaniseInterval(seconds: number): string {
 }
 
 export default function WorkerJobsModule() {
-  const [jobs, setJobs] = useState<JobStatus[]>([]);
-  const [summary, setSummary] = useState<WorkerSummary | null>(null);
-  const [runs, setRuns] = useState<JobRun[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [failuresOnly, setFailuresOnly] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  /**
-   * Nothing is set synchronously in an effect body — `react-hooks/set-state-in-effect`
-   * objects to that, and it is right: the fetch resolves later, so the state it
-   * sets belongs in the callback rather than in the call.
-   */
-  const loadRuns = useCallback(
-    (job: string | null, onlyFailures: boolean, live: () => boolean) =>
-      workerApi
-        .runs({
-          ...(job ? { job } : {}),
-          ...(onlyFailures ? { status: "failed" } : {}),
-          limit: 50,
-        })
-        .then((res) => {
-          if (live()) setRuns(res.data);
-        })
-        .catch(() => {
-          // The job table above is the important half; a failed history fetch
-          // must not blank the page.
-        }),
-    []
-  );
+  // Converted 2026-08-21. Two async effects gone, along with both `live`/`alive`
+  // flags that guarded against a fetch resolving after unmount — that is what the
+  // cache layer does, and doing it by hand in every component is how one gets
+  // forgotten.
+  const {
+    data: jobsData,
+    isLoading: loading,
+    error: jobsError,
+  } = useWorkerJobsQuery();
+  const jobs = useMemo(() => jobsData?.jobs ?? [], [jobsData]);
+  const summary = jobsData?.summary ?? null;
+  const error = jobsError
+    ? extractApiError(jobsError, "Could not load the background jobs.")
+    : null;
 
-  useEffect(() => {
-    let live = true;
-    void (async () => {
-      try {
-        const res = await workerApi.jobs();
-        if (live) {
-          setJobs(res.data.jobs);
-          setSummary(res.data.summary);
-        }
-      } catch (err) {
-        if (live) setError(extractApiError(err, "Could not load the background jobs."));
-      } finally {
-        if (live) setLoading(false);
-      }
-    })();
-    return () => {
-      live = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    let alive = true;
-    void loadRuns(selected, failuresOnly, () => alive);
-    return () => {
-      alive = false;
-    };
-  }, [selected, failuresOnly, loadRuns]);
+  // The run history is a second query keyed on the two filters, so changing
+  // either re-reads from cache if that combination has been seen and fetches if
+  // not — which the hand-rolled version could not do: it refetched every time.
+  //
+  // No error handling, deliberately, and this is unchanged from before: the job
+  // table above is the important half, and a failed history fetch must not blank
+  // the page.
+  const { data: runs = [] } = useWorkerRunsQuery({
+    ...(selected ? { job: selected } : {}),
+    ...(failuresOnly ? { status: "failed" } : {}),
+    limit: 50,
+  });
 
   return (
     <div className="flex flex-col gap-4">

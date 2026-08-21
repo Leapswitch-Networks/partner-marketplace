@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import Link from "next/link";
 
 import Badge, { type BadgeTone } from "@/components/common/Badge";
@@ -10,7 +10,7 @@ import ErrorState from "@/components/common/ErrorState";
 import Skeleton from "@/components/common/Skeleton";
 import { buttonClasses } from "@/components/common/Button";
 import { navIcon } from "@/components/dashboard/navIcons";
-import healthApi, { type SystemHealth } from "@/lib/api/healthApi";
+import { useSystemHealthQuery } from "@/lib/api/endpoints/opsEndpoints";
 import { extractApiError } from "@/lib/utils/apiError";
 
 /**
@@ -34,31 +34,16 @@ import { extractApiError } from "@/lib/utils/apiError";
  * unchecked green tick is worse than an honest blank.
  */
 export default function HealthModule() {
-  const [data, setData] = useState<SystemHealth | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      setData((await healthApi.overview()).data);
-    } catch (err) {
-      setError(extractApiError(err, "Could not load system health."));
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    // Handed to a callback rather than called in the body. `load` sets state,
-    // and calling it directly here runs those updates inside the effect's own
-    // synchronous phase — a second render pass for values React could have had
-    // in the first, which is what `react-hooks/set-state-in-effect` is for. One
-    // microtask's remove makes them ordinary updates, and nothing else changes:
-    // the fetch still starts on mount and the retry path still calls `load`.
-    void Promise.resolve().then(load);
-  }, [load]);
+  // Converted 2026-08-21. The endpoint sets `keepUnusedDataFor: 0`, so leaving this
+  // screen discards the answer — the opposite of the cache's default, and the
+  // point of the exception. A health check describes the process that answered it;
+  // a cached one is a claim about the past presented as the present, and being
+  // current is the entire value of this page.
+  //
+  // `isFetching`, not `isLoading`, so the Refresh button shows progress on a
+  // manual re-check rather than only on the first load.
+  const { data, isFetching: loading, error: fetchError, refetch: load } = useSystemHealthQuery();
+  const error = fetchError ? extractApiError(fetchError, "Could not load system health.") : null;
 
   return (
     <div className="flex h-full min-h-0 flex-col">

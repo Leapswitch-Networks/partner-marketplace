@@ -93,6 +93,13 @@ export const api = createApi({
     "User",
     "Webhook",
     "WorkerJob",
+    // Operations — added 2026-08-21 as the remaining fetch-on-mount modules moved
+    // over. `SystemHealth` and `ApiDocs` are read-only and nothing invalidates
+    // them: they are snapshots of the running application, not stored records.
+    // Declared anyway, for the reason the `Activity` note above gives.
+    "SystemHealth",
+    "ApiDocs",
+    "RecycleBin",
   ] as const,
 
   endpoints: () => ({}),
