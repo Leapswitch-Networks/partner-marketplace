@@ -36,13 +36,30 @@ import { VERIFICATION_LEVELS } from "@/lib/public/siteContent";
  * every partner. That is the honest shape of a directory this size, and it is
  * also the one that makes six partners read as *selective* rather than *empty*.
  *
- * ## `searchParams` is read, and nothing is filtered by it yet
+ * ## `searchParams` drives a real server-side filter
  *
- * The home page's search and the vocabulary chips both link here with `?q=`.
- * The query is echoed so the visitor knows it arrived, and the result set is
- * unchanged — there is no search backend, and pretending to filter would be a
- * lie the page tells silently. When `/public/partners` exists this becomes a
- * server fetch and nothing else about the page changes.
+ * ⚠️ **Corrected 2026-08-21.** This section used to say the query was echoed but
+ * nothing was filtered, "because there is no search backend". That stopped being
+ * true when `/public/partners` landed, and the page had *already* been passing all
+ * three parameters through — so the comment was describing an earlier version of
+ * the file it sits in. Re-measured against the running stack:
+ *
+ * | Request | Partners rendered |
+ * |---|---:|
+ * | `/partners` | 6 |
+ * | `/partners?q=north` | 1 |
+ * | `/partners?expertise=cloud-infrastructure` | 3 |
+ * | `/partners?city=nowhere` | 0 |
+ *
+ * `expertise` is a join on the expertise pivot, not a text match, and filtering on
+ * a parent category includes its children — a partner attaches expertise to leaves,
+ * so matching a parent id exactly returned nothing while the chips rendered
+ * perfectly. `q` is a LIKE over name and tagline; `city` is an exact lowercase
+ * match.
+ *
+ * The § 13.3 table above still holds: what is absent is *facet UI* — visible
+ * chips and counts that manufacture crawlable thin pages at this size. Answering a
+ * URL somebody already has is a different thing from advertising the combinations.
  */
 export const metadata: Metadata = {
   title: "Partner directory",

@@ -6,6 +6,44 @@
 > Update this file as part of the same change as the code. A task that isn't here is invisible to the
 > next person.
 
+## August 21, 2026 — Checked what the plans claimed was unbuilt, and found five of six rows were wrong
+
+**The build punchlist said the public enquiry form "posts nowhere".** It posts. A real enquiry sent
+through the form's own path came back with a reference and landed against the right company. That is
+the product's only unauthenticated write and its primary conversion path, so a document saying it does
+not work is worth correcting quickly.
+
+**It also said the directory has no filter.** Filtering works, server-side, on all three parameters:
+searching by name returns one company of six, filtering by a category returns three — and filtering by
+a *parent* category correctly includes its children, which a partner depends on because they attach
+their expertise to the specific leaf, not the heading. Measured against the running site, not the code.
+
+**The page's own comment said the same wrong thing about itself.** It claimed the query was echoed but
+nothing filtered, "because there is no search backend" — while the code immediately below it passed all
+three filters through. The comment was describing an earlier version of the file it lived in.
+
+**Two more rows were simply out of date**: the partner's own screens exist, and so does their inbox.
+
+**One row is a genuine gap, and it is worth stating rather than ticking.** The plan promises two
+separate approvals — one for the company, one for its content. Listings are reviewed: editing a
+published one sends it back to the queue. **A company's own profile text is not reviewed at all.** Its
+name, tagline and description appear on the public page the moment they are saved. Whether that is
+acceptable is a business decision, not a bug to quietly fix: reviewing profile edits means a second
+queue and means a company waits to correct a typo. It is recorded because the plan says content
+approval exists, and a reader would reasonably assume it covers this.
+
+**The team screen was silently showing at most a hundred people.** It asked for a hundred and rendered
+whatever came back, with no count and no controls — so a company with more staff than that saw exactly
+a hundred and had no way to know. It pages properly now, twenty-five at a time, with the total always
+on screen. A company with eight colleagues sees no controls at all; one with two hundred can reach all
+of them. Verified by temporarily shrinking the page size and reading the result: "Showing 1–2 of 20,
+Page 1 of 10", with Previous correctly unavailable on the first page.
+
+**And the register's claim that "nothing mechanical verifies anything" is retired.** It had said "floor
+laid" for fifteen days. There are now a thousand tests, both automated jobs pass, and a sixty-eight
+screen pass walks the whole application. The lesson kept alongside it is not the count: three times
+this week a check reported success about something it was not actually looking at.
+
 ## August 21, 2026 — The last screens moved onto the shared data layer, and I had to correct myself
 
 **Everything that used to fetch its own data on arrival now shares one cache.** The final four were the

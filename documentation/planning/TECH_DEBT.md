@@ -91,7 +91,7 @@ an ordering that only reads correctly together.
 |----|:---:|-------|--------|
 | PM-37 | 🔴 | No environment concept — every deployment-safety rule unenforced | ✅ closed 2026-08-06 |
 | PM-38 | 🟠 | No transaction boundary: 49 commits, a session that never rolls back | ✅ closed 2026-08-06 |
-| PM-39 | 🟠 | Nothing mechanical verifies anything — no tests, no CI | ⏳ floor laid 2026-08-06 |
+| PM-39 | ✅ | ~~Nothing mechanical verifies anything~~ — **1003 tests, CI green both jobs, 68-screen browser pass** | closed 2026-08-21 |
 | PM-40 | 🟠 | ~~56 routes are unversioned~~ — `API_PREFIX = "/api/v1"` | ✅ closed 2026-08-06 |
 | PM-41 | ✅ | ~~The frontend has no data layer~~ — **the fetch-on-mount sweep finished 2026-08-21**: every screen reads through the cache, one documented exception | Frontend |
 | PM-42 | 🟡 | ~~The API contract is hand-copied into TypeScript~~ — generated + drift-asserted | ✅ closed 2026-08-06 |
@@ -2219,3 +2219,31 @@ each screen asks for the right data. `TeamModule` still asks for `per_page: 100`
 and renders all of it with no paging, so an organisation with more than a hundred
 members silently sees a hundred — noted at the call site and unfixed, because it
 needs the screen to paginate rather than a different fetch.
+
+---
+
+## PM-39 — nothing mechanical verifies anything ✅ CLOSED 2026-08-21
+
+The row said "floor laid" for fifteen days, which was true on 2026-08-06 and
+understated things badly by the end. What exists now:
+
+* **1003 backend tests**, and CI runs them against a migrated *and seeded*
+  database. Until 2026-08-21 it seeded nothing, so 86 of them were skipped there
+  and five failed for want of reference data — the suite existed and CI was red for
+  environmental reasons, which is arguably worse than no CI (see PM-50).
+* **Both CI jobs green**, including the production build — which had never once
+  succeeded in CI, because two public routes enumerate their pages at build time
+  against a live API the job did not have.
+* **A 68-screen browser pass** that signs in, walks every screen, and asserts URL,
+  sidebar, text floor, console errors and failed requests. It was 59 screens this
+  morning; nine screens had never been opened by it, which is why three separate
+  defects reached this week's review with a green tick beside them.
+
+**The thing worth carrying forward** is not the count. It is that on three separate
+occasions this week a check reported success about something it was not looking at:
+a page absent from the pass list, a route whose failure matched the empty state's
+text, and a WARN that would have recurred for ever. Coverage of the *checks* turned
+out to matter more than coverage of the code.
+
+PM-11 stays open: this is a floor over behaviour, not a coverage measurement, and
+nothing here reports a percentage.

@@ -62,17 +62,45 @@ serves none of them does not belong on this list.
 |:--:|---|---|---|
 | 1 | Partner requests to join | Public | ✅ `/become-a-partner` → `/contact` |
 | 2 | **We approve the company** | Staff | ✅ `/dashboard/partners` exists |
-| 3 | Partner signs in; sees only what their permissions allow | Partner | 🔧 scoping done, pages not built |
-| 4 | **Partner updates their own data** | Partner | ⬜ |
-| 5 | **We approve the data before it is public** | Staff | ⬜ |
-| 6 | User filters partners by requirement | Public | ⬜ hardcoded list, no filter |
-| 7 | User sends an enquiry | Public | 🔧 form exists, posts nowhere |
-| 8 | **Partner reads the enquiry in their back office** | Partner | ⬜ |
+| 3 | Partner signs in; sees only what their permissions allow | Partner | ✅ five partner screens — organisation, team, branding, listings, enquiries |
+| 4 | **Partner updates their own data** | Partner | ✅ `PATCH /partners/me`, writable fields an allowlist |
+| 5 | **We approve the data before it is public** | Staff | 🔧 **listings yes, profile text no** — see the note below |
+| 6 | User filters partners by requirement | Public | ✅ server-side; **facet UI** deliberately absent |
+| 7 | User sends an enquiry | Public | ✅ verified end to end, 201 with a reference |
+| 8 | **Partner reads the enquiry in their back office** | Partner | ✅ inbox + thread, tenancy-scoped |
 
 > **Two approvals, not one**, and they are different permissions on different objects: step 2 approves
 > a *company*, step 5 approves *content*. Collapsing them is the single most likely design mistake
 > here — it would mean either that an approved partner can publish anything unread, or that every
 > edit re-approves the company.
+
+> ### ⚠️ Re-measured 2026-08-21 — five of these six rows were stale, and one is a real gap
+>
+> Every row above was checked against the running stack rather than against this file. Rows 3, 4, 7
+> and 8 were built and this table had not been updated; row 6 was built *and its own page docstring
+> also said it was not*.
+>
+> **Row 6, measured:** `/partners` renders 6, `?q=north` renders 1, `?expertise=cloud-infrastructure`
+> renders 3 (a parent filter includes its children), `?city=nowhere` renders 0. What is genuinely
+> absent is *facet UI* — visible chips and counts — which `FRONTEND_PLAN.md` § 13.3 holds back until a
+> measured trigger because they manufacture crawlable thin pages at this size. Answering a URL
+> somebody already has is a different thing from advertising every combination.
+>
+> **Row 7, measured:** posting a real enquiry through the form's own target
+> (`POST /api/public/enquiries`, the Next proxy) returns **201** with a reference, and the row lands
+> against the right partner. The probe was deleted afterwards.
+>
+> **Row 5 is the one that is not just bookkeeping.** Step 5 approves *content*, and listings are
+> moderated — `_MATERIAL_FIELDS` sends an edited PUBLISHED listing back to review, and the queue works.
+> **A partner's own profile text is not reviewed at all.** `name`, `tagline`, `about`, `website` and
+> the rest are on `update_own_organisation`'s writable allowlist and appear on the public profile the
+> moment they are saved.
+>
+> Whether that is acceptable is a product decision, not a bug to fix quietly: reviewing profile edits
+> means a pending/approved state on the partner record and a second queue, which is real work and
+> changes what a partner experiences when they fix a typo. Recorded here rather than left implicit,
+> because the note above says content approval exists and a reader would reasonably assume it covers
+> this.
 
 ---
 

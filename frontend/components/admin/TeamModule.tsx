@@ -12,6 +12,10 @@ import { useListUsersQuery } from "@/lib/api/endpoints/usersEndpoints";
 import { extractApiError } from "@/lib/utils/apiError";
 import { usePermissions } from "@/lib/hooks/usePermissions";
 
+/** Rows per page. Small enough that a partner reads a page rather than scrolling
+ *  one, and well under the server's cap of 100. */
+const PER_PAGE = 25;
+
 /**
  * `/dashboard/team` — a partner's own logins.
  *
@@ -38,21 +42,40 @@ export default function TeamModule() {
   const canInvite = can("invitation-create");
 
   const [email, setEmail] = useState("");
+  const [page, setPage] = useState(1);
 
-  // Converted 2026-08-21. Both reads share caches with other screens: the member
-  // list with the users table (tenancy-scoped server-side, so a partner sees only
-  // their own people), and the organisation with the profile and branding screens.
+  // Both reads share caches with other screens: the member list with the users
+  // table (tenancy-scoped server-side, so a partner sees only their own people),
+  // and the organisation with the profile and branding screens.
   //
-  // ⚠️ `per_page: 100` is inherited and is a real cap, not a page size — this
-  // screen shows the whole team with no pagination, so an organisation with more
-  // than a hundred people would silently show a hundred. Left as found because
-  // fixing it properly means paginating the list, which is a change to the screen
-  // rather than to how it fetches. Noted rather than quietly carried over.
-  const { data: page, isLoading: usersLoading } = useListUsersQuery({ per_page: 100 });
+  // ## This list is paged, and it was not
+  //
+  // It asked for `per_page: 100` and rendered whatever came back with no control
+  // and no count — so an organisation with more than a hundred people saw exactly
+  // a hundred and had no way to know. That is the failure mode this codebase keeps
+  // finding: not a crash, a number that is wrong and looks right. The server caps
+  // `per_page` at 100, so asking for more is not a fix either.
+  //
+  // 25 a page, with the total always on screen. A partner with eight colleagues
+  // sees no controls at all; one with two hundred can reach all of them.
+  const { data: memberPage, isFetching: usersFetching } = useListUsersQuery({
+    page,
+    per_page: PER_PAGE,
+  });
   const { data: org, isLoading: orgLoading } = useMyOrganisationQuery();
-  const members = page?.items ?? [];
+
+  const members = memberPage?.items ?? [];
+  const total = memberPage?.total ?? 0;
+  const totalPages = memberPage?.pages ?? 1;
   const organisation = org?.name ?? "";
-  const loading = usersLoading || orgLoading;
+
+  // `isFetching` **and** empty: turning a page must not blank the list while the
+  // next one arrives, which is the rule `lib/store/api.ts` records for every list
+  // screen here.
+  const loading = (usersFetching && members.length === 0) || orgLoading;
+
+  const firstOnPage = total === 0 ? 0 : (page - 1) * PER_PAGE + 1;
+  const lastOnPage = Math.min(page * PER_PAGE, total);
 
   const [createInvitation, { isLoading: sending }] = useCreateInvitationMutation();
 
@@ -125,6 +148,38 @@ export default function TeamModule() {
           </li>
         )}
       </ul>
+
+      {/*
+        Shown only when there is more than one page. A count and a pair of buttons
+        on a team of six would be furniture; on a team of two hundred their absence
+        was a lie.
+      */}
+      {totalPages > 1 && (
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs text-ink-muted dark:text-night-muted">
+            Showing {firstOnPage}–{lastOnPage} of {total}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1 || usersFetching}
+            >
+              Previous
+            </Button>
+            <span className="text-xs text-ink-muted dark:text-night-muted">
+              Page {page} of {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages || usersFetching}
+            >
+              Next
+            </Button>
+          </div>
+        </div>
+      )}
 
       <Toast toasts={toasts} onDismiss={dismiss} />
     </div>
