@@ -6,6 +6,30 @@
 > Update this file as part of the same change as the code. A task that isn't here is invisible to the
 > next person.
 
+## August 21, 2026 — The listing screens now share one cache, and the authoring form is finally being checked
+
+**Four more screens moved onto the shared data layer**, and one of them mattered more than the rest.
+The listing authoring form is the screen the whole supply side depends on: if a partner cannot use it,
+nothing gets written and the directory stays empty while looking like it works. It had never been opened
+by the automated browser pass — only the listings *list* had — so nothing was checking the form at all.
+It is now covered in three states: creating, viewing and editing a real record.
+
+**Submitting a listing for review used to leave two other screens wrong.** The page replaced its own
+copy of the listing and told nothing else, so the listings table still showed it as a draft and the
+moderation queue did not know a new item had arrived. Both correct themselves now, without either page
+knowing the other exists.
+
+**The edit form no longer loses what you have typed.** It used to load the listing and copy each value
+into the form. That is fine until something refreshes the underlying data — which now happens
+automatically after any change — at which point whatever the partner had typed since would be
+overwritten. The fields are derived instead, so a refresh cannot eat keystrokes: an untouched field
+follows the server, a touched one holds its own.
+
+**One design note worth keeping.** The set of fields a partner may write is spelled out as a list of
+what is allowed, not a list of what is forbidden. Status, rejection reason and owning company are
+absent from it. An exclusion list would be one new column away from accidentally granting write access
+to whatever gets added next.
+
 ## August 21, 2026 — The automated checks were failing for reasons that had nothing to do with the code
 
 **The only automated check this project has had been red for days, which means it had stopped being

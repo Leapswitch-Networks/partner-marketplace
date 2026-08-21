@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { headingClasses } from "@/components/common/PageHeading";
@@ -8,16 +8,14 @@ import Button from "@/components/common/Button";
 import Input from "@/components/common/Input";
 import Textarea from "@/components/common/Textarea";
 import Toast, { useToast } from "@/components/common/Toast";
+import type { Listing, PricingModel } from "@/lib/api/directoryApi";
 import {
-  createListing,
-  getListing,
-  listCategories,
-  submitListing,
-  updateListing,
-  type Category,
-  type Listing,
-  type PricingModel,
-} from "@/lib/api/directoryApi";
+  useCreateListingMutation,
+  useGetListingQuery,
+  useListCategoriesQuery,
+  useSubmitListingMutation,
+  useUpdateListingMutation,
+} from "@/lib/api/endpoints/directoryEndpoints";
 import { extractApiError } from "@/lib/utils/apiError";
 
 const PRICING: { value: PricingModel; label: string; hint: string }[] = [
@@ -25,6 +23,18 @@ const PRICING: { value: PricingModel; label: string; hint: string }[] = [
   { value: "FROM", label: "Starting from", hint: "A floor price, shown as “From ₹X”." },
   { value: "FIXED", label: "Fixed price", hint: "One number, no negotiation implied." },
 ];
+
+/** The editable shape of the form, kept separate from the API's payload type
+ *  because `categoryId` is `number | ""` here — an unchosen select is not a
+ *  number, and pretending otherwise is how a form submits `NaN`. */
+interface Fields {
+  title: string;
+  summary: string;
+  description: string;
+  categoryId: number | "";
+  pricingModel: PricingModel;
+  price: string;
+}
 
 /**
  * The listing authoring form — **the screen the supply side depends on.**
@@ -56,41 +66,49 @@ export default function ListingForm({ listingId }: { listingId?: string }) {
   const { toasts, show, dismiss } = useToast();
   const editing = Boolean(listingId);
 
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(editing);
-  const [saving, setSaving] = useState(false);
-  const [existing, setExisting] = useState<Listing | null>(null);
+  const { data: categories = [] } = useListCategoriesQuery();
+  const { data: existing, isLoading: loading } = useGetListingQuery(listingId ?? "", {
+    skip: !listingId,
+  });
 
-  const [title, setTitle] = useState("");
-  const [summary, setSummary] = useState("");
-  const [description, setDescription] = useState("");
-  const [categoryId, setCategoryId] = useState<number | "">("");
-  const [pricingModel, setPricingModel] = useState<PricingModel>("ON_REQUEST");
-  const [price, setPrice] = useState("");
+  const [create, { isLoading: creating }] = useCreateListingMutation();
+  const [update, { isLoading: updating }] = useUpdateListingMutation();
+  const [submit, { isLoading: submitting }] = useSubmitListingMutation();
+  const saving = creating || updating || submitting;
+
   const [errors, setErrors] = useState<Record<string, string>>({});
 
-  useEffect(() => {
-    listCategories()
-      .then(setCategories)
-      .catch(() => setCategories([]));
-  }, []);
+  /**
+   * ## Fields are derived, not copied into state by an effect
+   *
+   * The old version loaded the listing and then `setTitle(...)` &c. inside an
+   * effect. Two problems with that, and the second is the one a user meets:
+   * `react-hooks/set-state-in-effect` flags it, and a refetch — which the cache
+   * now does on its own after any invalidation — would overwrite whatever the
+   * partner had typed since. Deriving means a refetch cannot eat keystrokes.
+   *
+   * `edits` holds only what has actually been touched, so an untouched field
+   * follows the server's value and a touched one holds its own.
+   */
+  const [edits, setEdits] = useState<Partial<Fields>>({});
 
-  useEffect(() => {
-    if (!listingId) return;
-    getListing(listingId)
-      .then((listing) => {
-        setExisting(listing);
-        setTitle(listing.title);
-        setSummary(listing.summary);
-        setDescription(listing.description ?? "");
-        setCategoryId(listing.category_id);
-        setPricingModel(listing.pricing_model);
-        setPrice(listing.price != null ? String(listing.price) : "");
-      })
-      .catch((e) => show(extractApiError(e, "Could not load the listing."), "error"))
-      .finally(() => setLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [listingId]);
+  const fields = useMemo<Fields>(
+    () => ({
+      title: existing?.title ?? "",
+      summary: existing?.summary ?? "",
+      description: existing?.description ?? "",
+      categoryId: existing?.category_id ?? "",
+      pricingModel: existing?.pricing_model ?? "ON_REQUEST",
+      price: existing?.price != null ? String(existing.price) : "",
+      ...edits,
+    }),
+    [existing, edits]
+  );
+
+  const set = <K extends keyof Fields>(key: K, value: Fields[K]) =>
+    setEdits((prev) => ({ ...prev, [key]: value }));
+
+  const { title, summary, description, categoryId, pricingModel, price } = fields;
 
   /** Client-side validation mirrors the API's, so the common mistakes never
    *  cost a round trip. The API remains the authority — this is convenience. */
@@ -117,12 +135,11 @@ export default function ListingForm({ listingId }: { listingId?: string }) {
       price: pricingModel === "ON_REQUEST" ? null : Number(price),
     };
     return editing && listingId
-      ? updateListing(listingId, payload)
-      : createListing(payload);
+      ? update({ id: listingId, data: payload }).unwrap()
+      : create(payload).unwrap();
   };
 
   const onSaveDraft = async () => {
-    setSaving(true);
     try {
       const saved = await persist();
       if (!saved) return;
@@ -130,25 +147,20 @@ export default function ListingForm({ listingId }: { listingId?: string }) {
       router.push(`/dashboard/listings/${saved.id}`);
     } catch (e) {
       show(extractApiError(e, "Could not save the listing."), "error");
-    } finally {
-      setSaving(false);
     }
   };
 
   const onSaveAndSubmit = async () => {
-    setSaving(true);
     try {
       const saved = await persist();
       if (!saved) return;
       // Already back in review from the edit itself — submitting again would be
       // a redundant transition the API rejects with a 409.
-      if (saved.status !== "PENDING_REVIEW") await submitListing(saved.id);
+      if (saved.status !== "PENDING_REVIEW") await submit(saved.id).unwrap();
       show("Sent for review. A person reads every listing before it is published.");
       router.push(`/dashboard/listings/${saved.id}`);
     } catch (e) {
       show(extractApiError(e, "Could not submit the listing."), "error");
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -181,7 +193,7 @@ export default function ListingForm({ listingId }: { listingId?: string }) {
         <Input
           label="Title"
           value={title}
-          onChange={(e) => setTitle(e.target.value)}
+          onChange={(e) => set("title", e.target.value)}
           error={errors.title}
           placeholder="Managed Kubernetes for production workloads"
         />
@@ -189,7 +201,7 @@ export default function ListingForm({ listingId }: { listingId?: string }) {
         <Input
           label="One-line summary"
           value={summary}
-          onChange={(e) => setSummary(e.target.value)}
+          onChange={(e) => set("summary", e.target.value)}
           error={errors.summary}
           placeholder="What a buyer sees on the card, before they click."
         />
@@ -204,7 +216,7 @@ export default function ListingForm({ listingId }: { listingId?: string }) {
           <select
             id="listing-category"
             value={categoryId}
-            onChange={(e) => setCategoryId(e.target.value === "" ? "" : Number(e.target.value))}
+            onChange={(e) => set("categoryId", e.target.value === "" ? "" : Number(e.target.value))}
             className="w-full rounded-[5px] border border-surface-border bg-white px-3 py-2 text-sm text-ink focus:border-brand focus:outline-none focus:ring-1 focus:ring-brand dark:border-night-border dark:bg-night-card dark:text-gray-100"
           >
             <option value="">Choose a category…</option>
@@ -230,7 +242,7 @@ export default function ListingForm({ listingId }: { listingId?: string }) {
                   name="pricing_model"
                   value={option.value}
                   checked={pricingModel === option.value}
-                  onChange={() => setPricingModel(option.value)}
+                  onChange={() => set("pricingModel", option.value)}
                   className="mt-1 accent-brand"
                 />
                 <span>
@@ -250,7 +262,7 @@ export default function ListingForm({ listingId }: { listingId?: string }) {
             label="Price (INR)"
             type="number"
             value={price}
-            onChange={(e) => setPrice(e.target.value)}
+            onChange={(e) => set("price", e.target.value)}
             error={errors.price}
             placeholder="14000"
           />
@@ -259,7 +271,7 @@ export default function ListingForm({ listingId }: { listingId?: string }) {
         <Textarea
           label="Description (optional)"
           value={description}
-          onChange={(e) => setDescription(e.target.value)}
+          onChange={(e) => set("description", e.target.value)}
           rows={8}
           placeholder="What is included, what is not, and who it suits. You can add this later."
         />

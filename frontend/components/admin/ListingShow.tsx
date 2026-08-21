@@ -1,18 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import PageHeading from "@/components/common/PageHeading";
 import Button from "@/components/common/Button";
 import Toast, { useToast } from "@/components/common/Toast";
 import {
-  getListing,
-  listCategories,
-  submitListing,
-  type Category,
-  type Listing,
-} from "@/lib/api/directoryApi";
+  useGetListingQuery,
+  useListCategoriesQuery,
+  useSubmitListingMutation,
+} from "@/lib/api/endpoints/directoryEndpoints";
 import { extractApiError } from "@/lib/utils/apiError";
 import { usePermissions } from "@/lib/hooks/usePermissions";
 
@@ -25,44 +22,45 @@ import { usePermissions } from "@/lib/hooks/usePermissions";
  * exactly one thing to do. Burying the reason turns a two-minute fix into an
  * abandoned listing — so it is the first thing under the title, in the one tone
  * on this surface that means "you need to act".
+ *
+ * ## Submitting invalidates the index, not just this page
+ *
+ * Converted to the cached data layer 2026-08-21. The old version replaced its own
+ * local copy of the listing after submitting and told nothing else — so
+ * `/dashboard/listings` still showed DRAFT until it was reloaded by hand, and the
+ * moderation queue did not know a new item had arrived. `submitListing`
+ * invalidates `Listing`/LIST, so both correct themselves.
  */
 export default function ListingShow({ listingId }: { listingId: string }) {
   const router = useRouter();
   const { toasts, show, dismiss } = useToast();
   const { can } = usePermissions();
 
-  const [listing, setListing] = useState<Listing | null>(null);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState(false);
-
-  useEffect(() => {
-    Promise.all([getListing(listingId), listCategories()])
-      .then(([l, c]) => {
-        setListing(l);
-        setCategories(c);
-      })
-      .catch((e) => show(extractApiError(e, "Could not load the listing."), "error"))
-      .finally(() => setLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [listingId]);
+  const { data: listing, isLoading, isError } = useGetListingQuery(listingId);
+  // The shared picker cache — this page needs one category name, and every other
+  // screen showing a category list has already paid for the request.
+  const { data: categories = [] } = useListCategoriesQuery();
+  const [submit, { isLoading: busy }] = useSubmitListingMutation();
 
   const onSubmit = async () => {
-    setBusy(true);
     try {
-      setListing(await submitListing(listingId));
+      // No local assignment of the result. The mutation invalidates this row's tag,
+      // so the query above refetches — which also keeps the index and the
+      // moderation queue honest, neither of which this page knows about.
+      await submit(listingId).unwrap();
       show("Sent for review.");
     } catch (e) {
       show(extractApiError(e, "Could not submit for review."), "error");
-    } finally {
-      setBusy(false);
     }
   };
 
-  if (loading) {
+  if (isLoading) {
     return <p className="p-6 text-sm text-ink-muted dark:text-night-muted">Loading…</p>;
   }
-  if (!listing) {
+  // `isError` and "not found" are one message on purpose: for the person reading
+  // it, a 404 and a failed request are the same event — the listing is not on
+  // screen — and inventing two wordings implies a distinction they cannot act on.
+  if (isError || !listing) {
     return <p className="p-6 text-sm text-ink-muted dark:text-night-muted">Listing not found.</p>;
   }
 

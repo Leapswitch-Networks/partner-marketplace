@@ -8,6 +8,7 @@ import type {
   ListingStatus,
   ModerationQueueEntry,
   OwnOrganisationOverview,
+  PricingModel,
 } from "@/lib/api/directoryApi";
 import type { Paginated } from "@/types";
 
@@ -43,6 +44,21 @@ import type { Paginated } from "@/types";
  * later successful mutation cannot invalidate the failed slot and the retry the
  * user is waiting for never fires.
  */
+/**
+ * What a partner may write on a listing. Deliberately an allowlist: the API's
+ * `UpdateListingRequest` has no `status`, `rejection_reason` or `partner_id`, and
+ * mirroring that here keeps the two from drifting in the direction that matters.
+ */
+export type ListingWritable = Partial<{
+  title: string;
+  summary: string;
+  category_id: number;
+  description: string | null;
+  pricing_model: PricingModel;
+  price: number | null;
+  currency: string;
+}>;
+
 export const directoryEndpoints = api.injectEndpoints({
   endpoints: (build) => ({
     // --- Categories ---------------------------------------------------------
@@ -90,6 +106,34 @@ export const directoryEndpoints = api.injectEndpoints({
     getListing: build.query<Listing, string>({
       query: (id) => `/listings/${id}`,
       providesTags: (_r, _e, id) => [{ type: "Listing", id }],
+    }),
+
+    // Authoring. `ListingWritable` mirrors what the API accepts and nothing more —
+    // `status`, `rejection_reason` and `partner_id` are absent because a partner
+    // must not be able to set any of them, and an exclusion list would be one new
+    // column away from leaking write access to whatever gets added next.
+    createListing: build.mutation<Listing, ListingWritable & { title: string; summary: string; category_id: number }>({
+      query: (body) => ({ url: "/listings", method: "POST", body }),
+      // No row tag: the row did not exist until now, so there is nothing to
+      // invalidate but the collections it has just joined. `Category` too — the
+      // public listing count per category is recomputed on publish, and a draft
+      // still moves the authoring screens' idea of what exists.
+      invalidatesTags: [
+        { type: "Listing", id: "LIST" },
+        { type: "Category", id: "LIST" },
+      ],
+    }),
+
+    updateListing: build.mutation<Listing, { id: string; data: ListingWritable }>({
+      query: ({ id, data }) => ({ url: `/listings/${id}`, method: "PATCH", body: data }),
+      // Editing a material field sends a PUBLISHED listing back to review and
+      // recounts both the old and new category, so this cannot be a row-only
+      // invalidation — see `listing_service.update_listing`.
+      invalidatesTags: (_r, _e, { id }) => [
+        { type: "Listing", id },
+        { type: "Listing", id: "LIST" },
+        { type: "Category", id: "LIST" },
+      ],
     }),
 
     submitListing: build.mutation<Listing, string>({
@@ -239,4 +283,6 @@ export const {
   useUpdateEnquiryStatusMutation,
   useGetMyOverviewQuery,
   useReviewQueueQuery,
+  useCreateListingMutation,
+  useUpdateListingMutation,
 } = directoryEndpoints;

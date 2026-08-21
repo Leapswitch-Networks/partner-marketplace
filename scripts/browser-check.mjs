@@ -97,6 +97,7 @@ const PAGES = [
   // the run reported 59 passed and had not loaded either of the two files that
   // had just been rewritten. A verification tool that is silent about what it
   // does not cover is the failure mode worth fixing here, not the conversion.
+  ["/dashboard/listings/new", "Listing"],
   ["/dashboard/categories", "Categor"],
   ["/dashboard/listings", "Listing"],
   ["/dashboard/moderation", "Moderation"],
@@ -137,6 +138,13 @@ const DYNAMIC = [
   // the not-found branch, which loads cleanly and proves nothing.
   ["/dashboard/partners/{partner}", "Partner"],
   ["/dashboard/partners/{partner}/edit", "Partner"],
+  // Added 2026-08-21 with the conversion of these two screens to the cached data
+  // layer. Only the listings *index* was covered, so the authoring form — which
+  // `DIRECTORY_BUILD_PUNCHLIST` 3.6 calls the highest-risk screen in the product,
+  // because a partner who cannot use it writes nothing — had never been opened
+  // here. `/new` needs no id and lives in PAGES; these two do.
+  ["/dashboard/listings/{listing}", "Listing"],
+  ["/dashboard/listings/{listing}/edit", "Listing"],
 ];
 
 /**
@@ -439,17 +447,29 @@ try {
       fetch("${API}/users?per_page=1", { credentials: "include" }).then(r => r.json()),
       fetch("${API}/roles", { credentials: "include" }).then(r => r.json()),
       fetch("${API}/partners?per_page=1", { credentials: "include" }).then(r => r.json()).catch(() => ({})),
-    ]).then(([users, roles, partners]) => ({
+      fetch("${API}/listings?per_page=1", { credentials: "include" }).then(r => r.json()).catch(() => ({})),
+    ]).then(([users, roles, partners, listings]) => ({
       user: (users.items || users.data || [])[0]?.id ?? null,
       role: (Array.isArray(roles) ? roles : roles.items || [])[0]?.id ?? null,
       partner: (partners.items || [])[0]?.id ?? null,
+      listing: (listings.items || [])[0]?.id ?? null,
     }))
   `);
   if (!ids.user || !ids.role) {
     record("resolve ids", "WARN", `could not resolve a user/role id (${JSON.stringify(ids)})`);
   } else {
-    record("resolve ids", "PASS", `user ${String(ids.user).slice(0, 8)} · role ${ids.role} · partner ${ids.partner ?? "none"}`);
+    record("resolve ids", "PASS", `user ${String(ids.user).slice(0, 8)} · role ${ids.role} · partner ${ids.partner ?? "none"} · listing ${ids.listing ? String(ids.listing).slice(0, 8) : "none"}`);
     for (const [template, expected] of DYNAMIC) {
+      if (template.includes("{listing}")) {
+        // Same reasoning as partners: with no listing row, rendering the
+        // not-found branch would pass while proving nothing.
+        if (ids.listing == null) {
+          record(template, "WARN", "no listing exists to resolve — screen not exercised");
+          continue;
+        }
+        await check(template.replace("{listing}", ids.listing), expected);
+        continue;
+      }
       if (template.includes("{partner}")) {
         // A fresh install has no partner rows; skip rather than render the
         // not-found branch, which loads cleanly and proves nothing.
