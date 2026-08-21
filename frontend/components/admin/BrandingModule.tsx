@@ -1,16 +1,16 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 
 import PageHeading from "@/components/common/PageHeading";
 import Button from "@/components/common/Button";
 import Toast, { useToast } from "@/components/common/Toast";
+// `uploadBrandAsset` stays a direct call — see the note on `onUpload` below.
+import { uploadBrandAsset } from "@/lib/api/directoryApi";
 import {
-  clearBrandAsset,
-  getMyOrganisation,
-  uploadBrandAsset,
-  type OwnOrganisation,
-} from "@/lib/api/directoryApi";
+  useClearBrandAssetMutation,
+  useMyOrganisationQuery,
+} from "@/lib/api/endpoints/directoryEndpoints";
 import { extractApiError } from "@/lib/utils/apiError";
 
 const ASSETS = [
@@ -60,24 +60,33 @@ const ASSETS = [
  */
 export default function BrandingModule() {
   const { toasts, show, dismiss } = useToast();
-  const [org, setOrg] = useState<OwnOrganisation | null>(null);
-  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState<string | null>(null);
   const [version, setVersion] = useState(() => 0);
   const inputs = useRef<Record<string, HTMLInputElement | null>>({});
 
-  useEffect(() => {
-    getMyOrganisation()
-      .then(setOrg)
-      .catch((e) => show(extractApiError(e, "Could not load your organisation."), "error"))
-      .finally(() => setLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Converted 2026-08-21. The organisation is shared with the profile and team
+  // screens, so this no longer fetches its own copy.
+  const { data: org, isLoading: loading, refetch } = useMyOrganisationQuery();
+  const [clearAsset] = useClearBrandAssetMutation();
 
+  /**
+   * ⚠️ **The upload is deliberately NOT a cache mutation.**
+   *
+   * It sends a `File` inside `FormData`, and a mutation's argument ends up in a
+   * dispatched Redux action — so a File would trip the store's
+   * `serializableCheck`, which `lib/store/index.ts` keeps on purpose ("dropping
+   * serializableCheck to add one middleware is how a store loses its dev-time
+   * guardrails"). Weakening that for one upload is a bad trade.
+   *
+   * So this one call goes direct and then refetches by hand. It is the only place
+   * in the app that does, and this comment is why — without it the next reader
+   * would reasonably "tidy" it into the slice and reintroduce the warning.
+   */
   const onUpload = async (asset: "logo" | "banner", file: File) => {
     setBusy(asset);
     try {
-      setOrg(await uploadBrandAsset(asset, file));
+      await uploadBrandAsset(asset, file);
+      await refetch();
       // Bust the preview: the URL is unchanged, so without this the browser
       // shows the image it already has.
       setVersion((v) => v + 1);
@@ -95,7 +104,9 @@ export default function BrandingModule() {
   const onClear = async (asset: "logo" | "banner") => {
     setBusy(asset);
     try {
-      setOrg(await clearBrandAsset(asset));
+      // Clearing carries no body, so it is an ordinary mutation — and it
+      // invalidates the record, so no manual refetch here.
+      await clearAsset(asset).unwrap();
       setVersion((v) => v + 1);
       show("Removed.");
     } catch (e) {

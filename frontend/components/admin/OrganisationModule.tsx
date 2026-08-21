@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 
 import PageHeading from "@/components/common/PageHeading";
 import Button from "@/components/common/Button";
@@ -8,13 +8,11 @@ import Input from "@/components/common/Input";
 import Textarea from "@/components/common/Textarea";
 import Toast, { useToast } from "@/components/common/Toast";
 import {
-  getMyOrganisation,
-  listCategories,
-  setMyExpertise,
-  updateMyOrganisation,
-  type Category,
-  type OwnOrganisation,
-} from "@/lib/api/directoryApi";
+  useListCategoriesQuery,
+  useMyOrganisationQuery,
+  useSetMyExpertiseMutation,
+  useUpdateMyOrganisationMutation,
+} from "@/lib/api/endpoints/directoryEndpoints";
 import { extractApiError } from "@/lib/utils/apiError";
 
 /**
@@ -44,46 +42,57 @@ import { extractApiError } from "@/lib/utils/apiError";
 export default function OrganisationModule() {
   const { toasts, show, dismiss } = useToast();
 
-  const [org, setOrg] = useState<OwnOrganisation | null>(null);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [selected, setSelected] = useState<number[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState<Record<string, string>>({});
+  // Converted 2026-08-21. The organisation is shared with the branding and team
+  // screens; the category list with every picker in the app.
+  const { data: org, isLoading: loading } = useMyOrganisationQuery();
+  const { data: categories = [] } = useListCategoriesQuery();
 
-  useEffect(() => {
-    Promise.all([getMyOrganisation(), listCategories()])
-      .then(([o, c]) => {
-        setOrg(o);
-        setCategories(c);
-        setSelected((o.expertise ?? []).map((e) => e.id));
-        setForm({
-          name: o.name ?? "",
-          tagline: o.tagline ?? "",
-          about: o.about ?? "",
-          website: o.website ?? "",
-          public_email: o.public_email ?? "",
-          public_phone: o.public_phone ?? "",
-          founded_year: o.founded_year ? String(o.founded_year) : "",
-          employee_range: o.employee_range ?? "",
-          city: o.city ?? "",
-          state: o.state ?? "",
-          country: o.country ?? "",
-          service_areas: o.service_areas ?? "",
-        });
-      })
-      .catch((e) => show(extractApiError(e, "Could not load your organisation."), "error"))
-      .finally(() => setLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const [saveOrganisation, { isLoading: savingOrg }] = useUpdateMyOrganisationMutation();
+  const [saveExpertise, { isLoading: savingExpertise }] = useSetMyExpertiseMutation();
+  const saving = savingOrg || savingExpertise;
+
+  /**
+   * ## Both the form and the expertise selection are derived, not seeded
+   *
+   * The old version copied the loaded organisation into two pieces of state in an
+   * effect. The cache now refetches this record after any write to it — including
+   * a staff edit through the admin screens — and a copy would be silently
+   * overwritten mid-typing. `null`/absent means "follow the server"; anything else
+   * is what this person has changed.
+   */
+  const [edits, setEdits] = useState<Record<string, string>>({});
+  const [expertiseEdits, setExpertiseEdits] = useState<number[] | null>(null);
+
+  const form = useMemo<Record<string, string>>(
+    () => ({
+      name: org?.name ?? "",
+      tagline: org?.tagline ?? "",
+      about: org?.about ?? "",
+      website: org?.website ?? "",
+      public_email: org?.public_email ?? "",
+      public_phone: org?.public_phone ?? "",
+      founded_year: org?.founded_year ? String(org.founded_year) : "",
+      employee_range: org?.employee_range ?? "",
+      city: org?.city ?? "",
+      state: org?.state ?? "",
+      country: org?.country ?? "",
+      service_areas: org?.service_areas ?? "",
+      ...edits,
+    }),
+    [org, edits]
+  );
+
+  const selected = useMemo(
+    () => expertiseEdits ?? (org?.expertise ?? []).map((e) => e.id),
+    [expertiseEdits, org]
+  );
 
   const set = (key: string) => (e: { target: { value: string } }) =>
-    setForm((prev) => ({ ...prev, [key]: e.target.value }));
+    setEdits((prev) => ({ ...prev, [key]: e.target.value }));
 
   const onSave = async () => {
-    setSaving(true);
     try {
-      const next = await updateMyOrganisation({
+      await saveOrganisation({
         name: form.name.trim(),
         tagline: form.tagline.trim() || null,
         about: form.about.trim() || null,
@@ -96,26 +105,24 @@ export default function OrganisationModule() {
         state: form.state.trim() || null,
         country: form.country.trim() || null,
         service_areas: form.service_areas.trim() || null,
-      });
-      setOrg(next);
+      }).unwrap();
+      // The edits are dropped rather than kept: the mutation invalidates this
+      // record, so the refetch is now the truth and holding local overrides on
+      // top of it would mask whatever the server normalised.
+      setEdits({});
       show("Saved.");
     } catch (e) {
       show(extractApiError(e, "Could not save."), "error");
-    } finally {
-      setSaving(false);
     }
   };
 
   const onSaveExpertise = async () => {
-    setSaving(true);
     try {
-      const next = await setMyExpertise(selected);
-      setOrg(next);
+      await saveExpertise(selected).unwrap();
+      setExpertiseEdits(null);
       show("Expertise updated — buyers can filter for these.");
     } catch (e) {
       show(extractApiError(e, "Could not save your expertise."), "error");
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -204,8 +211,10 @@ export default function OrganisationModule() {
               className="accent-brand"
               checked={selected.includes(c.id)}
               onChange={(e) =>
-                setSelected((prev) =>
-                  e.target.checked ? [...prev, c.id] : prev.filter((id) => id !== c.id),
+                setExpertiseEdits(
+                  e.target.checked
+                    ? [...selected, c.id]
+                    : selected.filter((id) => id !== c.id),
                 )
               }
             />

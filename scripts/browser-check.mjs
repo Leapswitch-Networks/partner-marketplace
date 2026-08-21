@@ -66,6 +66,16 @@ const PAGES = [
   ["/dashboard/health", "Health"],
   ["/dashboard/recycle-bin", "Recycle"],
   ["/dashboard/branding", "Branding"],
+  // Added 2026-08-21 with their conversion. Both are partner self-service screens,
+  // so a staff account (which is what this script signs in as) sees the
+  // "not attached to an organisation" branch — that still proves the page renders
+  // rather than throwing, which is what this check is for. A partner-account pass
+  // would exercise the populated branch and is worth having; it needs a second
+  // login and is a bigger change than closing the gap.
+  // The 404 is the correct answer here for a staff account — see `allow404` on
+  // `check`. The page is still asserted to render its "not attached" branch.
+  ["/dashboard/organisation", "Organisation", { allow404: ["partners/me"] }],
+  ["/dashboard/team", "Team", { allow404: ["partners/me"] }],
   ["/dashboard/ai-assistant", "AI Assistant"],
   ["/dashboard/api-consumers", "Platform API"],
   ["/dashboard/webhooks", "Webhooks"],
@@ -352,7 +362,18 @@ try {
   // a login form legitimately has no sidebar and little text. `expect` is for
   // routes whose whole job is to land somewhere else: the URL assertion checks
   // the destination instead of the requested path.
-  async function check(path, expected, { signedOut = false, expect = path } = {}) {
+  /**
+   * `allow404` names request paths whose 404 is the *right* answer for the account
+   * this script signs in as, so it is not counted as a failure.
+   *
+   * Added 2026-08-21 for the two partner self-service screens. They call
+   * `/partners/me`, which resolves the organisation from the session — and this
+   * script signs in as staff, who have none, so a 404 is correct and the page
+   * renders its "not attached to an organisation" branch. Without this the two
+   * screens would WARN on every run for ever, and a check that always says
+   * something is one nobody reads. The page render is still fully asserted.
+   */
+  async function check(path, expected, { signedOut = false, expect = path, allow404 = [] } = {}) {
     cdp.drain();
     const failedRequests = [];
     const consoleErrors = [];
@@ -420,7 +441,11 @@ try {
     if (!state.text.toLowerCase().includes(expected.toLowerCase()))
       problems.push(`"${expected}" not on the page`);
     if (consoleErrors.length) problems.push(`${consoleErrors.length} console error(s): ${consoleErrors[0]}`);
-    if (failedRequests.length) problems.push(`${failedRequests.length} failed request(s): ${failedRequests[0]}`);
+    const unexpectedRequests = failedRequests.filter(
+      (r) => !allow404.some((allowed) => r.includes("404") && r.includes(allowed))
+    );
+    if (unexpectedRequests.length)
+      problems.push(`${unexpectedRequests.length} failed request(s): ${unexpectedRequests[0]}`);
 
     if (problems.length === 0) {
       record(path, "PASS", `${state.text.length} chars · ${state.headings[0] ?? ""}`);
@@ -430,8 +455,8 @@ try {
   }
 
   console.log("\n--- pages ---");
-  for (const [path, expected] of PAGES) {
-    await check(path, expected);
+  for (const [path, expected, options] of PAGES) {
+    await check(path, expected, options ?? {});
   }
 
   // --- Redirect aliases -----------------------------------------------------

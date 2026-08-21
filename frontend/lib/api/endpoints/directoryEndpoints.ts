@@ -7,6 +7,7 @@ import type {
   Listing,
   ListingStatus,
   ModerationQueueEntry,
+  OwnOrganisation,
   OwnOrganisationOverview,
   PricingModel,
 } from "@/lib/api/directoryApi";
@@ -229,6 +230,52 @@ export const directoryEndpoints = api.injectEndpoints({
       ],
     }),
 
+    // --- The partner's own record -------------------------------------------
+    //
+    // `/partners/me` takes no id: the organisation is resolved from the session,
+    // which is the whole security model of these screens — there is no path
+    // parameter to tamper with and so no ownership check to forget.
+    //
+    // Tagged `Partner`/LIST rather than by row: this row has no id the client
+    // knows, and a staff edit to the same organisation through the admin screens
+    // should refresh it.
+    myOrganisation: build.query<OwnOrganisation, void>({
+      query: () => "/partners/me",
+      providesTags: [{ type: "Partner", id: "LIST" }],
+    }),
+
+    updateMyOrganisation: build.mutation<OwnOrganisation, Partial<OwnOrganisation>>({
+      query: (body) => ({ url: "/partners/me", method: "PATCH", body }),
+      invalidatesTags: [{ type: "Partner", id: "LIST" }],
+    }),
+
+    /** Replaces the whole selection. Ids, because these become the filter's join. */
+    setMyExpertise: build.mutation<OwnOrganisation, number[]>({
+      query: (categoryIds) => ({
+        url: "/partners/me/expertise",
+        method: "PUT",
+        body: { category_ids: categoryIds },
+      }),
+      // `Category` too: expertise is the join the public directory filter runs
+      // on, so changing it changes which partners a category page can show.
+      invalidatesTags: [
+        { type: "Partner", id: "LIST" },
+        { type: "Category", id: "LIST" },
+      ],
+    }),
+
+    // ⚠️ **The matching UPLOAD is deliberately not here.** It sends a `File` in
+    // `FormData`, and a mutation's argument ends up inside a dispatched action —
+    // so a File would trip the store's `serializableCheck`, which `lib/store`
+    // keeps on purpose ("dropping serializableCheck to add one middleware is how
+    // a store loses its dev-time guardrails"). Weakening that for one upload is a
+    // bad trade, so `uploadBrandAsset` stays a direct call and its one caller
+    // invalidates this tag explicitly. Clearing carries no body and belongs here.
+    clearBrandAsset: build.mutation<OwnOrganisation, "logo" | "banner">({
+      query: (asset) => ({ url: `/partners/me/brand/${asset}`, method: "DELETE" }),
+      invalidatesTags: [{ type: "Partner", id: "LIST" }],
+    }),
+
     // --- The partner's own organisation -------------------------------------
     //
     // Tagged with both `Listing` and `Enquiry` LIST, not a tag of its own. It is
@@ -283,6 +330,10 @@ export const {
   useUpdateEnquiryStatusMutation,
   useGetMyOverviewQuery,
   useReviewQueueQuery,
+  useMyOrganisationQuery,
+  useUpdateMyOrganisationMutation,
+  useSetMyExpertiseMutation,
+  useClearBrandAssetMutation,
   useCreateListingMutation,
   useUpdateListingMutation,
 } = directoryEndpoints;

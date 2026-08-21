@@ -1,17 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import PageHeading from "@/components/common/PageHeading";
 import Button from "@/components/common/Button";
 import Input from "@/components/common/Input";
 import Toast, { useToast } from "@/components/common/Toast";
-import { adminApi } from "@/lib/api/adminApi";
-import { invitationApi } from "@/lib/api/rbacApi";
-import { getMyOrganisation } from "@/lib/api/directoryApi";
+import { useCreateInvitationMutation } from "@/lib/api/endpoints/invitationsEndpoints";
+import { useMyOrganisationQuery } from "@/lib/api/endpoints/directoryEndpoints";
+import { useListUsersQuery } from "@/lib/api/endpoints/usersEndpoints";
 import { extractApiError } from "@/lib/utils/apiError";
 import { usePermissions } from "@/lib/hooks/usePermissions";
-import type { ManagedUser } from "@/types";
 
 /**
  * `/dashboard/team` — a partner's own logins.
@@ -38,40 +37,36 @@ export default function TeamModule() {
   const { can } = usePermissions();
   const canInvite = can("invitation-create");
 
-  const [members, setMembers] = useState<ManagedUser[]>([]);
-  const [organisation, setOrganisation] = useState<string>("");
-  const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState("");
-  const [sending, setSending] = useState(false);
 
-  const load = () =>
-    Promise.all([adminApi.listUsers({ per_page: 100 }), getMyOrganisation()])
-      .then(([users, org]) => {
-        setMembers(users.data.items);
-        setOrganisation(org.name);
-      })
-      .catch((e) => show(extractApiError(e, "Could not load your team."), "error"))
-      .finally(() => setLoading(false));
+  // Converted 2026-08-21. Both reads share caches with other screens: the member
+  // list with the users table (tenancy-scoped server-side, so a partner sees only
+  // their own people), and the organisation with the profile and branding screens.
+  //
+  // ⚠️ `per_page: 100` is inherited and is a real cap, not a page size — this
+  // screen shows the whole team with no pagination, so an organisation with more
+  // than a hundred people would silently show a hundred. Left as found because
+  // fixing it properly means paginating the list, which is a change to the screen
+  // rather than to how it fetches. Noted rather than quietly carried over.
+  const { data: page, isLoading: usersLoading } = useListUsersQuery({ per_page: 100 });
+  const { data: org, isLoading: orgLoading } = useMyOrganisationQuery();
+  const members = page?.items ?? [];
+  const organisation = org?.name ?? "";
+  const loading = usersLoading || orgLoading;
 
-  useEffect(() => {
-    load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const [createInvitation, { isLoading: sending }] = useCreateInvitationMutation();
 
   const onInvite = async () => {
     if (!email.trim()) return;
-    setSending(true);
     try {
       // No organisation field — the API resolves it from the actor's session.
       // `CreateInvitationPayload` has no place to put one, which is the
       // enforcement rather than a convention.
-      await invitationApi.create({ email: email.trim() });
+      await createInvitation({ email: email.trim() }).unwrap();
       setEmail("");
       show("Invitation sent.");
     } catch (e) {
       show(extractApiError(e, "Could not send the invitation."), "error");
-    } finally {
-      setSending(false);
     }
   };
 

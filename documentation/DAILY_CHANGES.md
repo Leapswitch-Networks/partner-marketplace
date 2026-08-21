@@ -54,6 +54,13 @@ into line with everything else and reintroduce the warning.
 list. That is the third time this week the same gap has turned up: a screen nobody checks cannot fail,
 so a green result says nothing about it.
 
+**Adding them surfaced a smaller version of the same trap.** Both call an address that resolves the
+company from whoever is signed in — and the automated pass signs in as internal staff, who belong to no
+company, so that call correctly answers "not found" and the page correctly shows its "you are not
+attached to a company" state. The pass counted that as a warning, which would have been repeated on
+every run for ever. A permanent warning is a warning nobody reads, so the pass now knows this
+particular not-found is the right answer for this account, while still checking the page renders.
+
 **One thing found and left alone, deliberately.** The team screen asks for at most a hundred people and
 shows all of them with no paging, so a company with more than a hundred staff would silently see a
 hundred. Fixing it properly means adding paging to that screen, which is a change to what it does
