@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useMemo } from "react";
 
 import Badge, { type BadgeTone } from "@/components/common/Badge";
 import Button, { buttonClasses } from "@/components/common/Button";
@@ -18,11 +18,11 @@ import {
   ShowPageSidebar,
 } from "@/components/common/ShowPage";
 import { navIcon } from "@/components/dashboard/navIcons";
-import { partnersApi } from "@/lib/api/partnersApi";
+import { useGetPartnerQuery } from "@/lib/api/endpoints/partnersEndpoints";
 import usePermissions from "@/lib/hooks/usePermissions";
 import { extractApiError } from "@/lib/utils/apiError";
 import { formatDate, formatDateTime } from "@/lib/utils/format";
-import type { PartnerDetailResponse, PartnerStatus, VerificationLevel } from "@/types";
+import type { PartnerStatus, VerificationLevel } from "@/types";
 
 /**
  * The partner detail surface — the Show of the Index / Form / Show contract.
@@ -68,29 +68,24 @@ export default function PartnerShow({
   onEdit?: () => void;
 }) {
   const { can } = usePermissions();
-  const [partner, setPartner] = useState<PartnerDetailResponse | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await partnersApi.get(partnerId);
-      setPartner(res.data);
-    } catch (err) {
-      setError(extractApiError(err, "Could not load this partner."));
-    } finally {
-      setLoading(false);
-    }
-  }, [partnerId]);
+  // Converted to the cached data layer 2026-08-21. The effect this replaces was
+  // already careful — it deferred `load` by a microtask to avoid setting state
+  // synchronously inside an effect — but the careful workaround was only needed
+  // because the fetch lived in a component at all. There is no effect now.
+  //
+  // The cache is shared with the partners index, so opening a row this session has
+  // already listed renders from the cache and revalidates behind the reader; and a
+  // status change or verification made anywhere in the app refreshes this screen
+  // without it subscribing to anything.
+  const { data: partner, isLoading: loading, error, refetch } = useGetPartnerQuery(partnerId);
 
-  useEffect(() => {
-    // Deferred by a microtask rather than called in the effect body — same
-    // reasoning as `UserShow`: `load` sets state, and calling it synchronously
-    // here costs a second render pass and trips `react-hooks/set-state-in-effect`.
-    void Promise.resolve().then(load);
-  }, [load]);
+  // `ErrorState` doubles as the route-level `error.tsx` boundary, which React
+  // hands a real Error — so the RTK error shape is converted rather than passed.
+  const failure = useMemo(
+    () => (error ? new Error(extractApiError(error, "Could not load this partner.")) : null),
+    [error]
+  );
 
   if (loading) {
     return (
@@ -101,13 +96,11 @@ export default function PartnerShow({
     );
   }
 
-  if (error || !partner) {
+  if (failure || !partner) {
     return (
       <ErrorState
-        // `ErrorState` takes an Error because it doubles as the route-level
-        // `error.tsx` boundary, which React hands one.
-        error={new Error(error ?? "The partner could not be found.")}
-        reset={load}
+        error={failure ?? new Error("The partner could not be found.")}
+        reset={refetch}
         title="Could not load this partner"
         description="The record may have been deleted, or you may not have permission to view it."
         compact

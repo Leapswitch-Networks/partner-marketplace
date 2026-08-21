@@ -6,6 +6,26 @@
 > Update this file as part of the same change as the code. A task that isn't here is invisible to the
 > next person.
 
+## August 21, 2026 — The partner and listing screens now share one cache
+
+**Four more screens moved onto the shared data layer**: the company profile and its edit form, and the
+listing view and authoring form. Between them they were the last of the directory's screens still
+fetching their own copy of everything on arrival.
+
+**The clearest win is the smallest one.** The tier list is an unchanging reference table that the
+onboarding form, the companies table and the tiers screen all read, and each used to fetch it
+separately. There is one copy now, and a change to a tier updates every screen showing one without any
+of them knowing the others exist.
+
+**A company's record is no longer re-fetched when you open it from the table you just loaded it in.**
+It renders from what is already held and revalidates quietly behind the reader. And a status change or
+a verification made anywhere in the application refreshes the profile screen, which previously showed
+whatever it had loaded on arrival until reloaded by hand.
+
+**Two effects went away and one stayed, deliberately.** The two that fetched are gone. The one that
+remains re-baselines the edit form after loading, so "unsaved changes" means changed *since you
+arrived* — without it the form is dirty the moment it opens and prompts on every exit.
+
 ## August 21, 2026 — The listing screens now share one cache, and the authoring form is finally being checked
 
 **Four more screens moved onto the shared data layer**, and one of them mattered more than the rest.

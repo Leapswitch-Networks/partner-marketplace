@@ -14,12 +14,13 @@ import Select from "@/components/common/Select";
 import Skeleton from "@/components/common/Skeleton";
 import Textarea from "@/components/common/Textarea";
 import { navIcon } from "@/components/dashboard/navIcons";
+import type { CreatePartnerPayload, UpdatePartnerPayload } from "@/lib/api/partnersApi";
 import {
-  partnersApi,
-  type CreatePartnerPayload,
-  type UpdatePartnerPayload,
-} from "@/lib/api/partnersApi";
-import type { PartnerDetailResponse, PartnerTier } from "@/types";
+  useCreatePartnerMutation,
+  useGetPartnerQuery,
+  useListPartnerTiersQuery,
+  useUpdatePartnerMutation,
+} from "@/lib/api/endpoints/partnersEndpoints";
 import { extractApiError } from "@/lib/utils/apiError";
 
 /**
@@ -168,11 +169,25 @@ export default function PartnerForm({
 }) {
   const router = useRouter();
 
-  const [record, setRecord] = useState<PartnerDetailResponse | null>(null);
-  const [tiers, setTiers] = useState<PartnerTier[]>([]);
-  const [loading, setLoading] = useState(Boolean(partnerId));
   const [serverError, setServerError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+
+  // Converted to the cached data layer 2026-08-21. The tier list is the clearest
+  // win: it is an unchanging reference table that this form, the partners index
+  // and the tiers screen all read, and each used to fetch its own copy.
+  //
+  // A tier failure stays silent and leaves the select empty rather than blocking
+  // the form — `tier_id` is nullable on the API and `_resolve_tier` falls back to
+  // the seeded default, so a partner can be onboarded without one.
+  const { data: tiers = [] } = useListPartnerTiersQuery();
+  const {
+    data: record,
+    isLoading: loading,
+    error: loadError,
+  } = useGetPartnerQuery(partnerId ?? "", { skip: !partnerId });
+
+  const [createPartner] = useCreatePartnerMutation();
+  const [updatePartner] = useUpdatePartnerMutation();
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -181,61 +196,41 @@ export default function PartnerForm({
 
   const { reset, register, formState } = form;
 
-  // Tiers drive the picker. A failure is silent and leaves the select empty
-  // rather than blocking the form: `tier_id` is nullable on the API and
-  // `_resolve_tier` falls back to the seeded default, so a partner can be
-  // onboarded without one.
+  // The one effect that stays, and it is not a fetch. `reset` re-baselines the
+  // form so `isDirty` means "changed since load" — which is what `ResourceForm`'s
+  // unsaved-changes guard needs. Seeding with per-field `setValue` would leave the
+  // form dirty on arrival and prompt on every exit.
   useEffect(() => {
-    partnersApi
-      .listTiers()
-      .then((res) => setTiers(res.data))
-      .catch(() => setTiers([]));
-  }, []);
+    if (!record) return;
+    reset({
+      name: record.name,
+      legal_name: record.legal_name ?? "",
+      tier_id: record.tier ? String(record.tier.id) : "",
+      tagline: record.tagline ?? "",
+      about: record.about ?? "",
+      website: record.website ?? "",
+      public_email: record.public_email ?? "",
+      public_phone: record.public_phone ?? "",
+      founded_year: record.founded_year ? String(record.founded_year) : "",
+      employee_range: record.employee_range ?? "",
+      gst_number: record.gst_number ?? "",
+      pan_number: record.pan_number ?? "",
+      billing_address: record.billing_address ?? "",
+      city: record.city ?? "",
+      state: record.state ?? "",
+      country: record.country ?? "",
+      postal_code: record.postal_code ?? "",
+      agreement_signed_at: toDateInput(record.agreement_signed_at),
+      notes: record.notes ?? "",
+    });
+  }, [record, reset]);
 
-  useEffect(() => {
-    if (!partnerId) return;
-    let cancelled = false;
-    partnersApi
-      .get(partnerId)
-      .then((res) => {
-        if (cancelled) return;
-        const partner = res.data;
-        setRecord(partner);
-        // `reset`, not per-field `setValue`: it re-baselines the form so
-        // `isDirty` means "changed since load", which is what the unsaved-changes
-        // guard in `ResourceForm` needs. Seeding with setValue leaves the form
-        // dirty on arrival and prompts on every exit.
-        reset({
-          name: partner.name,
-          legal_name: partner.legal_name ?? "",
-          tier_id: partner.tier ? String(partner.tier.id) : "",
-          tagline: partner.tagline ?? "",
-          about: partner.about ?? "",
-          website: partner.website ?? "",
-          public_email: partner.public_email ?? "",
-          public_phone: partner.public_phone ?? "",
-          founded_year: partner.founded_year ? String(partner.founded_year) : "",
-          employee_range: partner.employee_range ?? "",
-          gst_number: partner.gst_number ?? "",
-          pan_number: partner.pan_number ?? "",
-          billing_address: partner.billing_address ?? "",
-          city: partner.city ?? "",
-          state: partner.state ?? "",
-          country: partner.country ?? "",
-          postal_code: partner.postal_code ?? "",
-          agreement_signed_at: toDateInput(partner.agreement_signed_at),
-          notes: partner.notes ?? "",
-        });
-      })
-      .catch(
-        (err) =>
-          !cancelled && setServerError(extractApiError(err, "Could not load this partner."))
-      )
-      .finally(() => !cancelled && setLoading(false));
-    return () => {
-      cancelled = true;
-    };
-  }, [partnerId, reset]);
+  // A load failure surfaces in the same banner a save failure does, rather than
+  // in a second mechanism — for the reader they are the same event: the form in
+  // front of them is not usable.
+  const loadFailure = loadError
+    ? extractApiError(loadError, "Could not load this partner.")
+    : null;
 
   const onSubmit = async (values: FormValues) => {
     setServerError(null);
@@ -267,9 +262,12 @@ export default function PartnerForm({
 
     try {
       if (record) {
-        await partnersApi.update(record.id, payload satisfies UpdatePartnerPayload);
+        await updatePartner({
+          id: record.id,
+          data: payload satisfies UpdatePartnerPayload,
+        }).unwrap();
       } else {
-        await partnersApi.create(payload);
+        await createPartner(payload).unwrap();
       }
       // Set before navigating so the dirty guard does not prompt on the way out.
       setSaved(true);
@@ -506,12 +504,12 @@ export default function PartnerForm({
         {/* The submit button lives in the footer, outside this element, so it is
             wired by `form=` rather than by nesting. */}
         <form id={FORM_ID} onSubmit={form.handleSubmit(onSubmit)} noValidate>
-          {serverError && (
+          {(serverError ?? loadFailure) && (
             <div
               role="alert"
               className="mb-4 rounded-[5px] border border-tone-danger/40 bg-tone-danger/10 px-3 py-2 text-xs text-tone-danger"
             >
-              {serverError}
+              {serverError ?? loadFailure}
             </div>
           )}
           <div className="flex flex-col gap-5">{fields}</div>
@@ -528,7 +526,7 @@ export default function PartnerForm({
       recordLabel={record?.name}
       icon={navIcon("partners")}
       backHref="/dashboard/partners"
-      serverError={serverError}
+      serverError={serverError ?? loadFailure}
       onSubmit={onSubmit}
       skipDirtyGuard={saved}
     >
