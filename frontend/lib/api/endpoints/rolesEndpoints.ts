@@ -1,5 +1,6 @@
 import { api } from "@/lib/store/api";
 import type {
+  ClonePayload,
   CreateRolePayload,
   NavSectionOption,
   RoleMatrix,
@@ -72,6 +73,16 @@ export const rolesEndpoints = api.injectEndpoints({
       invalidatesTags: [{ type: "Role", id: "LIST" }],
     }),
 
+    // Cloning produces a new role, so it invalidates the list the same way
+    // creating one does. Before this, `CloneRoleModal` relied on its caller
+    // refreshing — which worked because the roles screen passed a reload, and
+    // would have silently gone stale the first time it was opened from anywhere
+    // else.
+    cloneRole: build.mutation<Role, { id: number; data: ClonePayload }>({
+      query: ({ id, data }) => ({ url: `/roles/${id}/clone`, method: "POST", body: data }),
+      invalidatesTags: [{ type: "Role", id: "LIST" }],
+    }),
+
     deleteRole: build.mutation<{ message: string }, number>({
       query: (id) => ({ url: `/roles/${id}`, method: "DELETE" }),
       invalidatesTags: [{ type: "Role", id: "LIST" }],
@@ -121,6 +132,7 @@ export const {
   useCreateRoleMutation,
   useUpdateRoleMutation,
   useDeleteRoleMutation,
+  useCloneRoleMutation,
   useRoleNavPreferencesQuery,
   useSetRoleNavPreferencesMutation,
   useRoleMatrixQuery,

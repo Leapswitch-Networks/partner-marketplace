@@ -6,6 +6,39 @@
 > Update this file as part of the same change as the code. A task that isn't here is invisible to the
 > next person.
 
+## August 21, 2026 — The last screens moved onto the shared data layer, and I had to correct myself
+
+**Everything that used to fetch its own data on arrival now shares one cache.** The final four were the
+search box, the dashboard's summary tiles, and the two assistant screens. Two action dialogs — clone a
+role, email a user — went with them.
+
+**The search box lost a piece of machinery it no longer needs.** It kept a counter to throw away
+answers that arrived out of order, because a slow search for "ab" can land after a fast one for "abcd"
+and overwrite the better result. Keying the stored answer on the search term makes that impossible
+rather than defended against, so the counter is gone — and typing backwards to something you already
+searched is now instant instead of asking again.
+
+**Cloning a role used to depend on whoever opened the dialog remembering to refresh.** That worked
+because the roles screen did, and would have quietly stopped working the first time the dialog was
+opened from anywhere else. The new role now appears wherever roles are shown.
+
+**The dashboard's four summary numbers each fail independently, which they had to.** A partner account
+is refused two of them, and one refusal must not blank the whole panel. That was hand-written before
+and is now a property of asking for them separately.
+
+**A correction: I was wrong about the logo upload, and the wrong explanation was already committed.**
+Earlier today I kept the image upload off the shared layer and wrote a confident comment saying an
+image file could not travel through it without disabling a development-time safety check — and told the
+next reader not to change it. That was wrong. The library ignores exactly that part of the request by
+design, and another endpoint in this project had been relying on that all along. The upload is now
+handled like everything else and the misleading comment is replaced with what is actually true, along
+with a note that the first version was reasoned about rather than checked. Checking took one command.
+
+**One call deliberately stays direct, and it is the last one.** The invitation acceptance page looks up
+an invitation by its token. Sharing that through the cache would mean keeping a single-use credential in
+the browser's store after the invitation had been used, and that page has no second reader to share with
+anyway — all of the cost and none of the benefit. The reason is written where the call is.
+
 ## August 21, 2026 — Settings and Security read the same rows, and now stay in step
 
 **Two screens edit the same table through different addresses.** Configuration serves the whole

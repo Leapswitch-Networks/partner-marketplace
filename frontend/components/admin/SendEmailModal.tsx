@@ -5,7 +5,7 @@ import { useState } from "react";
 import Button from "@/components/common/Button";
 import Input from "@/components/common/Input";
 import Modal from "@/components/common/Modal";
-import { adminApi } from "@/lib/api/adminApi";
+import { useSendUserEmailMutation } from "@/lib/api/endpoints/usersEndpoints";
 import { extractApiError } from "@/lib/utils/apiError";
 import type { ManagedUser } from "@/types";
 
@@ -49,6 +49,8 @@ export default function SendEmailModal({
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [sendEmail] = useSendUserEmailMutation();
+
   const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
   const tooLarge = totalBytes > MAX_TOTAL_BYTES;
   const canSend =
@@ -79,19 +81,22 @@ export default function SendEmailModal({
     setSending(true);
     setError(null);
     try {
-      const res = await adminApi.sendEmail(
-        user.id,
-        {
+      // `usersEndpoints.sendUserEmail` was written for this modal and had no
+      // caller until now — it builds the multipart body and leaves Content-Type
+      // unset so the browser writes its own boundary.
+      const result = await sendEmail({
+        id: user.id,
+        data: {
           subject: subject.trim(),
           message: message.trim(),
           bcc_sender: bccSender,
         },
-        files
-      );
+        files,
+      }).unwrap();
       // A 200 does not mean it was delivered — the endpoint reports a refused
       // send as `sent: false` rather than a 5xx, so this has to be checked.
-      if (res.data.sent) onSent(res.data.message);
-      else setError(res.data.message);
+      if (result.sent) onSent(result.message);
+      else setError(result.message);
     } catch (err) {
       // Reads the 422 branch, which is where attachment rejections arrive —
       // "'invoice.pdf' is not a valid PDF file" is the whole point of the check

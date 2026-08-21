@@ -264,13 +264,28 @@ export const directoryEndpoints = api.injectEndpoints({
       ],
     }),
 
-    // ⚠️ **The matching UPLOAD is deliberately not here.** It sends a `File` in
-    // `FormData`, and a mutation's argument ends up inside a dispatched action —
-    // so a File would trip the store's `serializableCheck`, which `lib/store`
-    // keeps on purpose ("dropping serializableCheck to add one middleware is how
-    // a store loses its dev-time guardrails"). Weakening that for one upload is a
-    // bad trade, so `uploadBrandAsset` stays a direct call and its one caller
-    // invalidates this tag explicitly. Clearing carries no body and belongs here.
+    // Multipart. `FormData` is built here and handed to `axiosBaseQuery` as the
+    // body, which passes it to axios untouched — and **the Content-Type is
+    // deliberately never set**, because the browser writes it itself with the
+    // multipart boundary, and setting it by hand produces a body the server
+    // cannot parse. Same shape as `usersEndpoints.sendUserEmail`.
+    //
+    // ⚠️ **Corrected 2026-08-21.** An earlier version of this comment said the
+    // upload could not live here, because a `File` in a mutation argument would
+    // trip the store's `serializableCheck`. **That was wrong.** RTK's default
+    // `ignoredActionPaths` is `["meta.arg", "meta.baseQueryMeta"]` — exactly where
+    // RTK Query puts mutation arguments — so a non-serialisable argument is
+    // ignored by design. Checked against the installed source rather than
+    // reasoned about, which is what the first version should have been.
+    uploadBrandAsset: build.mutation<OwnOrganisation, { asset: "logo" | "banner"; file: File }>({
+      query: ({ asset, file }) => {
+        const body = new FormData();
+        body.append("file", file);
+        return { url: `/partners/me/brand/${asset}`, method: "PUT", body };
+      },
+      invalidatesTags: [{ type: "Partner", id: "LIST" }],
+    }),
+
     clearBrandAsset: build.mutation<OwnOrganisation, "logo" | "banner">({
       query: (asset) => ({ url: `/partners/me/brand/${asset}`, method: "DELETE" }),
       invalidatesTags: [{ type: "Partner", id: "LIST" }],
@@ -334,6 +349,7 @@ export const {
   useUpdateMyOrganisationMutation,
   useSetMyExpertiseMutation,
   useClearBrandAssetMutation,
+  useUploadBrandAssetMutation,
   useCreateListingMutation,
   useUpdateListingMutation,
 } = directoryEndpoints;

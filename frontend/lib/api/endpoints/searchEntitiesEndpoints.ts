@@ -4,6 +4,7 @@ import type {
   SearchableEntity,
   SearchableEntityPage,
   SearchableEntityPayload,
+  SearchResponse,
 } from "@/lib/api/searchApi";
 
 /**
@@ -28,6 +29,28 @@ import type {
  */
 export const searchEntitiesEndpoints = api.injectEndpoints({
   endpoints: (build) => ({
+    /**
+     * The global search box. Any signed-in user may call it; what comes back is
+     * decided per entity by its permission plus row scoping.
+     *
+     * ## Keyed on the term, which replaces a hand-rolled race guard
+     *
+     * `GlobalSearch` used to keep a sequence counter and discard any response
+     * that was not from the newest keystroke — because a slow request for "ab"
+     * could land after a fast one for "abcd" and overwrite the better answer.
+     * Keying the cache on the term makes that structural: the hook only ever
+     * returns the data for the argument it was last called with, so a late
+     * response for an older term cannot be rendered. It also means backspacing
+     * to a term already typed is instant.
+     *
+     * Not tagged: results are a view over every searchable table at once, and
+     * there is no single collection whose change should invalidate them. They
+     * expire on their own.
+     */
+    search: build.query<SearchResponse, { q: string; limit?: number }>({
+      query: ({ q, limit }) => ({ url: "/search", params: { q, limit } }),
+    }),
+
     listSearchEntities: build.query<SearchableEntityPage, ListEntitiesParams | void>({
       query: (params) => ({ url: "/settings/search", params: params ?? {} }),
       providesTags: (result) =>
@@ -76,6 +99,7 @@ export const searchEntitiesEndpoints = api.injectEndpoints({
 });
 
 export const {
+  useSearchQuery,
   useListSearchEntitiesQuery,
   useCreateSearchEntityMutation,
   useUpdateSearchEntityMutation,

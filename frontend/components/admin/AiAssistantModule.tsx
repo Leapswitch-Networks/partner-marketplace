@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import PageHeading from "@/components/common/PageHeading";
 import Badge from "@/components/common/Badge";
@@ -10,7 +10,10 @@ import { Card, CardContent } from "@/components/common/Card";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import Toast, { useToast } from "@/components/common/Toast";
 import { navIcon } from "@/components/dashboard/navIcons";
-import { aiApi, type AssistantSettings } from "@/lib/api/aiApi";
+import {
+  useAssistantSettingsQuery,
+  useSetAssistantEnabledMutation,
+} from "@/lib/api/endpoints/aiEndpoints";
 import { extractApiError } from "@/lib/utils/apiError";
 
 /**
@@ -44,33 +47,16 @@ const TOOL_COPY: Record<string, { label: string; detail: string }> = {
 };
 
 export default function AiAssistantModule() {
-  const [settings, setSettings] = useState<AssistantSettings | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [confirming, setConfirming] = useState(false);
+
+  // Converted 2026-08-21. The async effect and its `live` flag are gone.
+  const { data: settings, isLoading: loading, error: fetchError } = useAssistantSettingsQuery();
+  const error = fetchError
+    ? extractApiError(fetchError, "Could not load the assistant settings.")
+    : null;
+  const [setEnabled] = useSetAssistantEnabledMutation();
   const { toasts, show, dismiss } = useToast();
 
-  /**
-   * Nothing is set synchronously in the effect body — `setLoading(true)` used to
-   * be the first line and that is exactly what `react-hooks/set-state-in-effect`
-   * objects to. `loading` starts true instead, which is also what it means.
-   */
-  useEffect(() => {
-    let live = true;
-    void (async () => {
-      try {
-        const res = await aiApi.settings();
-        if (live) setSettings(res.data);
-      } catch (err) {
-        if (live) setError(extractApiError(err, "Could not load the assistant settings."));
-      } finally {
-        if (live) setLoading(false);
-      }
-    })();
-    return () => {
-      live = false;
-    };
-  }, []);
 
   /**
    * Returns the promise rather than catching it. `ConfirmDialog` owns the busy
@@ -80,10 +66,11 @@ export default function AiAssistantModule() {
    */
   const toggle = async () => {
     if (!settings) return;
-    const res = await aiApi.setEnabled(!settings.enabled);
-    setSettings(res.data);
+    // `.unwrap()` so a rejection still reaches `ConfirmDialog` — see the note
+    // above. The mutation invalidates the setting, so there is nothing to assign.
+    const next = await setEnabled(!settings.enabled).unwrap();
     show(
-      res.data.enabled
+      next.enabled
         ? "The assistant is on. It appears for everyone who holds ai-assistant-use."
         : "The assistant is off and the widget is hidden.",
       "success"

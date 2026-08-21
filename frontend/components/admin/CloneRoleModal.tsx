@@ -5,7 +5,7 @@ import { useState } from "react";
 import Button from "@/components/common/Button";
 import Input from "@/components/common/Input";
 import Modal from "@/components/common/Modal";
-import { roleApi } from "@/lib/api/rbacApi";
+import { useCloneRoleMutation } from "@/lib/api/endpoints/rolesEndpoints";
 import type { Role } from "@/types";
 
 /**
@@ -34,19 +34,27 @@ export default function CloneRoleModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const [cloneRole] = useCloneRoleMutation();
+
   const submit = async (event: React.SyntheticEvent) => {
     event.preventDefault();
     setSaving(true);
     setError(null);
     try {
-      const res = await roleApi.clone(role.id, {
-        name: name.trim(),
-        display_name: displayName.trim() || null,
-      });
-      onCloned(res.data);
+      // Converted 2026-08-21. The mutation invalidates the roles list, so the new
+      // role appears wherever roles are shown — this modal used to depend on its
+      // caller reloading, which the roles screen did and any other opener would
+      // not have.
+      const created = await cloneRole({
+        id: role.id,
+        data: { name: name.trim(), display_name: displayName.trim() || null },
+      }).unwrap();
+      onCloned(created);
     } catch (err) {
-      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      setError(detail ?? "Could not clone this role.");
+      // `error.data` is already a human-readable message from `axiosBaseQuery` —
+      // the axios `response.data.detail` shape this used to dig into is not what
+      // the cache layer hands back.
+      setError((err as { data?: string })?.data ?? "Could not clone this role.");
     } finally {
       setSaving(false);
     }

@@ -7,10 +7,10 @@ import { useRouter } from "next/navigation";
 import { navIcon } from "@/components/dashboard/navIcons";
 import {
   MIN_SEARCH_LENGTH,
-  searchApi,
   type SearchGroup,
   type SearchHit,
 } from "@/lib/api/searchApi";
+import { useSearchQuery } from "@/lib/api/endpoints/searchEntitiesEndpoints";
 import useDebouncedValue from "@/lib/hooks/useDebouncedValue";
 
 /**
@@ -57,78 +57,74 @@ export default function GlobalSearch({
    * booleans it replaces could disagree with each other while a request was in
    * flight.
    */
-  const [result, setResult] = useState<{
-    q: string;
-    groups: SearchGroup[];
-    hiddenAreas: string[];
-  }>({ q: "", groups: [], hiddenAreas: [] });
-  const [active, setActive] = useState(0);
+  /**
+   * The roving highlight, stored **with the term it belongs to**.
+   *
+   * It has to return to the first row whenever the results change, and the
+   * obvious way — `setActive(0)` in an effect on `term` — is what
+   * `react-hooks/set-state-in-effect` refuses. Pairing the index with its term
+   * and deriving instead means a new search reads as row 0 without anything
+   * having to reset it.
+   */
+  const [cursorState, setCursorState] = useState({ term: "", index: 0 });
   const [coords, setCoords] = useState({ top: 0, left: 0, width: 0 });
 
   const inputRef = useRef<HTMLInputElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const listboxId = useId();
 
-  /** Rejects out-of-order responses — see note 1. */
-  const seq = useRef(0);
-
   const debounced = useDebouncedValue(query, 300);
   const tooShort = debounced.trim().length < MIN_SEARCH_LENGTH;
 
   const term = debounced.trim();
 
+  const active = cursorState.term === term ? cursorState.index : 0;
+  const setActive = (next: number | ((current: number) => number)) =>
+    setCursorState({
+      term,
+      index: typeof next === "function" ? next(active) : next,
+    });
+
   /**
-   * Derived, not stored — see the note on `result`.
+   * ## The cache key does what the sequence counter used to
    *
-   * Memoised because a bare `tooShort ? [] : result.groups` produces a fresh
-   * `[]` on every render, which would make `flatItems` below recompute forever.
+   * Converted 2026-08-21. This component kept a `seq` ref and discarded any
+   * response that was not from the newest keystroke, because a slow request for
+   * "ab" can land after a fast one for "abcd" and overwrite the better answer.
+   *
+   * Keying the query on the term makes that structural rather than defended: the
+   * hook only ever returns data for the argument it was last called with, so a
+   * late response for an older term cannot be rendered. Backspacing to a term
+   * already typed is now instant instead of a fresh round trip.
+   *
+   * `skip` below the floor rather than a guard inside an effect — no request is
+   * made at all, which is what the old early-return was approximating.
    */
-  const groups = useMemo(
-    () => (tooShort ? [] : result.groups),
-    [tooShort, result.groups]
-  );
-  const loading = !tooShort && result.q !== term;
+  const { data, isFetching } = useSearchQuery({ q: term }, { skip: tooShort });
 
   /**
-   * Same derivation as `groups`: below the floor nothing was searched, so
-   * naming areas as "not searched" would be false.
+   * Memoised because a bare `?? []` produces a fresh array on every render,
+   * which would make `flatItems` below recompute forever.
    */
-  const hiddenAreas = useMemo(
-    () => (tooShort ? [] : result.hiddenAreas),
-    [tooShort, result.hiddenAreas]
+  const groups = useMemo<SearchGroup[]>(
+    () => (tooShort ? [] : (data?.groups ?? [])),
+    [tooShort, data]
   );
 
-  useEffect(() => {
-    // No `setState` in the effect body. Under the floor there is simply nothing
-    // to do: `groups` already derives to `[]`, and bumping the sequence
-    // discards any response still in flight from a longer query.
-    if (tooShort) {
-      seq.current += 1;
-      return;
-    }
+  /**
+   * Below the floor nothing was searched, so naming areas as "not searched"
+   * would be false.
+   */
+  const hiddenAreas = useMemo<string[]>(
+    () => (tooShort ? [] : (data?.hidden_areas ?? [])),
+    [tooShort, data]
+  );
 
-    const mine = ++seq.current;
+  // `isFetching`, so the spinner shows while a *new* term is in flight even
+  // though a previous term's results are still on screen — which is exactly the
+  // window the old `result.q !== term` comparison was detecting.
+  const loading = !tooShort && isFetching;
 
-    searchApi
-      .query(term)
-      .then((res) => {
-        if (mine !== seq.current) return; // a newer keystroke already won
-        setResult({
-          q: term,
-          groups: res.data.groups,
-          hiddenAreas: res.data.hidden_areas ?? [],
-        });
-        setActive(0);
-      })
-      .catch(() => {
-        if (mine !== seq.current) return;
-        // A failed search shows "nothing found" rather than an error banner in
-        // the chrome. The box is not the place to report an outage, and the
-        // next keystroke retries anyway. Recording `q` is what stops `loading`
-        // hanging true forever after a failure.
-        setResult({ q: term, groups: [], hiddenAreas: [] });
-      });
-  }, [term, tooShort]);
 
   // Position, and close on anything that invalidates the measurement. Same rule
   // as `FilterCombobox`: a scroll would otherwise leave the panel drifting.
@@ -157,9 +153,9 @@ export default function GlobalSearch({
   const go = (hit: SearchHit) => {
     setOpen(false);
     setQuery("");
-    // Reset to the empty result rather than clearing a separate `groups` state,
-    // so the next open does not flash the previous search's hits.
-    setResult({ q: "", groups: [], hiddenAreas: [] });
+    // Clearing the query is enough: the term falls below the floor, `skip` turns
+    // the query off and `groups` derives to `[]`, so the next open cannot flash
+    // the previous search's hits. That is what the explicit reset used to do.
     router.push(hit.url);
   };
 

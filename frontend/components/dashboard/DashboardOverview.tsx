@@ -1,13 +1,17 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React from "react";
 import { Briefcase, Layers, TrendingUp, User, UserPlus, Users } from "lucide-react";
 
 import useHydrated from "@/lib/hooks/useHydrated";
 import { ActionCard, MetricCard } from "@/components/common/cards";
 import usePermissions from "@/lib/hooks/usePermissions";
-import { adminApi } from "@/lib/api/adminApi";
-import { roleApi, permissionApi, activityApi } from "@/lib/api/rbacApi";
+import { useListActivityQuery } from "@/lib/api/endpoints/activityEndpoints";
+import {
+  useListPermissionGroupsQuery,
+  useListRolesQuery,
+} from "@/lib/api/endpoints/rolesEndpoints";
+import { useListUsersQuery } from "@/lib/api/endpoints/usersEndpoints";
 import type { AdminSection } from "@/components/dashboard/Sidebar";
 
 /**
@@ -57,46 +61,33 @@ export default function DashboardOverview({
   // once hydrated. Was a `useState` flipped in an effect, which is a whole extra
   // render pass to answer a question `useSyncExternalStore` answers in the first.
   const isLoaded = useHydrated();
-  const [counts, setCounts] = useState<Counts>({
-    users: null,
-    roles: null,
-    permissions: null,
-    activity: null,
-  });
+  /**
+   * ## Four independent counts, and a failure in one must not blank the others
+   *
+   * Converted 2026-08-21. The `Promise.allSettled` this replaces existed for a
+   * real reason, not neatness: a Partner account gets a 403 on roles and
+   * permissions, and one refusal must not take the whole panel down. Four
+   * separate queries give that for nothing — each has its own error state, and an
+   * undefined `data` renders as "—" exactly as the swallowed rejection did.
+   *
+   * `per_page: 1` on both paged counts: only the envelope's `total` is wanted, so
+   * this asks for the smallest page that still carries it. Those cache keys are
+   * deliberately distinct from the full-page ones the tables use, so this panel
+   * cannot evict a table's data or be served a single row where a page is
+   * expected.
+   */
+  const { data: usersPage } = useListUsersQuery({ per_page: 1 });
+  const { data: roles } = useListRolesQuery();
+  const { data: permissionGroups } = useListPermissionGroupsQuery();
+  const { data: activityPage } = useListActivityQuery({ per_page: 1 });
 
-
-
-  useEffect(() => {
-    let cancelled = false;
-
-    // Each count is fetched independently and failures are swallowed to `null`,
-    // which renders as "—". One endpoint the user lacks permission for must not
-    // blank the whole panel — a 403 on roles is expected for a Partner.
-    const load = async () => {
-      const [users, roles, permissions, activity] = await Promise.allSettled([
-        adminApi.listUsers({ per_page: 1 }),
-        roleApi.list(),
-        permissionApi.list(),
-        activityApi.list({ per_page: 1 }),
-      ]);
-      if (cancelled) return;
-
-      setCounts({
-        users: users.status === "fulfilled" ? users.value.data.total ?? null : null,
-        roles: roles.status === "fulfilled" ? roles.value.data.length : null,
-        permissions:
-          permissions.status === "fulfilled"
-            ? permissions.value.data.reduce((n: number, g) => n + (g.permissions?.length ?? 0), 0)
-            : null,
-        activity: activity.status === "fulfilled" ? activity.value.data.total ?? null : null,
-      });
-    };
-
-    void load();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const counts: Counts = {
+    users: usersPage?.total ?? null,
+    roles: roles?.length ?? null,
+    permissions:
+      permissionGroups?.reduce((n, g) => n + (g.permissions?.length ?? 0), 0) ?? null,
+    activity: activityPage?.total ?? null,
+  };
 
   const fmt = (n: number | null) => (n === null ? "—" : String(n));
 

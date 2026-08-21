@@ -60,6 +60,15 @@ export default function AcceptInvitationClient({ token }: { token: string | null
     let live = true;
     void (async () => {
       try {
+        // ⚠️ **Deliberately NOT on the cached data layer** — the last direct
+        // client call in the application, and the reason is the token.
+        //
+        // A cache key is the query argument, so `useInvitationPreview(token)`
+        // would put a single-use invitation credential into the Redux store, where
+        // it stays after the invitation is consumed and is visible to anything that
+        // can read the store. This page is also a dead end — you accept or you do
+        // not — so there is no second reader to share a cache with and nothing to
+        // dedupe. All of the cost, none of the benefit.
         const res = await invitationApi.preview(token);
         if (live) setPreview(res.data);
       } catch (err: unknown) {

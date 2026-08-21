@@ -3,7 +3,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { navIcon } from "@/components/dashboard/navIcons";
-import { aiApi, type ChatReply } from "@/lib/api/aiApi";
+import type { ChatReply } from "@/lib/api/aiApi";
+import {
+  useAskAssistantMutation,
+  useAssistantAvailabilityQuery,
+  useSendAssistantFeedbackMutation,
+} from "@/lib/api/endpoints/aiEndpoints";
 import { extractApiError } from "@/lib/utils/apiError";
 
 /**
@@ -40,7 +45,6 @@ const TOOL_LABELS: Record<string, string> = {
 };
 
 export default function AssistantWidget() {
-  const [available, setAvailable] = useState(false);
   const [open, setOpen] = useState(false);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [draft, setDraft] = useState("");
@@ -49,22 +53,20 @@ export default function AssistantWidget() {
   const [rated, setRated] = useState(false);
   const endRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    let live = true;
-    void (async () => {
-      try {
-        const res = await aiApi.availability();
-        if (live) setAvailable(res.data.available && res.data.can_use);
-      } catch {
-        // A 401/403 here is the normal case for most roles. The widget simply
-        // does not appear; an error banner for a feature you cannot use would be
-        // noise on every page.
-      }
-    })();
-    return () => {
-      live = false;
-    };
-  }, []);
+  // `chat` is a mutation, not a query — see the note in `aiEndpoints`: a query
+  // keyed on the message would serve a second identical question from cache,
+  // which for a language model is both wrong and hides a real cost.
+  const [ask] = useAskAssistantMutation();
+  const [sendFeedback] = useSendAssistantFeedbackMutation();
+
+  // Converted 2026-08-21. Shares one cache entry with the assistant settings
+  // screen, which is mounted on the same page and used to make the same call.
+  //
+  // No error branch, unchanged from before: a 401/403 is the normal case for most
+  // roles, so `data` is simply undefined and the widget does not appear. An error
+  // banner for a feature you cannot use would be noise on every page.
+  const { data: availability } = useAssistantAvailabilityQuery();
+  const available = Boolean(availability?.available && availability?.can_use);
 
   useEffect(() => {
     if (open) endRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -79,8 +81,10 @@ export default function AssistantWidget() {
     setTurns((prev) => [...prev, { id: `u-${Date.now()}`, role: "user", content: message }]);
 
     try {
-      const res = await aiApi.chat(message, conversationId);
-      const reply: ChatReply = res.data;
+      const reply: ChatReply = await ask({
+        message,
+        conversation_id: conversationId,
+      }).unwrap();
       setConversationId(reply.conversation_id);
       setRated(false);
       setTurns((prev) => [
@@ -104,12 +108,12 @@ export default function AssistantWidget() {
     } finally {
       setSending(false);
     }
-  }, [draft, sending, conversationId]);
+  }, [draft, sending, conversationId, ask]);
 
   const rate = async (helpful: boolean) => {
     setRated(true);
     try {
-      await aiApi.feedback(helpful, conversationId);
+      await sendFeedback({ helpful, conversation_id: conversationId }).unwrap();
     } catch {
       // Feedback failing is not worth telling anyone about — the answer is
       // already on screen and this is a background signal.

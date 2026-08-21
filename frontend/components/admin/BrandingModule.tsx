@@ -5,11 +5,10 @@ import { useRef, useState } from "react";
 import PageHeading from "@/components/common/PageHeading";
 import Button from "@/components/common/Button";
 import Toast, { useToast } from "@/components/common/Toast";
-// `uploadBrandAsset` stays a direct call — see the note on `onUpload` below.
-import { uploadBrandAsset } from "@/lib/api/directoryApi";
 import {
   useClearBrandAssetMutation,
   useMyOrganisationQuery,
+  useUploadBrandAssetMutation,
 } from "@/lib/api/endpoints/directoryEndpoints";
 import { extractApiError } from "@/lib/utils/apiError";
 
@@ -66,27 +65,24 @@ export default function BrandingModule() {
 
   // Converted 2026-08-21. The organisation is shared with the profile and team
   // screens, so this no longer fetches its own copy.
-  const { data: org, isLoading: loading, refetch } = useMyOrganisationQuery();
+  const { data: org, isLoading: loading } = useMyOrganisationQuery();
+  const [uploadAsset] = useUploadBrandAssetMutation();
   const [clearAsset] = useClearBrandAssetMutation();
 
   /**
-   * ⚠️ **The upload is deliberately NOT a cache mutation.**
+   * The upload is an ordinary mutation, so it invalidates the record itself.
    *
-   * It sends a `File` inside `FormData`, and a mutation's argument ends up in a
-   * dispatched Redux action — so a File would trip the store's
-   * `serializableCheck`, which `lib/store/index.ts` keeps on purpose ("dropping
-   * serializableCheck to add one middleware is how a store loses its dev-time
-   * guardrails"). Weakening that for one upload is a bad trade.
-   *
-   * So this one call goes direct and then refetches by hand. It is the only place
-   * in the app that does, and this comment is why — without it the next reader
-   * would reasonably "tidy" it into the slice and reintroduce the warning.
+   * ⚠️ **Corrected 2026-08-21.** This briefly went direct with a hand-rolled
+   * refetch and a comment claiming a `File` argument would trip the store's
+   * `serializableCheck`. It does not: RTK's default `ignoredActionPaths` is
+   * `["meta.arg", "meta.baseQueryMeta"]`, which is exactly where RTK Query puts
+   * mutation arguments. `usersEndpoints.sendUserEmail` had been doing this all
+   * along.
    */
   const onUpload = async (asset: "logo" | "banner", file: File) => {
     setBusy(asset);
     try {
-      await uploadBrandAsset(asset, file);
-      await refetch();
+      await uploadAsset({ asset, file }).unwrap();
       // Bust the preview: the URL is unchanged, so without this the browser
       // shows the image it already has.
       setVersion((v) => v + 1);
@@ -104,8 +100,6 @@ export default function BrandingModule() {
   const onClear = async (asset: "logo" | "banner") => {
     setBusy(asset);
     try {
-      // Clearing carries no body, so it is an ordinary mutation — and it
-      // invalidates the record, so no manual refetch here.
       await clearAsset(asset).unwrap();
       setVersion((v) => v + 1);
       show("Removed.");

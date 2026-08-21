@@ -100,6 +100,9 @@ export const api = createApi({
     "SystemHealth",
     "ApiDocs",
     "RecycleBin",
+    // The assistant. `Assistant` covers availability and the on/off setting;
+    // conversations are a separate collection with their own rows.
+    "Assistant",
   ] as const,
 
   endpoints: () => ({}),
