@@ -31,7 +31,19 @@ service category pages. There is no running system during an automated check, so
 time. That check exists specifically because the build was once broken for an unknown length of time
 with nobody noticing, so it failing permanently is a particularly unhelpful state.
 
-**It now builds without a running system, and refuses to do so quietly.** The important detail is what
+**The first fix for that was the wrong one, and it is worth saying why.** Making the two page-listing
+steps survive a missing system got the build further and then it failed again, on the sitemap and the
+audience pages, which also read live data. Excusing each page in turn would mean adding a new exception
+every time a public page learns to read anything — and every one of those chips away at the promise
+that a page fails visibly when the system behind it is down. That promise is the reason a broken
+deployment looks broken instead of looking empty.
+
+**So the checks now run a real system for the build to read.** A database, the reference data, the
+sample directory, and the API itself, started and waited for. That makes this check stronger than it
+has ever been: it now builds the real company and category pages from real records, so it is a smoke
+test of the public site rather than only a compilation check.
+
+**The escape hatch survives for one case and nothing uses it.** The important detail is what
 was *not* changed: when a page cannot reach the system while somebody is actually looking at it, it
 still fails visibly, because a page that silently shows nothing is how a broken deployment looks
 healthy. What changed is only the build-time question of which addresses exist. And it is opt-in: a

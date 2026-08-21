@@ -46,11 +46,10 @@ import { VERIFICATION_LEVELS } from "@/lib/public/siteContent";
 export const dynamicParams = false;
 
 export async function generateStaticParams() {
-  // Wrapped because this runs at BUILD time against the live API, so `npm run
-  // build` needs a reachable backend. Without the wrapper CI's build job failed
-  // on `TypeError: fetch failed` and had been red long enough to stop being read.
-  // The wrapper does not soften the failure — it rethrows with the reason unless
-  // BUILD_WITHOUT_API=1 is set. See `lib/public/buildParams.ts`.
+  // Runs at BUILD time against the live API, so `npm run build` needs a reachable
+  // backend — CI stands one up for exactly this (PM-50). The wrapper does not
+  // soften the failure: it rethrows, naming this route and the cause, because a
+  // bare `TypeError: fetch failed` says neither. See `lib/public/buildParams.ts`.
   return staticParamsOrEmpty("/partners/[slug]", async () => {
     const slugs = await fetchAllPartnerSlugs();
     return slugs.map((slug) => ({ slug }));

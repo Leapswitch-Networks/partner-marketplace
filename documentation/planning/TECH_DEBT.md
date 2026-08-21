@@ -2107,8 +2107,24 @@ worth reading:
   that enumerates nothing serves a hard 404 for every partner page. A silent `[]`
   would turn a missing backend into a directory that builds cleanly and serves
   nothing, which is strictly worse than a failed build.
-* CI sets the flag and discards the artefact. **A build produced with it is not
-  deployable** and says so on stderr.
+* **The first attempt set that flag in CI, and it was wrong.** The build then
+  failed further along — `/sitemap.xml` and the `/for/*` pages read the API while
+  prerendering too. Wrapping each of those in turn would grow a new exception every
+  time a public page learned to read anything, and each one chips at the guarantee
+  that a page fails visibly when the backend is down.
+
+  So the frontend job now **runs a real API**: postgres service, `alembic upgrade
+  head`, `seed_rbac` + `seed_partner_tiers` + `seed_directory`, then `uvicorn` in
+  the background with a readiness poll. That makes the step strictly more than it
+  ever was — it prerenders real partner and category pages from real rows, so it is
+  now a smoke test of the public surface rather than only a compile check.
+
+  `seed_directory`'s demo partner logins stay off: they are gated behind
+  `ALLOW_DEMO_PARTNER_LOGINS`, which is not set, because a build needs public data
+  and no accounts.
+
+  The flag survives as an escape hatch for building locally with the stack down.
+  **Nothing in the repository sets it**, and a build made with it is not deployable.
 
 ### Verified against a fresh database, not the dev one
 
