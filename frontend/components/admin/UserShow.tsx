@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
 
 import Badge from "@/components/common/Badge";
 import FormModal from "@/components/common/FormModal";
@@ -18,11 +17,11 @@ import {
   ShowPageMain,
   ShowPageSidebar,
 } from "@/components/common/ShowPage";
-import { adminApi } from "@/lib/api/adminApi";
+import { useGetUserQuery } from "@/lib/api/endpoints/usersEndpoints";
 import usePermissions from "@/lib/hooks/usePermissions";
 import { extractApiError } from "@/lib/utils/apiError";
 import { formatDate, formatDateTime } from "@/lib/utils/format";
-import { ACCOUNT_TYPE_LABELS, type ManagedUserDetail, type UserStatus } from "@/types";
+import { ACCOUNT_TYPE_LABELS, type UserStatus } from "@/types";
 
 /**
  * The Users detail page — the third page of the Index / Form / Show contract,
@@ -53,32 +52,12 @@ export default function UserShow({
   onEdit?: () => void;
 }) {
   const { can } = usePermissions();
-  const [user, setUser] = useState<ManagedUserDetail | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await adminApi.getUser(userId);
-      setUser(res.data);
-    } catch (err) {
-      setError(extractApiError(err, "Could not load this user."));
-    } finally {
-      setLoading(false);
-    }
-  }, [userId]);
-
-  useEffect(() => {
-    // Handed to a callback rather than called in the body. `load` sets state,
-    // and calling it directly here runs those updates inside the effect's own
-    // synchronous phase — a second render pass for values React could have had
-    // in the first, which is what `react-hooks/set-state-in-effect` is for. One
-    // microtask's remove makes them ordinary updates, and nothing else changes:
-    // the fetch still starts on mount and the retry path still calls `load`.
-    void Promise.resolve().then(load);
-  }, [load]);
+  // Converted 2026-08-21. The cache is shared with the users table, so opening a
+  // row that table has already listed renders from what is held and revalidates
+  // behind the reader — and any write from the table's row actions (approve,
+  // suspend, unlock, reset 2FA) refreshes this screen without it subscribing.
+  const { data: user, isLoading: loading, error: fetchError, refetch: load } = useGetUserQuery(userId);
+  const error = fetchError ? extractApiError(fetchError, "Could not load this user.") : null;
 
   if (loading) {
     return (

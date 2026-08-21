@@ -6,6 +6,17 @@
 > Update this file as part of the same change as the code. A task that isn't here is invisible to the
 > next person.
 
+## August 21, 2026 — The user detail and edit screens joined the shared cache
+
+**Two more screens converted.** Opening a person's record from the users table no longer re-fetches
+what that table already loaded — it renders immediately and checks for changes behind the reader. And
+any action taken from the table's row menu (approve, suspend, unlock, reset two-factor) now refreshes
+the detail screen, which previously kept showing whatever it had loaded on arrival.
+
+**The role picker is now fetched once for the whole application.** This form, the users table and the
+invitation form each used to fetch the same unchanging list of roles separately. There is one copy, and
+yesterday's role changes update all three.
+
 ## August 21, 2026 — Roles and permissions now share one cache with every screen that reads them
 
 **All four role screens moved onto the shared data layer**: the roles table, the detail view, the edit

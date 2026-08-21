@@ -13,10 +13,15 @@ import ResourceForm, { FormGrid, FormSection } from "@/components/common/Resourc
 import { navIcon } from "@/components/dashboard/navIcons";
 import Select from "@/components/common/Select";
 import Skeleton from "@/components/common/Skeleton";
-import { adminApi, type CreateUserPayload, type UpdateUserPayload } from "@/lib/api/adminApi";
-import { roleApi } from "@/lib/api/rbacApi";
+import type { CreateUserPayload, UpdateUserPayload } from "@/lib/api/adminApi";
+import {
+  useCreateUserMutation,
+  useGetUserQuery,
+  useUpdateUserMutation,
+} from "@/lib/api/endpoints/usersEndpoints";
+import { useListRolesQuery } from "@/lib/api/endpoints/rolesEndpoints";
 import useAppSelector from "@/lib/hooks/useAppSelector";
-import { ACCOUNT_TYPE_LABELS, type ManagedUserDetail, type Role } from "@/types";
+import { ACCOUNT_TYPE_LABELS } from "@/types";
 import { extractApiError } from "@/lib/utils/apiError";
 
 /**
@@ -92,9 +97,19 @@ export default function UserForm({
   const router = useRouter();
   const me = useAppSelector((s) => s.auth.user);
 
-  const [record, setRecord] = useState<ManagedUserDetail | null>(null);
-  const [roles, setRoles] = useState<Role[]>([]);
-  const [loading, setLoading] = useState(Boolean(userId));
+  // Converted 2026-08-21. The role list is the shared picker cache — this form, the
+  // users table and the invitation form all read it, and each used to fetch its own
+  // copy on mount.
+  const { data: roles = [] } = useListRolesQuery();
+  const {
+    data: record,
+    isLoading: userLoading,
+    error: loadError,
+  } = useGetUserQuery(userId ?? "", { skip: !userId });
+  const loading = Boolean(userId) && userLoading;
+
+  const [createUser] = useCreateUserMutation();
+  const [updateUser] = useUpdateUserMutation();
   const [serverError, setServerError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
@@ -115,43 +130,28 @@ export default function UserForm({
 
   const { reset, register, formState } = form;
 
+  // The one effect left, and it is not a fetch. `reset` rather than per-field
+  // `setValue`: it re-baselines the form so `isDirty` means "changed since load",
+  // which is what the unsaved-changes guard needs. Seeding with setValue leaves
+  // the form dirty on arrival and prompts on every exit.
   useEffect(() => {
-    roleApi
-      .list()
-      .then((res) => setRoles(res.data))
-      .catch(() => setRoles([]));
-  }, []);
+    if (!record) return;
+    reset({
+      first_name: record.first_name,
+      last_name: record.last_name,
+      email: record.email,
+      password: "",
+      account_type: record.account_type,
+      status: record.status,
+      designation: record.designation ?? "",
+      company_name: record.company_name ?? "",
+      role_id: record.roles[0]?.id ? String(record.roles[0].id) : "",
+    });
+  }, [record, reset]);
 
-  useEffect(() => {
-    if (!userId) return;
-    let cancelled = false;
-    adminApi
-      .getUser(userId)
-      .then((res) => {
-        if (cancelled) return;
-        const user = res.data;
-        setRecord(user);
-        // `reset` rather than per-field `setValue`: it re-baselines the form so
-        // `isDirty` means "changed since load", which is what the unsaved-changes
-        // guard needs. Seeding with setValue leaves the form dirty on arrival.
-        reset({
-          first_name: user.first_name,
-          last_name: user.last_name,
-          email: user.email,
-          password: "",
-          account_type: user.account_type,
-          status: user.status,
-          designation: user.designation ?? "",
-          company_name: user.company_name ?? "",
-          role_id: user.roles[0]?.id ? String(user.roles[0].id) : "",
-        });
-      })
-      .catch((err) => !cancelled && setServerError(extractApiError(err, "Could not load this user.")))
-      .finally(() => !cancelled && setLoading(false));
-    return () => {
-      cancelled = true;
-    };
-  }, [userId, reset]);
+  const loadFailure = loadError
+    ? extractApiError(loadError, "Could not load this user.")
+    : null;
 
   /**
    * Editing your own account. The API refuses `status` and `role_ids` from you
@@ -177,7 +177,7 @@ export default function UserForm({
           payload.status = values.status;
           payload.role_ids = values.role_id ? [Number(values.role_id)] : [];
         }
-        await adminApi.updateUser(record.id, payload);
+        await updateUser({ id: record.id, data: payload }).unwrap();
       } else {
         const payload: CreateUserPayload = {
           first_name: values.first_name.trim(),
@@ -190,7 +190,7 @@ export default function UserForm({
           company_name: values.company_name.trim() || null,
         };
         if (values.password) payload.password = values.password;
-        await adminApi.createUser(payload);
+        await createUser(payload).unwrap();
       }
       // Set before navigating so the dirty guard does not prompt on the way out.
       setSaved(true);
@@ -324,12 +324,12 @@ export default function UserForm({
             is wired by `form=` rather than by nesting — a `<button>` in the
             footer would otherwise not submit the form at all. */}
         <form id={FORM_ID} onSubmit={form.handleSubmit(onSubmit)} noValidate>
-          {serverError && (
+          {(serverError ?? loadFailure) && (
             <div
               role="alert"
               className="mb-4 rounded-[5px] border border-tone-danger/40 bg-tone-danger/10 px-3 py-2 text-xs text-tone-danger"
             >
-              {serverError}
+              {serverError ?? loadFailure}
             </div>
           )}
           <div className="flex flex-col gap-5">{fields}</div>
@@ -346,7 +346,7 @@ export default function UserForm({
       recordLabel={record?.full_name}
       icon={navIcon("users")}
       backHref="/dashboard/users"
-      serverError={serverError}
+      serverError={serverError ?? loadFailure}
       onSubmit={onSubmit}
       skipDirtyGuard={saved}
     >
