@@ -6,29 +6,6 @@
 > Update this file as part of the same change as the code. A task that isn't here is invisible to the
 > next person.
 
-## August 21, 2026 — The four Operations screens joined the shared cache, and two of them deliberately do not cache
-
-**System health, API documentation, background jobs and the recycle bin all moved across.** Four more
-screens that used to fetch their own copy of everything on arrival, and between them six hand-written
-guards against a request finishing after the reader had already navigated away. That guard is the kind
-of thing that works until the one place somebody forgets it; the shared layer does it for every screen
-at once.
-
-**Two of them switch caching off, and that is the interesting part.** The health screen describes the
-process that answered the request. A cached health check is a claim about the past presented as the
-present, and being current is the entire point of the page — so leaving it discards the answer, and
-coming back a minute later asks again. The API documentation is the opposite: it is generated from the
-application's own list of addresses, so it cannot change until the application is replaced, and it
-caches normally. Same folder, opposite decisions, both written down next to the code.
-
-**Restoring something from the recycle bin now puts it back on screen everywhere.** Previously the bin
-reloaded itself and nothing else, so a restored account was missing from the people table until that
-page was reloaded by hand — no error, just a record that had apparently not come back. A restore now
-refreshes every list a deleted record can return to.
-
-**The job history is now cached per filter.** Switching between "all jobs" and one job, or toggling
-"failures only", re-reads a combination already seen instead of asking again every time.
-
 ## August 21, 2026 — The Operations screens joined the shared cache, and a health check is deliberately never cached
 
 **Four more screens converted**: system health, API documentation, background jobs and the recycle bin.
